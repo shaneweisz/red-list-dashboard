@@ -12,12 +12,12 @@ import EolSummary from "../EolSummary";
 import TaxaIcon from "../TaxaIcon";
 import { ALPHA2_TO_NAME, type CountryStats } from "../WorldMap";
 import { CATEGORY_COLORS, TAXA_BY_ID, THREATENED_CATEGORIES } from "@/config/taxa";
-import { speciesMatchesNode, getNodeDef, getViewRootForNode, findNode, matchesBreakdownName, breakdownDisplayName, primaryFilterRank } from "@/lib/taxonomy-utils";
+import { speciesMatchesNode, getViewRootForNode, findNode, matchesBreakdownName, primaryFilterRank } from "@/lib/taxonomy-utils";
 import { dynamicNodeDisplayName, isDynamicNodeId, dynamicNodeRankInfo } from "@/lib/dynamic-taxon";
 import ReviewerChart from "./ReviewerChart";
 import { parseAssessors } from "@/lib/parseAssessors";
 import { iucnRegionCountries, countryToIucnRegion } from "@/lib/regions";
-import { useFilterParams } from "@/hooks/useFilterParams";
+import { useFilterParams, EMPTY_EXACT_FILTERS } from "@/hooks/useFilterParams";
 import { type RedListSpecies } from "@/hooks/useRedListSpeciesQuery";
 import { isOutdated, outdatedCutoffDate } from "@/lib/outdated";
 
@@ -330,7 +330,7 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
     selectedPopulationTrends, setSelectedPopulationTrends,
     selectedMovementPatterns, setSelectedMovementPatterns,
     selectedThreats, setSelectedThreats,
-    breakdownFilter, setBreakdownFilter,
+    breakdownFilter,
     endemicsOnly, setEndemicsOnly,
     selectedGrowthForms, setSelectedGrowthForms,
     selectedAssessors, setSelectedAssessors,
@@ -2450,6 +2450,12 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
     </div>
   );
 
+  // Whether any real filter (category/year/country/growth-form/etc.) is
+  // active — deliberately excludes selectedTaxa/selectedSubgroups/
+  // breakdownFilter, which are taxonomy navigation, not filters: clearing
+  // those is what Home is for, not the Matching Filters card's Clear all.
+  const hasActiveFilters = selectedCategories.size > 0 || selectedYearRanges.size > 0 || selectedAssessmentYears.size > 0 || selectedDescribedYears.size > 0 || selectedObsRanges.size > 0 || selectedCountries.size > 0 || selectedSystems.size > 0 || endemicsOnly || selectedGrowthForms.size > 0 || selectedPopulationTrends.size > 0 || selectedMovementPatterns.size > 0 || selectedThreats.size > 0 || selectedAssessors.size > 0 || selectedReviewers.size > 0 || showOnlyStarred || exactFilters.outdated || exactFilters.minObs != null || exactFilters.maxObs != null || exactFilters.minAssessmentYear != null || exactFilters.maxAssessmentYear != null || exactFilters.minDescribedYear != null || exactFilters.maxDescribedYear != null;
+
   return (
     <div className="space-y-4 min-w-0">
       {/* Always show Taxa Summary table */}
@@ -2459,6 +2465,7 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
         selectedSubgroups={selectedSubgroups}
         disableAllSpecies={isNewAssessments}
         viewMode={viewMode}
+        onViewModeChange={onViewModeChange}
         layoutMode={layoutMode}
         onLayoutModeChange={setLayoutMode}
         countryModeContent={countryModeContent}
@@ -2528,29 +2535,101 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
       ) : (
       <div className="space-y-3">
 
-          {/* Applied filters — every currently-active filter shown as a
-              removable pill, plus Clear-all/Starred/species-count/Not-Evaluated
-              shortcut. Sits directly below TaxaSummary's breadcrumb table and
-              above the taxon-focus stat card so active filters are visible
-              before its numbers. (The free-text species search box that used
-              to live in this row was removed — SpeciesSearchBar in the page
-              header covers taxon/species lookup instead.) */}
-          <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-3 md:p-4">
-            <div className="flex flex-wrap items-center gap-2 md:gap-4">
-            {(selectedTaxa.size > 0 || selectedSubgroups.size > 0 || selectedCategories.size > 0 || selectedYearRanges.size > 0 || selectedAssessmentYears.size > 0 || selectedDescribedYears.size > 0 || selectedObsRanges.size > 0 || selectedCountries.size > 0 || selectedSystems.size > 0 || endemicsOnly || selectedGrowthForms.size > 0 || selectedPopulationTrends.size > 0 || selectedMovementPatterns.size > 0 || selectedThreats.size > 0 || selectedAssessors.size > 0 || selectedReviewers.size > 0 || showOnlyStarred || exactFilters.outdated || exactFilters.minObs != null || exactFilters.maxObs != null || exactFilters.minAssessmentYear != null || exactFilters.maxAssessmentYear != null || exactFilters.minDescribedYear != null || exactFilters.maxDescribedYear != null) && (
-              <button
-                onClick={() => { clearAllFilters(); setSelectedTaxa(new Set()); setSelectedSubgroups(new Set()); setSelectedObsRanges(new Set()); setSelectedSystems(new Set()); setEndemicsOnly(false); setSelectedGrowthForms(new Set()); setSelectedPopulationTrends(new Set()); setSelectedMovementPatterns(new Set()); setSelectedThreats(new Set()); setExpandedThreat(null); setSelectedAssessors(new Set()); setSelectedReviewers(new Set()); setShowOnlyStarred(false); }}
-                title="Reset all filters and taxa"
-                className="px-2 md:px-3 py-1.5 rounded-lg text-xs md:text-sm font-medium transition-colors flex items-center gap-1 md:gap-1.5 bg-white text-zinc-700 border border-zinc-200 hover:bg-zinc-50 dark:bg-zinc-800 dark:text-zinc-300 dark:border-zinc-700 shrink-0"
-              >
-                <svg className="w-3.5 h-3.5 md:w-4 md:h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                </svg>
-                <span className="hidden sm:inline">Clear all</span>
-              </button>
-            )}
-            {pinnedSpecies.length > 0 && (
-              <>
+          {/* Taxon-focus header — any single selected taxon: a top-level taxon
+              (selectedTopLevelTaxon, e.g. Mammals, or "All Species" itself), a
+              sub-group row drilled into via TaxaSummary's own tree
+              (selectedSubgroupTaxon: dynamic order/family/genus, or a static SSC
+              group), or a non-curated arbitrary rank reached via search
+              (arbitraryTaxon). Two stat cards: the taxon (name + rank) and the
+              matched-species count (mirrors the table's totalFiltered). The
+              Assessed/Not Evaluated toggle lives paired with the View selector
+              at the bottom-right of TaxaSummary's own table now, not here — see
+              its onViewModeChange prop. TaxaSummary's own breadcrumb table
+              above already shows the tree branch that led here (Mammals →
+              Rodentia → Heteromyidae → ...) when applicable — this is purely an
+              additional, more prominent summary, not a replacement for it. */}
+          {focusedTaxonCard && !isSingleSpecies && (
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-3">
+                <div className="text-xs font-medium uppercase tracking-wide text-zinc-500 dark:text-zinc-400">
+                  {focusedTaxonCard.rank ?? "Taxon"}
+                </div>
+                <div className="mt-0.5 text-2xl font-bold text-zinc-900 dark:text-zinc-100">
+                  {focusedTaxonCard.name}
+                </div>
+              </div>
+              <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-3">
+                <div className="text-xs font-medium uppercase tracking-wide text-zinc-500 dark:text-zinc-400">
+                  {isNewAssessments ? "Not Evaluated Species" : "Assessed Species"}
+                </div>
+                <div className="mt-0.5 flex items-baseline gap-1.5">
+                  {speciesLoading && assessedSpecies.length === 0 ? (
+                    <Spinner className="h-6 w-6" />
+                  ) : (
+                    <>
+                      <span className="text-2xl font-bold text-zinc-900 dark:text-zinc-100">
+                        {totalFiltered.toLocaleString()}
+                      </span>
+                      {totalFiltered !== taxaFilteredSpeciesBase.length && (
+                        <span className="text-sm font-medium text-zinc-400 dark:text-zinc-500">
+                          matching filters
+                        </span>
+                      )}
+                    </>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Matching Filters — replaces the old separate "applied filters" row.
+              Only rendered when there's something to show: an active filter
+              (hasActiveFilters), a Starred toggle (pinnedSpecies.length > 0), or
+              the Not Evaluated shortcut. Deliberately excludes selectedTaxa/
+              selectedSubgroups/breakdownFilter — those are taxonomy navigation,
+              not filters; Home is what clears them, not this card's Clear all.
+              The heading restates the same number as the stat card above
+              (totalFiltered) so the card is self-explanatory without having to
+              look back up — not true redundancy since they're adjacent. */}
+          {(hasActiveFilters || pinnedSpecies.length > 0 || (!isNewAssessments && (neCount > 0 || neBlockedForAll))) && (
+            <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-3 md:p-4">
+              {hasActiveFilters && (
+                <div className="mb-2 text-sm font-semibold text-zinc-900 dark:text-zinc-100">
+                  {totalFiltered.toLocaleString()} Matching Filters
+                </div>
+              )}
+              <div className="flex flex-wrap items-center gap-2 md:gap-4">
+              {hasActiveFilters && (
+                <button
+                  onClick={() => {
+                    setSelectedCategories(new Set());
+                    setSelectedYearRanges(new Set());
+                    setSelectedAssessmentYears(new Set());
+                    setSelectedDescribedYears(new Set());
+                    setSelectedObsRanges(new Set());
+                    setSelectedCountries(new Set());
+                    setSelectedSystems(new Set());
+                    setEndemicsOnly(false);
+                    setSelectedGrowthForms(new Set());
+                    setSelectedPopulationTrends(new Set());
+                    setSelectedMovementPatterns(new Set());
+                    setSelectedThreats(new Set());
+                    setExpandedThreat(null);
+                    setSelectedAssessors(new Set());
+                    setSelectedReviewers(new Set());
+                    setShowOnlyStarred(false);
+                    setExactFilters(EMPTY_EXACT_FILTERS);
+                  }}
+                  title="Reset all filters (taxon selection stays — use Home to clear that)"
+                  className="px-2 md:px-3 py-1.5 rounded-lg text-xs md:text-sm font-medium transition-colors flex items-center gap-1 md:gap-1.5 bg-white text-zinc-700 border border-zinc-200 hover:bg-zinc-50 dark:bg-zinc-800 dark:text-zinc-300 dark:border-zinc-700 shrink-0"
+                >
+                  <svg className="w-3.5 h-3.5 md:w-4 md:h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                  <span className="hidden sm:inline">Clear all</span>
+                </button>
+              )}
+              {pinnedSpecies.length > 0 && (
                 <button
                   onClick={() => setShowOnlyStarred(!showOnlyStarred)}
                   className={`px-2 md:px-3 py-1.5 rounded-lg text-xs md:text-sm font-medium transition-colors flex items-center gap-1 md:gap-1.5 ${
@@ -2564,45 +2643,10 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
                   </svg>
                   <span className="hidden sm:inline">Starred</span> ({pinnedSpecies.length})
                 </button>
-              </>
-            )}
-            {Array.from(selectedTaxa).map(taxonId => (
-              <button
-                key={taxonId}
-                onClick={() => setSelectedTaxa(prev => { const next = new Set(prev); next.delete(taxonId); return next; })}
-                className="px-3 py-1.5 text-sm font-medium rounded-full flex items-center gap-1 hover:opacity-80"
-                style={{ backgroundColor: (TAXA_BY_ID[taxonId]?.color || "#666") + "20", color: TAXA_BY_ID[taxonId]?.color || "#666" }}
-              >
-                {TAXA_BY_ID[taxonId]?.name || taxonId}
-                <span className="text-sm">×</span>
-              </button>
-            ))}
-            {Array.from(selectedSubgroups).map(sgId => {
-              const sgInfo = getNodeDef(sgId);
-              return (
+              )}
+              {!isNewAssessments && Array.from(selectedCategories).filter(cat => cat !== "NE").map(cat => (
                 <button
-                  key={sgId}
-                  onClick={() => setSelectedSubgroups(prev => { const next = new Set(prev); next.delete(sgId); return next; })}
-                  className="px-3 py-1.5 text-sm font-medium rounded-full bg-violet-100 text-violet-600 dark:bg-violet-900/30 dark:text-violet-400 flex items-center gap-1 hover:opacity-80"
-                >
-                  {sgInfo?.node.name ?? dynamicNodeDisplayName(sgId)}
-                  <span className="text-sm">×</span>
-                </button>
-              );
-            })}
-            {breakdownFilter && selectedSubgroups.has(breakdownFilter.nodeId) && (
-              <button
-                onClick={() => setBreakdownFilter(null)}
-                className="px-3 py-1.5 text-sm font-medium rounded-full bg-violet-100 text-violet-600 dark:bg-violet-900/30 dark:text-violet-400 flex items-center gap-1 hover:opacity-80"
-              >
-                {breakdownDisplayName(breakdownFilter.rank, breakdownFilter.name)}
-                {breakdownFilter.onlyIds?.length ? " — No CoL Match" : breakdownFilter.excludeIds?.length ? " — CoL Match" : ""}
-                <span className="text-sm">×</span>
-              </button>
-            )}
-            {!isNewAssessments && Array.from(selectedCategories).filter(cat => cat !== "NE").map(cat => (
-              <button
-                key={cat}
+                  key={cat}
                 onClick={() => setSelectedCategories(prev => { const next = new Set(prev); next.delete(cat); return next; })}
                 className="px-3 py-1.5 text-sm font-medium rounded-full flex items-center gap-1 hover:opacity-80"
                 style={{ backgroundColor: CATEGORY_COLORS[cat] + "20", color: CATEGORY_COLORS[cat] }}
@@ -2796,11 +2840,10 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
                 </button>
               ));
             })()}
-            {/* No standalone species-count readout here anymore — the taxon-focus
-                stat card below shows it (with "of Y" once a filter narrows it),
-                so this row would just be a redundant second copy of the same
-                number. ml-auto moved to the Not Evaluated button so the pills
-                still hug the left and this stays right-aligned. */}
+            {/* No standalone species-count readout here anymore — the "N Matching
+                Filters" heading above already states it. ml-auto moved to the
+                Not Evaluated button so the pills still hug the left and this
+                stays right-aligned. */}
             {!isNewAssessments && (neCount > 0 || neBlockedForAll) && (
               <button
                 disabled={neBlockedForAll}
@@ -2829,88 +2872,6 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
                 {!neBlockedForAll && <span className="text-[10px] opacity-70">({neCount.toLocaleString()})</span>}
               </button>
             )}
-            </div>
-          </div>
-
-          {/* Taxon-focus header — any single selected taxon: a top-level taxon
-              (selectedTopLevelTaxon, e.g. Mammals, or "All Species" itself), a
-              sub-group row drilled into via TaxaSummary's own tree
-              (selectedSubgroupTaxon: dynamic order/family/genus, or a static SSC
-              group), or a non-curated arbitrary rank reached via search
-              (arbitraryTaxon). Two stat cards: the taxon (name + rank) and the
-              matched-species count (mirrors the table's totalFiltered) — the
-              latter also carries the Assessed/Not Evaluated view-mode toggle,
-              since this is where the mode actually changes what's shown.
-              grid-cols-1 sm:grid-cols-2 (not a flat grid-cols-2) plus flex-wrap
-              on the second card keep the toggle from being squeezed at phone
-              widths. TaxaSummary's own breadcrumb table above already shows the
-              tree branch that led here (Mammals → Rodentia → Heteromyidae →
-              ...) when applicable — this is purely an additional, more
-              prominent summary, not a replacement for it. */}
-          {focusedTaxonCard && !isSingleSpecies && (
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-3">
-                <div className="text-xs font-medium uppercase tracking-wide text-zinc-500 dark:text-zinc-400">
-                  {focusedTaxonCard.rank ?? "Taxon"}
-                </div>
-                <div className="mt-0.5 text-2xl font-bold text-zinc-900 dark:text-zinc-100">
-                  {focusedTaxonCard.name}
-                </div>
-              </div>
-              <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-3 flex items-center justify-between gap-3 flex-wrap">
-                <div>
-                  <div className="text-xs font-medium uppercase tracking-wide text-zinc-500 dark:text-zinc-400">
-                    {isNewAssessments ? "Not Evaluated Species" : "Assessed Species"}
-                  </div>
-                  <div className="mt-0.5 flex items-baseline gap-1.5">
-                    {speciesLoading && assessedSpecies.length === 0 ? (
-                      <Spinner className="h-6 w-6" />
-                    ) : (
-                      <>
-                        <span className="text-2xl font-bold text-zinc-900 dark:text-zinc-100">
-                          {totalFiltered.toLocaleString()}
-                        </span>
-                        {/* Only show this once a filter has actually narrowed the count
-                            below the taxon's own total (taxaFilteredSpeciesBase — taxon/
-                            subgroup only, no pill filters). Deliberately doesn't state the
-                            unfiltered total ("of 6,054") — that reads as ambiguous with a
-                            totally different ratio (e.g. assessed-of-described), especially
-                            since the two are often close in magnitude for a given taxon. */}
-                        {totalFiltered !== taxaFilteredSpeciesBase.length && (
-                          <span className="text-sm font-medium text-zinc-400 dark:text-zinc-500">
-                            matching filters
-                          </span>
-                        )}
-                      </>
-                    )}
-                  </div>
-                </div>
-                {onViewModeChange && (
-                  <div className="flex rounded-lg border border-zinc-200 dark:border-zinc-700 overflow-hidden text-xs shrink-0">
-                    <button
-                      type="button"
-                      onClick={() => onViewModeChange("reassessments")}
-                      className={`px-2 py-1 font-medium transition-colors ${
-                        !isNewAssessments
-                          ? "bg-zinc-800 dark:bg-zinc-100 text-white dark:text-zinc-900"
-                          : "bg-white dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400 hover:bg-zinc-50 dark:hover:bg-zinc-700"
-                      }`}
-                    >
-                      Assessed
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => onViewModeChange("new-assessments")}
-                      className={`px-2 py-1 font-medium transition-colors ${
-                        isNewAssessments
-                          ? "bg-zinc-800 dark:bg-zinc-100 text-white dark:text-zinc-900"
-                          : "bg-white dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400 hover:bg-zinc-50 dark:hover:bg-zinc-700"
-                      }`}
-                    >
-                      Not Evaluated
-                    </button>
-                  </div>
-                )}
               </div>
             </div>
           )}

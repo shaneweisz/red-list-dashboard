@@ -142,6 +142,10 @@ interface Props {
   onNavigateToSubgroup?: (taxonId: string, subgroupId: string) => void;
   disableAllSpecies?: boolean;
   viewMode?: "reassessments" | "new-assessments";
+  /** Assessed/Not Evaluated mode switch — paired here with the View selector
+   * (both are page-wide "which lens am I looking through" controls) rather
+   * than living inside RedListView's own stat card. */
+  onViewModeChange?: (mode: "reassessments" | "new-assessments") => void;
   /** Table 1a mode / SSC groups mode / country-view landing page — URL-synced
    * (see useFilterParams) so it survives reload/share and the browser back
    * button can return to it. */
@@ -1262,7 +1266,7 @@ function DescribedInfoIcon({ nodeId, source, breakdown }: { nodeId: string; sour
   );
 }
 
-export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgroups, onToggleSubgroup, onNavigateToSubgroup, disableAllSpecies, viewMode = "reassessments", layoutMode, onLayoutModeChange, countryModeContent, countryPillsContent, countryScope }: Props) {
+export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgroups, onToggleSubgroup, onNavigateToSubgroup, disableAllSpecies, viewMode = "reassessments", onViewModeChange, layoutMode, onLayoutModeChange, countryModeContent, countryPillsContent, countryScope }: Props) {
   const isNewAssessments = viewMode === "new-assessments";
   const [taxa, setTaxa] = useState<TaxonSummary[]>([]);
   const [loading, setLoading] = useState(true);
@@ -3348,7 +3352,33 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
         <span className="hidden sm:inline pl-3 md:pl-4 text-xs text-zinc-400 dark:text-zinc-500">
           {countryMode ? "Hover over a country, or click to lock it and multi-select." : "Click to filter, Cmd/Ctrl+click to multi-select."}
         </span>
-        <span className="inline-flex items-center gap-1.5 ml-auto pr-3 sm:pr-0">
+        <span className="inline-flex items-center gap-2.5 ml-auto pr-3 sm:pr-0">
+          {onViewModeChange && (
+            <div className="flex rounded-lg border border-zinc-200 dark:border-zinc-700 overflow-hidden text-xs shrink-0">
+              <button
+                type="button"
+                onClick={() => onViewModeChange("reassessments")}
+                className={`px-2 py-1 font-medium transition-colors ${
+                  !isNewAssessments
+                    ? "bg-zinc-800 dark:bg-zinc-100 text-white dark:text-zinc-900"
+                    : "bg-white dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400 hover:bg-zinc-50 dark:hover:bg-zinc-700"
+                }`}
+              >
+                Assessed
+              </button>
+              <button
+                type="button"
+                onClick={() => onViewModeChange("new-assessments")}
+                className={`px-2 py-1 font-medium transition-colors ${
+                  isNewAssessments
+                    ? "bg-zinc-800 dark:bg-zinc-100 text-white dark:text-zinc-900"
+                    : "bg-white dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400 hover:bg-zinc-50 dark:hover:bg-zinc-700"
+                }`}
+              >
+                Not Evaluated
+              </button>
+            </div>
+          )}
           {layoutModeSelect}
           {(table1aMode || sscMode) && (
             <span className="relative group/lm">
