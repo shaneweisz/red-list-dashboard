@@ -435,6 +435,16 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
     const prev = prevSelectionRef.current;
     prevSelectionRef.current = { taxa: selectedTaxa, subgroups: selectedSubgroups };
     if (prev === null) return;
+    // Skip going from no taxa to some taxa too — this is URL hydration
+    // (useFilterParams starts empty then populates from URL on mount), not a
+    // user browsing to a new taxon. Without this, a shared link combining
+    // ?view=new-assessments&taxa=X hydrates its taxa a render after this
+    // effect's first (skipped, prev === null) run, so that second run sees
+    // an empty→populated transition, misreads it as a real taxon change, and
+    // immediately resets straight back to Assessed — the exact case the
+    // "very first render" skip above was meant to protect (see the same
+    // hydration guard on the "reset all other filters" effect below).
+    if (prev.taxa.size === 0 && prev.subgroups.size === 0) return;
     const setsEqual = (a: Set<string>, b: Set<string>) => a.size === b.size && [...a].every((v) => b.has(v));
     const changed = !setsEqual(prev.taxa, selectedTaxa) || !setsEqual(prev.subgroups, selectedSubgroups);
     if (changed && isNewAssessments) onViewModeChange?.("reassessments");
