@@ -3,12 +3,13 @@
 import { useState, useEffect } from "react";
 import dynamic from "next/dynamic";
 import Link from "next/link";
-import { FaGlobeAmericas } from "react-icons/fa";
+import { FaGlobeAmericas, FaColumns } from "react-icons/fa";
 import { SpeciesSearchBar } from "../components/SpeciesSearchBar";
 import { ThemeToggle } from "../components/ThemeToggle";
 import { AuthStatus } from "../components/AuthStatus";
 import { useBrand } from "../components/BrandProvider";
 import { parseParams, type ViewMode } from "../hooks/useFilterParams";
+import { SpeciesCacheProvider } from "../contexts/SpeciesCacheContext";
 
 // Dynamically import view component
 const RedListView = dynamic(
@@ -102,6 +103,14 @@ export default function RedListPage() {
               <p className="[grid-area:subtitle] text-[15px] md:text-[1.375rem] text-zinc-500 dark:text-zinc-400">{brand.subtitle}</p>
             )}
             <div className="[grid-area:controls] flex items-center gap-2 sm:justify-self-end">
+              <Link
+                href="/compare"
+                className="flex items-center gap-1.5 px-2.5 py-1.5 text-sm font-medium rounded-lg border border-zinc-200 dark:border-zinc-700 text-zinc-600 dark:text-zinc-400 hover:bg-zinc-50 dark:hover:bg-zinc-800 transition-colors"
+                title="Compare two taxa side by side"
+              >
+                <FaColumns aria-hidden="true" />
+                Compare
+              </Link>
               <ThemeToggle />
               <AuthStatus />
             </div>
@@ -112,14 +121,16 @@ export default function RedListPage() {
         </div>
 
         {/* Content — single component instance stays mounted on viewMode switch */}
-        <RedListView
-          viewMode={viewMode}
-          onViewModeChange={handleViewModeChange}
-          sharedTaxa={sharedTaxa}
-          sharedSubgroups={sharedSubgroups}
-          onTaxaChange={setSharedTaxa}
-          onSubgroupsChange={setSharedSubgroups}
-        />
+        <SpeciesCacheProvider>
+          <RedListView
+            viewMode={viewMode}
+            onViewModeChange={handleViewModeChange}
+            sharedTaxa={sharedTaxa}
+            sharedSubgroups={sharedSubgroups}
+            onTaxaChange={setSharedTaxa}
+            onSubgroupsChange={setSharedSubgroups}
+          />
+        </SpeciesCacheProvider>
       </main>
 
       <footer className="max-w-xl mx-auto mt-2 pb-6 pt-4 border-t border-zinc-200 dark:border-zinc-800">
