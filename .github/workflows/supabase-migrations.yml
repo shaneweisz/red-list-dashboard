@@ -1,0 +1,50 @@
+name: Deploy Supabase migrations
+
+# Applies pending migrations under app/supabase/migrations/ to the Supabase
+# project on merge to main, per Supabase's own recommended CI/CD workflow:
+# https://supabase.com/docs/guides/deployment/managing-environments
+#
+# Safety notes (this repo is public, mirrors the data-sync workflow's
+# reasoning — see weekly-sync.yml):
+#   - Only triggers on push to main (a merge) or a manual workflow_dispatch —
+#     never pull_request/pull_request_target, so a fork PR can't run this
+#     with access to the secrets below or tamper with this file.
+#   - The Supabase access token / DB password live on the `supabase-migrations`
+#     GitHub Environment (required reviewer: the repo owner only), NOT as
+#     plain repo secrets — repo secrets are usable by anyone with push
+#     access. Environment protection pauses ANY job that declares
+#     `environment: supabase-migrations` for manual approval first,
+#     regardless of branch or trigger.
+#   - These credentials can alter production schema (create/drop
+#     tables/columns, change RLS policies), so treat them with at least as
+#     much care as the R2 data-sync credentials.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "app/supabase/migrations/**"
+  workflow_dispatch: {} # allows a manual re-run from the Actions tab
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment: supabase-migrations
+    env:
+      SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+      SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+      SUPABASE_PROJECT_ID: ${{ secrets.SUPABASE_PROJECT_ID }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: supabase/setup-cli@v1
+        with:
+          version: latest
+
+      - name: Link project
+        run: supabase link --project-ref "$SUPABASE_PROJECT_ID"
+        working-directory: app
+
+      - name: Push migrations
+        run: supabase db push
+        working-directory: app
