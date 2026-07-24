@@ -7,5 +7,8 @@ export async function GET() {
     data: { user },
   } = await supabase.auth.getUser();
 
-  return NextResponse.json({ email: user?.email ?? null });
+  return NextResponse.json({
+    email: user?.email ?? null,
+    avatarUrl: user?.user_metadata?.avatar_url ?? null,
+  });
 }
