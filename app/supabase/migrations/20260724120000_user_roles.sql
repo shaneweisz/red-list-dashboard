@@ -29,7 +29,8 @@ create policy "Users can view their own roles"
   on public.user_roles for select
   using (auth.uid() = user_id);
 
--- Run once after applying this migration, to grant yourself the admin role:
+-- Run once after applying this migration, to grant an account the admin
+-- role (swap in the actual signed-up account's email):
 --
 --   insert into public.user_roles (user_id, role)
---   select id, 'admin' from auth.users where email = 'shaneweisz@gmail.com';
+--   select id, 'admin' from auth.users where email = '<your account email>';
