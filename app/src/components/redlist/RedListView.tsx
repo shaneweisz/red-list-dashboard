@@ -2464,7 +2464,6 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
         countryModeContent={countryModeContent}
         countryPillsContent={countryPillsContent}
         countryScope={countryScope}
-        onClearCountryScope={() => { setSelectedCountries(new Set()); setHoverPreviewCountry(null); }}
         onToggleSubgroup={(sgId) => {
           // Clicking a view root ancestor → clear subgroups to show its children.
           // If the currently-selected subgroup is an SSC group, we got here by

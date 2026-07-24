@@ -18,8 +18,6 @@ import { IUCN_SOURCE_URL } from "@/config/taxonomy-tree";
 import { isLiveDrilldownNode, nextDynamicRank, isDynamicNodeId, dynamicNodeDisplayName, dynamicNodeFilter, dynamicNodeRankInfo, parseDynamicNodeId } from "@/lib/dynamic-taxon";
 import type { RedListSpecies } from "@/hooks/useRedListSpeciesQuery";
 import { outdatedCutoffDate } from "@/lib/outdated";
-import { ALPHA2_TO_NAME } from "@/lib/countries";
-import { matchingRegion } from "@/lib/regions";
 
 // See scripts/build-taxa-summary.ts's classifyNoMatch for what each reason means.
 // Modular/additive on top of colBreakdown[].noMatchIds — safe to drop independently
@@ -165,11 +163,6 @@ interface Props {
    * scopes this table's own fetches too. One country, a whole region, or an
    * arbitrary multi-select are all just "the current set of codes" here. */
   countryScope?: string[] | null;
-  /** Clears the country selection without changing layoutMode — used for the
-   * "France ×" chip atop the table when a country's scoped outside Country
-   * View. Country View's own equivalent lives on the map now (see WorldMap's
-   * country chips), not routed through here. */
-  onClearCountryScope?: () => void;
 }
 
 // Any static tree node with children is expandable — plus any node under a live
@@ -1269,7 +1262,7 @@ function DescribedInfoIcon({ nodeId, source, breakdown }: { nodeId: string; sour
   );
 }
 
-export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgroups, onToggleSubgroup, onNavigateToSubgroup, disableAllSpecies, viewMode = "reassessments", layoutMode, onLayoutModeChange, countryModeContent, countryPillsContent, countryScope, onClearCountryScope }: Props) {
+export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgroups, onToggleSubgroup, onNavigateToSubgroup, disableAllSpecies, viewMode = "reassessments", layoutMode, onLayoutModeChange, countryModeContent, countryPillsContent, countryScope }: Props) {
   const isNewAssessments = viewMode === "new-assessments";
   const [taxa, setTaxa] = useState<TaxonSummary[]>([]);
   const [loading, setLoading] = useState(true);
@@ -1322,21 +1315,19 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
   // country and skip applying a now-stale result.
   const countryKeyRef = useRef(countryKey);
   countryKeyRef.current = countryKey;
-  // Display name for the atop-table label: the one country's name, the whole
-  // region's name if the selection exactly matches one (e.g. picked via the
-  // region dropdown, or by happening to cmd-click every one of its countries),
-  // or the countries' own names (comma-separated, alphabetical) for an
-  // arbitrary multi-select that doesn't line up with any single region.
-  const countryScopeLabel = !countryScoped ? "" :
-    countryScope!.length === 1 ? (ALPHA2_TO_NAME[countryScope![0]] ?? countryScope![0]) :
-    matchingRegion(countryScope!) ?? countryScope!
-      .map((c) => ALPHA2_TO_NAME[c] ?? c)
-      .sort()
-      .join(", ");
-  // Country View always uses the plain 3-column style (even before a country is
-  // picked, showing global data) since Described/GBIF/CoL columns have no country
-  // dimension there either — see the `country-scoped` design note near countryMode.
-  const countryStyleColumns = layoutMode === "country" || countryScoped;
+  // Country View's own landing page always uses the plain 3-column style (even
+  // before a country is picked, showing global data) since Described/GBIF/CoL
+  // columns have no country dimension there either. Deliberately NOT also
+  // triggered by countryScoped alone: scoping to a country from an ordinary
+  // taxon view (e.g. clicking the small map widget while browsing Mammals)
+  // used to flip this on too, reformatting the table and duplicating the
+  // selection as a bespoke heading on top of the normal filter pill that
+  // already shows it (RedListView's applied-filters row) — removed per
+  // feedback. Clicking through from Country View into a taxon already resets
+  // layoutMode to null (see handleToggleTaxon's exitCountryModeForTaxon), so
+  // this naturally reverts to the global table at that point without any
+  // extra logic here.
+  const countryStyleColumns = layoutMode === "country";
   // Tighter, non-responsive padding for the sticky Taxonomic Group column in
   // Country View — cellPad's px-4 growth at the md breakpoint is more than the
   // taxon name + icon need just to avoid wrapping, and that column is the
@@ -2878,24 +2869,10 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
           columns get cramped or triggering horizontal scroll). */}
       {countryMode && <div>{countryModeContent}</div>}
       <div className={countryMode ? "min-w-0 flex flex-col h-full" : "contents"}>
-        {/* Country name atop the table — shown whenever a country is scoped
-            OUTSIDE Country View (the normal browsing view's "France ×" chip,
-            via onClearCountryScope). Country View's own version is the
-            chips row above the grid instead. */}
-        {countryScoped && !countryMode && (
-          <div className="flex items-center gap-1.5 mb-1.5 min-w-0 text-lg font-semibold text-zinc-900 dark:text-zinc-100">
-            <span className="truncate" title={countryScopeLabel}>{countryScopeLabel}</span>
-            {onClearCountryScope && (
-              <button
-                onClick={onClearCountryScope}
-                className="text-sm font-normal text-zinc-400 dark:text-zinc-500 hover:text-zinc-600 dark:hover:text-zinc-300 transition-colors shrink-0"
-                title="Clear selected country"
-              >
-                ✕
-              </button>
-            )}
-          </div>
-        )}
+        {/* No "country name atop the table" heading here anymore — a country
+            scoped outside Country View now shows only as the normal removable
+            pill in RedListView's applied-filters row, like every other filter,
+            instead of duplicating the selection as a bespoke heading too. */}
         {/* mb-4 here (not left to the parent's space-y-4) because this whole
             subtree's outer wrappers (lines above) render as `display: contents`
             outside country mode — a contents element's own margin is dropped
