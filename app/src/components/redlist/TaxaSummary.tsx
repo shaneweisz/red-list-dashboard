@@ -3336,21 +3336,18 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
         </div>
       </div>
     </div>
-    {/* Bottom-right-of-table controls row: usage hint (landing-only, left)
-        + the View selector (always shown, right) — gated on perTaxa.length
-        alone (not also !loading) — perTaxa already implies data is present,
-        and also gating on loading made this row flicker away and back on
-        every country switch (loading briefly flips true again for the
-        background refetch even though perTaxa/taxa still hold the previous
-        country's data). The selector itself stays visible past the landing
-        page (unlike the hint) so it's reachable at any drill-down depth. */}
-    {perTaxa.length > 0 && (
+    {/* Bottom-right-of-table controls row: usage hint (left) + View selector
+        (right) — both landing-only, hidden once a taxon row has been clicked.
+        Gated on perTaxa.length alone (not also !loading) — perTaxa already
+        implies data is present, and also gating on loading made this row
+        flicker away and back on every country switch (loading briefly flips
+        true again for the background refetch even though perTaxa/taxa still
+        hold the previous country's data). */}
+    {perTaxa.length > 0 && selectedTaxa.size === 0 && (
       <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1.5 mt-1.5">
-        {selectedTaxa.size === 0 && (
-          <span className="hidden sm:inline pl-3 md:pl-4 text-xs text-zinc-400 dark:text-zinc-500">
-            {countryMode ? "Hover over a country, or click to lock it and multi-select." : "Click to filter, Cmd/Ctrl+click to multi-select."}
-          </span>
-        )}
+        <span className="hidden sm:inline pl-3 md:pl-4 text-xs text-zinc-400 dark:text-zinc-500">
+          {countryMode ? "Hover over a country, or click to lock it and multi-select." : "Click to filter, Cmd/Ctrl+click to multi-select."}
+        </span>
         <span className="inline-flex items-center gap-1.5 ml-auto pr-3 sm:pr-0">
           {layoutModeSelect}
           {(table1aMode || sscMode) && (
