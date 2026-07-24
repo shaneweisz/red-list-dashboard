@@ -18,8 +18,6 @@ import { IUCN_SOURCE_URL } from "@/config/taxonomy-tree";
 import { isLiveDrilldownNode, nextDynamicRank, isDynamicNodeId, dynamicNodeDisplayName, dynamicNodeFilter, dynamicNodeRankInfo, parseDynamicNodeId } from "@/lib/dynamic-taxon";
 import type { RedListSpecies } from "@/hooks/useRedListSpeciesQuery";
 import { outdatedCutoffDate } from "@/lib/outdated";
-import { ALPHA2_TO_NAME } from "@/lib/countries";
-import { matchingRegion } from "@/lib/regions";
 
 // See scripts/build-taxa-summary.ts's classifyNoMatch for what each reason means.
 // Modular/additive on top of colBreakdown[].noMatchIds — safe to drop independently
@@ -165,11 +163,6 @@ interface Props {
    * scopes this table's own fetches too. One country, a whole region, or an
    * arbitrary multi-select are all just "the current set of codes" here. */
   countryScope?: string[] | null;
-  /** Clears the country selection without changing layoutMode — used for the
-   * "France ×" chip atop the table when a country's scoped outside Country
-   * View. Country View's own equivalent lives on the map now (see WorldMap's
-   * country chips), not routed through here. */
-  onClearCountryScope?: () => void;
 }
 
 // Any static tree node with children is expandable — plus any node under a live
@@ -1269,7 +1262,7 @@ function DescribedInfoIcon({ nodeId, source, breakdown }: { nodeId: string; sour
   );
 }
 
-export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgroups, onToggleSubgroup, onNavigateToSubgroup, disableAllSpecies, viewMode = "reassessments", layoutMode, onLayoutModeChange, countryModeContent, countryPillsContent, countryScope, onClearCountryScope }: Props) {
+export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgroups, onToggleSubgroup, onNavigateToSubgroup, disableAllSpecies, viewMode = "reassessments", layoutMode, onLayoutModeChange, countryModeContent, countryPillsContent, countryScope }: Props) {
   const isNewAssessments = viewMode === "new-assessments";
   const [taxa, setTaxa] = useState<TaxonSummary[]>([]);
   const [loading, setLoading] = useState(true);
@@ -1304,7 +1297,16 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
   const menuButtonRef = useRef<HTMLButtonElement>(null);
   const [menuPos, setMenuPos] = useState<{ top: number; left: number }>({ top: 0, left: 0 });
 
-  const countryScoped = !!countryScope?.length;
+  // Only actually scope this table's own data to a country while in Country
+  // View (layoutMode === "country") — countryScope itself is set from ANY
+  // country click/hover anywhere on the page (e.g. the small map widget in
+  // an ordinary taxon view's own charts row), but this table's numbers
+  // (fetchTaxa, ensureSubgroupData, Table 1a/SSC fetches, and the cache-
+  // buster reset below) should stay global outside Country View — clicking
+  // DRC while browsing Mammals shouldn't silently re-scope the breadcrumb
+  // tree to DRC's numbers. countryKey derives from this, so gating here
+  // covers every one of those effects at once.
+  const countryScoped = layoutMode === "country" && !!countryScope?.length;
   // Stable, order-independent key for the current country selection — used in
   // place of the countryScope array itself in effect dependency arrays and
   // fetch query strings. countryScope is a fresh array every render (built via
@@ -1322,21 +1324,11 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
   // country and skip applying a now-stale result.
   const countryKeyRef = useRef(countryKey);
   countryKeyRef.current = countryKey;
-  // Display name for the atop-table label: the one country's name, the whole
-  // region's name if the selection exactly matches one (e.g. picked via the
-  // region dropdown, or by happening to cmd-click every one of its countries),
-  // or the countries' own names (comma-separated, alphabetical) for an
-  // arbitrary multi-select that doesn't line up with any single region.
-  const countryScopeLabel = !countryScoped ? "" :
-    countryScope!.length === 1 ? (ALPHA2_TO_NAME[countryScope![0]] ?? countryScope![0]) :
-    matchingRegion(countryScope!) ?? countryScope!
-      .map((c) => ALPHA2_TO_NAME[c] ?? c)
-      .sort()
-      .join(", ");
-  // Country View always uses the plain 3-column style (even before a country is
-  // picked, showing global data) since Described/GBIF/CoL columns have no country
-  // dimension there either — see the `country-scoped` design note near countryMode.
-  const countryStyleColumns = layoutMode === "country" || countryScoped;
+  // Same layoutMode === "country" gate as countryScoped above — Country
+  // View's own landing page always uses the plain 3-column style (even
+  // before a country is picked, showing global data) since Described/GBIF/
+  // CoL columns have no country dimension there either.
+  const countryStyleColumns = layoutMode === "country";
   // Tighter, non-responsive padding for the sticky Taxonomic Group column in
   // Country View — cellPad's px-4 growth at the md breakpoint is more than the
   // taxon name + icon need just to avoid wrapping, and that column is the
@@ -1476,17 +1468,17 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
   // location data, which Not Evaluated species don't have (no assessment means no
   // assessment_locations row), so it's disabled under New Assessments.
   const layoutModeSelect = (
-    <span className="inline-flex items-center gap-1.5">
-      <span className="text-xs text-zinc-400 dark:text-zinc-500">View:</span>
+    <span className="inline-flex items-center gap-2">
+      <span className="text-sm font-medium text-zinc-600 dark:text-zinc-300">View</span>
       <select
         value={layoutMode ?? "taxonomic"}
         onChange={(e) => {
           const v = e.target.value;
           onLayoutModeChange(v === "taxonomic" ? null : (v as "table1a" | "ssc" | "country"));
         }}
-        className="text-xs bg-zinc-100 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-md px-1.5 py-0.5 text-zinc-700 dark:text-zinc-300 focus:outline-none focus:ring-1 focus:ring-blue-500"
+        className="text-sm bg-zinc-100 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-md px-2 py-1 text-zinc-700 dark:text-zinc-300 focus:outline-none focus:ring-1 focus:ring-blue-500"
       >
-        <option value="taxonomic">By Taxon</option>
+        <option value="taxonomic">By Taxonomic Group</option>
         <option value="country" disabled={isNewAssessments} title={isNewAssessments ? "Not available for New Assessments — Not Evaluated species have no location data" : undefined}>
           By Country
         </option>
@@ -2878,24 +2870,10 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
           columns get cramped or triggering horizontal scroll). */}
       {countryMode && <div>{countryModeContent}</div>}
       <div className={countryMode ? "min-w-0 flex flex-col h-full" : "contents"}>
-        {/* Country name atop the table — shown whenever a country is scoped
-            OUTSIDE Country View (the normal browsing view's "France ×" chip,
-            via onClearCountryScope). Country View's own version is the
-            chips row above the grid instead. */}
-        {countryScoped && !countryMode && (
-          <div className="flex items-center gap-1.5 mb-1.5 min-w-0 text-lg font-semibold text-zinc-900 dark:text-zinc-100">
-            <span className="truncate" title={countryScopeLabel}>{countryScopeLabel}</span>
-            {onClearCountryScope && (
-              <button
-                onClick={onClearCountryScope}
-                className="text-sm font-normal text-zinc-400 dark:text-zinc-500 hover:text-zinc-600 dark:hover:text-zinc-300 transition-colors shrink-0"
-                title="Clear selected country"
-              >
-                ✕
-              </button>
-            )}
-          </div>
-        )}
+        {/* No "country name atop the table" heading here anymore — a country
+            scoped outside Country View now shows only as the normal removable
+            pill in RedListView's applied-filters row, like every other filter,
+            instead of duplicating the selection as a bespoke heading too. */}
         {/* mb-4 here (not left to the parent's space-y-4) because this whole
             subtree's outer wrappers (lines above) render as `display: contents`
             outside country mode — a contents element's own margin is dropped
@@ -3359,21 +3337,26 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
         </div>
       </div>
     </div>
-    {/* Subtle controls: usage hint + # Described toggle + expand/table controls,
-        all landing-only — hidden once a taxon is selected. Gated on perTaxa.length
-        alone (not also !loading) — perTaxa already implies data is present, and
-        also gating on loading made this row flicker away and back on every
-        country switch (loading briefly flips true again for the background
-        refetch even though perTaxa/taxa still hold the previous country's data). */}
+    {/* Bottom-right-of-table controls row: usage hint (left) + View selector
+        (right) — both landing-only, hidden once a taxon row has been clicked.
+        Gated on perTaxa.length alone (not also !loading) — perTaxa already
+        implies data is present, and also gating on loading made this row
+        flicker away and back on every country switch (loading briefly flips
+        true again for the background refetch even though perTaxa/taxa still
+        hold the previous country's data). */}
     {perTaxa.length > 0 && selectedTaxa.size === 0 && (
       <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1.5 mt-1.5">
-        {/* Usage hint — desktop only; the toggles below matter more on mobile than this prose.
-            Country View starts hover-driven, then locks to click+multi-select once a
-            country's picked (see handleCountryDrilldown), so it gets its own wording. */}
         <span className="hidden sm:inline pl-3 md:pl-4 text-xs text-zinc-400 dark:text-zinc-500">
           {countryMode ? "Hover over a country, or click to lock it and multi-select." : "Click to filter, Cmd/Ctrl+click to multi-select."}
         </span>
-        <div className="flex flex-wrap items-center gap-3 pl-3 sm:pl-0">
+        <span className="inline-flex items-center gap-1.5 ml-auto pr-3 sm:pr-0">
+          {/* Assessed/Not Evaluated toggle used to be paired here too, but it's
+              a scope control that matters just as much (more, really) once
+              you've drilled into a specific taxon as it does on this landing
+              page — pairing its visibility with the View selector's landing-
+              only rule broke that. It now lives as the "Assessed Species"
+              stat card's own header instead (RedListView), which is shown at
+              both states. */}
           {layoutModeSelect}
           {(table1aMode || sscMode) && (
             <span className="relative group/lm">
@@ -3386,12 +3369,12 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
               >
                 <FaInfoCircle size={10} />
               </a>
-              <span className="absolute bottom-full left-1/2 -translate-x-1/2 mb-1 px-2 py-1 text-xs text-white bg-zinc-800 dark:bg-zinc-700 rounded whitespace-nowrap opacity-0 invisible group-hover/lm:opacity-100 group-hover/lm:visible z-50 shadow-lg pointer-events-none">
+              <span className="absolute bottom-full right-0 mb-1 px-2 py-1 text-xs text-white bg-zinc-800 dark:bg-zinc-700 rounded whitespace-nowrap opacity-0 invisible group-hover/lm:opacity-100 group-hover/lm:visible z-50 shadow-lg pointer-events-none">
                 {table1aMode ? "View IUCN Red List Table 1a (PDF)" : "View IUCN SSC Specialist Groups (mammals, reptiles, fishes, invertebrates, plants & fungi)"}
               </span>
             </span>
           )}
-        </div>
+        </span>
       </div>
     )}
     </>

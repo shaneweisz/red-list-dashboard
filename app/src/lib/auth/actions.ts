@@ -6,7 +6,17 @@ import { createClient } from "@/lib/supabase/server";
 
 export async function signInWithGitHub() {
   const supabase = await createClient();
-  const origin = (await headers()).get("origin");
+
+  // Derive the current domain from the Host header (what Vercel's own routing
+  // is built on, present on every request) rather than the browser-sent
+  // Origin header — Origin proved unreliable across this app's several
+  // custom domains (different DNS/proxy paths), occasionally producing a
+  // redirectTo Supabase didn't recognize and silently falling back to the
+  // Site URL instead of completing sign-in.
+  const headersList = await headers();
+  const host = headersList.get("x-forwarded-host") ?? headersList.get("host");
+  const protocol = headersList.get("x-forwarded-proto") ?? "https";
+  const origin = `${protocol}://${host}`;
 
   const { data, error } = await supabase.auth.signInWithOAuth({
     provider: "github",

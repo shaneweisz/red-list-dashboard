@@ -19,6 +19,7 @@ import { parseAssessors } from "@/lib/parseAssessors";
 import { iucnRegionCountries, countryToIucnRegion } from "@/lib/regions";
 import { useFilterParams } from "@/hooks/useFilterParams";
 import { type RedListSpecies } from "@/hooks/useRedListSpeciesQuery";
+import { useSpeciesCache } from "@/contexts/SpeciesCacheContext";
 import { isOutdated, outdatedCutoffDate } from "@/lib/outdated";
 
 import AssessorCandidatesTable from "../AssessorCandidatesTable";
@@ -143,11 +144,16 @@ interface SpeciesDetails {
 }
 
 
-// Debounced search input - manages own state for instant typing, debounces parent updates
+// Debounced search input — manages own state for instant typing, debounces parent updates.
+// Filters the currently-visible species table by name in place, composing with whatever
+// pill filters are already active (e.g. Mammals + EN + Mexico, then narrow to "mouse") —
+// distinct from the page header's SpeciesSearchBar, which navigates to a taxon/species
+// instead of narrowing the current view. Placeholder text keeps the two from reading as
+// duplicates of each other.
 function DebouncedSearchInput({
   onSearch,
   initialValue = "",
-  placeholder = "Search species...",
+  placeholder = "Filter by name...",
   className,
 }: {
   onSearch: (value: string) => void;
@@ -315,21 +321,14 @@ interface RedListViewProps {
   sharedSubgroups?: Set<string>;
   onTaxaChange?: (taxa: Set<string>) => void;
   onSubgroupsChange?: (subgroups: Set<string>) => void;
+  // Namespaces this instance's URL params (e.g. "_b" turns `taxa` into `taxa_b`) so
+  // two instances can share one URL without clobbering each other — compare mode's
+  // second panel. Defaults to "" (today's single-dashboard behavior).
+  paramSuffix?: string;
 }
 
-export default function RedListView({ viewMode = "reassessments", onViewModeChange, sharedTaxa, sharedSubgroups, onTaxaChange, onSubgroupsChange }: RedListViewProps = {}) {
+export default function RedListView({ viewMode = "reassessments", onViewModeChange, sharedTaxa, sharedSubgroups, onTaxaChange, onSubgroupsChange, paramSuffix = "" }: RedListViewProps = {}) {
   const isNewAssessments = viewMode === "new-assessments";
-  // Every species/truncation cache below is keyed by (mode, taxonId), not taxonId
-  // alone — a taxon's Assessed and Not Evaluated species lists are entirely
-  // different data. Previously taxonId alone was the key, with the whole cache
-  // wiped on every mode switch (see the effect below that used to do this) to
-  // avoid serving one mode's data under the other's key — meaning toggling back
-  // to a mode you'd already loaded for this taxon still paid the full fetch cost
-  // again (reported: several seconds each time for a large taxon like Plants,
-  // whose Not Evaluated list is huge). Prefixing the key means each mode's data
-  // is cached independently: revisiting a mode you've already loaded for this
-  // taxon is instant, and only a genuinely new (mode, taxon) pair fetches.
-  const modeKeyPrefix = isNewAssessments ? "ne:" : "assessed:";
 
   // The species table scrolls horizontally on narrow screens, so an expanded
   // detail row's `<td colSpan>` is as wide as the (often off-screen) table, not
@@ -376,11 +375,18 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
     sortField, sortDirection, setSort,
     mapViewMode, mapSortKey, mapSortDirection, setMapViewMode, setMapSort,
     clearAllFilters,
+    clearAllFiltersAndTaxa,
     setViewMode: setUrlViewMode,
     species: urlSpecies, tab: urlTab,
     setSpeciesParam, setTabParam,
     fromPopstateRef,
-  } = useFilterParams();
+  } = useFilterParams(paramSuffix);
+
+  const cache = useSpeciesCache();
+  const speciesApiUrl = useCallback(
+    (taxonId: string, categoryParam: string) => `${SPECIES_API}?taxon=${encodeURIComponent(taxonId)}${categoryParam}`,
+    []
+  );
 
   // Country view needs real per-country location data, which Not Evaluated
   // species don't have (no assessment means no assessment_locations row) — see
@@ -435,22 +441,31 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
     const prev = prevSelectionRef.current;
     prevSelectionRef.current = { taxa: selectedTaxa, subgroups: selectedSubgroups };
     if (prev === null) return;
+    // Skip going from no taxa to some taxa too — this is URL hydration
+    // (useFilterParams starts empty then populates from URL on mount), not a
+    // user browsing to a new taxon. Without this, a shared link combining
+    // ?view=new-assessments&taxa=X hydrates its taxa a render after this
+    // effect's first (skipped, prev === null) run, so that second run sees
+    // an empty→populated transition, misreads it as a real taxon change, and
+    // immediately resets straight back to Assessed — the exact case the
+    // "very first render" skip above was meant to protect (see the same
+    // hydration guard on the "reset all other filters" effect below).
+    if (prev.taxa.size === 0 && prev.subgroups.size === 0) return;
     const setsEqual = (a: Set<string>, b: Set<string>) => a.size === b.size && [...a].every((v) => b.has(v));
     const changed = !setsEqual(prev.taxa, selectedTaxa) || !setsEqual(prev.subgroups, selectedSubgroups);
     if (changed && isNewAssessments) onViewModeChange?.("reassessments");
   }, [selectedTaxa, selectedSubgroups, isNewAssessments, onViewModeChange]);
 
   // Reset mode-specific filter state when switching between reassessments and
-  // new-assessments. speciesByTaxon/truncationByTaxon are NOT cleared here — they're
-  // keyed by (mode, taxonId) (see modeKeyPrefix above), so each mode's data survives
-  // the switch independently and toggling back to a mode already loaded for the
-  // current taxon is instant instead of re-fetching from scratch every time.
+  // new-assessments. The shared species cache (SpeciesCacheContext) is NOT cleared
+  // here — it's keyed by the exact request URL, which already differs between modes
+  // (`?taxon=X` vs `?taxon=X&category=NE`), so each mode's data survives the switch
+  // independently and toggling back to a mode already loaded for the current taxon
+  // is instant instead of re-fetching from scratch every time.
   const prevViewModeRef = useRef(viewMode);
   useEffect(() => {
     if (prevViewModeRef.current === viewMode) return;
     prevViewModeRef.current = viewMode;
-    setNeSpecies([]);
-    setNeSpeciesFetched(false);
     // Clear assessment-specific filters (preserve search + species so search-bar navigation survives mode
     // switch; also preserve selectedSubgroups — new-assessments mode fetches a selected sub-group directly
     // (see the fetch effect below), so e.g. toggling Unassessed while viewing an SSC group should stay
@@ -616,144 +631,93 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
   const PAGE_SIZE = pageSize;
 
   // ── Data fetching ────────────────────────────────────────────────────
-  // Cache of fetched species per taxon ID. When "all" is fetched, it supersedes
-  // individual taxa caches. Each taxon is fetched at most once.
-  const [speciesByTaxon, setSpeciesByTaxon] = useState<Record<string, RedListSpecies[]>>({});
-  // Per-taxon NE-list truncation (giant aggregates are capped at 400k server-side).
-  const [truncationByTaxon, setTruncationByTaxon] = useState<Record<string, { truncated: boolean; tooLarge: boolean; neTotal: number | null; shown: number }>>({});
-  const [loadingTaxa, setLoadingTaxa] = useState<Set<string>>(new Set());
-  const [error, setError] = useState<string | null>(null);
-  const abortRefs = useRef<Record<string, AbortController>>({});
-  const prefetchPromiseRef = useRef<Promise<void> | null>(null);
+  // Species are fetched and cached in the shared SpeciesCacheContext (keyed by
+  // the exact request URL, e.g. `/api/redlist/species?taxon=birds`), not local
+  // component state — this is what lets compare mode's two panels share a
+  // fetch when they pick the same taxon, and it naturally keeps Assessed vs Not
+  // Evaluated data for the same taxon separate too, since their URLs differ
+  // (`?taxon=birds` vs `?taxon=birds&category=NE`) without needing an explicit
+  // mode-prefixed cache key.
+  const error = useMemo(() => {
+    if (selectedTaxa.size === 0) return null;
+    const fetchSet = isNewAssessments && selectedSubgroups.size > 0 ? [...selectedSubgroups] : [...selectedTaxa];
+    const categoryParam = isNewAssessments ? "&category=NE" : "";
+    for (const t of fetchSet) {
+      if (isNewAssessments && t === "all") continue;
+      const err = cache.errors[speciesApiUrl(t, categoryParam)];
+      if (err) return err;
+    }
+    return null;
+  }, [selectedTaxa, selectedSubgroups, isNewAssessments, cache.errors, speciesApiUrl]);
 
-  // Prefetch all species on mount so taxa clicks feel instant (skip for new-assessments — NE dataset too large).
-  // Declared before the taxa-fetch effect below so that on initial mount (e.g. landing directly on
-  // "All Species"), prefetchPromiseRef is already set by the time that effect runs — avoiding a
-  // duplicate concurrent fetch of the same "all" data and letting it attach to this one instead.
-  // Also re-runs whenever isNewAssessments flips back to false (switching back to Assessed mode),
-  // since that's this effect's own dependency — the guard below skips the fetch entirely once
-  // "assessed:all" is already cached (not just skipping the cache WRITE after an unnecessary
-  // request completes, which the old code did), which is what makes switching back to Assessed
-  // mode instant instead of re-fetching the whole dataset every time. speciesByTaxon deliberately
-  // ISN'T a dependency here — this only needs its value at the moment isNewAssessments changes
-  // (which the effect's own closure already captures fresh each time it re-runs), not a re-run on
-  // every unrelated speciesByTaxon update (e.g. an NE per-taxon fetch elsewhere completing), which
-  // would abort and restart this fetch pointlessly.
+  // Prefetch all species on mount so taxa clicks feel instant (skip for new-assessments — NE
+  // dataset too large). Idempotent via the shared cache's request() — a no-op once
+  // `?taxon=all` is cached or already in flight (e.g. requested by another compare-mode panel,
+  // or by the per-taxon effect below reaching "all" first).
   useEffect(() => {
-    if (isNewAssessments || speciesByTaxon["assessed:all"]) return;
-    const controller = new AbortController();
-    const promise = fetch(`${SPECIES_API}?taxon=all`, { signal: controller.signal })
-      .then(res => res.ok ? res.json() : null)
-      .then(data => {
-        if (data && !controller.signal.aborted) {
-          setSpeciesByTaxon(prev => prev["assessed:all"] ? prev : { ...prev, "assessed:all": data.species });
-        }
-      })
-      .catch(() => {})
-      .finally(() => { prefetchPromiseRef.current = null; });
-    prefetchPromiseRef.current = promise;
-    return () => { controller.abort(); prefetchPromiseRef.current = null; };
-  }, [isNewAssessments]); // eslint-disable-line react-hooks/exhaustive-deps -- speciesByTaxon read intentionally excluded, see comment above
+    if (isNewAssessments) return;
+    cache.request(`${SPECIES_API}?taxon=all`);
+  // Depends on cache.request specifically, not the whole cache object: the
+  // linter conservatively wants the whole object for any method call off a
+  // hook-returned value, but cache.request's identity only ever changes
+  // together with cache.entries (see SpeciesCacheContext) — depending on the
+  // whole object here would additionally re-run this effect on every
+  // loadingUrls/errors-only update, e.g. another compare-mode panel's fetch
+  // completing or failing, which has nothing to do with this taxon.
+  }, [isNewAssessments, cache.request]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Determine which taxa need fetching
+  // Determine which taxa need fetching, and request them from the shared cache
   useEffect(() => {
     if (selectedTaxa.size === 0) return;
 
     // In new-assessments mode, a drill-down fetches the SUB-GROUP directly so a sub-group of
     // a too-large aggregate (e.g. crustaceans under invertebrates, beetles under insects)
     // loads on its own instead of being filtered out of the parent's empty (tooLarge) result.
-    // Skip "all" — NE dataset too large for serverless.
     const fetchSet = isNewAssessments && selectedSubgroups.size > 0
       ? [...selectedSubgroups]
       : [...selectedTaxa];
-    const taxaToFetch = fetchSet.filter(t => {
-      if (isNewAssessments && t === "all") return false;
-      const key = modeKeyPrefix + t;
-      return !speciesByTaxon[key] && !loadingTaxa.has(key);
-    });
-    // If "all" is already cached for this mode, no individual fetches needed
-    if (speciesByTaxon[modeKeyPrefix + "all"] && !selectedTaxa.has("all")) {
-      // "all" data covers everything — no new fetches needed
-      return;
+    const categoryParam = isNewAssessments ? "&category=NE" : "";
+
+    // If "all" is already cached, no individual fetches needed — "all" data covers everything.
+    if (cache.entries[speciesApiUrl("all", categoryParam)] && !selectedTaxa.has("all")) return;
+
+    for (const taxonId of fetchSet) {
+      if (isNewAssessments && taxonId === "all") continue; // NE dataset too large for "all"
+      cache.request(speciesApiUrl(taxonId, categoryParam));
     }
-    if (taxaToFetch.length === 0) return;
+  // cache.entries (for the "all" fast-path check above) + cache.request
+  // specifically, not the whole cache object — see the prefetch effect
+  // above for why depending on the whole object over-triggers this.
+  }, [selectedTaxa, selectedSubgroups, isNewAssessments, cache.entries, cache.request, speciesApiUrl]); // eslint-disable-line react-hooks/exhaustive-deps
 
-    for (const taxonId of taxaToFetch) {
-      const key = modeKeyPrefix + taxonId;
-      // Reuse the in-flight background prefetch instead of duplicating the request
-      // (the prefetch is assessed-only — see its own effect above — so only applies
-      // when this fetch is also for assessed mode).
-      if (taxonId === "all" && !isNewAssessments && prefetchPromiseRef.current) {
-        setLoadingTaxa(prev => new Set(prev).add(key));
-        prefetchPromiseRef.current.then(() => {
-          setLoadingTaxa(prev => { const next = new Set(prev); next.delete(key); return next; });
-        });
-        continue;
-      }
-
-      // If fetching "all", abort any in-flight individual taxon fetches FOR THIS MODE
-      // (a different mode's in-flight fetch is unrelated and shouldn't be aborted).
-      if (taxonId === "all") {
-        Object.entries(abortRefs.current).forEach(([id, ctrl]) => {
-          if (id !== key && id.startsWith(modeKeyPrefix)) ctrl.abort();
-        });
-      }
-
-      const controller = new AbortController();
-      abortRefs.current[key] = controller;
-
-      setLoadingTaxa(prev => new Set(prev).add(key));
-
-      const categoryParam = isNewAssessments ? "&category=NE" : "";
-      fetch(`${SPECIES_API}?taxon=${encodeURIComponent(taxonId)}${categoryParam}`, { signal: controller.signal })
-        .then(async res => {
-          if (!res.ok) {
-            const body = await res.json().catch(() => ({}));
-            throw new Error(body.error || `Species API returned ${res.status}`);
-          }
-          return res.json();
-        })
-        .then(data => {
-          if (!controller.signal.aborted) {
-            setSpeciesByTaxon(prev => ({ ...prev, [key]: data.species }));
-            setTruncationByTaxon(prev => ({ ...prev, [key]: { truncated: !!data.truncated, tooLarge: !!data.tooLarge, neTotal: data.neTotal ?? null, shown: data.species.length } }));
-          }
-        })
-        .catch(err => {
-          if (!controller.signal.aborted) {
-            setError(err instanceof Error ? err.message : "Unknown error");
-          }
-        })
-        .finally(() => {
-          if (!controller.signal.aborted) {
-            setLoadingTaxa(prev => { const next = new Set(prev); next.delete(key); return next; });
-          }
-          delete abortRefs.current[key];
-        });
-    }
-  }, [selectedTaxa, selectedSubgroups, speciesByTaxon, loadingTaxa, isNewAssessments, modeKeyPrefix]);
-
-  const speciesLoading = loadingTaxa.size > 0;
+  // "Loading" means one of THIS panel's currently-relevant URLs is still in flight —
+  // deliberately not "is anything in the shared cache loading", since in compare mode
+  // that set can include requests belonging to the other panel entirely.
+  const speciesLoading = useMemo(() => {
+    if (selectedTaxa.size === 0) return false;
+    const fetchSet = isNewAssessments && selectedSubgroups.size > 0 ? [...selectedSubgroups] : [...selectedTaxa];
+    const categoryParam = isNewAssessments ? "&category=NE" : "";
+    return fetchSet.some(t => !(isNewAssessments && t === "all") && cache.loadingUrls.has(speciesApiUrl(t, categoryParam)));
+  }, [selectedTaxa, selectedSubgroups, isNewAssessments, cache.loadingUrls, speciesApiUrl]);
 
   // Merge species from all fetched taxa relevant to current selection
   const assessedSpecies = useMemo(() => {
     if (selectedTaxa.size === 0) return [];
+    const categoryParam = isNewAssessments ? "&category=NE" : "";
     // If "all" is cached for this mode, use it directly
-    if (speciesByTaxon[modeKeyPrefix + "all"]) return speciesByTaxon[modeKeyPrefix + "all"];
+    const allEntry = cache.entries[speciesApiUrl("all", categoryParam)];
+    if (allEntry) return allEntry.species;
     // In new-assessments mode a drill-down is fetched per sub-group, so merge those caches
     // when sub-groups are selected; otherwise merge the per-taxon caches.
     const sourceIds = isNewAssessments && selectedSubgroups.size > 0 ? [...selectedSubgroups] : [...selectedTaxa];
     let merged: RedListSpecies[] = [];
     for (const taxonId of sourceIds) {
-      const key = modeKeyPrefix + taxonId;
-      if (speciesByTaxon[key]) merged = merged.concat(speciesByTaxon[key]);
+      const entry = cache.entries[speciesApiUrl(taxonId, categoryParam)];
+      if (entry) merged = merged.concat(entry.species);
     }
     return merged;
-  }, [selectedTaxa, selectedSubgroups, speciesByTaxon, isNewAssessments, modeKeyPrefix]);
+  }, [selectedTaxa, selectedSubgroups, cache.entries, isNewAssessments, speciesApiUrl]);
 
-  // NE species lazy loading (only fetched when NE category is selected)
-  const [neSpecies, setNeSpecies] = useState<RedListSpecies[]>([]);
-  const [neSpeciesFetched, setNeSpeciesFetched] = useState(false);
   // Determine taxon for NE fetch: "all" if selected or multi-taxa, otherwise the single taxon
   const neFetchTaxon = useMemo(() => {
     if (selectedTaxa.size === 0) return null;
@@ -762,18 +726,22 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
     return "all";
   }, [selectedTaxa]);
 
+  // NE species lazy loading (only fetched when NE category is selected in Assessed mode —
+  // in new-assessments mode the main path above already fetches NE species). Shares the same
+  // shared-cache URL as the new-assessments-mode fetch for the same taxon, so switching
+  // between "Assessed + NE filter" and New Assessments for one taxon only ever fetches once.
   useEffect(() => {
-    // Skip NE lazy-load in new-assessments mode — main path already fetches NE species
     if (isNewAssessments) return;
-    if (!selectedCategories.has("NE") || neSpeciesFetched || neFetchTaxon === null) return;
-    fetch(`${SPECIES_API}?taxon=${encodeURIComponent(neFetchTaxon)}&category=NE`)
-      .then(res => res.ok ? res.json() : null)
-      .then(data => { if (data?.species) setNeSpecies(data.species); setNeSpeciesFetched(true); })
-      .catch(() => {});
-  }, [selectedCategories, neSpeciesFetched, neFetchTaxon, isNewAssessments]);
+    if (!selectedCategories.has("NE") || neFetchTaxon === null) return;
+    cache.request(speciesApiUrl(neFetchTaxon, "&category=NE"));
+    // cache.request specifically, not the whole cache object — same reasoning
+    // as the prefetch effect above.
+  }, [selectedCategories, neFetchTaxon, isNewAssessments, cache.request, speciesApiUrl]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Reset NE fetch when taxon selection changes
-  useEffect(() => { setNeSpecies([]); setNeSpeciesFetched(false); }, [neFetchTaxon]);
+  const neSpecies = useMemo(() => {
+    if (isNewAssessments || !selectedCategories.has("NE") || neFetchTaxon === null) return [];
+    return cache.entries[speciesApiUrl(neFetchTaxon, "&category=NE")]?.species ?? [];
+  }, [isNewAssessments, selectedCategories, neFetchTaxon, cache.entries, speciesApiUrl]);
 
   // "All Species" (or any multi-taxon selection, which also resolves neFetchTaxon to
   // "all") has ~1.8M not-evaluated species — far past querySpecies's NE_CAP, so the
@@ -1079,7 +1047,9 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
       return;
     }
     // Skip if species is already in bulk-loaded data
-    const allSpecies = [...(speciesByTaxon[modeKeyPrefix + (selectedTaxa.size === 1 ? [...selectedTaxa][0] : "all")] ?? []), ...neSpecies];
+    const bulkTaxon = selectedTaxa.size === 1 ? [...selectedTaxa][0] : "all";
+    const bulkUrl = speciesApiUrl(bulkTaxon, isNewAssessments ? "&category=NE" : "");
+    const allSpecies = [...(cache.entries[bulkUrl]?.species ?? []), ...neSpecies];
     if (allSpecies.some(s => s.id === urlSpecies)) {
       setSingleSpeciesPreview(null);
       return;
@@ -1763,11 +1733,11 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
     if (!isNewAssessments) return null;
     let truncated = false; let neTotal = 0; let shown = 0;
     for (const t of selectedTaxa) {
-      const info = truncationByTaxon[modeKeyPrefix + t];
-      if (info?.truncated) { truncated = true; neTotal += info.neTotal ?? 0; shown += info.shown; }
+      const info = cache.entries[speciesApiUrl(t, "&category=NE")];
+      if (info?.truncated) { truncated = true; neTotal += info.neTotal ?? 0; shown += info.species.length; }
     }
     return truncated ? { neTotal, shown } : null;
-  }, [isNewAssessments, selectedTaxa, truncationByTaxon, modeKeyPrefix]);
+  }, [isNewAssessments, selectedTaxa, cache.entries, speciesApiUrl]);
 
   // A giant aggregate (insects, invertebrates) exceeds the cap — the API returns no rows
   // and flags tooLarge. Don't render the charts/list; prompt a drill-down into a sub-group.
@@ -1781,11 +1751,11 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
     const names: string[] = [];
     let neTotal = 0;
     for (const t of targets) {
-      const info = truncationByTaxon[modeKeyPrefix + t];
+      const info = cache.entries[speciesApiUrl(t, "&category=NE")];
       if (info?.tooLarge) { names.push(findNode(t)?.name ?? t); neTotal += info.neTotal ?? 0; }
     }
     return names.length > 0 ? { names, neTotal } : null;
-  }, [isNewAssessments, selectedTaxa, selectedSubgroups, truncationByTaxon, modeKeyPrefix]);
+  }, [isNewAssessments, selectedTaxa, selectedSubgroups, cache.entries, speciesApiUrl]);
 
   // ── Client-side pagination ─────────────────────────────────────────
   const totalFiltered = filteredSpecies.length;
@@ -2505,7 +2475,6 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
         countryModeContent={countryModeContent}
         countryPillsContent={countryPillsContent}
         countryScope={countryScope}
-        onClearCountryScope={() => { setSelectedCountries(new Set()); setHoverPreviewCountry(null); }}
         onToggleSubgroup={(sgId) => {
           // Clicking a view root ancestor → clear subgroups to show its children.
           // If the currently-selected subgroup is an SSC group, we got here by
@@ -2575,17 +2544,21 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
               sub-group row drilled into via TaxaSummary's own tree
               (selectedSubgroupTaxon: dynamic order/family/genus, or a static SSC
               group), or a non-curated arbitrary rank reached via search
-              (arbitraryTaxon). Two stat cards: the taxon (name + rank) and the
-              matched-species count (mirrors the table's totalFiltered) — the
-              latter also carries the Assessed/Not Evaluated view-mode toggle
-              (previously a page-header control, moved here since this is where
-              the mode actually changes what's shown). TaxaSummary's own
-              breadcrumb table above already shows the tree branch that led here
-              (Mammals → Rodentia → Heteromyidae → ...) when applicable — this is
-              purely an additional, more prominent summary, not a replacement
-              for it. */}
+              (arbitraryTaxon). Two fixed stat cards — the taxon (name + rank)
+              and its total species count (taxaFilteredSpeciesBase) — neither
+              reacts to pill filters, so this row never grows/changes as
+              filters are added; the applied-filters row below (right above
+              the species table) is what shows the live, filtered picture.
+              The Species card's Assessed/Not Evaluated toggle sits to the
+              right of its label, vertically centered against the whole card;
+              it lives here (not the landing-only row with the View selector)
+              so it's usable at any drill-down depth. TaxaSummary's own
+              breadcrumb table above already shows the tree branch that led
+              here (Mammals → Rodentia → Heteromyidae → ...) when applicable —
+              this is purely an additional, more prominent summary, not a
+              replacement for it. */}
           {focusedTaxonCard && !isSingleSpecies && (
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-3">
                 <div className="text-xs font-medium uppercase tracking-wide text-zinc-500 dark:text-zinc-400">
                   {focusedTaxonCard.rank ?? "Taxon"}
@@ -2602,7 +2575,7 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
                   <div className="mt-0.5 text-2xl font-bold text-zinc-900 dark:text-zinc-100">
                     {speciesLoading && assessedSpecies.length === 0
                       ? <Spinner className="h-6 w-6" />
-                      : totalFiltered.toLocaleString()}
+                      : taxaFilteredSpeciesBase.length.toLocaleString()}
                   </div>
                 </div>
                 {onViewModeChange && (
@@ -3137,11 +3110,12 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
             })()}
           </div>
 
-          {/* More Filters (collapsible) - hidden for New Assessments */}
-          {!isNewAssessments && <div>
+          {/* More Filters — a full-width collapsible card row, consistent with
+              the other cards on the page (hidden for New Assessments) */}
+          {!isNewAssessments && <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl">
             <button
               onClick={() => setMoreFiltersOpen(prev => !prev)}
-              className="flex items-center gap-1.5 text-xs font-medium text-zinc-500 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-300 transition-colors"
+              className="w-full flex items-center gap-1.5 px-3 md:px-4 py-2.5 text-sm font-medium text-zinc-700 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800 rounded-t-xl transition-colors"
             >
               <svg className={`w-3.5 h-3.5 transition-transform ${moreFiltersOpen ? "rotate-90" : ""}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
@@ -3154,10 +3128,10 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
               )}
             </button>
             {moreFiltersOpen && (
-              <div className="mt-3 flex flex-col gap-3">
+              <div className="px-3 md:px-4 pb-3 md:pb-4 pt-3 md:pt-4 border-t border-zinc-200 dark:border-zinc-800 flex flex-col gap-3">
                 {/* Realm */}
-                <div className="flex items-center gap-2">
-                  <span className="text-xs font-medium text-zinc-500 dark:text-zinc-400 shrink-0 w-16">Realm</span>
+                <div className="flex items-center gap-2 bg-zinc-50 dark:bg-zinc-800/50 border border-zinc-200 dark:border-zinc-700 rounded-lg px-3 py-2">
+                  <span className="text-sm font-semibold text-zinc-900 dark:text-zinc-100 shrink-0 w-20">Realm</span>
                   <div className="flex flex-wrap gap-1.5">
                     {(["Terrestrial", "Freshwater", "Marine"] as const).map(system => {
                       const isSelected = selectedSystems.has(system);
@@ -3215,8 +3189,8 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
                   const sorted = Object.entries(gfCounts).sort((a, b) => b[1] - a[1]);
                   if (sorted.length === 0) return null;
                   return (
-                    <div className="flex items-start gap-2">
-                      <span className="text-xs font-medium text-zinc-500 dark:text-zinc-400 shrink-0 w-16 pt-1">Growth</span>
+                    <div className="flex items-start gap-2 bg-zinc-50 dark:bg-zinc-800/50 border border-zinc-200 dark:border-zinc-700 rounded-lg px-3 py-2">
+                      <span className="text-sm font-semibold text-zinc-900 dark:text-zinc-100 shrink-0 w-20 pt-1">Growth</span>
                       <div className="flex flex-wrap gap-1.5">
                         {sorted.map(([gf, count]) => {
                           const isSelected = selectedGrowthForms.has(gf);
@@ -3247,8 +3221,8 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
                 })()}
 
                 {/* Trend */}
-                <div className="flex items-center gap-2">
-                    <span className="text-xs font-medium text-zinc-500 dark:text-zinc-400 shrink-0 w-16">Trend</span>
+                <div className="flex items-center gap-2 bg-zinc-50 dark:bg-zinc-800/50 border border-zinc-200 dark:border-zinc-700 rounded-lg px-3 py-2">
+                    <span className="text-sm font-semibold text-zinc-900 dark:text-zinc-100 shrink-0 w-20">Trend</span>
                     <div className="flex flex-wrap gap-1.5">
                       {(["Increasing", "Stable", "Decreasing", "Unknown"] as const).map(trend => {
                         const isSelected = selectedPopulationTrends.has(trend);
@@ -3279,8 +3253,8 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
 
                 {/* Movement Patterns */}
                 {!isNewAssessments && (
-                  <div className="flex items-center gap-2">
-                    <span className="text-xs font-medium text-zinc-500 dark:text-zinc-400 shrink-0 w-16">Movement</span>
+                  <div className="flex items-center gap-2 bg-zinc-50 dark:bg-zinc-800/50 border border-zinc-200 dark:border-zinc-700 rounded-lg px-3 py-2">
+                    <span className="text-sm font-semibold text-zinc-900 dark:text-zinc-100 shrink-0 w-20">Movement</span>
                       <div className="flex flex-wrap gap-1.5">
                         {(["Full Migrant", "Altitudinal Migrant", "Nomadic", "Not a Migrant", "Unknown"] as const).map(pattern => {
                           const isSelected = selectedMovementPatterns.has(pattern);
@@ -3366,16 +3340,23 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
             )}
           </div>}
 
-      {/* Search and Species Table */}
+      {/* Species Table */}
       <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl">
-        {/* Search bar */}
+        {/* Applied filters — every currently-active filter (including the
+            selected taxon/subgroup/breakdown-name) as a removable pill,
+            directly above the table they filter. Clear all resets everything
+            here, taxon/subgroup included — Home is for the "go back to
+            nothing selected at all" case; this is for "same taxon, different
+            filters". The free-text box narrows the visible table by name in
+            place, composing with the pills beside it — distinct from the page
+            header's SpeciesSearchBar, which navigates elsewhere instead of
+            narrowing here (see DebouncedSearchInput's own doc comment). */}
         <div className="p-3 md:p-4 border-b border-zinc-200 dark:border-zinc-800 rounded-t-xl">
           <div className="flex flex-wrap items-center gap-2 md:gap-4">
             <div className="relative flex-1 min-w-[140px] max-w-md">
               <DebouncedSearchInput
                 onSearch={handleSearch}
                 initialValue={searchFilter}
-                placeholder="Search species..."
                 className="w-full px-3 md:px-4 py-2 pl-9 md:pl-10 rounded-lg border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-zinc-900 dark:text-zinc-100 placeholder-zinc-400 focus:outline-none focus:ring-2 focus:ring-red-500 text-sm"
               />
               <svg
@@ -3389,8 +3370,12 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
             </div>
             {(selectedTaxa.size > 0 || selectedSubgroups.size > 0 || selectedCategories.size > 0 || selectedYearRanges.size > 0 || selectedAssessmentYears.size > 0 || selectedDescribedYears.size > 0 || selectedObsRanges.size > 0 || selectedCountries.size > 0 || selectedSystems.size > 0 || endemicsOnly || selectedGrowthForms.size > 0 || selectedPopulationTrends.size > 0 || selectedMovementPatterns.size > 0 || selectedThreats.size > 0 || selectedAssessors.size > 0 || selectedReviewers.size > 0 || showOnlyStarred || exactFilters.outdated || exactFilters.minObs != null || exactFilters.maxObs != null || exactFilters.minAssessmentYear != null || exactFilters.maxAssessmentYear != null || exactFilters.minDescribedYear != null || exactFilters.maxDescribedYear != null) && (
               <button
-                onClick={() => { clearAllFilters(); setSelectedTaxa(new Set()); setSelectedSubgroups(new Set()); setSelectedObsRanges(new Set()); setSelectedSystems(new Set()); setEndemicsOnly(false); setSelectedGrowthForms(new Set()); setSelectedPopulationTrends(new Set()); setSelectedMovementPatterns(new Set()); setSelectedThreats(new Set()); setExpandedThreat(null); setSelectedAssessors(new Set()); setSelectedReviewers(new Set()); setShowOnlyStarred(false); }}
-                title="Reset all filters and taxa"
+                onClick={() => {
+                  clearAllFiltersAndTaxa();
+                  setShowOnlyStarred(false);
+                  setExpandedThreat(null);
+                }}
+                title="Reset all filters and the selected taxon"
                 className="px-2 md:px-3 py-1.5 rounded-lg text-xs md:text-sm font-medium transition-colors flex items-center gap-1 md:gap-1.5 bg-white text-zinc-700 border border-zinc-200 hover:bg-zinc-50 dark:bg-zinc-800 dark:text-zinc-300 dark:border-zinc-700 shrink-0"
               >
                 <svg className="w-3.5 h-3.5 md:w-4 md:h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -3400,31 +3385,29 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
               </button>
             )}
             {pinnedSpecies.length > 0 && (
-              <>
-                <button
-                  onClick={() => setShowOnlyStarred(!showOnlyStarred)}
-                  className={`px-2 md:px-3 py-1.5 rounded-lg text-xs md:text-sm font-medium transition-colors flex items-center gap-1 md:gap-1.5 ${
-                    showOnlyStarred
-                      ? "bg-amber-500 text-white"
-                      : "bg-white text-zinc-700 border border-zinc-200 hover:bg-zinc-50 dark:bg-zinc-800 dark:text-zinc-300 dark:border-zinc-700"
-                  }`}
-                >
-                  <svg className="w-4 h-4" fill={showOnlyStarred ? "currentColor" : "none"} stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.197-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.784-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z" />
-                  </svg>
-                  <span className="hidden sm:inline">Starred</span> ({pinnedSpecies.length})
-                </button>
-              </>
+              <button
+                onClick={() => setShowOnlyStarred(!showOnlyStarred)}
+                className={`px-2 md:px-3 py-1.5 rounded-lg text-xs md:text-sm font-medium transition-colors flex items-center gap-1 md:gap-1.5 ${
+                  showOnlyStarred
+                    ? "bg-amber-500 text-white"
+                    : "bg-white text-zinc-700 border border-zinc-200 hover:bg-zinc-50 dark:bg-zinc-800 dark:text-zinc-300 dark:border-zinc-700"
+                }`}
+              >
+                <svg className="w-4 h-4" fill={showOnlyStarred ? "currentColor" : "none"} stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.197-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.784-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z" />
+                </svg>
+                <span className="hidden sm:inline">Starred</span> ({pinnedSpecies.length})
+              </button>
             )}
             {Array.from(selectedTaxa).map(taxonId => (
               <button
                 key={taxonId}
                 onClick={() => setSelectedTaxa(prev => { const next = new Set(prev); next.delete(taxonId); return next; })}
-                className="px-2 md:px-3 py-1 text-xs md:text-sm rounded-full flex items-center gap-1 hover:opacity-80"
+                className="px-3 py-1.5 text-sm font-medium rounded-full flex items-center gap-1 hover:opacity-80"
                 style={{ backgroundColor: (TAXA_BY_ID[taxonId]?.color || "#666") + "20", color: TAXA_BY_ID[taxonId]?.color || "#666" }}
               >
                 {TAXA_BY_ID[taxonId]?.name || taxonId}
-                <span className="text-xs">×</span>
+                <span className="text-sm">×</span>
               </button>
             ))}
             {Array.from(selectedSubgroups).map(sgId => {
@@ -3433,72 +3416,72 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
                 <button
                   key={sgId}
                   onClick={() => setSelectedSubgroups(prev => { const next = new Set(prev); next.delete(sgId); return next; })}
-                  className="px-2 md:px-3 py-1 text-xs md:text-sm rounded-full bg-violet-100 text-violet-600 dark:bg-violet-900/30 dark:text-violet-400 flex items-center gap-1 hover:opacity-80"
+                  className="px-3 py-1.5 text-sm font-medium rounded-full bg-violet-100 text-violet-600 dark:bg-violet-900/30 dark:text-violet-400 flex items-center gap-1 hover:opacity-80"
                 >
                   {sgInfo?.node.name ?? dynamicNodeDisplayName(sgId)}
-                  <span className="text-xs">×</span>
+                  <span className="text-sm">×</span>
                 </button>
               );
             })}
             {breakdownFilter && selectedSubgroups.has(breakdownFilter.nodeId) && (
               <button
                 onClick={() => setBreakdownFilter(null)}
-                className="px-2 md:px-3 py-1 text-xs md:text-sm rounded-full bg-violet-100 text-violet-600 dark:bg-violet-900/30 dark:text-violet-400 flex items-center gap-1 hover:opacity-80"
+                className="px-3 py-1.5 text-sm font-medium rounded-full bg-violet-100 text-violet-600 dark:bg-violet-900/30 dark:text-violet-400 flex items-center gap-1 hover:opacity-80"
               >
                 {breakdownDisplayName(breakdownFilter.rank, breakdownFilter.name)}
                 {breakdownFilter.onlyIds?.length ? " — No CoL Match" : breakdownFilter.excludeIds?.length ? " — CoL Match" : ""}
-                <span className="text-xs">×</span>
+                <span className="text-sm">×</span>
               </button>
             )}
             {!isNewAssessments && Array.from(selectedCategories).filter(cat => cat !== "NE").map(cat => (
               <button
                 key={cat}
                 onClick={() => setSelectedCategories(prev => { const next = new Set(prev); next.delete(cat); return next; })}
-                className="px-2 md:px-3 py-1 text-xs md:text-sm rounded-full flex items-center gap-1 hover:opacity-80"
+                className="px-3 py-1.5 text-sm font-medium rounded-full flex items-center gap-1 hover:opacity-80"
                 style={{ backgroundColor: CATEGORY_COLORS[cat] + "20", color: CATEGORY_COLORS[cat] }}
               >
                 {cat}
-                <span className="text-xs">×</span>
+                <span className="text-sm">×</span>
               </button>
             ))}
             {!isNewAssessments && Array.from(selectedYearRanges).map(range => (
               <button
                 key={range}
                 onClick={() => setSelectedYearRanges(prev => { const next = new Set(prev); next.delete(range); return next; })}
-                className="px-2 md:px-3 py-1 text-xs md:text-sm rounded-full bg-blue-100 text-blue-600 dark:bg-blue-900/30 dark:text-blue-400 flex items-center gap-1 hover:opacity-80"
+                className="px-3 py-1.5 text-sm font-medium rounded-full bg-blue-100 text-blue-600 dark:bg-blue-900/30 dark:text-blue-400 flex items-center gap-1 hover:opacity-80"
               >
                 {range}
-                <span className="text-xs">×</span>
+                <span className="text-sm">×</span>
               </button>
             ))}
             {!isNewAssessments && Array.from(selectedAssessmentYears).sort((a, b) => Number(b) - Number(a)).map(year => (
               <button
                 key={`ay-${year}`}
                 onClick={() => setSelectedAssessmentYears(prev => { const next = new Set(prev); next.delete(year); return next; })}
-                className="px-2 md:px-3 py-1 text-xs md:text-sm rounded-full bg-blue-100 text-blue-600 dark:bg-blue-900/30 dark:text-blue-400 flex items-center gap-1 hover:opacity-80"
+                className="px-3 py-1.5 text-sm font-medium rounded-full bg-blue-100 text-blue-600 dark:bg-blue-900/30 dark:text-blue-400 flex items-center gap-1 hover:opacity-80"
               >
                 Assessed {year}
-                <span className="text-xs">×</span>
+                <span className="text-sm">×</span>
               </button>
             ))}
             {isNewAssessments && Array.from(selectedDescribedYears).map(range => (
               <button
                 key={`dy-${range}`}
                 onClick={() => setSelectedDescribedYears(prev => { const next = new Set(prev); next.delete(range); return next; })}
-                className="px-2 md:px-3 py-1 text-xs md:text-sm rounded-full bg-violet-100 text-violet-600 dark:bg-violet-900/30 dark:text-violet-400 flex items-center gap-1 hover:opacity-80"
+                className="px-3 py-1.5 text-sm font-medium rounded-full bg-violet-100 text-violet-600 dark:bg-violet-900/30 dark:text-violet-400 flex items-center gap-1 hover:opacity-80"
               >
                 Described {range}
-                <span className="text-xs">×</span>
+                <span className="text-sm">×</span>
               </button>
             ))}
             {Array.from(selectedObsRanges).map(range => (
               <button
                 key={range}
                 onClick={() => setSelectedObsRanges(prev => { const next = new Set(prev); next.delete(range); return next; })}
-                className="px-2 md:px-3 py-1 text-xs md:text-sm rounded-full bg-emerald-100 text-emerald-600 dark:bg-emerald-900/30 dark:text-emerald-400 flex items-center gap-1 hover:opacity-80"
+                className="px-3 py-1.5 text-sm font-medium rounded-full bg-emerald-100 text-emerald-600 dark:bg-emerald-900/30 dark:text-emerald-400 flex items-center gap-1 hover:opacity-80"
               >
                 {range} obs
-                <span className="text-xs">×</span>
+                <span className="text-sm">×</span>
               </button>
             ))}
             {(() => {
@@ -3514,10 +3497,10 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
                     return (
                       <button
                         onClick={() => setSelectedCountries(new Set())}
-                        className="px-2 md:px-3 py-1 text-xs md:text-sm rounded-full bg-green-100 text-green-600 dark:bg-green-900/30 dark:text-green-400 flex items-center gap-1 hover:opacity-80"
+                        className="px-3 py-1.5 text-sm font-medium rounded-full bg-green-100 text-green-600 dark:bg-green-900/30 dark:text-green-400 flex items-center gap-1 hover:opacity-80"
                       >
                         {region}
-                        <span className="text-xs">×</span>
+                        <span className="text-sm">×</span>
                       </button>
                     );
                   }
@@ -3528,10 +3511,10 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
                 <button
                   key={code}
                   onClick={() => setSelectedCountries(prev => { const next = new Set(prev); next.delete(code); return next; })}
-                  className="px-2 md:px-3 py-1 text-xs md:text-sm rounded-full bg-green-100 text-green-600 dark:bg-green-900/30 dark:text-green-400 flex items-center gap-1 hover:opacity-80"
+                  className="px-3 py-1.5 text-sm font-medium rounded-full bg-green-100 text-green-600 dark:bg-green-900/30 dark:text-green-400 flex items-center gap-1 hover:opacity-80"
                 >
                   {getCountryName(code)}
-                  <span className="text-xs">×</span>
+                  <span className="text-sm">×</span>
                 </button>
               ));
             })()}
@@ -3539,39 +3522,39 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
               <button
                 key={`gf-${gf}`}
                 onClick={() => setSelectedGrowthForms(prev => { const next = new Set(prev); next.delete(gf); return next; })}
-                className="px-2 md:px-3 py-1 text-xs md:text-sm rounded-full bg-lime-100 text-lime-600 dark:bg-lime-900/30 dark:text-lime-400 flex items-center gap-1 hover:opacity-80"
+                className="px-3 py-1.5 text-sm font-medium rounded-full bg-lime-100 text-lime-600 dark:bg-lime-900/30 dark:text-lime-400 flex items-center gap-1 hover:opacity-80"
               >
                 {gf}
-                <span className="text-xs">×</span>
+                <span className="text-sm">×</span>
               </button>
             ))}
             {endemicsOnly && (
               <button
                 onClick={() => setEndemicsOnly(false)}
-                className="px-2 md:px-3 py-1 text-xs md:text-sm rounded-full bg-teal-100 text-teal-600 dark:bg-teal-900/30 dark:text-teal-400 flex items-center gap-1 hover:opacity-80"
+                className="px-3 py-1.5 text-sm font-medium rounded-full bg-teal-100 text-teal-600 dark:bg-teal-900/30 dark:text-teal-400 flex items-center gap-1 hover:opacity-80"
               >
                 Endemics only
-                <span className="text-xs">×</span>
+                <span className="text-sm">×</span>
               </button>
             )}
             {Array.from(selectedPopulationTrends).map(trend => (
               <button
                 key={`trend-${trend}`}
                 onClick={() => setSelectedPopulationTrends(prev => { const next = new Set(prev); next.delete(trend); return next; })}
-                className="px-2 md:px-3 py-1 text-xs md:text-sm rounded-full bg-orange-100 text-orange-600 dark:bg-orange-900/30 dark:text-orange-400 flex items-center gap-1 hover:opacity-80"
+                className="px-3 py-1.5 text-sm font-medium rounded-full bg-orange-100 text-orange-600 dark:bg-orange-900/30 dark:text-orange-400 flex items-center gap-1 hover:opacity-80"
               >
                 {trend}
-                <span className="text-xs">×</span>
+                <span className="text-sm">×</span>
               </button>
             ))}
             {Array.from(selectedMovementPatterns).map(pattern => (
               <button
                 key={`mov-${pattern}`}
                 onClick={() => setSelectedMovementPatterns(prev => { const next = new Set(prev); next.delete(pattern); return next; })}
-                className="px-2 md:px-3 py-1 text-xs md:text-sm rounded-full bg-teal-100 text-teal-600 dark:bg-teal-900/30 dark:text-teal-400 flex items-center gap-1 hover:opacity-80"
+                className="px-3 py-1.5 text-sm font-medium rounded-full bg-teal-100 text-teal-600 dark:bg-teal-900/30 dark:text-teal-400 flex items-center gap-1 hover:opacity-80"
               >
                 {pattern}
-                <span className="text-xs">×</span>
+                <span className="text-sm">×</span>
               </button>
             ))}
             {Array.from(selectedThreats).map(code => {
@@ -3582,10 +3565,10 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
                 <button
                   key={`threat-${code}`}
                   onClick={() => setSelectedThreats(prev => { const next = new Set(prev); next.delete(code); return next; })}
-                  className="px-2 md:px-3 py-1 text-xs md:text-sm rounded-full bg-rose-100 text-rose-600 dark:bg-rose-900/30 dark:text-rose-400 flex items-center gap-1 hover:opacity-80"
+                  className="px-3 py-1.5 text-sm font-medium rounded-full bg-rose-100 text-rose-600 dark:bg-rose-900/30 dark:text-rose-400 flex items-center gap-1 hover:opacity-80"
                 >
                   {label}
-                  <span className="text-xs">×</span>
+                  <span className="text-sm">×</span>
                 </button>
               );
             })}
@@ -3593,34 +3576,34 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
               <button
                 key={system}
                 onClick={() => setSelectedSystems(prev => { const next = new Set(prev); next.delete(system); return next; })}
-                className={`px-2 md:px-3 py-1 text-xs md:text-sm rounded-full flex items-center gap-1 hover:opacity-80 ${
+                className={`px-3 py-1.5 text-sm font-medium rounded-full flex items-center gap-1 hover:opacity-80 ${
                   system === "Terrestrial" ? "bg-amber-100 text-amber-600 dark:bg-amber-900/30 dark:text-amber-400"
                   : system === "Freshwater" ? "bg-cyan-100 text-cyan-600 dark:bg-cyan-900/30 dark:text-cyan-400"
                   : "bg-blue-100 text-blue-600 dark:bg-blue-900/30 dark:text-blue-400"
                 }`}
               >
                 {system}
-                <span className="text-xs">×</span>
+                <span className="text-sm">×</span>
               </button>
             ))}
             {!isNewAssessments && Array.from(selectedAssessors).map(name => (
               <button
                 key={`a-${name}`}
                 onClick={() => setSelectedAssessors(prev => { const next = new Set(prev); next.delete(name); return next; })}
-                className="px-2 md:px-3 py-1 text-xs md:text-sm rounded-full bg-violet-100 text-violet-600 dark:bg-violet-900/30 dark:text-violet-400 flex items-center gap-1 hover:opacity-80"
+                className="px-3 py-1.5 text-sm font-medium rounded-full bg-violet-100 text-violet-600 dark:bg-violet-900/30 dark:text-violet-400 flex items-center gap-1 hover:opacity-80"
               >
                 {name} <span className="text-[10px] opacity-60">(assessor)</span>
-                <span className="text-xs">×</span>
+                <span className="text-sm">×</span>
               </button>
             ))}
             {!isNewAssessments && Array.from(selectedReviewers).map(name => (
               <button
                 key={`r-${name}`}
                 onClick={() => setSelectedReviewers(prev => { const next = new Set(prev); next.delete(name); return next; })}
-                className="px-2 md:px-3 py-1 text-xs md:text-sm rounded-full bg-fuchsia-100 text-fuchsia-600 dark:bg-fuchsia-900/30 dark:text-fuchsia-400 flex items-center gap-1 hover:opacity-80"
+                className="px-3 py-1.5 text-sm font-medium rounded-full bg-fuchsia-100 text-fuchsia-600 dark:bg-fuchsia-900/30 dark:text-fuchsia-400 flex items-center gap-1 hover:opacity-80"
               >
                 {name} <span className="text-[10px] opacity-60">(reviewer)</span>
-                <span className="text-xs">×</span>
+                <span className="text-sm">×</span>
               </button>
             ))}
             {/* Exact URL-only filters (typically arrive via an agent/MCP dashboard
@@ -3639,10 +3622,10 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
                 <button
                   key={`ef-${c.key}`}
                   onClick={() => setExactFilters({ [c.key]: null })}
-                  className="px-2 md:px-3 py-1 text-xs md:text-sm rounded-full bg-slate-100 text-slate-600 dark:bg-slate-800/60 dark:text-slate-300 flex items-center gap-1 hover:opacity-80"
+                  className="px-3 py-1.5 text-sm font-medium rounded-full bg-slate-100 text-slate-600 dark:bg-slate-800/60 dark:text-slate-300 flex items-center gap-1 hover:opacity-80"
                 >
                   {c.label}
-                  <span className="text-xs">×</span>
+                  <span className="text-sm">×</span>
                 </button>
               ));
             })()}
