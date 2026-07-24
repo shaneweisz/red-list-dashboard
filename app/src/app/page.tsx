@@ -43,14 +43,6 @@ export default function RedListPage() {
   const [sharedTaxa, setSharedTaxa] = useState<Set<string>>(new Set());
   const [sharedSubgroups, setSharedSubgroups] = useState<Set<string>>(new Set());
 
-  // Portal target for TaxaSummary's View-by selector (Standard/Table 1a/SSC/
-  // Country) — a callback ref so it's available as soon as the header div
-  // mounts. Keeping the selector's own state inside TaxaSummary (URL-synced
-  // via useFilterParams) and just portaling its markup up here means it's
-  // reachable from the persistent top row at any drill-down depth, without
-  // lifting that state out of RedListView.
-  const [viewSelectorSlotEl, setViewSelectorSlotEl] = useState<HTMLDivElement | null>(null);
-
   // View-mode switch — previously two header buttons here, now surfaced
   // instead by RedListView itself (next to its own Assessed/Not Evaluated
   // stat card, where the mode actually matters), via this callback.
@@ -70,11 +62,11 @@ export default function RedListPage() {
   return (
     <div className="min-h-screen flex flex-col bg-zinc-50 dark:bg-zinc-950 px-4 sm:px-6 py-4 md:px-16 md:py-8">
       <main className="max-w-5xl w-full min-w-0 mx-auto flex-1">
-        {/* Header: two aligned rows (title | search, subtitle | view + theme).
+        {/* Header: two aligned rows (title | controls, subtitle | search).
             Globe sits inline with the title so the subtitle, controls and
             search bar share the same flush-left edge as the table below. */}
         <div className="mb-[0.9rem] md:mb-[1.35rem]">
-          <div className="min-w-0 grid grid-cols-1 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center gap-x-3 gap-y-1.5 sm:gap-y-3 [grid-template-areas:'title'_'subtitle'_'search'_'view'] sm:[grid-template-areas:'title_search'_'subtitle_view']">
+          <div className="min-w-0 grid grid-cols-1 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center gap-x-3 gap-y-1.5 sm:gap-y-3 [grid-template-areas:'title'_'subtitle'_'controls'_'search'] sm:[grid-template-areas:'title_controls'_'subtitle_search']">
             <button
               type="button"
               onClick={() => {
@@ -108,12 +100,11 @@ export default function RedListPage() {
             {brand.subtitle && (
               <p className="[grid-area:subtitle] text-[15px] md:text-[1.375rem] text-zinc-500 dark:text-zinc-400">{brand.subtitle}</p>
             )}
-            <div className="[grid-area:search] flex items-center gap-2 sm:justify-self-end">
-              <SpeciesSearchBar />
+            <div className="[grid-area:controls] flex items-center gap-2 sm:justify-self-end">
               <ThemeToggle />
             </div>
-            <div className="[grid-area:view] flex items-center gap-2 flex-wrap sm:justify-self-end">
-              <div ref={setViewSelectorSlotEl} className="flex items-center" />
+            <div className="[grid-area:search] sm:justify-self-end">
+              <SpeciesSearchBar />
             </div>
           </div>
         </div>
@@ -126,7 +117,6 @@ export default function RedListPage() {
           sharedSubgroups={sharedSubgroups}
           onTaxaChange={setSharedTaxa}
           onSubgroupsChange={setSharedSubgroups}
-          viewSelectorSlotEl={viewSelectorSlotEl}
         />
       </main>
 

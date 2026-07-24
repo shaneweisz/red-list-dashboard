@@ -279,12 +279,9 @@ interface RedListViewProps {
   sharedSubgroups?: Set<string>;
   onTaxaChange?: (taxa: Set<string>) => void;
   onSubgroupsChange?: (subgroups: Set<string>) => void;
-  /** DOM node (owned by page.tsx's persistent header) that TaxaSummary
-   * portals its View-by selector into — see TaxaSummary's own doc comment. */
-  viewSelectorSlotEl?: HTMLDivElement | null;
 }
 
-export default function RedListView({ viewMode = "reassessments", onViewModeChange, sharedTaxa, sharedSubgroups, onTaxaChange, onSubgroupsChange, viewSelectorSlotEl }: RedListViewProps = {}) {
+export default function RedListView({ viewMode = "reassessments", onViewModeChange, sharedTaxa, sharedSubgroups, onTaxaChange, onSubgroupsChange }: RedListViewProps = {}) {
   const isNewAssessments = viewMode === "new-assessments";
   // Every species/truncation cache below is keyed by (mode, taxonId), not taxonId
   // alone — a taxon's Assessed and Not Evaluated species lists are entirely
@@ -2464,7 +2461,6 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
         viewMode={viewMode}
         layoutMode={layoutMode}
         onLayoutModeChange={setLayoutMode}
-        viewSelectorSlotEl={viewSelectorSlotEl}
         countryModeContent={countryModeContent}
         countryPillsContent={countryPillsContent}
         countryScope={countryScope}
@@ -3440,7 +3436,7 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
             {moreFiltersOpen && (
               <div className="px-3 md:px-4 pb-3 md:pb-4 pt-1 border-t border-zinc-200 dark:border-zinc-800 flex flex-col gap-3">
                 {/* Realm */}
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2 bg-zinc-50 dark:bg-zinc-800/50 border border-zinc-200 dark:border-zinc-700 rounded-lg px-3 py-2">
                   <span className="text-xs font-medium text-zinc-500 dark:text-zinc-400 shrink-0 w-16">Realm</span>
                   <div className="flex flex-wrap gap-1.5">
                     {(["Terrestrial", "Freshwater", "Marine"] as const).map(system => {
@@ -3499,7 +3495,7 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
                   const sorted = Object.entries(gfCounts).sort((a, b) => b[1] - a[1]);
                   if (sorted.length === 0) return null;
                   return (
-                    <div className="flex items-start gap-2">
+                    <div className="flex items-start gap-2 bg-zinc-50 dark:bg-zinc-800/50 border border-zinc-200 dark:border-zinc-700 rounded-lg px-3 py-2">
                       <span className="text-xs font-medium text-zinc-500 dark:text-zinc-400 shrink-0 w-16 pt-1">Growth</span>
                       <div className="flex flex-wrap gap-1.5">
                         {sorted.map(([gf, count]) => {
@@ -3531,7 +3527,7 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
                 })()}
 
                 {/* Trend */}
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2 bg-zinc-50 dark:bg-zinc-800/50 border border-zinc-200 dark:border-zinc-700 rounded-lg px-3 py-2">
                     <span className="text-xs font-medium text-zinc-500 dark:text-zinc-400 shrink-0 w-16">Trend</span>
                     <div className="flex flex-wrap gap-1.5">
                       {(["Increasing", "Stable", "Decreasing", "Unknown"] as const).map(trend => {
@@ -3563,7 +3559,7 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
 
                 {/* Movement Patterns */}
                 {!isNewAssessments && (
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-2 bg-zinc-50 dark:bg-zinc-800/50 border border-zinc-200 dark:border-zinc-700 rounded-lg px-3 py-2">
                     <span className="text-xs font-medium text-zinc-500 dark:text-zinc-400 shrink-0 w-16">Movement</span>
                       <div className="flex flex-wrap gap-1.5">
                         {(["Full Migrant", "Altitudinal Migrant", "Nomadic", "Not a Migrant", "Unknown"] as const).map(pattern => {

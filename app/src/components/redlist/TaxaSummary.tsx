@@ -170,11 +170,6 @@ interface Props {
    * View. Country View's own equivalent lives on the map now (see WorldMap's
    * country chips), not routed through here. */
   onClearCountryScope?: () => void;
-  /** DOM node (owned by page.tsx's persistent header) that the View-by
-   * selector portals into, so it's reachable regardless of drill-down depth
-   * instead of only appearing on the pre-selection landing page. Null until
-   * the header's ref callback has fired (first client render / SSR). */
-  viewSelectorSlotEl?: HTMLDivElement | null;
 }
 
 // Any static tree node with children is expandable — plus any node under a live
@@ -1274,7 +1269,7 @@ function DescribedInfoIcon({ nodeId, source, breakdown }: { nodeId: string; sour
   );
 }
 
-export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgroups, onToggleSubgroup, onNavigateToSubgroup, disableAllSpecies, viewMode = "reassessments", layoutMode, onLayoutModeChange, countryModeContent, countryPillsContent, countryScope, onClearCountryScope, viewSelectorSlotEl }: Props) {
+export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgroups, onToggleSubgroup, onNavigateToSubgroup, disableAllSpecies, viewMode = "reassessments", layoutMode, onLayoutModeChange, countryModeContent, countryPillsContent, countryScope, onClearCountryScope }: Props) {
   const isNewAssessments = viewMode === "new-assessments";
   const [taxa, setTaxa] = useState<TaxonSummary[]>([]);
   const [loading, setLoading] = useState(true);
@@ -1491,7 +1486,7 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
         }}
         className="text-sm bg-zinc-100 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-md px-2 py-1 text-zinc-700 dark:text-zinc-300 focus:outline-none focus:ring-1 focus:ring-blue-500"
       >
-        <option value="taxonomic">By Taxon</option>
+        <option value="taxonomic">By Taxonomic Group</option>
         <option value="country" disabled={isNewAssessments} title={isNewAssessments ? "Not available for New Assessments — Not Evaluated species have no location data" : undefined}>
           By Country
         </option>
@@ -3364,42 +3359,41 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
         </div>
       </div>
     </div>
-    {/* Subtle usage hint — landing-only — hidden once a taxon is selected.
-        Gated on perTaxa.length alone (not also !loading) — perTaxa already
-        implies data is present, and also gating on loading made this row
-        flicker away and back on every country switch (loading briefly flips
-        true again for the background refetch even though perTaxa/taxa still
-        hold the previous country's data). The View-by selector itself lives
-        in the page header now (portaled via viewSelectorSlotEl below), not
-        here, so it's reachable at any drill-down depth. */}
-    {perTaxa.length > 0 && selectedTaxa.size === 0 && (
+    {/* Bottom-right-of-table controls row: usage hint (landing-only, left)
+        + the View selector (always shown, right) — gated on perTaxa.length
+        alone (not also !loading) — perTaxa already implies data is present,
+        and also gating on loading made this row flicker away and back on
+        every country switch (loading briefly flips true again for the
+        background refetch even though perTaxa/taxa still hold the previous
+        country's data). The selector itself stays visible past the landing
+        page (unlike the hint) so it's reachable at any drill-down depth. */}
+    {perTaxa.length > 0 && (
       <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1.5 mt-1.5">
-        <span className="hidden sm:inline pl-3 md:pl-4 text-xs text-zinc-400 dark:text-zinc-500">
-          {countryMode ? "Hover over a country, or click to lock it and multi-select." : "Click to filter, Cmd/Ctrl+click to multi-select."}
-        </span>
-      </div>
-    )}
-    {viewSelectorSlotEl && createPortal(
-      <span className="inline-flex items-center gap-1.5">
-        {layoutModeSelect}
-        {(table1aMode || sscMode) && (
-          <span className="relative group/lm">
-            <a
-              href={table1aMode ? IUCN_SOURCE_URL : "https://iucn.org/our-union/commissions/group/1445"}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300 transition-colors"
-              onClick={(e) => e.stopPropagation()}
-            >
-              <FaInfoCircle size={10} />
-            </a>
-            <span className="absolute top-full right-0 mt-1 px-2 py-1 text-xs text-white bg-zinc-800 dark:bg-zinc-700 rounded whitespace-nowrap opacity-0 invisible group-hover/lm:opacity-100 group-hover/lm:visible z-50 shadow-lg pointer-events-none">
-              {table1aMode ? "View IUCN Red List Table 1a (PDF)" : "View IUCN SSC Specialist Groups (mammals, reptiles, fishes, invertebrates, plants & fungi)"}
-            </span>
+        {selectedTaxa.size === 0 && (
+          <span className="hidden sm:inline pl-3 md:pl-4 text-xs text-zinc-400 dark:text-zinc-500">
+            {countryMode ? "Hover over a country, or click to lock it and multi-select." : "Click to filter, Cmd/Ctrl+click to multi-select."}
           </span>
         )}
-      </span>,
-      viewSelectorSlotEl
+        <span className="inline-flex items-center gap-1.5 ml-auto pr-3 sm:pr-0">
+          {layoutModeSelect}
+          {(table1aMode || sscMode) && (
+            <span className="relative group/lm">
+              <a
+                href={table1aMode ? IUCN_SOURCE_URL : "https://iucn.org/our-union/commissions/group/1445"}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300 transition-colors"
+                onClick={(e) => e.stopPropagation()}
+              >
+                <FaInfoCircle size={10} />
+              </a>
+              <span className="absolute bottom-full right-0 mb-1 px-2 py-1 text-xs text-white bg-zinc-800 dark:bg-zinc-700 rounded whitespace-nowrap opacity-0 invisible group-hover/lm:opacity-100 group-hover/lm:visible z-50 shadow-lg pointer-events-none">
+                {table1aMode ? "View IUCN Red List Table 1a (PDF)" : "View IUCN SSC Specialist Groups (mammals, reptiles, fishes, invertebrates, plants & fungi)"}
+              </span>
+            </span>
+          )}
+        </span>
+      </div>
     )}
     </>
   );
