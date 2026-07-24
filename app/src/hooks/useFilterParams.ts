@@ -49,6 +49,26 @@ const numParam = (p: URLSearchParams, key: string): number | null => {
 
 const FILTER_RANKS: FilterRank[] = ["class", "order", "family", "genus", "species"];
 
+// Compare mode support: every param name this hook owns can be namespaced with a
+// suffix (e.g. "_b") so two independent panels can each keep their own filter
+// state in one shared URL without colliding (?taxa=birds&taxa_b=reptiles). A
+// bare "" suffix (the default / single-dashboard case) is identical to no
+// namespacing at all.
+const paramKey = (name: string, suffix: string): string => (suffix ? `${name}${suffix}` : name);
+
+// The full set of base (unsuffixed) param names this hook reads/writes — used by
+// syncUrl to know which keys in the URL "belong to" a given hook instance (so it
+// can merge its own writes into the URL without clobbering another instance's
+// differently-suffixed params). Keep in sync with parseParams/buildQs below.
+const OWN_PARAM_NAMES = [
+  "view", "layout", "origin", "countries", "region", "taxa", "subgroups",
+  "categories", "years", "assessmentYears", "describedYears", "obsRanges",
+  "systems", "trends", "movement", "threats", "bd", "endemics", "growthForms",
+  "assessors", "reviewers", "search", "outdated", "minObs", "maxObs",
+  "minAssessmentYear", "maxAssessmentYear", "minDescribedYear", "maxDescribedYear",
+  "species", "tab", "sort", "dir", "mapview", "mapsort", "mapdir",
+];
+
 // `bd=ssc-small-mammal:order:rodentia` — narrows a node's species list to one
 // breakdown row (see TaxaSummary.tsx's BreakdownList). nodeId:rank:name, colon-joined
 // like the rest of the URL scheme. Carries its own nodeId (rather than always
@@ -65,8 +85,8 @@ export interface BreakdownParam {
   onlyIds?: number[];
   excludeIds?: number[];
 }
-const parseBreakdownParam = (p: URLSearchParams): BreakdownParam | null => {
-  const raw = p.get("bd");
+const parseBreakdownParam = (p: URLSearchParams, key: string): BreakdownParam | null => {
+  const raw = p.get(key);
   if (!raw) return null;
   const [nodeId, rank, name, mode, idsCsv] = raw.split(":");
   if (!nodeId || !name || !FILTER_RANKS.includes(rank as FilterRank)) return null;
@@ -81,30 +101,31 @@ const parseBreakdownParam = (p: URLSearchParams): BreakdownParam | null => {
   return result;
 };
 
-export function parseParams(search: string) {
+export function parseParams(search: string, suffix: string = "") {
   const p = new URLSearchParams(search);
-  const sortParam = p.get("sort");
-  const viewParam = p.get("view");
-  const layoutParam = p.get("layout");
+  const k = (name: string) => paramKey(name, suffix);
+  const sortParam = p.get(k("sort"));
+  const viewParam = p.get(k("view"));
+  const layoutParam = p.get(k("layout"));
   // A `region` param expands to its country codes (the dashboard has no separate
   // region state — it stores a region AS its countries and re-derives the chip).
   const countryCodes = new Set<string>(
-    p.get("countries") ? p.get("countries")!.split(",").filter(Boolean) : []
+    p.get(k("countries")) ? p.get(k("countries"))!.split(",").filter(Boolean) : []
   );
-  if (p.get("region")) {
-    resolveRegions(p.get("region")!.split(",").filter(Boolean)).codes.forEach((c) => countryCodes.add(c));
+  if (p.get(k("region"))) {
+    resolveRegions(p.get(k("region"))!.split(",").filter(Boolean)).codes.forEach((c) => countryCodes.add(c));
   }
   // Taxa: the URL carries a single flat `taxa` token list; expand each into the
   // internal display-root + (optional) sub-group. Legacy `subgroups=` links still
   // parse (their values are added directly, with the parent root ensured present).
   const taxaSet = new Set<string>();
   const subgroupSet = new Set<string>();
-  for (const tok of p.get("taxa")?.split(",").filter(Boolean) ?? []) {
+  for (const tok of p.get(k("taxa"))?.split(",").filter(Boolean) ?? []) {
     const { taxa, subgroup } = expandTaxaToken(tok);
     taxaSet.add(taxa);
     if (subgroup) subgroupSet.add(subgroup);
   }
-  for (const sg of p.get("subgroups")?.split(",").filter(Boolean) ?? []) {
+  for (const sg of p.get(k("subgroups"))?.split(",").filter(Boolean) ?? []) {
     const id = canonicalizeTaxonId(sg);
     subgroupSet.add(id);
     const root = getViewRootForNode(id);
@@ -122,60 +143,60 @@ export function parseParams(search: string) {
     // hook entirely). Cleared wherever a new layoutMode is deliberately set
     // (setLayoutMode/navigateToTaxonSubgroup/returnToLayoutMode) — a fresh,
     // explicit mode choice overrides whatever "return to X" memory it held.
-    originLayout: (p.get("origin") === "table1a" || p.get("origin") === "ssc" || p.get("origin") === "country" ? p.get("origin") : null) as LayoutMode,
+    originLayout: (p.get(k("origin")) === "table1a" || p.get(k("origin")) === "ssc" || p.get(k("origin")) === "country" ? p.get(k("origin")) : null) as LayoutMode,
     // Expanded from the flat `taxa` token list (+ legacy `subgroups=`) above.
     taxa: taxaSet,
     subgroups: subgroupSet,
-    categories: p.get("categories")
-      ? new Set(p.get("categories")!.split(",").filter(Boolean))
+    categories: p.get(k("categories"))
+      ? new Set(p.get(k("categories"))!.split(",").filter(Boolean))
       : new Set<string>(),
-    yearRanges: p.get("years")
-      ? new Set(p.get("years")!.split(",").filter(Boolean))
+    yearRanges: p.get(k("years"))
+      ? new Set(p.get(k("years"))!.split(",").filter(Boolean))
       : new Set<string>(),
-    assessmentYears: p.get("assessmentYears")
-      ? new Set(p.get("assessmentYears")!.split(",").filter(Boolean))
+    assessmentYears: p.get(k("assessmentYears"))
+      ? new Set(p.get(k("assessmentYears"))!.split(",").filter(Boolean))
       : new Set<string>(),
     // CoL description-year range buckets (NE/new-assessments view only).
-    describedYears: p.get("describedYears")
-      ? new Set(p.get("describedYears")!.split(",").filter(Boolean))
+    describedYears: p.get(k("describedYears"))
+      ? new Set(p.get(k("describedYears"))!.split(",").filter(Boolean))
       : new Set<string>(),
     countries: countryCodes,
-    obsRanges: p.get("obsRanges")
-      ? new Set(p.get("obsRanges")!.split(",").filter(Boolean))
+    obsRanges: p.get(k("obsRanges"))
+      ? new Set(p.get(k("obsRanges"))!.split(",").filter(Boolean))
       : new Set<string>(),
-    systems: p.get("systems")
-      ? new Set(p.get("systems")!.split(",").filter(Boolean))
+    systems: p.get(k("systems"))
+      ? new Set(p.get(k("systems"))!.split(",").filter(Boolean))
       : new Set<string>(),
-    populationTrends: p.get("trends")
-      ? new Set(p.get("trends")!.split(",").filter(Boolean))
+    populationTrends: p.get(k("trends"))
+      ? new Set(p.get(k("trends"))!.split(",").filter(Boolean))
       : new Set<string>(),
-    movementPatterns: p.get("movement")
-      ? new Set(p.get("movement")!.split(",").filter(Boolean))
+    movementPatterns: p.get(k("movement"))
+      ? new Set(p.get(k("movement"))!.split(",").filter(Boolean))
       : new Set<string>(),
-    threats: p.get("threats")
-      ? new Set(p.get("threats")!.split(",").filter(Boolean))
+    threats: p.get(k("threats"))
+      ? new Set(p.get(k("threats"))!.split(",").filter(Boolean))
       : new Set<string>(),
-    breakdown: parseBreakdownParam(p),
+    breakdown: parseBreakdownParam(p, k("bd")),
     // Endemics-only: restrict to species occurring in exactly one country.
-    endemicsOnly: p.get("endemics") === "1",
-    growthForms: p.get("growthForms")
-      ? new Set(p.get("growthForms")!.split(",").filter(Boolean))
+    endemicsOnly: p.get(k("endemics")) === "1",
+    growthForms: p.get(k("growthForms"))
+      ? new Set(p.get(k("growthForms"))!.split(",").filter(Boolean))
       : new Set<string>(),
-    assessors: p.get("assessors")
-      ? new Set(p.get("assessors")!.split("|").filter(Boolean))
+    assessors: p.get(k("assessors"))
+      ? new Set(p.get(k("assessors"))!.split("|").filter(Boolean))
       : new Set<string>(),
-    reviewers: p.get("reviewers")
-      ? new Set(p.get("reviewers")!.split("|").filter(Boolean))
+    reviewers: p.get(k("reviewers"))
+      ? new Set(p.get(k("reviewers"))!.split("|").filter(Boolean))
       : new Set<string>(),
-    search: p.get("search") || "",
+    search: p.get(k("search")) || "",
     // Exact URL-only base filters (see ExactFilters).
-    outdated: (p.get("outdated") === "yes" ? "yes" : p.get("outdated") === "no" ? "no" : null) as "yes" | "no" | null,
-    minObs: numParam(p, "minObs"),
-    maxObs: numParam(p, "maxObs"),
-    minAssessmentYear: numParam(p, "minAssessmentYear"),
-    maxAssessmentYear: numParam(p, "maxAssessmentYear"),
-    minDescribedYear: numParam(p, "minDescribedYear"),
-    maxDescribedYear: numParam(p, "maxDescribedYear"),
+    outdated: (p.get(k("outdated")) === "yes" ? "yes" : p.get(k("outdated")) === "no" ? "no" : null) as "yes" | "no" | null,
+    minObs: numParam(p, k("minObs")),
+    maxObs: numParam(p, k("maxObs")),
+    minAssessmentYear: numParam(p, k("minAssessmentYear")),
+    maxAssessmentYear: numParam(p, k("maxAssessmentYear")),
+    minDescribedYear: numParam(p, k("minDescribedYear")),
+    maxDescribedYear: numParam(p, k("maxDescribedYear")),
     sortField: (
       sortParam === "category" ? "category" :
       sortParam === "year" ? "year" :
@@ -185,17 +206,17 @@ export function parseParams(search: string) {
       sortParam === "describedYear" ? "describedYear" :
       null
     ) as "year" | "category" | "totalGbif" | "newGbif" | "pctNewGbif" | "describedYear" | null,
-    sortDirection: (p.get("dir") === "asc" ? "asc" : "desc") as "asc" | "desc",
-    mapViewMode: (p.get("mapview") === "list" ? "list" : "map") as MapViewMode,
+    sortDirection: (p.get(k("dir")) === "asc" ? "asc" : "desc") as "asc" | "desc",
+    mapViewMode: (p.get(k("mapview")) === "list" ? "list" : "map") as MapViewMode,
     mapSortKey: (
-      p.get("mapsort") === "name" ? "name" :
-      p.get("mapsort") === "outdated" ? "outdated" :
-      p.get("mapsort") === "percentOutdated" ? "percentOutdated" :
+      p.get(k("mapsort")) === "name" ? "name" :
+      p.get(k("mapsort")) === "outdated" ? "outdated" :
+      p.get(k("mapsort")) === "percentOutdated" ? "percentOutdated" :
       "species"
     ) as MapSortKey,
-    mapSortDirection: (p.get("mapdir") === "asc" ? "asc" : "desc") as "asc" | "desc",
-    species: p.get("species") ? Number(p.get("species")) : null,
-    tab: (p.get("tab") || null) as "gbif" | "literature" | "redlist" | "wikipedia" | "cites" | "assessors" | "reviewers" | "col" | "eol" | null,
+    mapSortDirection: (p.get(k("mapdir")) === "asc" ? "asc" : "desc") as "asc" | "desc",
+    species: p.get(k("species")) ? Number(p.get(k("species"))) : null,
+    tab: (p.get(k("tab")) || null) as "gbif" | "literature" | "redlist" | "wikipedia" | "cites" | "assessors" | "reviewers" | "col" | "eol" | null,
   };
 }
 
@@ -235,56 +256,57 @@ export function buildQs(state: {
   mapSortDirection?: "asc" | "desc";
   species: number | null;
   tab: "gbif" | "literature" | "redlist" | "wikipedia" | "cites" | "assessors" | "reviewers" | "col" | "eol" | null;
-}): string {
+}, suffix: string = ""): string {
   const p = new URLSearchParams();
-  if (state.viewMode === "new-assessments") p.set("view", "new-assessments");
-  if (state.layoutMode) p.set("layout", state.layoutMode);
-  if (state.originLayout) p.set("origin", state.originLayout);
+  const k = (name: string) => paramKey(name, suffix);
+  if (state.viewMode === "new-assessments") p.set(k("view"), "new-assessments");
+  if (state.layoutMode) p.set(k("layout"), state.layoutMode);
+  if (state.originLayout) p.set(k("origin"), state.originLayout);
   // taxa + subgroups collapse to a single flat `taxa` token list (e.g.
   // invertebrates + inv-corals → taxa=corals); no separate subgroups param.
   const taxaTokens = collapseTaxaToTokens(state.taxa, state.subgroups);
-  if (taxaTokens.length > 0) p.set("taxa", taxaTokens.join(","));
-  if (state.categories.size > 0) p.set("categories", [...state.categories].join(","));
-  if (state.yearRanges.size > 0) p.set("years", [...state.yearRanges].join(","));
-  if (state.assessmentYears.size > 0) p.set("assessmentYears", [...state.assessmentYears].join(","));
-  if (state.describedYears.size > 0) p.set("describedYears", [...state.describedYears].join(","));
-  if (state.countries.size > 0) p.set("countries", [...state.countries].join(","));
-  if (state.obsRanges.size > 0) p.set("obsRanges", [...state.obsRanges].join(","));
-  if (state.systems.size > 0) p.set("systems", [...state.systems].join(","));
-  if (state.populationTrends.size > 0) p.set("trends", [...state.populationTrends].join(","));
-  if (state.movementPatterns.size > 0) p.set("movement", [...state.movementPatterns].join(","));
-  if (state.threats.size > 0) p.set("threats", [...state.threats].join(","));
+  if (taxaTokens.length > 0) p.set(k("taxa"), taxaTokens.join(","));
+  if (state.categories.size > 0) p.set(k("categories"), [...state.categories].join(","));
+  if (state.yearRanges.size > 0) p.set(k("years"), [...state.yearRanges].join(","));
+  if (state.assessmentYears.size > 0) p.set(k("assessmentYears"), [...state.assessmentYears].join(","));
+  if (state.describedYears.size > 0) p.set(k("describedYears"), [...state.describedYears].join(","));
+  if (state.countries.size > 0) p.set(k("countries"), [...state.countries].join(","));
+  if (state.obsRanges.size > 0) p.set(k("obsRanges"), [...state.obsRanges].join(","));
+  if (state.systems.size > 0) p.set(k("systems"), [...state.systems].join(","));
+  if (state.populationTrends.size > 0) p.set(k("trends"), [...state.populationTrends].join(","));
+  if (state.movementPatterns.size > 0) p.set(k("movement"), [...state.movementPatterns].join(","));
+  if (state.threats.size > 0) p.set(k("threats"), [...state.threats].join(","));
   if (state.breakdown) {
     let bd = `${state.breakdown.nodeId}:${state.breakdown.rank}:${state.breakdown.name}`;
     if (state.breakdown.onlyIds?.length) bd += `:only:${state.breakdown.onlyIds.join(",")}`;
     else if (state.breakdown.excludeIds?.length) bd += `:excl:${state.breakdown.excludeIds.join(",")}`;
-    p.set("bd", bd);
+    p.set(k("bd"), bd);
   }
-  if (state.endemicsOnly) p.set("endemics", "1");
-  if (state.growthForms.size > 0) p.set("growthForms", [...state.growthForms].join(","));
-  if (state.assessors.size > 0) p.set("assessors", [...state.assessors].join("|"));
-  if (state.reviewers.size > 0) p.set("reviewers", [...state.reviewers].join("|"));
-  if (state.search) p.set("search", state.search);
-  if (state.outdated) p.set("outdated", state.outdated);
-  if (state.minObs != null) p.set("minObs", String(state.minObs));
-  if (state.maxObs != null) p.set("maxObs", String(state.maxObs));
-  if (state.minAssessmentYear != null) p.set("minAssessmentYear", String(state.minAssessmentYear));
-  if (state.maxAssessmentYear != null) p.set("maxAssessmentYear", String(state.maxAssessmentYear));
-  if (state.minDescribedYear != null) p.set("minDescribedYear", String(state.minDescribedYear));
-  if (state.maxDescribedYear != null) p.set("maxDescribedYear", String(state.maxDescribedYear));
-  if (state.species != null) p.set("species", String(state.species));
-  if (state.species != null && state.tab && state.tab !== "gbif") p.set("tab", state.tab);
+  if (state.endemicsOnly) p.set(k("endemics"), "1");
+  if (state.growthForms.size > 0) p.set(k("growthForms"), [...state.growthForms].join(","));
+  if (state.assessors.size > 0) p.set(k("assessors"), [...state.assessors].join("|"));
+  if (state.reviewers.size > 0) p.set(k("reviewers"), [...state.reviewers].join("|"));
+  if (state.search) p.set(k("search"), state.search);
+  if (state.outdated) p.set(k("outdated"), state.outdated);
+  if (state.minObs != null) p.set(k("minObs"), String(state.minObs));
+  if (state.maxObs != null) p.set(k("maxObs"), String(state.maxObs));
+  if (state.minAssessmentYear != null) p.set(k("minAssessmentYear"), String(state.minAssessmentYear));
+  if (state.maxAssessmentYear != null) p.set(k("maxAssessmentYear"), String(state.maxAssessmentYear));
+  if (state.minDescribedYear != null) p.set(k("minDescribedYear"), String(state.minDescribedYear));
+  if (state.maxDescribedYear != null) p.set(k("maxDescribedYear"), String(state.maxDescribedYear));
+  if (state.species != null) p.set(k("species"), String(state.species));
+  if (state.species != null && state.tab && state.tab !== "gbif") p.set(k("tab"), state.tab);
   // null / "year" desc is the default — only write non-default sort to URL
   const isDefaultSort = state.sortField === null || state.sortField === "year";
   if (!isDefaultSort) {
-    p.set("sort", state.sortField!);
-    if (state.sortDirection !== "desc") p.set("dir", state.sortDirection);
+    p.set(k("sort"), state.sortField!);
+    if (state.sortDirection !== "desc") p.set(k("dir"), state.sortDirection);
   } else if (state.sortDirection !== "desc") {
-    p.set("dir", state.sortDirection);
+    p.set(k("dir"), state.sortDirection);
   }
-  if (state.mapViewMode === "list") p.set("mapview", "list");
-  if (state.mapSortKey && state.mapSortKey !== "species") p.set("mapsort", state.mapSortKey);
-  if (state.mapSortDirection === "asc") p.set("mapdir", "asc");
+  if (state.mapViewMode === "list") p.set(k("mapview"), "list");
+  if (state.mapSortKey && state.mapSortKey !== "species") p.set(k("mapsort"), state.mapSortKey);
+  if (state.mapSortDirection === "asc") p.set(k("mapdir"), "asc");
   const qs = p.toString();
   return qs ? `?${qs}` : "";
 }
@@ -298,10 +320,15 @@ export function buildQs(state: {
  * router overhead.
  *
  * Example URL: /?taxa=mammals&categories=CR,EN&years=11-20+years&search=shrew
+ *
+ * `paramSuffix` namespaces every URL param this hook reads/writes (e.g. "_b" turns
+ * `taxa` into `taxa_b`), so a second, independently-filtered instance of this hook
+ * can share one URL with the first (compare mode) without either clobbering the
+ * other's params. Defaults to "" — identical to the single-dashboard behavior.
  */
-export function useFilterParams() {
+export function useFilterParams(paramSuffix: string = "") {
   // Initialize with empty state (SSR-safe), hydrate from URL in effect
-  const [state, setState] = useState(() => parseParams(""));
+  const [state, setState] = useState(() => parseParams("", paramSuffix));
 
   // Tracks whether the most recent state update came from a popstate (URL navigation).
   // Consumers can check this to avoid clearing URL-driven state.
@@ -310,24 +337,34 @@ export function useFilterParams() {
   // Hydrate from URL on mount + sync on popstate (back/forward button)
   useEffect(() => {
     fromPopstateRef.current = true;
-    setState(parseParams(window.location.search)); // eslint-disable-line react-hooks/set-state-in-effect -- hydrate from URL on mount
+    setState(parseParams(window.location.search, paramSuffix)); // eslint-disable-line react-hooks/set-state-in-effect -- hydrate from URL on mount
     const onPopState = () => {
       fromPopstateRef.current = true;
-      setState(parseParams(window.location.search));
+      setState(parseParams(window.location.search, paramSuffix));
     };
     window.addEventListener("popstate", onPopState);
     return () => window.removeEventListener("popstate", onPopState);
-  }, []);
+  }, [paramSuffix]);
 
-  // Write URL silently (no Next.js navigation, no re-render loop)
+  // Write URL silently (no Next.js navigation, no re-render loop). Merges this
+  // instance's (suffixed) params into whatever's currently in the URL rather than
+  // replacing the whole query string, so a second useFilterParams instance with a
+  // different paramSuffix (compare mode) can co-exist in the same URL — each
+  // instance only ever touches its own suffixed keys.
   const syncUrl = useCallback((newState: typeof state, push: boolean) => {
-    const url = window.location.pathname + buildQs(newState);
+    const current = new URLSearchParams(window.location.search);
+    for (const name of OWN_PARAM_NAMES) current.delete(paramKey(name, paramSuffix));
+    for (const [ownKey, value] of new URLSearchParams(buildQs(newState, paramSuffix))) {
+      current.set(ownKey, value);
+    }
+    const qs = current.toString();
+    const url = window.location.pathname + (qs ? `?${qs}` : "");
     if (push) {
       window.history.pushState(null, "", url);
     } else {
       window.history.replaceState(null, "", url);
     }
-  }, []);
+  }, [paramSuffix]);
 
   // --- Setters: update local state instantly, sync URL in background ---
 
