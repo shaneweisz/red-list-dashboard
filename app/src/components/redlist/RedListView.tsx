@@ -2465,7 +2465,6 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
         selectedSubgroups={selectedSubgroups}
         disableAllSpecies={isNewAssessments}
         viewMode={viewMode}
-        onViewModeChange={onViewModeChange}
         layoutMode={layoutMode}
         onLayoutModeChange={setLayoutMode}
         countryModeContent={countryModeContent}
@@ -2540,14 +2539,22 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
               sub-group row drilled into via TaxaSummary's own tree
               (selectedSubgroupTaxon: dynamic order/family/genus, or a static SSC
               group), or a non-curated arbitrary rank reached via search
-              (arbitraryTaxon). Two stat cards: the taxon (name + rank) and the
-              matched-species count (mirrors the table's totalFiltered). The
-              Assessed/Not Evaluated toggle lives paired with the View selector
-              at the bottom-right of TaxaSummary's own table now, not here — see
-              its onViewModeChange prop. TaxaSummary's own breadcrumb table
-              above already shows the tree branch that led here (Mammals →
-              Rodentia → Heteromyidae → ...) when applicable — this is purely an
-              additional, more prominent summary, not a replacement for it. */}
+              (arbitraryTaxon). Two fixed-fact stat cards — the taxon (name +
+              rank) and its total species count (taxaFilteredSpeciesBase, NOT
+              totalFiltered) — neither reacts to pill filters; the Matching
+              Filters row below is what shows the filtered/live numbers. The
+              second card's header IS the Assessed/Not Evaluated toggle rather
+              than a plain caption: the toggle's own button labels already say
+              "Assessed"/"Not Evaluated", so a separate caption saying the same
+              thing would be redundant, and this keeps the toggle visible at
+              both the landing page and single-taxon drill-down (unlike the
+              View selector, which is landing-only — browsing mode stops
+              mattering once you've committed to a taxon, but Assessed/Not
+              Evaluated scope matters just as much here as there). TaxaSummary's
+              own breadcrumb table above already shows the tree branch that led
+              here (Mammals → Rodentia → Heteromyidae → ...) when applicable —
+              this is purely an additional, more prominent summary, not a
+              replacement for it. */}
           {focusedTaxonCard && !isSingleSpecies && (
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-3">
@@ -2559,45 +2566,62 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
                 </div>
               </div>
               <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-3">
-                <div className="text-xs font-medium uppercase tracking-wide text-zinc-500 dark:text-zinc-400">
-                  {isNewAssessments ? "Not Evaluated Species" : "Assessed Species"}
-                </div>
-                <div className="mt-0.5 flex items-baseline gap-1.5">
-                  {speciesLoading && assessedSpecies.length === 0 ? (
-                    <Spinner className="h-6 w-6" />
-                  ) : (
-                    <>
-                      <span className="text-2xl font-bold text-zinc-900 dark:text-zinc-100">
-                        {totalFiltered.toLocaleString()}
-                      </span>
-                      {totalFiltered !== taxaFilteredSpeciesBase.length && (
-                        <span className="text-sm font-medium text-zinc-400 dark:text-zinc-500">
-                          matching filters
-                        </span>
-                      )}
-                    </>
-                  )}
+                {onViewModeChange ? (
+                  <div className="flex rounded-lg border border-zinc-200 dark:border-zinc-700 overflow-hidden text-xs w-fit">
+                    <button
+                      type="button"
+                      onClick={() => onViewModeChange("reassessments")}
+                      className={`px-2 py-1 font-medium transition-colors ${
+                        !isNewAssessments
+                          ? "bg-zinc-800 dark:bg-zinc-100 text-white dark:text-zinc-900"
+                          : "bg-white dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400 hover:bg-zinc-50 dark:hover:bg-zinc-700"
+                      }`}
+                    >
+                      Assessed
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => onViewModeChange("new-assessments")}
+                      className={`px-2 py-1 font-medium transition-colors ${
+                        isNewAssessments
+                          ? "bg-zinc-800 dark:bg-zinc-100 text-white dark:text-zinc-900"
+                          : "bg-white dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400 hover:bg-zinc-50 dark:hover:bg-zinc-700"
+                      }`}
+                    >
+                      Not Evaluated
+                    </button>
+                  </div>
+                ) : (
+                  <div className="text-xs font-medium uppercase tracking-wide text-zinc-500 dark:text-zinc-400">
+                    {isNewAssessments ? "Not Evaluated Species" : "Assessed Species"}
+                  </div>
+                )}
+                <div className="mt-1 text-2xl font-bold text-zinc-900 dark:text-zinc-100">
+                  {speciesLoading && assessedSpecies.length === 0
+                    ? <Spinner className="h-6 w-6" />
+                    : taxaFilteredSpeciesBase.length.toLocaleString()}
                 </div>
               </div>
             </div>
           )}
 
-          {/* Matching Filters — replaces the old separate "applied filters" row.
-              Only rendered when there's something to show: an active filter
-              (hasActiveFilters), a Starred toggle (pinnedSpecies.length > 0), or
-              the Not Evaluated shortcut. Deliberately excludes selectedTaxa/
-              selectedSubgroups/breakdownFilter — those are taxonomy navigation,
-              not filters; Home is what clears them, not this card's Clear all.
-              The heading restates the same number as the stat card above
-              (totalFiltered) so the card is self-explanatory without having to
-              look back up — not true redundancy since they're adjacent. */}
+          {/* Active Filters / Matched Species — two cards mirroring the Taxon/
+              Assessed-Species row above (same grid pattern: a fixed-fact card
+              on the left, a live-number card on the right), shown only when
+              there's something to display: an active filter (hasActiveFilters),
+              a Starred toggle (pinnedSpecies.length > 0), or the Not Evaluated
+              shortcut. Deliberately excludes selectedTaxa/selectedSubgroups/
+              breakdownFilter from both the chip list and Clear all — those are
+              taxonomy navigation, not filters; Home is what clears them.
+              Matched Species (right) only renders once hasActiveFilters is
+              true — with no active filter it would just repeat the taxon's own
+              fixed total already shown in the card above, so the left card
+              spans full width by itself instead (className below has no grid
+              classes in that case, so it's just a plain block). */}
           {(hasActiveFilters || pinnedSpecies.length > 0 || (!isNewAssessments && (neCount > 0 || neBlockedForAll))) && (
-            <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-3 md:p-4">
-              {hasActiveFilters && (
-                <div className="mb-2 text-sm font-semibold text-zinc-900 dark:text-zinc-100">
-                  {totalFiltered.toLocaleString()} Matching Filters
-                </div>
-              )}
+            <div className={hasActiveFilters ? "grid grid-cols-1 sm:grid-cols-2 gap-4" : ""}>
+              <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-3 md:p-4">
+              <div className="text-sm font-semibold text-zinc-900 dark:text-zinc-100 mb-2">Active Filters</div>
               <div className="flex flex-wrap items-center gap-2 md:gap-4">
               {hasActiveFilters && (
                 <button
@@ -2873,6 +2897,19 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
               </button>
             )}
               </div>
+              </div>
+              {hasActiveFilters && (
+                <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-3 md:p-4">
+                  <div className="text-xs font-medium uppercase tracking-wide text-zinc-500 dark:text-zinc-400">
+                    Matched Species
+                  </div>
+                  <div className="mt-0.5 text-2xl font-bold text-zinc-900 dark:text-zinc-100">
+                    {speciesLoading && totalFiltered === 0 && !singleSpeciesPreview
+                      ? <Spinner className="h-6 w-6" />
+                      : totalFiltered.toLocaleString()}
+                  </div>
+                </div>
+              )}
             </div>
           )}
 
