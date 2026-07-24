@@ -143,11 +143,16 @@ interface SpeciesDetails {
 }
 
 
-// Debounced search input - manages own state for instant typing, debounces parent updates
+// Debounced search input — manages own state for instant typing, debounces parent updates.
+// Filters the currently-visible species table by name in place, composing with whatever
+// pill filters are already active (e.g. Mammals + EN + Mexico, then narrow to "mouse") —
+// distinct from the page header's SpeciesSearchBar, which navigates to a taxon/species
+// instead of narrowing the current view. Placeholder text keeps the two from reading as
+// duplicates of each other.
 function DebouncedSearchInput({
   onSearch,
   initialValue = "",
-  placeholder = "Search species...",
+  placeholder = "Filter by name...",
   className,
 }: {
   onSearch: (value: string) => void;
@@ -376,6 +381,7 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
     sortField, sortDirection, setSort,
     mapViewMode, mapSortKey, mapSortDirection, setMapViewMode, setMapSort,
     clearAllFilters,
+    clearAllFiltersAndTaxa,
     setViewMode: setUrlViewMode,
     species: urlSpecies, tab: urlTab,
     setSpeciesParam, setTabParam,
@@ -2505,7 +2511,6 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
         countryModeContent={countryModeContent}
         countryPillsContent={countryPillsContent}
         countryScope={countryScope}
-        onClearCountryScope={() => { setSelectedCountries(new Set()); setHoverPreviewCountry(null); }}
         onToggleSubgroup={(sgId) => {
           // Clicking a view root ancestor → clear subgroups to show its children.
           // If the currently-selected subgroup is an SSC group, we got here by
@@ -2575,17 +2580,21 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
               sub-group row drilled into via TaxaSummary's own tree
               (selectedSubgroupTaxon: dynamic order/family/genus, or a static SSC
               group), or a non-curated arbitrary rank reached via search
-              (arbitraryTaxon). Two stat cards: the taxon (name + rank) and the
-              matched-species count (mirrors the table's totalFiltered) — the
-              latter also carries the Assessed/Not Evaluated view-mode toggle
-              (previously a page-header control, moved here since this is where
-              the mode actually changes what's shown). TaxaSummary's own
-              breadcrumb table above already shows the tree branch that led here
-              (Mammals → Rodentia → Heteromyidae → ...) when applicable — this is
-              purely an additional, more prominent summary, not a replacement
-              for it. */}
+              (arbitraryTaxon). Two fixed stat cards — the taxon (name + rank)
+              and its total species count (taxaFilteredSpeciesBase) — neither
+              reacts to pill filters, so this row never grows/changes as
+              filters are added; the applied-filters row below (right above
+              the species table) is what shows the live, filtered picture.
+              The Species card's Assessed/Not Evaluated toggle sits to the
+              right of its label, vertically centered against the whole card;
+              it lives here (not the landing-only row with the View selector)
+              so it's usable at any drill-down depth. TaxaSummary's own
+              breadcrumb table above already shows the tree branch that led
+              here (Mammals → Rodentia → Heteromyidae → ...) when applicable —
+              this is purely an additional, more prominent summary, not a
+              replacement for it. */}
           {focusedTaxonCard && !isSingleSpecies && (
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-3">
                 <div className="text-xs font-medium uppercase tracking-wide text-zinc-500 dark:text-zinc-400">
                   {focusedTaxonCard.rank ?? "Taxon"}
@@ -2602,7 +2611,7 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
                   <div className="mt-0.5 text-2xl font-bold text-zinc-900 dark:text-zinc-100">
                     {speciesLoading && assessedSpecies.length === 0
                       ? <Spinner className="h-6 w-6" />
-                      : totalFiltered.toLocaleString()}
+                      : taxaFilteredSpeciesBase.length.toLocaleString()}
                   </div>
                 </div>
                 {onViewModeChange && (
@@ -3137,11 +3146,12 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
             })()}
           </div>
 
-          {/* More Filters (collapsible) - hidden for New Assessments */}
-          {!isNewAssessments && <div>
+          {/* More Filters — a full-width collapsible card row, consistent with
+              the other cards on the page (hidden for New Assessments) */}
+          {!isNewAssessments && <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl">
             <button
               onClick={() => setMoreFiltersOpen(prev => !prev)}
-              className="flex items-center gap-1.5 text-xs font-medium text-zinc-500 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-300 transition-colors"
+              className="w-full flex items-center gap-1.5 px-3 md:px-4 py-2.5 text-sm font-medium text-zinc-700 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800 rounded-t-xl transition-colors"
             >
               <svg className={`w-3.5 h-3.5 transition-transform ${moreFiltersOpen ? "rotate-90" : ""}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
@@ -3154,10 +3164,10 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
               )}
             </button>
             {moreFiltersOpen && (
-              <div className="mt-3 flex flex-col gap-3">
+              <div className="px-3 md:px-4 pb-3 md:pb-4 pt-3 md:pt-4 border-t border-zinc-200 dark:border-zinc-800 flex flex-col gap-3">
                 {/* Realm */}
-                <div className="flex items-center gap-2">
-                  <span className="text-xs font-medium text-zinc-500 dark:text-zinc-400 shrink-0 w-16">Realm</span>
+                <div className="flex items-center gap-2 bg-zinc-50 dark:bg-zinc-800/50 border border-zinc-200 dark:border-zinc-700 rounded-lg px-3 py-2">
+                  <span className="text-sm font-semibold text-zinc-900 dark:text-zinc-100 shrink-0 w-20">Realm</span>
                   <div className="flex flex-wrap gap-1.5">
                     {(["Terrestrial", "Freshwater", "Marine"] as const).map(system => {
                       const isSelected = selectedSystems.has(system);
@@ -3215,8 +3225,8 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
                   const sorted = Object.entries(gfCounts).sort((a, b) => b[1] - a[1]);
                   if (sorted.length === 0) return null;
                   return (
-                    <div className="flex items-start gap-2">
-                      <span className="text-xs font-medium text-zinc-500 dark:text-zinc-400 shrink-0 w-16 pt-1">Growth</span>
+                    <div className="flex items-start gap-2 bg-zinc-50 dark:bg-zinc-800/50 border border-zinc-200 dark:border-zinc-700 rounded-lg px-3 py-2">
+                      <span className="text-sm font-semibold text-zinc-900 dark:text-zinc-100 shrink-0 w-20 pt-1">Growth</span>
                       <div className="flex flex-wrap gap-1.5">
                         {sorted.map(([gf, count]) => {
                           const isSelected = selectedGrowthForms.has(gf);
@@ -3247,8 +3257,8 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
                 })()}
 
                 {/* Trend */}
-                <div className="flex items-center gap-2">
-                    <span className="text-xs font-medium text-zinc-500 dark:text-zinc-400 shrink-0 w-16">Trend</span>
+                <div className="flex items-center gap-2 bg-zinc-50 dark:bg-zinc-800/50 border border-zinc-200 dark:border-zinc-700 rounded-lg px-3 py-2">
+                    <span className="text-sm font-semibold text-zinc-900 dark:text-zinc-100 shrink-0 w-20">Trend</span>
                     <div className="flex flex-wrap gap-1.5">
                       {(["Increasing", "Stable", "Decreasing", "Unknown"] as const).map(trend => {
                         const isSelected = selectedPopulationTrends.has(trend);
@@ -3279,8 +3289,8 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
 
                 {/* Movement Patterns */}
                 {!isNewAssessments && (
-                  <div className="flex items-center gap-2">
-                    <span className="text-xs font-medium text-zinc-500 dark:text-zinc-400 shrink-0 w-16">Movement</span>
+                  <div className="flex items-center gap-2 bg-zinc-50 dark:bg-zinc-800/50 border border-zinc-200 dark:border-zinc-700 rounded-lg px-3 py-2">
+                    <span className="text-sm font-semibold text-zinc-900 dark:text-zinc-100 shrink-0 w-20">Movement</span>
                       <div className="flex flex-wrap gap-1.5">
                         {(["Full Migrant", "Altitudinal Migrant", "Nomadic", "Not a Migrant", "Unknown"] as const).map(pattern => {
                           const isSelected = selectedMovementPatterns.has(pattern);
@@ -3366,16 +3376,23 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
             )}
           </div>}
 
-      {/* Search and Species Table */}
+      {/* Species Table */}
       <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl">
-        {/* Search bar */}
+        {/* Applied filters — every currently-active filter (including the
+            selected taxon/subgroup/breakdown-name) as a removable pill,
+            directly above the table they filter. Clear all resets everything
+            here, taxon/subgroup included — Home is for the "go back to
+            nothing selected at all" case; this is for "same taxon, different
+            filters". The free-text box narrows the visible table by name in
+            place, composing with the pills beside it — distinct from the page
+            header's SpeciesSearchBar, which navigates elsewhere instead of
+            narrowing here (see DebouncedSearchInput's own doc comment). */}
         <div className="p-3 md:p-4 border-b border-zinc-200 dark:border-zinc-800 rounded-t-xl">
           <div className="flex flex-wrap items-center gap-2 md:gap-4">
             <div className="relative flex-1 min-w-[140px] max-w-md">
               <DebouncedSearchInput
                 onSearch={handleSearch}
                 initialValue={searchFilter}
-                placeholder="Search species..."
                 className="w-full px-3 md:px-4 py-2 pl-9 md:pl-10 rounded-lg border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-zinc-900 dark:text-zinc-100 placeholder-zinc-400 focus:outline-none focus:ring-2 focus:ring-red-500 text-sm"
               />
               <svg
@@ -3389,8 +3406,12 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
             </div>
             {(selectedTaxa.size > 0 || selectedSubgroups.size > 0 || selectedCategories.size > 0 || selectedYearRanges.size > 0 || selectedAssessmentYears.size > 0 || selectedDescribedYears.size > 0 || selectedObsRanges.size > 0 || selectedCountries.size > 0 || selectedSystems.size > 0 || endemicsOnly || selectedGrowthForms.size > 0 || selectedPopulationTrends.size > 0 || selectedMovementPatterns.size > 0 || selectedThreats.size > 0 || selectedAssessors.size > 0 || selectedReviewers.size > 0 || showOnlyStarred || exactFilters.outdated || exactFilters.minObs != null || exactFilters.maxObs != null || exactFilters.minAssessmentYear != null || exactFilters.maxAssessmentYear != null || exactFilters.minDescribedYear != null || exactFilters.maxDescribedYear != null) && (
               <button
-                onClick={() => { clearAllFilters(); setSelectedTaxa(new Set()); setSelectedSubgroups(new Set()); setSelectedObsRanges(new Set()); setSelectedSystems(new Set()); setEndemicsOnly(false); setSelectedGrowthForms(new Set()); setSelectedPopulationTrends(new Set()); setSelectedMovementPatterns(new Set()); setSelectedThreats(new Set()); setExpandedThreat(null); setSelectedAssessors(new Set()); setSelectedReviewers(new Set()); setShowOnlyStarred(false); }}
-                title="Reset all filters and taxa"
+                onClick={() => {
+                  clearAllFiltersAndTaxa();
+                  setShowOnlyStarred(false);
+                  setExpandedThreat(null);
+                }}
+                title="Reset all filters and the selected taxon"
                 className="px-2 md:px-3 py-1.5 rounded-lg text-xs md:text-sm font-medium transition-colors flex items-center gap-1 md:gap-1.5 bg-white text-zinc-700 border border-zinc-200 hover:bg-zinc-50 dark:bg-zinc-800 dark:text-zinc-300 dark:border-zinc-700 shrink-0"
               >
                 <svg className="w-3.5 h-3.5 md:w-4 md:h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -3400,31 +3421,29 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
               </button>
             )}
             {pinnedSpecies.length > 0 && (
-              <>
-                <button
-                  onClick={() => setShowOnlyStarred(!showOnlyStarred)}
-                  className={`px-2 md:px-3 py-1.5 rounded-lg text-xs md:text-sm font-medium transition-colors flex items-center gap-1 md:gap-1.5 ${
-                    showOnlyStarred
-                      ? "bg-amber-500 text-white"
-                      : "bg-white text-zinc-700 border border-zinc-200 hover:bg-zinc-50 dark:bg-zinc-800 dark:text-zinc-300 dark:border-zinc-700"
-                  }`}
-                >
-                  <svg className="w-4 h-4" fill={showOnlyStarred ? "currentColor" : "none"} stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.197-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.784-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z" />
-                  </svg>
-                  <span className="hidden sm:inline">Starred</span> ({pinnedSpecies.length})
-                </button>
-              </>
+              <button
+                onClick={() => setShowOnlyStarred(!showOnlyStarred)}
+                className={`px-2 md:px-3 py-1.5 rounded-lg text-xs md:text-sm font-medium transition-colors flex items-center gap-1 md:gap-1.5 ${
+                  showOnlyStarred
+                    ? "bg-amber-500 text-white"
+                    : "bg-white text-zinc-700 border border-zinc-200 hover:bg-zinc-50 dark:bg-zinc-800 dark:text-zinc-300 dark:border-zinc-700"
+                }`}
+              >
+                <svg className="w-4 h-4" fill={showOnlyStarred ? "currentColor" : "none"} stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.197-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.784-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z" />
+                </svg>
+                <span className="hidden sm:inline">Starred</span> ({pinnedSpecies.length})
+              </button>
             )}
             {Array.from(selectedTaxa).map(taxonId => (
               <button
                 key={taxonId}
                 onClick={() => setSelectedTaxa(prev => { const next = new Set(prev); next.delete(taxonId); return next; })}
-                className="px-2 md:px-3 py-1 text-xs md:text-sm rounded-full flex items-center gap-1 hover:opacity-80"
+                className="px-3 py-1.5 text-sm font-medium rounded-full flex items-center gap-1 hover:opacity-80"
                 style={{ backgroundColor: (TAXA_BY_ID[taxonId]?.color || "#666") + "20", color: TAXA_BY_ID[taxonId]?.color || "#666" }}
               >
                 {TAXA_BY_ID[taxonId]?.name || taxonId}
-                <span className="text-xs">×</span>
+                <span className="text-sm">×</span>
               </button>
             ))}
             {Array.from(selectedSubgroups).map(sgId => {
@@ -3433,72 +3452,72 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
                 <button
                   key={sgId}
                   onClick={() => setSelectedSubgroups(prev => { const next = new Set(prev); next.delete(sgId); return next; })}
-                  className="px-2 md:px-3 py-1 text-xs md:text-sm rounded-full bg-violet-100 text-violet-600 dark:bg-violet-900/30 dark:text-violet-400 flex items-center gap-1 hover:opacity-80"
+                  className="px-3 py-1.5 text-sm font-medium rounded-full bg-violet-100 text-violet-600 dark:bg-violet-900/30 dark:text-violet-400 flex items-center gap-1 hover:opacity-80"
                 >
                   {sgInfo?.node.name ?? dynamicNodeDisplayName(sgId)}
-                  <span className="text-xs">×</span>
+                  <span className="text-sm">×</span>
                 </button>
               );
             })}
             {breakdownFilter && selectedSubgroups.has(breakdownFilter.nodeId) && (
               <button
                 onClick={() => setBreakdownFilter(null)}
-                className="px-2 md:px-3 py-1 text-xs md:text-sm rounded-full bg-violet-100 text-violet-600 dark:bg-violet-900/30 dark:text-violet-400 flex items-center gap-1 hover:opacity-80"
+                className="px-3 py-1.5 text-sm font-medium rounded-full bg-violet-100 text-violet-600 dark:bg-violet-900/30 dark:text-violet-400 flex items-center gap-1 hover:opacity-80"
               >
                 {breakdownDisplayName(breakdownFilter.rank, breakdownFilter.name)}
                 {breakdownFilter.onlyIds?.length ? " — No CoL Match" : breakdownFilter.excludeIds?.length ? " — CoL Match" : ""}
-                <span className="text-xs">×</span>
+                <span className="text-sm">×</span>
               </button>
             )}
             {!isNewAssessments && Array.from(selectedCategories).filter(cat => cat !== "NE").map(cat => (
               <button
                 key={cat}
                 onClick={() => setSelectedCategories(prev => { const next = new Set(prev); next.delete(cat); return next; })}
-                className="px-2 md:px-3 py-1 text-xs md:text-sm rounded-full flex items-center gap-1 hover:opacity-80"
+                className="px-3 py-1.5 text-sm font-medium rounded-full flex items-center gap-1 hover:opacity-80"
                 style={{ backgroundColor: CATEGORY_COLORS[cat] + "20", color: CATEGORY_COLORS[cat] }}
               >
                 {cat}
-                <span className="text-xs">×</span>
+                <span className="text-sm">×</span>
               </button>
             ))}
             {!isNewAssessments && Array.from(selectedYearRanges).map(range => (
               <button
                 key={range}
                 onClick={() => setSelectedYearRanges(prev => { const next = new Set(prev); next.delete(range); return next; })}
-                className="px-2 md:px-3 py-1 text-xs md:text-sm rounded-full bg-blue-100 text-blue-600 dark:bg-blue-900/30 dark:text-blue-400 flex items-center gap-1 hover:opacity-80"
+                className="px-3 py-1.5 text-sm font-medium rounded-full bg-blue-100 text-blue-600 dark:bg-blue-900/30 dark:text-blue-400 flex items-center gap-1 hover:opacity-80"
               >
                 {range}
-                <span className="text-xs">×</span>
+                <span className="text-sm">×</span>
               </button>
             ))}
             {!isNewAssessments && Array.from(selectedAssessmentYears).sort((a, b) => Number(b) - Number(a)).map(year => (
               <button
                 key={`ay-${year}`}
                 onClick={() => setSelectedAssessmentYears(prev => { const next = new Set(prev); next.delete(year); return next; })}
-                className="px-2 md:px-3 py-1 text-xs md:text-sm rounded-full bg-blue-100 text-blue-600 dark:bg-blue-900/30 dark:text-blue-400 flex items-center gap-1 hover:opacity-80"
+                className="px-3 py-1.5 text-sm font-medium rounded-full bg-blue-100 text-blue-600 dark:bg-blue-900/30 dark:text-blue-400 flex items-center gap-1 hover:opacity-80"
               >
                 Assessed {year}
-                <span className="text-xs">×</span>
+                <span className="text-sm">×</span>
               </button>
             ))}
             {isNewAssessments && Array.from(selectedDescribedYears).map(range => (
               <button
                 key={`dy-${range}`}
                 onClick={() => setSelectedDescribedYears(prev => { const next = new Set(prev); next.delete(range); return next; })}
-                className="px-2 md:px-3 py-1 text-xs md:text-sm rounded-full bg-violet-100 text-violet-600 dark:bg-violet-900/30 dark:text-violet-400 flex items-center gap-1 hover:opacity-80"
+                className="px-3 py-1.5 text-sm font-medium rounded-full bg-violet-100 text-violet-600 dark:bg-violet-900/30 dark:text-violet-400 flex items-center gap-1 hover:opacity-80"
               >
                 Described {range}
-                <span className="text-xs">×</span>
+                <span className="text-sm">×</span>
               </button>
             ))}
             {Array.from(selectedObsRanges).map(range => (
               <button
                 key={range}
                 onClick={() => setSelectedObsRanges(prev => { const next = new Set(prev); next.delete(range); return next; })}
-                className="px-2 md:px-3 py-1 text-xs md:text-sm rounded-full bg-emerald-100 text-emerald-600 dark:bg-emerald-900/30 dark:text-emerald-400 flex items-center gap-1 hover:opacity-80"
+                className="px-3 py-1.5 text-sm font-medium rounded-full bg-emerald-100 text-emerald-600 dark:bg-emerald-900/30 dark:text-emerald-400 flex items-center gap-1 hover:opacity-80"
               >
                 {range} obs
-                <span className="text-xs">×</span>
+                <span className="text-sm">×</span>
               </button>
             ))}
             {(() => {
@@ -3514,10 +3533,10 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
                     return (
                       <button
                         onClick={() => setSelectedCountries(new Set())}
-                        className="px-2 md:px-3 py-1 text-xs md:text-sm rounded-full bg-green-100 text-green-600 dark:bg-green-900/30 dark:text-green-400 flex items-center gap-1 hover:opacity-80"
+                        className="px-3 py-1.5 text-sm font-medium rounded-full bg-green-100 text-green-600 dark:bg-green-900/30 dark:text-green-400 flex items-center gap-1 hover:opacity-80"
                       >
                         {region}
-                        <span className="text-xs">×</span>
+                        <span className="text-sm">×</span>
                       </button>
                     );
                   }
@@ -3528,10 +3547,10 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
                 <button
                   key={code}
                   onClick={() => setSelectedCountries(prev => { const next = new Set(prev); next.delete(code); return next; })}
-                  className="px-2 md:px-3 py-1 text-xs md:text-sm rounded-full bg-green-100 text-green-600 dark:bg-green-900/30 dark:text-green-400 flex items-center gap-1 hover:opacity-80"
+                  className="px-3 py-1.5 text-sm font-medium rounded-full bg-green-100 text-green-600 dark:bg-green-900/30 dark:text-green-400 flex items-center gap-1 hover:opacity-80"
                 >
                   {getCountryName(code)}
-                  <span className="text-xs">×</span>
+                  <span className="text-sm">×</span>
                 </button>
               ));
             })()}
@@ -3539,39 +3558,39 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
               <button
                 key={`gf-${gf}`}
                 onClick={() => setSelectedGrowthForms(prev => { const next = new Set(prev); next.delete(gf); return next; })}
-                className="px-2 md:px-3 py-1 text-xs md:text-sm rounded-full bg-lime-100 text-lime-600 dark:bg-lime-900/30 dark:text-lime-400 flex items-center gap-1 hover:opacity-80"
+                className="px-3 py-1.5 text-sm font-medium rounded-full bg-lime-100 text-lime-600 dark:bg-lime-900/30 dark:text-lime-400 flex items-center gap-1 hover:opacity-80"
               >
                 {gf}
-                <span className="text-xs">×</span>
+                <span className="text-sm">×</span>
               </button>
             ))}
             {endemicsOnly && (
               <button
                 onClick={() => setEndemicsOnly(false)}
-                className="px-2 md:px-3 py-1 text-xs md:text-sm rounded-full bg-teal-100 text-teal-600 dark:bg-teal-900/30 dark:text-teal-400 flex items-center gap-1 hover:opacity-80"
+                className="px-3 py-1.5 text-sm font-medium rounded-full bg-teal-100 text-teal-600 dark:bg-teal-900/30 dark:text-teal-400 flex items-center gap-1 hover:opacity-80"
               >
                 Endemics only
-                <span className="text-xs">×</span>
+                <span className="text-sm">×</span>
               </button>
             )}
             {Array.from(selectedPopulationTrends).map(trend => (
               <button
                 key={`trend-${trend}`}
                 onClick={() => setSelectedPopulationTrends(prev => { const next = new Set(prev); next.delete(trend); return next; })}
-                className="px-2 md:px-3 py-1 text-xs md:text-sm rounded-full bg-orange-100 text-orange-600 dark:bg-orange-900/30 dark:text-orange-400 flex items-center gap-1 hover:opacity-80"
+                className="px-3 py-1.5 text-sm font-medium rounded-full bg-orange-100 text-orange-600 dark:bg-orange-900/30 dark:text-orange-400 flex items-center gap-1 hover:opacity-80"
               >
                 {trend}
-                <span className="text-xs">×</span>
+                <span className="text-sm">×</span>
               </button>
             ))}
             {Array.from(selectedMovementPatterns).map(pattern => (
               <button
                 key={`mov-${pattern}`}
                 onClick={() => setSelectedMovementPatterns(prev => { const next = new Set(prev); next.delete(pattern); return next; })}
-                className="px-2 md:px-3 py-1 text-xs md:text-sm rounded-full bg-teal-100 text-teal-600 dark:bg-teal-900/30 dark:text-teal-400 flex items-center gap-1 hover:opacity-80"
+                className="px-3 py-1.5 text-sm font-medium rounded-full bg-teal-100 text-teal-600 dark:bg-teal-900/30 dark:text-teal-400 flex items-center gap-1 hover:opacity-80"
               >
                 {pattern}
-                <span className="text-xs">×</span>
+                <span className="text-sm">×</span>
               </button>
             ))}
             {Array.from(selectedThreats).map(code => {
@@ -3582,10 +3601,10 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
                 <button
                   key={`threat-${code}`}
                   onClick={() => setSelectedThreats(prev => { const next = new Set(prev); next.delete(code); return next; })}
-                  className="px-2 md:px-3 py-1 text-xs md:text-sm rounded-full bg-rose-100 text-rose-600 dark:bg-rose-900/30 dark:text-rose-400 flex items-center gap-1 hover:opacity-80"
+                  className="px-3 py-1.5 text-sm font-medium rounded-full bg-rose-100 text-rose-600 dark:bg-rose-900/30 dark:text-rose-400 flex items-center gap-1 hover:opacity-80"
                 >
                   {label}
-                  <span className="text-xs">×</span>
+                  <span className="text-sm">×</span>
                 </button>
               );
             })}
@@ -3593,34 +3612,34 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
               <button
                 key={system}
                 onClick={() => setSelectedSystems(prev => { const next = new Set(prev); next.delete(system); return next; })}
-                className={`px-2 md:px-3 py-1 text-xs md:text-sm rounded-full flex items-center gap-1 hover:opacity-80 ${
+                className={`px-3 py-1.5 text-sm font-medium rounded-full flex items-center gap-1 hover:opacity-80 ${
                   system === "Terrestrial" ? "bg-amber-100 text-amber-600 dark:bg-amber-900/30 dark:text-amber-400"
                   : system === "Freshwater" ? "bg-cyan-100 text-cyan-600 dark:bg-cyan-900/30 dark:text-cyan-400"
                   : "bg-blue-100 text-blue-600 dark:bg-blue-900/30 dark:text-blue-400"
                 }`}
               >
                 {system}
-                <span className="text-xs">×</span>
+                <span className="text-sm">×</span>
               </button>
             ))}
             {!isNewAssessments && Array.from(selectedAssessors).map(name => (
               <button
                 key={`a-${name}`}
                 onClick={() => setSelectedAssessors(prev => { const next = new Set(prev); next.delete(name); return next; })}
-                className="px-2 md:px-3 py-1 text-xs md:text-sm rounded-full bg-violet-100 text-violet-600 dark:bg-violet-900/30 dark:text-violet-400 flex items-center gap-1 hover:opacity-80"
+                className="px-3 py-1.5 text-sm font-medium rounded-full bg-violet-100 text-violet-600 dark:bg-violet-900/30 dark:text-violet-400 flex items-center gap-1 hover:opacity-80"
               >
                 {name} <span className="text-[10px] opacity-60">(assessor)</span>
-                <span className="text-xs">×</span>
+                <span className="text-sm">×</span>
               </button>
             ))}
             {!isNewAssessments && Array.from(selectedReviewers).map(name => (
               <button
                 key={`r-${name}`}
                 onClick={() => setSelectedReviewers(prev => { const next = new Set(prev); next.delete(name); return next; })}
-                className="px-2 md:px-3 py-1 text-xs md:text-sm rounded-full bg-fuchsia-100 text-fuchsia-600 dark:bg-fuchsia-900/30 dark:text-fuchsia-400 flex items-center gap-1 hover:opacity-80"
+                className="px-3 py-1.5 text-sm font-medium rounded-full bg-fuchsia-100 text-fuchsia-600 dark:bg-fuchsia-900/30 dark:text-fuchsia-400 flex items-center gap-1 hover:opacity-80"
               >
                 {name} <span className="text-[10px] opacity-60">(reviewer)</span>
-                <span className="text-xs">×</span>
+                <span className="text-sm">×</span>
               </button>
             ))}
             {/* Exact URL-only filters (typically arrive via an agent/MCP dashboard
@@ -3639,10 +3658,10 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
                 <button
                   key={`ef-${c.key}`}
                   onClick={() => setExactFilters({ [c.key]: null })}
-                  className="px-2 md:px-3 py-1 text-xs md:text-sm rounded-full bg-slate-100 text-slate-600 dark:bg-slate-800/60 dark:text-slate-300 flex items-center gap-1 hover:opacity-80"
+                  className="px-3 py-1.5 text-sm font-medium rounded-full bg-slate-100 text-slate-600 dark:bg-slate-800/60 dark:text-slate-300 flex items-center gap-1 hover:opacity-80"
                 >
                   {c.label}
-                  <span className="text-xs">×</span>
+                  <span className="text-sm">×</span>
                 </button>
               ));
             })()}

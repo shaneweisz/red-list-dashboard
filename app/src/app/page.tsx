@@ -63,7 +63,7 @@ export default function RedListPage() {
   return (
     <div className="min-h-screen flex flex-col bg-zinc-50 dark:bg-zinc-950 px-4 sm:px-6 py-4 md:px-16 md:py-8">
       <main className="max-w-5xl w-full min-w-0 mx-auto flex-1">
-        {/* Header: two aligned rows (title | view-toggle, subtitle | search).
+        {/* Header: two aligned rows (title | controls, subtitle | search).
             Globe sits inline with the title so the subtitle, controls and
             search bar share the same flush-left edge as the table below. */}
         <div className="mb-[0.9rem] md:mb-[1.35rem]">
