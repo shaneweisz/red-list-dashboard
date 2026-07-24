@@ -1297,7 +1297,16 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
   const menuButtonRef = useRef<HTMLButtonElement>(null);
   const [menuPos, setMenuPos] = useState<{ top: number; left: number }>({ top: 0, left: 0 });
 
-  const countryScoped = !!countryScope?.length;
+  // Only actually scope this table's own data to a country while in Country
+  // View (layoutMode === "country") — countryScope itself is set from ANY
+  // country click/hover anywhere on the page (e.g. the small map widget in
+  // an ordinary taxon view's own charts row), but this table's numbers
+  // (fetchTaxa, ensureSubgroupData, Table 1a/SSC fetches, and the cache-
+  // buster reset below) should stay global outside Country View — clicking
+  // DRC while browsing Mammals shouldn't silently re-scope the breadcrumb
+  // tree to DRC's numbers. countryKey derives from this, so gating here
+  // covers every one of those effects at once.
+  const countryScoped = layoutMode === "country" && !!countryScope?.length;
   // Stable, order-independent key for the current country selection — used in
   // place of the countryScope array itself in effect dependency arrays and
   // fetch query strings. countryScope is a fresh array every render (built via
@@ -1315,18 +1324,10 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
   // country and skip applying a now-stale result.
   const countryKeyRef = useRef(countryKey);
   countryKeyRef.current = countryKey;
-  // Country View's own landing page always uses the plain 3-column style (even
-  // before a country is picked, showing global data) since Described/GBIF/CoL
-  // columns have no country dimension there either. Deliberately NOT also
-  // triggered by countryScoped alone: scoping to a country from an ordinary
-  // taxon view (e.g. clicking the small map widget while browsing Mammals)
-  // used to flip this on too, reformatting the table and duplicating the
-  // selection as a bespoke heading on top of the normal filter pill that
-  // already shows it (RedListView's applied-filters row) — removed per
-  // feedback. Clicking through from Country View into a taxon already resets
-  // layoutMode to null (see handleToggleTaxon's exitCountryModeForTaxon), so
-  // this naturally reverts to the global table at that point without any
-  // extra logic here.
+  // Same layoutMode === "country" gate as countryScoped above — Country
+  // View's own landing page always uses the plain 3-column style (even
+  // before a country is picked, showing global data) since Described/GBIF/
+  // CoL columns have no country dimension there either.
   const countryStyleColumns = layoutMode === "country";
   // Tighter, non-responsive padding for the sticky Taxonomic Group column in
   // Country View — cellPad's px-4 growth at the md breakpoint is more than the
