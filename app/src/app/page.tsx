@@ -43,8 +43,17 @@ export default function RedListPage() {
   const [sharedTaxa, setSharedTaxa] = useState<Set<string>>(new Set());
   const [sharedSubgroups, setSharedSubgroups] = useState<Set<string>>(new Set());
 
-  // View-mode switch, surfaced as a header control (top row) so it's visible
-  // and reachable regardless of which taxon/layout is currently selected.
+  // Portal target for TaxaSummary's View-by selector (Standard/Table 1a/SSC/
+  // Country) — a callback ref so it's available as soon as the header div
+  // mounts. Keeping the selector's own state inside TaxaSummary (URL-synced
+  // via useFilterParams) and just portaling its markup up here means it's
+  // reachable from the persistent top row at any drill-down depth, without
+  // lifting that state out of RedListView.
+  const [viewSelectorSlotEl, setViewSelectorSlotEl] = useState<HTMLDivElement | null>(null);
+
+  // View-mode switch — previously two header buttons here, now surfaced
+  // instead by RedListView itself (next to its own Assessed/Not Evaluated
+  // stat card, where the mode actually matters), via this callback.
   const handleViewModeChange = (mode: ViewMode) => {
     if (viewMode === mode) return;
     setViewMode(mode);
@@ -100,30 +109,7 @@ export default function RedListPage() {
               <p className="[grid-area:subtitle] text-[15px] md:text-[1.375rem] text-zinc-500 dark:text-zinc-400">{brand.subtitle}</p>
             )}
             <div className="[grid-area:controls] flex items-center gap-2 flex-wrap sm:justify-self-end">
-              <div className="flex rounded-lg border border-zinc-200 dark:border-zinc-700 overflow-hidden text-xs shrink-0">
-                <button
-                  type="button"
-                  onClick={() => handleViewModeChange("reassessments")}
-                  className={`px-2 py-1 font-medium transition-colors ${
-                    viewMode !== "new-assessments"
-                      ? "bg-zinc-800 dark:bg-zinc-100 text-white dark:text-zinc-900"
-                      : "bg-white dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400 hover:bg-zinc-50 dark:hover:bg-zinc-700"
-                  }`}
-                >
-                  Assessed
-                </button>
-                <button
-                  type="button"
-                  onClick={() => handleViewModeChange("new-assessments")}
-                  className={`px-2 py-1 font-medium transition-colors ${
-                    viewMode === "new-assessments"
-                      ? "bg-zinc-800 dark:bg-zinc-100 text-white dark:text-zinc-900"
-                      : "bg-white dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400 hover:bg-zinc-50 dark:hover:bg-zinc-700"
-                  }`}
-                >
-                  Not Evaluated
-                </button>
-              </div>
+              <div ref={setViewSelectorSlotEl} className="flex items-center" />
               <ThemeToggle />
             </div>
             <div className="[grid-area:search] sm:justify-self-end">
@@ -140,6 +126,7 @@ export default function RedListPage() {
           sharedSubgroups={sharedSubgroups}
           onTaxaChange={setSharedTaxa}
           onSubgroupsChange={setSharedSubgroups}
+          viewSelectorSlotEl={viewSelectorSlotEl}
         />
       </main>
 

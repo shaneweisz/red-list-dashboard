@@ -279,9 +279,12 @@ interface RedListViewProps {
   sharedSubgroups?: Set<string>;
   onTaxaChange?: (taxa: Set<string>) => void;
   onSubgroupsChange?: (subgroups: Set<string>) => void;
+  /** DOM node (owned by page.tsx's persistent header) that TaxaSummary
+   * portals its View-by selector into — see TaxaSummary's own doc comment. */
+  viewSelectorSlotEl?: HTMLDivElement | null;
 }
 
-export default function RedListView({ viewMode = "reassessments", onViewModeChange, sharedTaxa, sharedSubgroups, onTaxaChange, onSubgroupsChange }: RedListViewProps = {}) {
+export default function RedListView({ viewMode = "reassessments", onViewModeChange, sharedTaxa, sharedSubgroups, onTaxaChange, onSubgroupsChange, viewSelectorSlotEl }: RedListViewProps = {}) {
   const isNewAssessments = viewMode === "new-assessments";
   // Every species/truncation cache below is keyed by (mode, taxonId), not taxonId
   // alone — a taxon's Assessed and Not Evaluated species lists are entirely
@@ -2461,6 +2464,7 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
         viewMode={viewMode}
         layoutMode={layoutMode}
         onLayoutModeChange={setLayoutMode}
+        viewSelectorSlotEl={viewSelectorSlotEl}
         countryModeContent={countryModeContent}
         countryPillsContent={countryPillsContent}
         countryScope={countryScope}
@@ -2841,12 +2845,15 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
               (selectedSubgroupTaxon: dynamic order/family/genus, or a static SSC
               group), or a non-curated arbitrary rank reached via search
               (arbitraryTaxon). Two stat cards: the taxon (name + rank) and the
-              matched-species count (mirrors the table's totalFiltered). The
-              Assessed/Not Evaluated view-mode toggle lives in the page header
-              now, not here. TaxaSummary's own breadcrumb table above already
-              shows the tree branch that led here (Mammals → Rodentia →
-              Heteromyidae → ...) when applicable — this is purely an
-              additional, more prominent summary, not a replacement for it. */}
+              matched-species count (mirrors the table's totalFiltered) — the
+              latter also carries the Assessed/Not Evaluated view-mode toggle,
+              since this is where the mode actually changes what's shown.
+              grid-cols-1 sm:grid-cols-2 (not a flat grid-cols-2) plus flex-wrap
+              on the second card keep the toggle from being squeezed at phone
+              widths. TaxaSummary's own breadcrumb table above already shows the
+              tree branch that led here (Mammals → Rodentia → Heteromyidae →
+              ...) when applicable — this is purely an additional, more
+              prominent summary, not a replacement for it. */}
           {focusedTaxonCard && !isSingleSpecies && (
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-3">
@@ -2857,15 +2864,43 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
                   {focusedTaxonCard.name}
                 </div>
               </div>
-              <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-3">
-                <div className="text-xs font-medium uppercase tracking-wide text-zinc-500 dark:text-zinc-400">
-                  {isNewAssessments ? "Not Evaluated Species" : "Assessed Species"}
+              <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-3 flex items-center justify-between gap-3 flex-wrap">
+                <div>
+                  <div className="text-xs font-medium uppercase tracking-wide text-zinc-500 dark:text-zinc-400">
+                    {isNewAssessments ? "Not Evaluated Species" : "Assessed Species"}
+                  </div>
+                  <div className="mt-0.5 text-2xl font-bold text-zinc-900 dark:text-zinc-100">
+                    {speciesLoading && assessedSpecies.length === 0
+                      ? <Spinner className="h-6 w-6" />
+                      : totalFiltered.toLocaleString()}
+                  </div>
                 </div>
-                <div className="mt-0.5 text-2xl font-bold text-zinc-900 dark:text-zinc-100">
-                  {speciesLoading && assessedSpecies.length === 0
-                    ? <Spinner className="h-6 w-6" />
-                    : totalFiltered.toLocaleString()}
-                </div>
+                {onViewModeChange && (
+                  <div className="flex rounded-lg border border-zinc-200 dark:border-zinc-700 overflow-hidden text-xs shrink-0">
+                    <button
+                      type="button"
+                      onClick={() => onViewModeChange("reassessments")}
+                      className={`px-2 py-1 font-medium transition-colors ${
+                        !isNewAssessments
+                          ? "bg-zinc-800 dark:bg-zinc-100 text-white dark:text-zinc-900"
+                          : "bg-white dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400 hover:bg-zinc-50 dark:hover:bg-zinc-700"
+                      }`}
+                    >
+                      Assessed
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => onViewModeChange("new-assessments")}
+                      className={`px-2 py-1 font-medium transition-colors ${
+                        isNewAssessments
+                          ? "bg-zinc-800 dark:bg-zinc-100 text-white dark:text-zinc-900"
+                          : "bg-white dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400 hover:bg-zinc-50 dark:hover:bg-zinc-700"
+                      }`}
+                    >
+                      Not Evaluated
+                    </button>
+                  </div>
+                )}
               </div>
             </div>
           )}
