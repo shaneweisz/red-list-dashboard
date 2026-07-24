@@ -451,6 +451,25 @@ export default function OccurrenceMapRow({
   // GBIF points toggle (on by default)
   const [showGbif, setShowGbif] = useState(true);
 
+  // Range maps are restricted for now — hide the toggle unless the signed-in
+  // user is on the allowlist. The real enforcement is server-side (the
+  // /range-map API route itself 403s); this is just so unauthorized users
+  // don't see a toggle for a layer they can't actually load.
+  const [canViewRangeMap, setCanViewRangeMap] = useState(false);
+  useEffect(() => {
+    if (!assessmentId) return;
+    let cancelled = false;
+    fetch("/api/auth/me")
+      .then((res) => (res.ok ? res.json() : { canViewRangeMap: false }))
+      .then((data: { canViewRangeMap?: boolean }) => {
+        if (!cancelled) setCanViewRangeMap(!!data.canViewRangeMap);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [assessmentId]);
+
   // Range map layer state
   const [showRange, setShowRange] = useState(false);
   const [rangeLoading, setRangeLoading] = useState(false);
@@ -1378,7 +1397,7 @@ export default function OccurrenceMapRow({
                 );
               })()}
               {/* IUCN Range Map layer */}
-              {showRange && assessmentId && (
+              {showRange && assessmentId && canViewRangeMap && (
                 <RangeMapLayer
                   assessmentId={assessmentId}
                   visible={showRange}
@@ -1506,7 +1525,7 @@ export default function OccurrenceMapRow({
               >
                 GBIF Points
               </button>
-              {assessmentId && (
+              {assessmentId && canViewRangeMap && (
                 <div className="flex flex-col">
                   <button
                     onClick={() => setShowRange(!showRange)}
