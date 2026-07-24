@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { S3Client, GetObjectCommand, ListObjectsV2Command } from "@aws-sdk/client-s3";
 import { CACHE_1H } from "@/lib/cache-headers";
 import { createClient } from "@/lib/supabase/server";
-import { isRangeMapAuthorized } from "@/lib/auth/range-map-access";
+import { isAdmin } from "@/lib/auth/roles";
 
 // In-memory cache: assessmentId → { data, timestamp }
 const rangeCache = new Map<number, { data: object; timestamp: number }>();
@@ -100,7 +100,7 @@ export async function GET(
   const {
     data: { user },
   } = await supabase.auth.getUser();
-  if (!isRangeMapAuthorized(user?.email)) {
+  if (!(await isAdmin(supabase, user?.id))) {
     return NextResponse.json({ error: "Not authorized to view range maps" }, { status: 403 });
   }
 
