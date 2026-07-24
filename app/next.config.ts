@@ -47,6 +47,28 @@ const nextConfig: NextConfig = {
   // and breaks event capture through the proxy.
   skipTrailingSlashRedirect: true,
 
+  // Server Actions (e.g. the GitHub sign-in form in /login) reject any request
+  // whose Origin header doesn't match the request's own host, as CSRF
+  // protection — by default only the exact same origin is trusted. This app is
+  // served on multiple custom domains (see src/config/brand.ts), and at least
+  // one (red.cst.cam.ac.uk, likely proxied through Cambridge's own campus DNS/
+  // reverse-proxy layer in front of Vercel) was seen 500ing on sign-in because
+  // the origin Next.js saw didn't match what it expected — list every domain
+  // this app answers on explicitly, plus a wildcard for Vercel's own preview
+  // deployments (both URL shapes: the stable git-branch alias and the
+  // per-deployment hash that changes on every push).
+  experimental: {
+    serverActions: {
+      allowedOrigins: [
+        "dashforlife.org",
+        "dashoflife.org",
+        "red-list-dashboard.vercel.app",
+        "red.cst.cam.ac.uk",
+        "*-shaneweiszs-projects.vercel.app",
+      ],
+    },
+  },
+
   // #261: DuckDB-backed read routes query Parquet in R2. Keep the native addon
   // out of the bundler, and force-include the 68MB libduckdb.so it dlopens at
   // runtime (file-tracing misses dlopen deps). Scoped to the v2 routes so the
