@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { createPortal } from "react-dom";
+import { useRouter } from "next/navigation";
 import { FaInfoCircle, FaChevronRight } from "react-icons/fa";
 
 import { HiOutlineAdjustmentsHorizontal } from "react-icons/hi2";
@@ -1264,6 +1265,7 @@ function DescribedInfoIcon({ nodeId, source, breakdown }: { nodeId: string; sour
 
 export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgroups, onToggleSubgroup, onNavigateToSubgroup, disableAllSpecies, viewMode = "reassessments", layoutMode, onLayoutModeChange, countryModeContent, countryPillsContent, countryScope }: Props) {
   const isNewAssessments = viewMode === "new-assessments";
+  const router = useRouter();
   const [taxa, setTaxa] = useState<TaxonSummary[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -1474,6 +1476,10 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
         value={layoutMode ?? "taxonomic"}
         onChange={(e) => {
           const v = e.target.value;
+          if (v === "compare") {
+            router.push("/compare");
+            return;
+          }
           onLayoutModeChange(v === "taxonomic" ? null : (v as "table1a" | "ssc" | "country"));
         }}
         className="text-sm bg-zinc-100 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-md px-2 py-1 text-zinc-700 dark:text-zinc-300 focus:outline-none focus:ring-1 focus:ring-blue-500"
@@ -1484,6 +1490,7 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
         </option>
         <option value="ssc">By SSC Specialist Group (WIP)</option>
         <option value="table1a">Table 1a</option>
+        <option value="compare">Compare Taxa Side by Side</option>
       </select>
     </span>
   );

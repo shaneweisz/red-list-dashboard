@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react";
 import dynamic from "next/dynamic";
 import Link from "next/link";
-import { FaGlobeAmericas, FaColumns } from "react-icons/fa";
+import { FaGlobeAmericas } from "react-icons/fa";
 import { SpeciesSearchBar } from "../components/SpeciesSearchBar";
 import { ThemeToggle } from "../components/ThemeToggle";
 import { AuthStatus } from "../components/AuthStatus";
@@ -103,14 +103,6 @@ export default function RedListPage() {
               <p className="[grid-area:subtitle] text-[15px] md:text-[1.375rem] text-zinc-500 dark:text-zinc-400">{brand.subtitle}</p>
             )}
             <div className="[grid-area:controls] flex items-center gap-2 justify-end sm:justify-self-end">
-              <Link
-                href="/compare"
-                className="flex items-center gap-1.5 px-2.5 py-1.5 text-sm font-medium rounded-lg border border-zinc-200 dark:border-zinc-700 text-zinc-600 dark:text-zinc-400 hover:bg-zinc-50 dark:hover:bg-zinc-800 transition-colors"
-                title="Compare two taxa side by side"
-              >
-                <FaColumns aria-hidden="true" />
-                Compare
-              </Link>
               <ThemeToggle />
               <AuthStatus />
             </div>
