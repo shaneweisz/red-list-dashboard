@@ -143,6 +143,47 @@ interface SpeciesDetails {
 }
 
 
+// Debounced search input — manages own state for instant typing, debounces parent updates.
+// Filters the currently-visible species table by name in place, composing with whatever
+// pill filters are already active (e.g. Mammals + EN + Mexico, then narrow to "mouse") —
+// distinct from the page header's SpeciesSearchBar, which navigates to a taxon/species
+// instead of narrowing the current view. Placeholder text keeps the two from reading as
+// duplicates of each other.
+function DebouncedSearchInput({
+  onSearch,
+  initialValue = "",
+  placeholder = "Filter by name...",
+  className,
+}: {
+  onSearch: (value: string) => void;
+  initialValue?: string;
+  placeholder?: string;
+  className?: string;
+}) {
+  const [localValue, setLocalValue] = useState(initialValue);
+
+  useEffect(() => {
+    setLocalValue(initialValue);
+  }, [initialValue]);
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      onSearch(localValue.toLowerCase());
+    }, 200);
+    return () => clearTimeout(timer);
+  }, [localValue, onSearch]);
+
+  return (
+    <input
+      type="text"
+      value={localValue}
+      onChange={(e) => setLocalValue(e.target.value)}
+      placeholder={placeholder}
+      className={className}
+    />
+  );
+}
+
 // Explain IUCN Red List criteria codes
 // See: https://www.iucnredlist.org/resources/categories-and-criteria
 function explainCriteria(criteria: string): string {
@@ -335,7 +376,7 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
     selectedGrowthForms, setSelectedGrowthForms,
     selectedAssessors, setSelectedAssessors,
     selectedReviewers, setSelectedReviewers,
-    searchFilter,
+    searchFilter, setSearchFilter,
     exactFilters, setExactFilters,
     sortField, sortDirection, setSort,
     mapViewMode, mapSortKey, mapSortDirection, setMapViewMode, setMapSort,
@@ -569,6 +610,11 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
     );
     if (!stillSelected) setExpandedThreat(null);
   }, [selectedThreats, expandedThreat]);
+
+  // Stable callback for debounced search input
+  const handleSearch = useCallback((value: string) => {
+    setSearchFilter(value);
+  }, [setSearchFilter]);
 
   // Pagination
   const [currentPage, setCurrentPage] = useState(1);
@@ -3337,9 +3383,27 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
             directly above the table they filter. Clear all resets everything
             here, taxon/subgroup included — Home is for the "go back to
             nothing selected at all" case; this is for "same taxon, different
-            filters". */}
+            filters". The free-text box narrows the visible table by name in
+            place, composing with the pills beside it — distinct from the page
+            header's SpeciesSearchBar, which navigates elsewhere instead of
+            narrowing here (see DebouncedSearchInput's own doc comment). */}
         <div className="p-3 md:p-4 border-b border-zinc-200 dark:border-zinc-800 rounded-t-xl">
           <div className="flex flex-wrap items-center gap-2 md:gap-4">
+            <div className="relative flex-1 min-w-[140px] max-w-md">
+              <DebouncedSearchInput
+                onSearch={handleSearch}
+                initialValue={searchFilter}
+                className="w-full px-3 md:px-4 py-2 pl-9 md:pl-10 rounded-lg border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-zinc-900 dark:text-zinc-100 placeholder-zinc-400 focus:outline-none focus:ring-2 focus:ring-red-500 text-sm"
+              />
+              <svg
+                className="absolute left-2.5 md:left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-400 pointer-events-none"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+              </svg>
+            </div>
             {(selectedTaxa.size > 0 || selectedSubgroups.size > 0 || selectedCategories.size > 0 || selectedYearRanges.size > 0 || selectedAssessmentYears.size > 0 || selectedDescribedYears.size > 0 || selectedObsRanges.size > 0 || selectedCountries.size > 0 || selectedSystems.size > 0 || endemicsOnly || selectedGrowthForms.size > 0 || selectedPopulationTrends.size > 0 || selectedMovementPatterns.size > 0 || selectedThreats.size > 0 || selectedAssessors.size > 0 || selectedReviewers.size > 0 || showOnlyStarred || exactFilters.outdated || exactFilters.minObs != null || exactFilters.maxObs != null || exactFilters.minAssessmentYear != null || exactFilters.maxAssessmentYear != null || exactFilters.minDescribedYear != null || exactFilters.maxDescribedYear != null) && (
               <button
                 onClick={() => {
