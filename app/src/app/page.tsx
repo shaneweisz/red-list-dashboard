@@ -6,6 +6,7 @@ import Link from "next/link";
 import { FaGlobeAmericas } from "react-icons/fa";
 import { SpeciesSearchBar } from "../components/SpeciesSearchBar";
 import { ThemeToggle } from "../components/ThemeToggle";
+import { AuthStatus } from "../components/AuthStatus";
 import { useBrand } from "../components/BrandProvider";
 import { parseParams, type ViewMode } from "../hooks/useFilterParams";
 
@@ -102,6 +103,7 @@ export default function RedListPage() {
             )}
             <div className="[grid-area:controls] flex items-center gap-2 sm:justify-self-end">
               <ThemeToggle />
+              <AuthStatus />
             </div>
             <div className="[grid-area:search] sm:justify-self-end">
               <SpeciesSearchBar />
