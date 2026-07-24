@@ -108,12 +108,12 @@ export default function RedListPage() {
             {brand.subtitle && (
               <p className="[grid-area:subtitle] text-[15px] md:text-[1.375rem] text-zinc-500 dark:text-zinc-400">{brand.subtitle}</p>
             )}
-            <div className="[grid-area:search] sm:justify-self-end">
+            <div className="[grid-area:search] flex items-center gap-2 sm:justify-self-end">
               <SpeciesSearchBar />
+              <ThemeToggle />
             </div>
             <div className="[grid-area:view] flex items-center gap-2 flex-wrap sm:justify-self-end">
               <div ref={setViewSelectorSlotEl} className="flex items-center" />
-              <ThemeToggle />
             </div>
           </div>
         </div>
