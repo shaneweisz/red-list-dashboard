@@ -3435,10 +3435,10 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
               )}
             </button>
             {moreFiltersOpen && (
-              <div className="px-3 md:px-4 pb-3 md:pb-4 pt-1 border-t border-zinc-200 dark:border-zinc-800 flex flex-col gap-3">
+              <div className="px-3 md:px-4 pb-3 md:pb-4 pt-3 md:pt-4 border-t border-zinc-200 dark:border-zinc-800 flex flex-col gap-3">
                 {/* Realm */}
                 <div className="flex items-center gap-2 bg-zinc-50 dark:bg-zinc-800/50 border border-zinc-200 dark:border-zinc-700 rounded-lg px-3 py-2">
-                  <span className="text-xs font-medium text-zinc-500 dark:text-zinc-400 shrink-0 w-16">Realm</span>
+                  <span className="text-sm font-semibold text-zinc-900 dark:text-zinc-100 shrink-0 w-20">Realm</span>
                   <div className="flex flex-wrap gap-1.5">
                     {(["Terrestrial", "Freshwater", "Marine"] as const).map(system => {
                       const isSelected = selectedSystems.has(system);
@@ -3497,7 +3497,7 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
                   if (sorted.length === 0) return null;
                   return (
                     <div className="flex items-start gap-2 bg-zinc-50 dark:bg-zinc-800/50 border border-zinc-200 dark:border-zinc-700 rounded-lg px-3 py-2">
-                      <span className="text-xs font-medium text-zinc-500 dark:text-zinc-400 shrink-0 w-16 pt-1">Growth</span>
+                      <span className="text-sm font-semibold text-zinc-900 dark:text-zinc-100 shrink-0 w-20 pt-1">Growth</span>
                       <div className="flex flex-wrap gap-1.5">
                         {sorted.map(([gf, count]) => {
                           const isSelected = selectedGrowthForms.has(gf);
@@ -3529,7 +3529,7 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
 
                 {/* Trend */}
                 <div className="flex items-center gap-2 bg-zinc-50 dark:bg-zinc-800/50 border border-zinc-200 dark:border-zinc-700 rounded-lg px-3 py-2">
-                    <span className="text-xs font-medium text-zinc-500 dark:text-zinc-400 shrink-0 w-16">Trend</span>
+                    <span className="text-sm font-semibold text-zinc-900 dark:text-zinc-100 shrink-0 w-20">Trend</span>
                     <div className="flex flex-wrap gap-1.5">
                       {(["Increasing", "Stable", "Decreasing", "Unknown"] as const).map(trend => {
                         const isSelected = selectedPopulationTrends.has(trend);
@@ -3561,7 +3561,7 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
                 {/* Movement Patterns */}
                 {!isNewAssessments && (
                   <div className="flex items-center gap-2 bg-zinc-50 dark:bg-zinc-800/50 border border-zinc-200 dark:border-zinc-700 rounded-lg px-3 py-2">
-                    <span className="text-xs font-medium text-zinc-500 dark:text-zinc-400 shrink-0 w-16">Movement</span>
+                    <span className="text-sm font-semibold text-zinc-900 dark:text-zinc-100 shrink-0 w-20">Movement</span>
                       <div className="flex flex-wrap gap-1.5">
                         {(["Full Migrant", "Altitudinal Migrant", "Nomadic", "Not a Migrant", "Unknown"] as const).map(pattern => {
                           const isSelected = selectedMovementPatterns.has(pattern);
