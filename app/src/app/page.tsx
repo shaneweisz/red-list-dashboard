@@ -66,9 +66,12 @@ export default function RedListPage() {
       <main className="max-w-5xl w-full min-w-0 mx-auto flex-1">
         {/* Header: two aligned rows (title | controls, subtitle | search).
             Globe sits inline with the title so the subtitle, controls and
-            search bar share the same flush-left edge as the table below. */}
+            search bar share the same flush-left edge as the table below.
+            Title and controls (theme toggle, sign-in) share a row even on
+            mobile — only subtitle and search drop to their own full-width
+            rows below that on narrow screens. */}
         <div className="mb-[0.9rem] md:mb-[1.35rem]">
-          <div className="min-w-0 grid grid-cols-1 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center gap-x-3 gap-y-1.5 sm:gap-y-3 [grid-template-areas:'title'_'subtitle'_'controls'_'search'] sm:[grid-template-areas:'title_controls'_'subtitle_search']">
+          <div className="min-w-0 grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3 gap-y-1.5 sm:gap-y-3 [grid-template-areas:'title_controls'_'subtitle_subtitle'_'search_search'] sm:[grid-template-areas:'title_controls'_'subtitle_search']">
             <button
               type="button"
               onClick={() => {

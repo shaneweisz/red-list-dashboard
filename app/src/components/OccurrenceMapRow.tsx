@@ -2399,9 +2399,11 @@ export default function OccurrenceMapRow({
           {/* ── Left sidebar (iNat photos + contributors) + Map (right) ── */}
           <div className="flex flex-col sm:flex-row sm:items-stretch gap-2">
             {/* Left column — iNat photo gallery only (hidden if no iNat data); narrow
-                since it's just a 2-col thumbnail grid now, leaving more room for the map */}
+                since it's just a 2-col thumbnail grid now, leaving more room for the map.
+                Ordered after the map on mobile (order-2) since the map is the primary
+                content there; back to its normal DOM order (first, on the left) at sm+. */}
             {(!breakdown || breakdown.iNaturalist > 0) && (
-            <div className="sm:w-44 shrink-0 flex flex-col gap-2">
+            <div className="order-2 sm:order-none sm:w-44 shrink-0 flex flex-col gap-2">
               {/* iNat photo grid — only shown when photos exist or loading */}
               {(inatPhotos.length > 0 || loadingInatPhotos) && (
                 <div className="flex flex-col bg-white dark:bg-zinc-900 rounded-lg border border-zinc-200 dark:border-zinc-700 overflow-hidden relative z-10">
@@ -2411,8 +2413,9 @@ export default function OccurrenceMapRow({
                   </div>
                   {inatPhotos.length > 0 ? (
                     <>
-                      {/* Photos — 2-col x 5-row grid */}
-                      <div className={`grid grid-cols-2 gap-1 p-1.5 ${loadingInatPhotos ? "opacity-50" : ""}`}>
+                      {/* Photos — 5-col x 2-row grid on mobile (full-width column there),
+                          2-col x 5-row once the sidebar narrows to w-44 at sm+ */}
+                      <div className={`grid grid-cols-5 sm:grid-cols-2 gap-1 p-1.5 ${loadingInatPhotos ? "opacity-50" : ""}`}>
                         {inatPhotos.slice(0, pageSize).map((obs, idx) => (
                           <div key={`${inatPage}-${idx}`} className="aspect-square">
                             <InatPhotoWithPreview
@@ -2475,7 +2478,7 @@ export default function OccurrenceMapRow({
             )}
 
             {/* Map(s) — takes remaining width, stretches to match left column */}
-            <div className="flex-1 min-w-0 flex flex-col gap-2">
+            <div className="order-1 sm:order-none flex-1 min-w-0 flex flex-col gap-2">
                 {splitView && splitDate ? (
                   <div className="flex flex-col gap-2">
                     {/* Split view control bar */}
