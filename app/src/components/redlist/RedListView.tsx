@@ -2576,12 +2576,10 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
                         <>
                           {totalFiltered.toLocaleString()}
                           <span className="text-base font-normal text-zinc-400 dark:text-zinc-500"> of {taxaFilteredSpeciesBase.length.toLocaleString()}</span>
+                          <span className="text-[11px] font-normal text-zinc-400 dark:text-zinc-500"> matching filters</span>
                         </>
                       ) : totalFiltered.toLocaleString()}
                   </div>
-                  {!(speciesLoading && assessedSpecies.length === 0) && totalFiltered < taxaFilteredSpeciesBase.length && (
-                    <div className="text-[11px] text-zinc-400 dark:text-zinc-500 mt-0.5">matching filters</div>
-                  )}
                 </div>
                 {onViewModeChange && (
                   <div className="flex rounded-lg border border-zinc-200 dark:border-zinc-700 overflow-hidden text-xs shrink-0">
