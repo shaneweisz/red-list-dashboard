@@ -2564,8 +2564,8 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
                   {focusedTaxonCard.name}
                 </div>
               </div>
-              <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-3 flex items-center justify-between gap-3">
-                <div>
+              <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-3 flex flex-col sm:flex-row sm:items-center justify-between gap-2 sm:gap-3">
+                <div className="min-w-0">
                   <div className="text-xs font-medium uppercase tracking-wide text-zinc-500 dark:text-zinc-400">
                     {isNewAssessments ? "Not Evaluated Species" : "Assessed Species"}
                   </div>
@@ -2575,8 +2575,7 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
                       : totalFiltered < taxaFilteredSpeciesBase.length ? (
                         <>
                           {totalFiltered.toLocaleString()}
-                          <span className="text-base font-normal text-zinc-400 dark:text-zinc-500"> of {taxaFilteredSpeciesBase.length.toLocaleString()}</span>
-                          <span className="text-[11px] font-normal text-zinc-400 dark:text-zinc-500"> matching filters</span>
+                          <span className="text-base font-normal text-zinc-400 dark:text-zinc-500"> matching filters of {taxaFilteredSpeciesBase.length.toLocaleString()} total</span>
                         </>
                       ) : totalFiltered.toLocaleString()}
                   </div>
