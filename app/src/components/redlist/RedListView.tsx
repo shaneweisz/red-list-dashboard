@@ -3025,10 +3025,10 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
               </div>
             </div>
 
-            {/* Geospatial GBIF Records */}
+            {/* GBIF Records */}
             <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-3 flex flex-col">
               <div className="flex items-center justify-between mb-1">
-                <span className="text-sm font-semibold text-zinc-900 dark:text-zinc-100 flex items-center gap-1">Geospatial GBIF Records <GbifInfoTooltip /></span>
+                <span className="text-sm font-semibold text-zinc-900 dark:text-zinc-100 flex items-center gap-1">GBIF Records <GbifInfoTooltip /></span>
                               </div>
               <div className="flex-1 min-h-[150px] flex items-center justify-center">
                 {speciesLoading && assessedSpecies.length === 0 ? (
@@ -3058,7 +3058,7 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
           )}
 
           {/* Charts row 2 (new-assessments mode only): Country map + Year
-              Described + Geospatial GBIF Records, 3-col, 1/3 each. For
+              Described + GBIF Records, 3-col, 1/3 each. For
               reassessments, Country map + Threats live in More Filters
               instead (below) — decluttered out of the always-visible primary
               view now that they're not the only geographic/threat filter
@@ -3099,10 +3099,10 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
               </div>
             </div>
 
-            {/* Geospatial GBIF Records */}
+            {/* GBIF Records */}
             <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-3 flex flex-col">
               <div className="flex items-center justify-between mb-1">
-                <span className="text-sm font-semibold text-zinc-900 dark:text-zinc-100 flex items-center gap-1">Geospatial GBIF Records <GbifInfoTooltip /></span>
+                <span className="text-sm font-semibold text-zinc-900 dark:text-zinc-100 flex items-center gap-1">GBIF Records <GbifInfoTooltip /></span>
               </div>
               <div style={{ height: 180 }} className="flex items-center justify-center">
                 {speciesLoading && assessedSpecies.length === 0 ? (
@@ -3133,7 +3133,8 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
               <svg className={`w-3.5 h-3.5 transition-transform ${moreFiltersOpen ? "rotate-90" : ""}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
               </svg>
-              More Filters
+              <span className="sm:hidden">More Filters</span>
+              <span className="hidden sm:inline">More Filters: Country, Threats, and more</span>
               {(selectedSystems.size + selectedGrowthForms.size + selectedPopulationTrends.size + selectedMovementPatterns.size + selectedThreats.size + selectedCountries.size + (endemicsOnly ? 1 : 0) > 0) && (
                 <span className="ml-1 px-1.5 py-0.5 text-[10px] rounded-full bg-zinc-200 dark:bg-zinc-700 text-zinc-600 dark:text-zinc-300">
                   {selectedSystems.size + selectedGrowthForms.size + selectedPopulationTrends.size + selectedMovementPatterns.size + selectedThreats.size + selectedCountries.size + (endemicsOnly ? 1 : 0)} active
@@ -3144,7 +3145,7 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
               <div className="px-3 md:px-4 pb-3 md:pb-4 pt-3 md:pt-4 border-t border-zinc-200 dark:border-zinc-800 flex flex-col gap-3">
                 {/* Country map + Threats — moved here from the primary view (Charts row
                     2) so that row stays focused on Conservation Status / Years Since
-                    Assessed / Geospatial GBIF Records; these still filter live like
+                    Assessed / GBIF Records; these still filter live like
                     every other control on this page, just tucked a click away. */}
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                   {countryMapCard}
