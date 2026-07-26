@@ -68,7 +68,7 @@ const paramKey = (name: string, suffix: string): string => (suffix ? `${name}${s
 export const OWN_PARAM_NAMES = [
   "view", "layout", "origin", "countries", "region", "taxa", "subgroups",
   "categories", "years", "assessmentYears", "describedYears", "obsRanges",
-  "systems", "trends", "movement", "threats", "bd", "endemics", "growthForms",
+  "systems", "trends", "movement", "threats", "criteria", "bd", "endemics", "growthForms",
   "assessors", "reviewers", "search", "outdated", "minObs", "maxObs",
   "minAssessmentYear", "maxAssessmentYear", "minDescribedYear", "maxDescribedYear",
   "species", "tab", "sort", "dir", "mapview", "mapsort", "mapdir",
@@ -181,6 +181,9 @@ export function parseParams(search: string, suffix: string = "") {
     threats: p.get(k("threats"))
       ? new Set(p.get(k("threats"))!.split(",").filter(Boolean))
       : new Set<string>(),
+    criteria: p.get(k("criteria"))
+      ? new Set(p.get(k("criteria"))!.split(",").filter(Boolean))
+      : new Set<string>(),
     breakdown: parseBreakdownParam(p, k("bd")),
     // Endemics-only: restrict to species occurring in exactly one country.
     endemicsOnly: p.get(k("endemics")) === "1",
@@ -241,6 +244,7 @@ export function buildQs(state: {
   populationTrends: Set<string>;
   movementPatterns: Set<string>;
   threats: Set<string>;
+  criteria: Set<string>;
   breakdown?: BreakdownParam | null;
   endemicsOnly: boolean;
   growthForms: Set<string>;
@@ -281,6 +285,7 @@ export function buildQs(state: {
   if (state.populationTrends.size > 0) p.set(k("trends"), [...state.populationTrends].join(","));
   if (state.movementPatterns.size > 0) p.set(k("movement"), [...state.movementPatterns].join(","));
   if (state.threats.size > 0) p.set(k("threats"), [...state.threats].join(","));
+  if (state.criteria.size > 0) p.set(k("criteria"), [...state.criteria].join(","));
   if (state.breakdown) {
     let bd = `${state.breakdown.nodeId}:${state.breakdown.rank}:${state.breakdown.name}`;
     if (state.breakdown.onlyIds?.length) bd += `:only:${state.breakdown.onlyIds.join(",")}`;
@@ -650,6 +655,18 @@ export function useFilterParams(paramSuffix: string = "") {
     [syncUrl]
   );
 
+  const setSelectedCriteria = useCallback(
+    (updater: Set<string> | ((prev: Set<string>) => Set<string>)) => {
+      setState(prev => {
+        const nextVal = typeof updater === "function" ? updater(prev.criteria) : updater;
+        const next = { ...prev, criteria: nextVal };
+        queueMicrotask(() => syncUrl(next, false));
+        return next;
+      });
+    },
+    [syncUrl]
+  );
+
   const setSelectedGrowthForms = useCallback(
     (updater: Set<string> | ((prev: Set<string>) => Set<string>)) => {
       setState(prev => {
@@ -825,6 +842,7 @@ export function useFilterParams(paramSuffix: string = "") {
         populationTrends: new Set<string>(),
         movementPatterns: new Set<string>(),
         threats: new Set<string>(),
+        criteria: new Set<string>(),
         breakdown: null,
         endemicsOnly: false,
         growthForms: new Set<string>(),
@@ -858,6 +876,7 @@ export function useFilterParams(paramSuffix: string = "") {
         populationTrends: new Set<string>(),
         movementPatterns: new Set<string>(),
         threats: new Set<string>(),
+        criteria: new Set<string>(),
         breakdown: null,
         endemicsOnly: false,
         growthForms: new Set<string>(),
@@ -891,6 +910,7 @@ export function useFilterParams(paramSuffix: string = "") {
     selectedPopulationTrends: state.populationTrends,
     selectedMovementPatterns: state.movementPatterns,
     selectedThreats: state.threats,
+    selectedCriteria: state.criteria,
     breakdownFilter: state.breakdown,
     endemicsOnly: state.endemicsOnly,
     selectedGrowthForms: state.growthForms,
@@ -923,6 +943,7 @@ export function useFilterParams(paramSuffix: string = "") {
     setSelectedPopulationTrends,
     setSelectedMovementPatterns,
     setSelectedThreats,
+    setSelectedCriteria,
     setBreakdownFilter,
     setEndemicsOnly,
     setSelectedGrowthForms,
