@@ -1484,8 +1484,8 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
           By Country
         </option>
         <option value="ssc">By SSC Specialist Group (WIP)</option>
+        <option value="compare">Comparison Mode</option>
         <option value="table1a">Table 1a</option>
-        <option value="compare">Compare Taxa Side by Side</option>
       </select>
     </span>
   );
@@ -1707,14 +1707,19 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
     return () => controller.abort();
   }, [countryKey]);
 
-  // Only the very first load (no data yet) shows this — a country-switch
-  // refetch (countryScope changing with taxa already populated) keeps
-  // rendering the existing table with its stale data, plus a small corner
-  // spinner (see the scrollRef wrapper below), so the table doesn't blank
-  // out and reappear on every country click.
+  // Only the very first load (no data at all yet, in any mode) blanks the
+  // WHOLE component out to this — in country mode the table itself is still
+  // `hidden` at that point anyway (nothing's scoped), so there's nothing else
+  // on the page yet for this to disrupt. min-h matches a typical table's
+  // rendered height so this doesn't read as a collapsed/half-height box that
+  // then snaps taller once real rows arrive. A country-switch refetch
+  // (countryScope changing with taxa already populated, from a previous
+  // country or the global landing fetch) is handled separately, right in the
+  // table body below — see the `loading` branch alongside flatLoading —
+  // so the map/pills/hint row stay put instead of blanking away too.
   if (loading && taxa.length === 0) {
     return (
-      <div className="flex items-center justify-center bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl py-24">
+      <div className="flex items-center justify-center min-h-[420px] bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl py-24">
         <svg
           className="animate-spin h-8 w-8 text-zinc-400"
           xmlns="http://www.w3.org/2000/svg"
@@ -2740,27 +2745,9 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
             own mb-4 (see the ternary a few lines up), so skip it here to avoid
             doubling up. */}
         <div ref={scrollRef} className={`relative bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl overflow-x-auto ${countryMode ? "flex-1 [zoom:.75]" : "mb-4"}`}>
-          {/* Country-switch refetch indicator — see the loading-gate comment
-              above renderRow's skeleton branch for why this doesn't blank the table. */}
-          {loading && taxa.length > 0 && (
-            <div className="absolute top-2 right-2 z-20">
-              <svg className="animate-spin h-4 w-4 text-zinc-400" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
-              </svg>
-            </div>
-          )}
           <table className="w-full">
             {renderHead()}
-        {/* Dims every row's numbers (not just a corner spinner) while a
-            country-switch refetch is in flight — the row-level content below
-            deliberately keeps showing the previous country's numbers during
-            that refetch (see the skeleton-gate comment above) rather than
-            blanking to a skeleton, so without this there's no visual cue
-            that any given number might already be stale. Scoped to
-            !flatMode: Table 1a/SSC's own refetch (flatLoading) already
-            blanks to a loading row instead of leaving stale content up. */}
-        <tbody className={!flatMode && loading && taxa.length > 0 ? "opacity-50 transition-opacity duration-200" : "transition-opacity duration-200"}>
+        <tbody className="transition-opacity duration-200">
           {flatMode ? (
             /* Table 1a / SSC groups view: sections with headers, individual rows, subtotals */
             flatLoading ? (
@@ -3033,6 +3020,23 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
                 )}
               </>
             ) : null
+          ) : loading ? (
+            // A country-switch refetch (countryScope changed, taxa still
+            // holds the previous country's — or the global landing fetch's —
+            // rows). Blanks the body to just this single centered spinner
+            // rather than leaving stale rows up dimmed underneath a corner
+            // spinner: the table's own frame (thead, card chrome) stays put
+            // so there's no size jump, only the rows swap out.
+            <tr>
+              <td colSpan={visibleColCount} className={cellPad}>
+                <div className="flex items-center justify-center py-24">
+                  <svg className="animate-spin h-6 w-6 text-zinc-400" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                  </svg>
+                </div>
+              </td>
+            </tr>
           ) : (
             <>
               {/* All Species totals row (always visible) */}
