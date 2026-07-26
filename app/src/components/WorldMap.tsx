@@ -499,7 +499,14 @@ function WorldMap({ selectedCountries, onCountrySelect, selectedTaxon, precomput
   const hoveredOccurrenceStats = hoveredCountryCode && occurrenceStats ? occurrenceStats[hoveredCountryCode] : null;
 
   return (
-    <div className="relative bg-white dark:bg-zinc-900 rounded-xl shadow-sm border border-zinc-200 dark:border-zinc-800 p-3 h-full flex flex-col">
+    // h-full covers CSS Grid stretch parents (definite track size, percentage
+    // heights resolve fine there); flex-1/min-h-0 covers a flex-column parent
+    // whose own height only comes from ITS flex-grow — a plain block ancestor
+    // sized that way doesn't count as "definite" for a percentage-height (h-full)
+    // child in Chromium, so that combination silently collapses to content size
+    // without this. Both are inert unless the actual parent matches their layout
+    // mode, so having both covers each caller without affecting the other.
+    <div className="relative bg-white dark:bg-zinc-900 rounded-xl shadow-sm border border-zinc-200 dark:border-zinc-800 p-3 h-full flex-1 min-h-0 flex flex-col">
       {/* Header with controls */}
       <div className="flex items-center justify-between mb-1 gap-2">
         <h2 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100 shrink-0">

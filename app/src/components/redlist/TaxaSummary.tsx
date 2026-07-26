@@ -18,7 +18,6 @@ import { TAXONOMY_VIEWS } from "@/config/taxonomy-views";
 import { IUCN_SOURCE_URL } from "@/config/taxonomy-tree";
 import { isLiveDrilldownNode, nextDynamicRank, isDynamicNodeId, dynamicNodeDisplayName, dynamicNodeFilter, dynamicNodeRankInfo, parseDynamicNodeId } from "@/lib/dynamic-taxon";
 import type { RedListSpecies } from "@/hooks/useRedListSpeciesQuery";
-import { outdatedCutoffDate } from "@/lib/outdated";
 
 // See scripts/build-taxa-summary.ts's classifyNoMatch for what each reason means.
 // Modular/additive on top of colBreakdown[].noMatchIds — safe to drop independently
@@ -148,16 +147,14 @@ interface Props {
    * button can return to it. */
   layoutMode: "table1a" | "ssc" | "country" | null;
   onLayoutModeChange: (mode: "table1a" | "ssc" | "country" | null) => void;
-  /** Rendered in place of the taxa table when layoutMode === "country" — a
+  /** Rendered full width, always visible, when layoutMode === "country" — a
    * promoted WorldMap/CountryStatsList panel built by RedListView (which already
    * owns the country-stats data and click-through wiring), kept out of this
    * component so it doesn't need its own dynamic WorldMap import. */
   countryModeContent?: React.ReactNode;
-  /** Rendered above BOTH the map and the table in Country View — the current
-   * selection as removable name chips (built by RedListView, which owns the
-   * selection/hover state). Living above the whole grid rather than inside
-   * either column means neither the map nor the (zoomed) table ever resizes
-   * as chips are added/removed while hovering/locking/clearing countries. */
+  /** Rendered above the taxa table in Country View, once at least one country
+   * is selected — the current selection as removable name chips (built by
+   * RedListView, which owns the selection state). */
   countryPillsContent?: React.ReactNode;
   /** Set whenever at least one country is selected — independent of layoutMode,
    * so selecting countries anywhere (not just via the Country view landing page)
@@ -191,14 +188,13 @@ const getAssessedBarColor = (percent: number) =>
 const getOutdatedBarColor = (percent: number) =>
   percent < 20 ? "#22c55e" : percent <= 50 ? "#f97316" : "#ef4444";
 
-// Info icon for the "# Outdated" header: states the exact rolling cutoff date
-// (today minus 10 years) so the ">10 yrs old" threshold isn't just an abstract rule.
-// This column's counts come from the static data/taxa-summary.json build
-// artifact (see README § Data Sync Pipeline), computed as of the last data
-// sync — not live, unlike the rest of the dashboard. So the cutoff date shown
-// here must be anchored to that sync date, not "today": otherwise, the longer
-// it's been since the last rebuild, the more the displayed cutoff would drift
-// from the one actually used to compute the count next to it.
+// Info icon for the "# Outdated" header. This column's counts come from the
+// static data/taxa-summary.json build artifact (see README § Data Sync
+// Pipeline), computed as of the last data sync — not live, unlike the rest
+// of the dashboard — so the tooltip states that sync date directly rather
+// than a cutoff derived from "today", which would drift from the date
+// actually used to compute the count next to it the longer it's been since
+// the last rebuild.
 function OutdatedInfoIcon() {
   const [dataAsOf, setDataAsOf] = useState<Date | null>(null);
   useEffect(() => {
@@ -208,7 +204,6 @@ function OutdatedInfoIcon() {
       .catch(() => {});
   }, []);
   const dateFormat = { day: "numeric", month: "short", year: "numeric" } as const;
-  const cutoffLabel = outdatedCutoffDate(dataAsOf ?? undefined).toLocaleDateString("en-GB", dateFormat);
   return (
     <span className="relative group normal-case font-normal">
       <FaInfoCircle size={11} className="text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300" />
@@ -217,8 +212,8 @@ function OutdatedInfoIcon() {
           (right), since this header sits at the right edge of the table. */}
       <span className="absolute top-full right-0 mt-2 px-2 py-1 text-xs text-white bg-zinc-800 dark:bg-zinc-700 rounded whitespace-nowrap opacity-0 invisible group-hover:opacity-100 group-hover:visible z-50 shadow-lg">
         {dataAsOf
-          ? <>Not assessed since {cutoffLabel} (Last sync date: {dataAsOf.toLocaleDateString("en-GB", dateFormat)})</>
-          : <>Not assessed since {cutoffLabel}</>}
+          ? <>As of last sync date: {dataAsOf.toLocaleDateString("en-GB", dateFormat)}</>
+          : <>As of last sync date</>}
       </span>
     </span>
   );
@@ -1489,8 +1484,8 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
           By Country
         </option>
         <option value="ssc">By SSC Specialist Group (WIP)</option>
+        <option value="compare">Comparison Mode</option>
         <option value="table1a">Table 1a</option>
-        <option value="compare">Compare Taxa Side by Side</option>
       </select>
     </span>
   );
@@ -1712,158 +1707,28 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
     return () => controller.abort();
   }, [countryKey]);
 
-  // Only the very first load (no data yet) shows the full-table skeleton below —
-  // a country-switch refetch (countryScope changing with taxa already populated)
-  // keeps rendering the existing table with its stale data, plus a small corner
-  // spinner (see the scrollRef wrapper below), so the map/table/toolbar don't
-  // blank out and reappear on every country click.
+  // Only the very first load (no data at all yet, in any mode) blanks the
+  // WHOLE component out to this — in country mode the table itself is still
+  // `hidden` at that point anyway (nothing's scoped), so there's nothing else
+  // on the page yet for this to disrupt. min-h matches a typical table's
+  // rendered height so this doesn't read as a collapsed/half-height box that
+  // then snaps taller once real rows arrive. A country-switch refetch
+  // (countryScope changing with taxa already populated, from a previous
+  // country or the global landing fetch) is handled separately, right in the
+  // table body below — see the `loading` branch alongside flatLoading —
+  // so the map/pills/hint row stay put instead of blanking away too.
   if (loading && taxa.length === 0) {
-    // Skeleton rows matching actual table structure
-    const skeletonRows = Array.from({ length: 9 }, (_, i) => (
-      <tr key={i} className={i === 0 ? "bg-zinc-50/80 dark:bg-zinc-800/60" : ""}>
-        <td className={`${stickyClasses} bg-white dark:bg-zinc-900 ${cellPad} w-0`}>
-          <div className="flex items-center gap-2">
-            <div className="w-[22px] h-[22px] rounded-full bg-zinc-200 dark:bg-zinc-700" />
-            <div className="h-4 w-20 bg-zinc-200 dark:bg-zinc-700 rounded" />
-          </div>
-        </td>
-        {isVisible("described") && (
-          <td className={numericTdNoDividerClasses}>
-            <div className="h-4 w-16 bg-zinc-200 dark:bg-zinc-700 rounded ml-auto" />
-          </td>
-        )}
-        {isVisible("colDescribed") && (
-          <td className={numericTdClasses}>
-            <div className="h-4 w-16 bg-zinc-200 dark:bg-zinc-700 rounded ml-auto" />
-          </td>
-        )}
-        {isVisible("assessed") && (
-          <td className={flexTdClasses}>
-            <div className="flex items-center gap-1.5 sm:gap-3 min-w-[150px] sm:min-w-[230px] md:min-w-[250px]">
-              <div className="h-4 w-[48px] sm:w-[60px] bg-zinc-200 dark:bg-zinc-700 rounded flex-shrink-0" />
-              <div className="flex-1 min-w-[40px] h-3.5 sm:h-2.5 rounded-full bg-zinc-200 dark:bg-zinc-700" />
-              <div className="h-3 w-[44px] sm:w-[52px] bg-zinc-200 dark:bg-zinc-700 rounded flex-shrink-0" />
-            </div>
-          </td>
-        )}
-        {isVisible("outdated") && (
-          <td className={flexTdClasses}>
-            <div className="flex items-center gap-1.5 sm:gap-3 min-w-[150px] sm:min-w-[230px] md:min-w-[250px]">
-              <div className="h-4 w-[48px] sm:w-[60px] bg-zinc-200 dark:bg-zinc-700 rounded flex-shrink-0" />
-              <div className="flex-1 min-w-[40px] h-3.5 sm:h-2.5 rounded-full bg-zinc-200 dark:bg-zinc-700" />
-              <div className="h-3 w-[44px] sm:w-[52px] bg-zinc-200 dark:bg-zinc-700 rounded flex-shrink-0" />
-            </div>
-          </td>
-        )}
-        {countryStyleColumns && (
-          <td className={numericTdNoDividerClasses}>
-            <div className="h-4 w-12 bg-zinc-200 dark:bg-zinc-700 rounded ml-auto" />
-          </td>
-        )}
-        {isVisible("gbifUnassessed") && (
-          <td className={flexTdClasses}>
-            <div className="flex items-center gap-1.5 sm:gap-3 min-w-[150px] sm:min-w-[230px] md:min-w-[250px]">
-              <div className="h-4 w-[48px] sm:w-[60px] bg-zinc-200 dark:bg-zinc-700 rounded flex-shrink-0" />
-              <div className="flex-1 min-w-[40px] h-3.5 sm:h-2.5 rounded-full bg-zinc-200 dark:bg-zinc-700" />
-              <div className="h-3 w-[44px] sm:w-[52px] bg-zinc-200 dark:bg-zinc-700 rounded flex-shrink-0" />
-            </div>
-          </td>
-        )}
-        {isVisible("colNe") && (
-          <td className={flexTdClasses}>
-            <div className="flex items-center gap-1.5 sm:gap-3 min-w-[150px] sm:min-w-[230px] md:min-w-[250px]">
-              <div className="h-4 w-[48px] sm:w-[60px] bg-zinc-200 dark:bg-zinc-700 rounded flex-shrink-0" />
-              <div className="flex-1 min-w-[40px] h-3.5 sm:h-2.5 rounded-full bg-zinc-200 dark:bg-zinc-700" />
-              <div className="h-3 w-[44px] sm:w-[52px] bg-zinc-200 dark:bg-zinc-700 rounded flex-shrink-0" />
-            </div>
-          </td>
-        )}
-        {isVisible("totalGbifObs") && (
-          <td className={numericTdClasses}>
-            <div className="h-4 w-20 bg-zinc-200 dark:bg-zinc-700 rounded ml-auto" />
-          </td>
-        )}
-        {isVisible("gbifDistribution") && (
-          <td className={flexTdClasses}>
-            <div className="min-w-[100px] md:min-w-[120px]">
-              <div className="h-5 w-full rounded bg-zinc-200 dark:bg-zinc-700" />
-            </div>
-          </td>
-        )}
-        {isVisible("meanGbifObs") && (
-          <td className={numericTdClasses}>
-            <div className="h-4 w-16 bg-zinc-200 dark:bg-zinc-700 rounded ml-auto" />
-          </td>
-        )}
-        {isVisible("medianGbifObs") && (
-          <td className={numericTdClasses}>
-            <div className="h-4 w-16 bg-zinc-200 dark:bg-zinc-700 rounded ml-auto" />
-          </td>
-        )}
-        {isVisible("breakdown") && (
-          <td className={flexTdClasses}>
-            <div className="min-w-[80px] md:min-w-[100px]">
-              <div className="h-4 sm:h-3 w-full rounded-full bg-zinc-200 dark:bg-zinc-700" />
-            </div>
-          </td>
-        )}
-      </tr>
-    ));
-
     return (
-      <div className="relative bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl overflow-x-auto">
-        {/* Spinner overlay */}
-        <div className="absolute inset-0 flex items-center justify-center bg-white/60 dark:bg-zinc-900/60 z-20">
-          <svg
-            className="animate-spin h-8 w-8 text-zinc-400"
-            xmlns="http://www.w3.org/2000/svg"
-            fill="none"
-            viewBox="0 0 24 24"
-          >
-            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
-          </svg>
-        </div>
-        <table className="w-full">
-          <thead>
-            <tr className="bg-zinc-50 dark:bg-zinc-800 border-b border-zinc-200 dark:border-zinc-700">
-              <th className={`${stickyClasses} bg-zinc-50 dark:bg-zinc-800 ${taxonCellPad} text-center text-sm font-bold text-zinc-600 dark:text-zinc-300 whitespace-nowrap w-0`}>Taxonomic Group</th>
-              {isVisible("described") && <th className={numericThNoDividerClasses}># Described Species</th>}
-              {isVisible("colDescribed") && <th className={numericThClasses}># Described Species (CoL)</th>}
-              {isVisible("assessed") && (
-                <th className={countryStyleColumns ? `${centeredThClasses} whitespace-nowrap min-w-[80px]` : centeredThClasses}>
-                  {countryStyleColumns ? "# Assessed" : "# Red List Assessed"}
-                </th>
-              )}
-              {isVisible("outdated") && (
-                <th className={countryStyleColumns ? numericThNoDividerClasses : centeredThClasses}>
-                  {countryStyleColumns ? (
-                    "# Outdated"
-                  ) : (
-                    <span className="inline-flex items-center gap-1"># Outdated (&gt;10 yrs old) <OutdatedInfoIcon /></span>
-                  )}
-                </th>
-              )}
-              {countryStyleColumns && <th className={numericThNoDividerClasses}>% Outdated</th>}
-              {isVisible("gbifUnassessed") && <th className={centeredThClasses}># Unassessed, 1+ GBIF Obs</th>}
-              {isVisible("colNe") && <th className={centeredThClasses}># Not Evaluated</th>}
-              {isVisible("totalGbifObs") && <th className={numericThClasses}>Total Obs</th>}
-              {isVisible("gbifDistribution") && <th className={flexThClasses}>Obs Distribution</th>}
-              {isVisible("meanGbifObs") && <th className={numericThClasses}>Mean Obs</th>}
-              {isVisible("medianGbifObs") && <th className={numericThClasses}>Median Obs</th>}
-              {isVisible("breakdown") && <th className={flexThClasses}>Conservation Status Breakdown</th>}
-            </tr>
-          </thead>
-          <tbody>
-            {skeletonRows[0]}
-            <tr>
-              <td colSpan={visibleColCount} className="p-0">
-                <div className="border-b-2 border-zinc-200 dark:border-zinc-700" />
-              </td>
-            </tr>
-            {skeletonRows.slice(1)}
-          </tbody>
-        </table>
+      <div className="flex items-center justify-center min-h-[420px] bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl py-24">
+        <svg
+          className="animate-spin h-8 w-8 text-zinc-400"
+          xmlns="http://www.w3.org/2000/svg"
+          fill="none"
+          viewBox="0 0 24 24"
+        >
+          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+        </svg>
       </div>
     );
   }
@@ -2836,46 +2701,36 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
       </div>,
       document.body
     )}
-    {/* Country view: map on the left half, taxa table on the right half.
-        The table always uses the plain 3-column style in this mode
-        (countryStyleColumns, derived from layoutMode — see its definition
-        above), whether or not a country is picked yet. The selected
-        country's identity shows as removable chips in a row of its own
-        ABOVE this whole grid — same grid-cols template so its columns line
-        up with the map/table below, but with the left (map) cell left
-        empty and the chips confined to the right (table) cell. min-h-
-        [34px] on that cell reserves the space unconditionally (a blank gap
-        before anything's hovered/selected), so it never grows *this* grid
-        below it into needing align-items: stretch to force the map's card
-        to match a taller table. Chips living inside either component
-        (tried both: atop just the table, floated over the map, enclosed in
-        the table's own card) always ended up needing some mechanism to
-        keep the map's card the same height as the table's — a separate row
-        above both sidesteps the problem entirely, since neither column's
-        own natural height is ever affected by how many chips are showing.
-        Uses `contents` to no-op this grouping entirely outside country
-        mode, rather than branching (and duplicating) the huge table JSX
-        below per mode. */}
-    {countryMode && (
+    {/* Country view: map-only landing until a country's actually picked (no
+        hover preview — see RedListView's handleCountryDrilldown/countryScope),
+        THEN side-by-side map/table, same half-half layout this had before
+        the map-first rework. Uses `contents` to no-op the table wrapper
+        entirely outside country mode, rather than branching (and
+        duplicating) the huge table JSX below per mode.
+        Landing (not countryScoped): the map is full width AND grows to fill
+        the rest of the viewport (flex-1 min-h-0, via the flex chain from
+        page.tsx's <main> through RedListView's root down to here) so it
+        reads as a full-height landing map rather than a small box sitting
+        above empty space — on a 13" laptop screen that leaves just the
+        footer's first line visible without scrolling. WorldMap's own root
+        is already `h-full flex flex-col` for exactly this.
+        Scoped: map moves into the left half of a 2-col grid, table into the
+        right half — grid's default align-items: stretch matches the map's
+        height to the table's own natural content height (no flex-1 needed
+        here), same as before this rework. The table's own scrollRef box
+        below is zoomed down (zoom-[.75]) to compensate for the narrower
+        (1/2, was 2/3) column. */}
+    {countryMode && !countryScoped && (
+      <div className="flex flex-col flex-1 min-h-0 mb-4">{countryModeContent}</div>
+    )}
+    {countryMode && countryScoped && (
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-1.5">
         <div aria-hidden="true" />
-        <div className="min-h-[34px]">{countryPillsContent}</div>
+        <div>{countryPillsContent}</div>
       </div>
     )}
-    <div className={countryMode ? "grid grid-cols-1 lg:grid-cols-2 gap-4 mb-4" : "contents"}>
-      {/* No extra wrapper here — WorldMap already renders its own card (bg/border/
-          padding); wrapping it again doubled up the box and, since neither div had
-          an explicit height, left the map's own h-full with nothing to fill,
-          which is why it didn't match the table's height. Grid's default
-          align-items: stretch now makes both columns match the taller one — no
-          artificial min-height on the map side, so the row settles at the
-          table's own natural content height instead of leaving dead space
-          below the last row. Even 1/2-1/2 split (col-span-1 each); the table's
-          own scrollRef box below is zoomed down to compensate for the narrower
-          column (was 2/3 width, now 1/2 — zoom-[.75] keeps everything, fonts
-          included, at the same proportions just smaller, rather than letting
-          columns get cramped or triggering horizontal scroll). */}
-      {countryMode && <div>{countryModeContent}</div>}
+    <div className={countryMode ? (countryScoped ? "grid grid-cols-1 lg:grid-cols-2 gap-4 mb-4" : "hidden") : "contents"}>
+      {countryMode && countryScoped && <div>{countryModeContent}</div>}
       <div className={countryMode ? "min-w-0 flex flex-col h-full" : "contents"}>
         {/* No "country name atop the table" heading here anymore — a country
             scoped outside Country View now shows only as the normal removable
@@ -2890,27 +2745,9 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
             own mb-4 (see the ternary a few lines up), so skip it here to avoid
             doubling up. */}
         <div ref={scrollRef} className={`relative bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl overflow-x-auto ${countryMode ? "flex-1 [zoom:.75]" : "mb-4"}`}>
-          {/* Country-switch refetch indicator — see the loading-gate comment
-              above renderRow's skeleton branch for why this doesn't blank the table. */}
-          {loading && taxa.length > 0 && (
-            <div className="absolute top-2 right-2 z-20">
-              <svg className="animate-spin h-4 w-4 text-zinc-400" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
-              </svg>
-            </div>
-          )}
           <table className="w-full">
             {renderHead()}
-        {/* Dims every row's numbers (not just a corner spinner) while a
-            country-switch refetch is in flight — the row-level content below
-            deliberately keeps showing the previous country's numbers during
-            that refetch (see the skeleton-gate comment above) rather than
-            blanking to a skeleton, so without this there's no visual cue
-            that any given number might already be stale. Scoped to
-            !flatMode: Table 1a/SSC's own refetch (flatLoading) already
-            blanks to a loading row instead of leaving stale content up. */}
-        <tbody className={!flatMode && loading && taxa.length > 0 ? "opacity-50 transition-opacity duration-200" : "transition-opacity duration-200"}>
+        <tbody className="transition-opacity duration-200">
           {flatMode ? (
             /* Table 1a / SSC groups view: sections with headers, individual rows, subtotals */
             flatLoading ? (
@@ -3183,6 +3020,23 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
                 )}
               </>
             ) : null
+          ) : loading ? (
+            // A country-switch refetch (countryScope changed, taxa still
+            // holds the previous country's — or the global landing fetch's —
+            // rows). Blanks the body to just this single centered spinner
+            // rather than leaving stale rows up dimmed underneath a corner
+            // spinner: the table's own frame (thead, card chrome) stays put
+            // so there's no size jump, only the rows swap out.
+            <tr>
+              <td colSpan={visibleColCount} className={cellPad}>
+                <div className="flex items-center justify-center py-24">
+                  <svg className="animate-spin h-6 w-6 text-zinc-400" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                  </svg>
+                </div>
+              </td>
+            </tr>
           ) : (
             <>
               {/* All Species totals row (always visible) */}
@@ -3353,8 +3207,8 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
         hold the previous country's data). */}
     {perTaxa.length > 0 && selectedTaxa.size === 0 && (
       <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1.5 mt-1.5">
-        <span className="hidden sm:inline pl-3 md:pl-4 text-xs text-zinc-400 dark:text-zinc-500">
-          {countryMode ? "Hover over a country, or click to lock it and multi-select." : "Click to filter, Cmd/Ctrl+click to multi-select."}
+        <span className="hidden sm:inline pl-3 md:pl-4 text-sm text-zinc-400 dark:text-zinc-500">
+          {countryMode ? "Click a country to view its species, Cmd/Ctrl+click to multi-select." : "Click to filter, use charts and search to explore species. Cmd/Ctrl+click to multi-select."}
         </span>
         <span className="inline-flex items-center gap-1.5 ml-auto pr-3 sm:pr-0">
           {/* Assessed/Not Evaluated toggle used to be paired here too, but it's

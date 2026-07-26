@@ -49,7 +49,7 @@ interface CountryStatsListProps {
   onSortChange?: (key: SortKey, dir: SortDir) => void;
 }
 
-const PAGE_SIZE = 10;
+const PAGE_SIZE = 15;
 
 function percentOutdatedOf(species: number, outdated: number): number {
   return species > 0 ? (outdated / species) * 100 : 0;
@@ -74,7 +74,7 @@ function SortHeader({
 }) {
   return (
     <th
-      className={`text-xs font-medium text-zinc-500 dark:text-zinc-400 px-1.5 py-0.5 cursor-pointer select-none hover:text-zinc-700 dark:hover:text-zinc-200 whitespace-nowrap overflow-hidden text-ellipsis ${align === "left" ? "text-left" : "text-right"} ${widthClass ?? ""}`}
+      className={`text-sm font-medium text-zinc-500 dark:text-zinc-400 px-3 py-2 cursor-pointer select-none hover:text-zinc-700 dark:hover:text-zinc-200 whitespace-nowrap overflow-hidden text-ellipsis ${align === "left" ? "text-left" : "text-right"} ${widthClass ?? ""}`}
       onClick={onClick}
       aria-sort={active ? (dir === "asc" ? "ascending" : "descending") : undefined}
     >
@@ -116,7 +116,7 @@ function FilterIconButton({
       title="Filter"
       aria-label="Filter this column"
     >
-      <FaFilter size={9} />
+      <FaFilter size={11} />
     </button>
   );
 }
@@ -251,21 +251,30 @@ export default function CountryStatsList({
   const openFilterConfig = openFilterKey ? filterConfigs[openFilterKey] : null;
 
   return (
-    <div className="flex-1 min-h-0 flex flex-col rounded-lg border border-zinc-200 dark:border-zinc-800">
+    // mb-9 reserves room for WorldMap's floating Map/List toggle, which
+    // overlays bottom-left of whichever view is showing (absolutely
+    // positioned against the shared card, not this component) — harmless
+    // dead space when this list is short, but without it the pagination
+    // footer collides with the toggle once the list is tall enough to fill
+    // the card (e.g. Country View's now-full-height landing map/list).
+    <div className="flex-1 min-h-0 flex flex-col mb-11 rounded-lg border border-zinc-200 dark:border-zinc-800">
       <div className="flex-1 min-h-0 overflow-auto">
         {/* table-fixed + explicit column-width shares (rather than auto/content-based
             sizing) so the Country column truncates instead of wrapping long names
-            ("United States of America") across multiple lines — needed now that
-            this list has to fit the map's narrower 1/3-width column. Rows use
-            text-xs + py-0.5 (down from text-sm/py-1) so PAGE_SIZE rows + header +
-            footer land close to the Map view's own natural height — with align-
-            items: stretch on the paired grid, taller List content used to drag
-            the whole row (map card AND table) up to match, which meant just
-            toggling Map/List visibly resized the page. Min/max filters live
-            behind each numeric header's filter icon (see FilterIconButton)
-            rather than a permanent row, for the same reason — a row of inputs
-            here would have blown that height budget again. */}
-        <table className="w-full table-fixed text-xs border-collapse">
+            ("United States of America") across multiple lines, whatever width this
+            ends up at. text-sm + more generous py (up from the text-xs/py-0.5 this
+            used to run at) reads properly now that Country View's landing map (and
+            this List alternative to it) is flex-1'd to fill the viewport instead of
+            a small fixed-height card — cramped micro-text made sense in that small
+            card, not in a full-height one. Once a country's picked, the map/list
+            card sits in a half-width grid cell with align-items: stretch matching
+            the taxa table's own height (see TaxaSummary), so this can still end up
+            shorter there — same sizing either way, it just scrolls internally
+            (flex-1 min-h-0 overflow-auto below) rather than changing text size to
+            fit. Min/max filters live behind each numeric header's filter icon (see
+            FilterIconButton) rather than a permanent row, to keep the header compact
+            regardless of available height. */}
+        <table className="w-full table-fixed text-sm border-collapse">
           <thead className="sticky top-0 bg-zinc-50 dark:bg-zinc-900 border-b border-zinc-200 dark:border-zinc-800 z-10">
             <tr>
               <SortHeader label="Country" active={sortKey === "name"} dir={sortDir} align="left" widthClass={showOutdatedMode ? "w-[34%]" : "w-2/3"} onClick={() => toggleSort("name")} />
@@ -328,22 +337,22 @@ export default function CountryStatsList({
                     isSelected ? "bg-blue-50 dark:bg-blue-900/30" : "hover:bg-zinc-50 dark:hover:bg-zinc-800/50"
                   }`}
                 >
-                  <td className="px-1.5 py-0.5 text-zinc-700 dark:text-zinc-300 max-w-0">
+                  <td className="px-3 py-2 text-zinc-700 dark:text-zinc-300 max-w-0">
                     <span className="block truncate" title={row.name}>{row.name}</span>
                   </td>
-                  <td className="px-1.5 py-0.5 text-right tabular-nums text-zinc-700 dark:text-zinc-300 whitespace-nowrap">{row.species.toLocaleString()}</td>
+                  <td className="px-3 py-2 text-right tabular-nums text-zinc-700 dark:text-zinc-300 whitespace-nowrap">{row.species.toLocaleString()}</td>
                   {showOutdatedMode && (
-                    <td className="px-1.5 py-0.5 text-right tabular-nums text-zinc-700 dark:text-zinc-300 whitespace-nowrap">{row.outdated.toLocaleString()}</td>
+                    <td className="px-3 py-2 text-right tabular-nums text-zinc-700 dark:text-zinc-300 whitespace-nowrap">{row.outdated.toLocaleString()}</td>
                   )}
                   {showOutdatedMode && (
-                    <td className="px-1.5 py-0.5 text-right tabular-nums text-zinc-700 dark:text-zinc-300 whitespace-nowrap">{row.percentOutdated.toFixed(1)}%</td>
+                    <td className="px-3 py-2 text-right tabular-nums text-zinc-700 dark:text-zinc-300 whitespace-nowrap">{row.percentOutdated.toFixed(1)}%</td>
                   )}
                 </tr>
               );
             })}
             {sorted.length === 0 && (
               <tr>
-                <td colSpan={showOutdatedMode ? 4 : 2} className="px-2 py-6 text-center text-zinc-400 text-xs">
+                <td colSpan={showOutdatedMode ? 4 : 2} className="px-2 py-8 text-center text-zinc-400 text-sm">
                   No data
                 </td>
               </tr>
@@ -352,7 +361,7 @@ export default function CountryStatsList({
         </table>
       </div>
       {sorted.length > 0 && (
-        <div className="flex items-center justify-between px-2 py-0.5 border-t border-zinc-200 dark:border-zinc-800 text-xs text-zinc-500 dark:text-zinc-400 shrink-0">
+        <div className="flex items-center justify-between px-3 py-1.5 border-t border-zinc-200 dark:border-zinc-800 text-sm text-zinc-500 dark:text-zinc-400 shrink-0">
           <span>
             {clampedPage * PAGE_SIZE + 1}–{Math.min((clampedPage + 1) * PAGE_SIZE, sorted.length)} of {sorted.length}
           </span>
@@ -360,7 +369,7 @@ export default function CountryStatsList({
             <button
               onClick={() => setPage((p) => Math.max(0, p - 1))}
               disabled={clampedPage === 0}
-              className="px-1.5 py-0.5 rounded hover:bg-zinc-100 dark:hover:bg-zinc-800 disabled:opacity-30 disabled:hover:bg-transparent"
+              className="px-2 py-1 rounded hover:bg-zinc-100 dark:hover:bg-zinc-800 disabled:opacity-30 disabled:hover:bg-transparent"
             >
               Prev
             </button>
@@ -368,7 +377,7 @@ export default function CountryStatsList({
             <button
               onClick={() => setPage((p) => Math.min(pageCount - 1, p + 1))}
               disabled={clampedPage >= pageCount - 1}
-              className="px-1.5 py-0.5 rounded hover:bg-zinc-100 dark:hover:bg-zinc-800 disabled:opacity-30 disabled:hover:bg-transparent"
+              className="px-2 py-1 rounded hover:bg-zinc-100 dark:hover:bg-zinc-800 disabled:opacity-30 disabled:hover:bg-transparent"
             >
               Next
             </button>
