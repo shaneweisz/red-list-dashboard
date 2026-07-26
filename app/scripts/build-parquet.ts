@@ -159,7 +159,7 @@ export async function run(): Promise<void> {
         coalesce(CAST(r.possibly_extinct AS VARCHAR), '') = 'true'             AS possibly_extinct,
         coalesce(CAST(r.possibly_extinct_in_the_wild AS VARCHAR), '') = 'true' AS possibly_extinct_in_the_wild,
         nullif(r.criteria, '')            AS criteria,
-        r.threat_codes,
+        r.threat_codes, r.habitat_codes,
         la.latest_assessors, la.latest_reviewers
       FROM read_csv_auto('${redlistGlob}', union_by_name=true) r
       LEFT JOIN enrich e ON e.sis_taxon_id = r.sis_taxon_id

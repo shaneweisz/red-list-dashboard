@@ -118,6 +118,66 @@ const THREAT_CATEGORIES: { code: string; label: string; children: { code: string
   ]},
 ];
 
+// IUCN habitat classification (18 top-level categories, 126 codes total) — see
+// https://www.iucnredlist.org/resources/habitat-classification-scheme. A handful
+// of codes go a 3rd level deep (e.g. 11.1.1/11.1.2 under 11.1, 9.8.1-9.8.6 under
+// 9.8); those are intentionally folded into their 2nd-level parent rather than
+// given their own drill row, mirroring THREAT_CATEGORIES' 2-level depth — the
+// prefix-based matching (code.startsWith(sel + ".")) still counts a species
+// under e.g. "11.1.1" when "11.1" is selected, it just isn't its own pill.
+const HABITAT_CATEGORIES: { code: string; label: string; children: { code: string; label: string }[] }[] = [
+  { code: "1", label: "Forest", children: [
+    { code: "1.1", label: "Forest - Boreal" }, { code: "1.2", label: "Forest - Subarctic" }, { code: "1.3", label: "Forest - Subantarctic" }, { code: "1.4", label: "Forest - Temperate" }, { code: "1.5", label: "Forest - Subtropical/Tropical Dry" }, { code: "1.6", label: "Forest - Subtropical/Tropical Moist Lowland" }, { code: "1.7", label: "Forest - Subtropical/Tropical Mangrove Vegetation Above High Tide Level" }, { code: "1.8", label: "Forest - Subtropical/Tropical Swamp" }, { code: "1.9", label: "Forest - Subtropical/Tropical Moist Montane" },
+  ]},
+  { code: "2", label: "Savanna", children: [
+    { code: "2.1", label: "Savanna - Dry" }, { code: "2.2", label: "Savanna - Moist" },
+  ]},
+  { code: "3", label: "Shrubland", children: [
+    { code: "3.1", label: "Shrubland - Subarctic" }, { code: "3.2", label: "Shrubland - Subantarctic" }, { code: "3.3", label: "Shrubland - Boreal" }, { code: "3.4", label: "Shrubland - Temperate" }, { code: "3.5", label: "Shrubland - Subtropical/Tropical Dry" }, { code: "3.6", label: "Shrubland - Subtropical/Tropical Moist" }, { code: "3.7", label: "Shrubland - Subtropical/Tropical High Altitude" }, { code: "3.8", label: "Shrubland - Mediterranean-type Shrubby Vegetation" },
+  ]},
+  { code: "4", label: "Grassland", children: [
+    { code: "4.1", label: "Grassland - Tundra" }, { code: "4.2", label: "Grassland - Subarctic" }, { code: "4.3", label: "Grassland - Subantarctic" }, { code: "4.4", label: "Grassland - Temperate" }, { code: "4.5", label: "Grassland - Subtropical/Tropical Dry" }, { code: "4.6", label: "Grassland - Subtropical/Tropical Seasonally Wet/Flooded" }, { code: "4.7", label: "Grassland - Subtropical/Tropical High Altitude" },
+  ]},
+  { code: "5", label: "Wetlands (inland)", children: [
+    { code: "5.1", label: "Wetlands (inland) - Permanent Rivers/Streams/Creeks (includes waterfalls)" }, { code: "5.2", label: "Wetlands (inland) - Seasonal/Intermittent/Irregular Rivers/Streams/Creeks" }, { code: "5.3", label: "Wetlands (inland) - Shrub Dominated Wetlands" }, { code: "5.4", label: "Wetlands (inland) - Bogs, Marshes, Swamps, Fens, Peatlands" }, { code: "5.5", label: "Wetlands (inland) - Permanent Freshwater Lakes (over 8ha)" }, { code: "5.6", label: "Wetlands (inland) - Seasonal/Intermittent Freshwater Lakes (over 8ha)" }, { code: "5.7", label: "Wetlands (inland) - Permanent Freshwater Marshes/Pools (under 8ha)" }, { code: "5.8", label: "Wetlands (inland) - Seasonal/Intermittent Freshwater Marshes/Pools (under 8ha)" }, { code: "5.9", label: "Wetlands (inland) - Freshwater Springs and Oases" }, { code: "5.10", label: "Wetlands (inland) - Tundra Wetlands (incl. pools and temporary waters from snowmelt)" }, { code: "5.11", label: "Wetlands (inland) - Alpine Wetlands (includes temporary waters from snowmelt)" }, { code: "5.12", label: "Wetlands (inland) - Geothermal Wetlands" }, { code: "5.13", label: "Wetlands (inland) - Permanent Inland Deltas" }, { code: "5.14", label: "Wetlands (inland) - Permanent Saline, Brackish or Alkaline Lakes" }, { code: "5.15", label: "Wetlands (inland) - Seasonal/Intermittent Saline, Brackish or Alkaline Lakes and Flats" }, { code: "5.16", label: "Wetlands (inland) - Permanent Saline, Brackish or Alkaline Marshes/Pools" }, { code: "5.17", label: "Wetlands (inland) - Seasonal/Intermittent Saline, Brackish or Alkaline Marshes/Pools" }, { code: "5.18", label: "Wetlands (inland) - Karst and Other Subterranean Hydrological Systems (inland)" },
+  ]},
+  { code: "6", label: "Rocky areas (eg. inland cliffs, mountain peaks)", children: [
+  ]},
+  { code: "7", label: "Caves and Subterranean Habitats (non-aquatic)", children: [
+    { code: "7.1", label: "Caves and Subterranean Habitats (non-aquatic) - Caves" }, { code: "7.2", label: "Caves and Subterranean Habitats (non-aquatic) - Other Subterranean Habitats" },
+  ]},
+  { code: "8", label: "Desert", children: [
+    { code: "8.1", label: "Desert - Hot" }, { code: "8.2", label: "Desert - Temperate" }, { code: "8.3", label: "Desert - Cold" },
+  ]},
+  { code: "9", label: "Marine Neritic", children: [
+    { code: "9.1", label: "Marine Neritic - Pelagic" }, { code: "9.2", label: "Marine Neritic - Subtidal Rock and Rocky Reefs" }, { code: "9.3", label: "Marine Neritic - Subtidal Loose Rock/pebble/gravel" }, { code: "9.4", label: "Marine Neritic - Subtidal Sandy" }, { code: "9.5", label: "Marine Neritic - Subtidal Sandy-Mud" }, { code: "9.6", label: "Marine Neritic - Subtidal Muddy" }, { code: "9.7", label: "Marine Neritic - Macroalgal/Kelp" }, { code: "9.8", label: "Marine Neritic - Coral Reef" }, { code: "9.9", label: "Marine Neritic - Seagrass (Submerged)" }, { code: "9.10", label: "Marine Neritic - Estuaries" },
+  ]},
+  { code: "10", label: "Marine Oceanic", children: [
+    { code: "10.1", label: "Marine Oceanic - Epipelagic (0-200m)" }, { code: "10.2", label: "Marine Oceanic - Mesopelagic (200-1000m)" }, { code: "10.3", label: "Marine Oceanic - Bathypelagic (1000-4000m)" }, { code: "10.4", label: "Marine Oceanic - Abyssopelagic (4000-6000m)" },
+  ]},
+  { code: "11", label: "Marine Deep Benthic", children: [
+    { code: "11.1", label: "Marine Deep Benthic - Continental Slope/Bathyl Zone (200-4,000m)" }, { code: "11.2", label: "Marine Deep Benthic - Abyssal Plain (4,000-6,000m)" }, { code: "11.3", label: "Marine Deep Benthic - Abyssal Mountain/Hills (4,000-6,000m)" }, { code: "11.4", label: "Marine Deep Benthic - Hadal/Deep Sea Trench (>6,000m)" }, { code: "11.5", label: "Marine Deep Benthic - Seamount" }, { code: "11.6", label: "Marine Deep Benthic - Deep Sea Vents (Rifts/Seeps)" },
+  ]},
+  { code: "12", label: "Marine Intertidal", children: [
+    { code: "12.1", label: "Marine Intertidal - Rocky Shoreline" }, { code: "12.2", label: "Marine Intertidal - Sandy Shoreline and/or Beaches, Sand Bars, Spits, Etc" }, { code: "12.3", label: "Marine Intertidal - Shingle and/or Pebble Shoreline and/or Beaches" }, { code: "12.4", label: "Marine Intertidal - Mud Flats and Salt Flats" }, { code: "12.5", label: "Marine Intertidal - Salt Marshes (Emergent Grasses)" }, { code: "12.6", label: "Marine Intertidal - Tidepools" }, { code: "12.7", label: "Marine Intertidal - Mangrove Submerged Roots" },
+  ]},
+  { code: "13", label: "Marine Coastal/Supratidal", children: [
+    { code: "13.1", label: "Marine Coastal/Supratidal - Sea Cliffs and Rocky Offshore Islands" }, { code: "13.2", label: "Marine Coastal/supratidal - Coastal Caves/Karst" }, { code: "13.3", label: "Marine Coastal/Supratidal - Coastal Sand Dunes" }, { code: "13.4", label: "Marine Coastal/Supratidal - Coastal Brackish/Saline Lagoons/Marine Lakes" }, { code: "13.5", label: "Marine Coastal/Supratidal - Coastal Freshwater Lakes" },
+  ]},
+  { code: "14", label: "Artificial/Terrestrial", children: [
+    { code: "14.1", label: "Artificial/Terrestrial - Arable Land" }, { code: "14.2", label: "Artificial/Terrestrial - Pastureland" }, { code: "14.3", label: "Artificial/Terrestrial - Plantations" }, { code: "14.4", label: "Artificial/Terrestrial - Rural Gardens" }, { code: "14.5", label: "Artificial/Terrestrial - Urban Areas" }, { code: "14.6", label: "Artificial/Terrestrial - Subtropical/Tropical Heavily Degraded Former Forest" },
+  ]},
+  { code: "15", label: "Artificial/Aquatic & Marine", children: [
+    { code: "15.1", label: "Artificial/Aquatic - Water Storage Areas (over 8ha)" }, { code: "15.2", label: "Artificial/Aquatic - Ponds (below 8ha)" }, { code: "15.3", label: "Artificial/Aquatic - Aquaculture Ponds" }, { code: "15.4", label: "Artificial/Aquatic - Salt Exploitation Sites" }, { code: "15.5", label: "Artificial/Aquatic - Excavations (open)" }, { code: "15.6", label: "Artificial/Aquatic - Wastewater Treatment Areas" }, { code: "15.7", label: "Artificial/Aquatic - Irrigated Land (includes irrigation channels)" }, { code: "15.8", label: "Artificial/Aquatic - Seasonally Flooded Agricultural Land" }, { code: "15.9", label: "Artificial/Aquatic - Canals and Drainage Channels, Ditches" }, { code: "15.10", label: "Artificial/Aquatic - Karst and Other Subterranean Hydrological Systems (human-made)" }, { code: "15.11", label: "Artificial/Marine - Marine Anthropogenic Structures" }, { code: "15.12", label: "Artificial/Marine - Mariculture Cages" }, { code: "15.13", label: "Artificial/Marine - Mari/Brackishculture Ponds" },
+  ]},
+  { code: "16", label: "Introduced vegetation", children: [
+  ]},
+  { code: "17", label: "Other", children: [
+  ]},
+  { code: "18", label: "Unknown", children: [
+  ]},
+];
+
 interface CriteriaNode {
   code: string;
   label: string;
@@ -269,6 +329,39 @@ function parseCriteriaCodes(criteria: string | null | undefined): string[] {
     }
   }
   return [...codes];
+}
+
+interface HabitatEntry {
+  code: string;
+  season: string;
+  suitability: string;
+  major: boolean;
+}
+
+// Decodes the single-letter season/suitability codes fetch-redlist-species.ts writes
+// into habitat_codes (see SEASON_CODES/SUITABILITY_CODES there) back to full labels.
+// "-" covers habitat entries with no season/suitability recorded in the IUCN DB.
+const HABITAT_SEASON_LABELS: Record<string, string> = {
+  R: "Resident", B: "Breeding Season", N: "Non-Breeding Season", P: "Passage", U: "Seasonal Occurrence Unknown", "-": "Unknown",
+};
+const HABITAT_SUITABILITY_LABELS: Record<string, string> = {
+  S: "Suitable", M: "Marginal", U: "Unknown", "-": "Unknown",
+};
+
+// Parses a species' habitat_codes (compact "code:season:suitability:major" tuples)
+// into structured entries — see fetch-redlist-species.ts's RedlistSpecies.habitat_codes
+// doc comment for the encoding.
+function parseHabitatEntries(habitatCodes: string[] | null | undefined): HabitatEntry[] {
+  if (!habitatCodes) return [];
+  return habitatCodes.map(tuple => {
+    const [code, season, suitability, major] = tuple.split(":");
+    return {
+      code: code ?? tuple,
+      season: HABITAT_SEASON_LABELS[season] ?? "Unknown",
+      suitability: HABITAT_SUITABILITY_LABELS[suitability] ?? "Unknown",
+      major: major === "1",
+    };
+  });
 }
 
 interface InatDefaultImage {
@@ -538,6 +631,10 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
     selectedMovementPatterns, setSelectedMovementPatterns,
     selectedThreats, setSelectedThreats,
     selectedCriteria, setSelectedCriteria,
+    selectedHabitat, setSelectedHabitat,
+    habitatSpecialistsOnly, setHabitatSpecialistsOnly,
+    habitatMajorOnly, setHabitatMajorOnly,
+    habitatResidentOnly, setHabitatResidentOnly,
     breakdownFilter, setBreakdownFilter,
     endemicsOnly, setEndemicsOnly,
     selectedGrowthForms, setSelectedGrowthForms,
@@ -656,6 +753,11 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
     setExpandedThreat(null);
     setSelectedCriteria(new Set());
     setExpandedCriteria(new Set());
+    setSelectedHabitat(new Set());
+    setExpandedHabitat(null);
+    setHabitatSpecialistsOnly(false);
+    setHabitatMajorOnly(false);
+    setHabitatResidentOnly(false);
     setEndemicsOnly(false);
     setSelectedGrowthForms(new Set());
     setSelectedAssessors(new Set());
@@ -666,7 +768,7 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
     if (viewMode === "new-assessments") {
       setSelectedTaxa(prev => prev.has("all") ? new Set<string>() : prev);
     }
-  }, [viewMode, setSelectedTaxa, setSelectedCategories, setSelectedYearRanges, setSelectedAssessmentYears, setSelectedDescribedYears, setSelectedCountries, setSelectedObsRanges, setSelectedSystems, setSelectedPopulationTrends, setSelectedMovementPatterns, setSelectedThreats, setSelectedCriteria, setEndemicsOnly, setSelectedGrowthForms, setSelectedAssessors, setSelectedReviewers, setSort]);
+  }, [viewMode, setSelectedTaxa, setSelectedCategories, setSelectedYearRanges, setSelectedAssessmentYears, setSelectedDescribedYears, setSelectedCountries, setSelectedObsRanges, setSelectedSystems, setSelectedPopulationTrends, setSelectedMovementPatterns, setSelectedThreats, setSelectedCriteria, setSelectedHabitat, setHabitatSpecialistsOnly, setHabitatMajorOnly, setHabitatResidentOnly, setEndemicsOnly, setSelectedGrowthForms, setSelectedAssessors, setSelectedReviewers, setSort]);
 
   // Taxon toggle handler (used by TaxaSummary)
   // Regular click: select only that taxon (or deselect if already sole selection)
@@ -815,6 +917,19 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
       return changed ? next : prev;
     });
   }, [selectedCriteria]);
+
+  // Habitat drill-down: a single expanded top-level category, like expandedThreat
+  // above (habitat only needs 2 levels — top category, then sub-habitat — so it
+  // doesn't need Criteria's multi-branch Set).
+  const [expandedHabitat, setExpandedHabitat] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!expandedHabitat) return;
+    const stillSelected = Array.from(selectedHabitat).some(
+      c => c === expandedHabitat || c.startsWith(expandedHabitat + ".")
+    );
+    if (!stillSelected) setExpandedHabitat(null);
+  }, [selectedHabitat, expandedHabitat]);
 
   // Stable callback for debounced search input
   const handleSearch = useCallback((value: string) => {
@@ -1158,6 +1273,21 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
     return getSpeciesReviewers(s).some(r => { const rl = r.toLowerCase(); return sels.some(x => rl.includes(x)); });
   }, [selectedReviewers, getSpeciesReviewers]);
 
+  // Consolidates all 4 habitat-related filters into one predicate (rather than 4
+  // separate inline checks repeated at every filter site) since major/resident both
+  // need the full parsed entry list, not just codes — cheaper to parse once per
+  // species per call than to re-derive it 2-3x over.
+  const matchesHabitatFilter = useCallback((s: Species): boolean => {
+    if (selectedHabitat.size === 0 && !habitatSpecialistsOnly && !habitatMajorOnly && !habitatResidentOnly) return true;
+    const entries = parseHabitatEntries(s.habitat_codes);
+    const codes = Array.from(new Set(entries.map(e => e.code)));
+    if (selectedHabitat.size > 0 && !codes.some(code => Array.from(selectedHabitat).some(sel => code === sel || code.startsWith(sel + ".")))) return false;
+    if (habitatSpecialistsOnly && codes.length !== 1) return false;
+    if (habitatMajorOnly && !entries.some(e => e.major)) return false;
+    if (habitatResidentOnly && !entries.some(e => e.season === "Resident")) return false;
+    return true;
+  }, [selectedHabitat, habitatSpecialistsOnly, habitatMajorOnly, habitatResidentOnly]);
+
   // Species details cache (images, criteria, common names)
   const [speciesDetails, setSpeciesDetails] = useState<Record<number, SpeciesDetails>>({});
   // Lazy assessment-history cache, keyed by sis_taxon_id. The species list no
@@ -1285,6 +1415,7 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
         possibly_extinct_in_the_wild: false,
         criteria: null,
         threat_codes: [],
+        habitat_codes: [],
       });
       urlSpeciesHandledRef.current = true;
     }
@@ -1420,6 +1551,7 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
       if (endemicsOnly && s.countries.length !== 1) return;
       if (selectedGrowthForms.size > 0 && !s.growth_forms?.some(gf => selectedGrowthForms.has(gf))) return;
       if (!matchesAssessorsFilter(s)) return;
+      if (!matchesHabitatFilter(s)) return;
       if (!matchesReviewersFilter(s)) return;
       counts[s.category] = (counts[s.category] || 0) + 1;
     });
@@ -1433,7 +1565,7 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
       percent: total > 0 ? (((counts[code] || 0) / total) * 100).toFixed(1) : "0",
       label: `${(counts[code] || 0).toLocaleString()} (${total > 0 ? (((counts[code] || 0) / total) * 100).toFixed(1) : 0}%)`,
     }));
-  }, [taxaFilteredSpecies, selectedCountries, selectedYearRanges, selectedObsRanges, selectedSystems, selectedPopulationTrends, selectedMovementPatterns, selectedThreats, selectedCriteria, endemicsOnly, selectedGrowthForms, matchesSearch, matchesAssessorsFilter, matchesReviewersFilter, matchesObsRangeFilter, matchesYearRangeFilter, selectedAssessmentYears, matchesAssessmentYearFilter]);
+  }, [taxaFilteredSpecies, selectedCountries, selectedYearRanges, selectedObsRanges, selectedSystems, selectedPopulationTrends, selectedMovementPatterns, selectedThreats, selectedCriteria, matchesHabitatFilter, endemicsOnly, selectedGrowthForms, matchesSearch, matchesAssessorsFilter, matchesReviewersFilter, matchesObsRangeFilter, matchesYearRangeFilter, selectedAssessmentYears, matchesAssessmentYearFilter]);
 
   // Year chart: apply all filters EXCEPT year range AND outdated (see
   // taxaFilteredSpeciesExceptOutdated above) — buckets align exactly with the
@@ -1463,6 +1595,7 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
       if (endemicsOnly && s.countries.length !== 1) return;
       if (selectedGrowthForms.size > 0 && !s.growth_forms?.some(gf => selectedGrowthForms.has(gf))) return;
       if (!matchesAssessorsFilter(s)) return;
+      if (!matchesHabitatFilter(s)) return;
       if (!matchesReviewersFilter(s)) return;
       const yearsSince = (now - new Date(s.assessment_date).getTime()) / msPerYear;
       if (yearsSince < 1) ranges[0].count++;
@@ -1476,7 +1609,7 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
       ...r,
       label: `${r.count.toLocaleString()} (${total > 0 ? ((r.count / total) * 100).toFixed(1) : 0}%)`,
     }));
-  }, [taxaFilteredSpeciesExceptOutdated, selectedCategories, selectedCountries, selectedObsRanges, selectedSystems, selectedPopulationTrends, selectedMovementPatterns, selectedThreats, selectedCriteria, endemicsOnly, selectedGrowthForms, matchesSearch, matchesAssessorsFilter, matchesReviewersFilter, matchesObsRangeFilter]);
+  }, [taxaFilteredSpeciesExceptOutdated, selectedCategories, selectedCountries, selectedObsRanges, selectedSystems, selectedPopulationTrends, selectedMovementPatterns, selectedThreats, selectedCriteria, matchesHabitatFilter, endemicsOnly, selectedGrowthForms, matchesSearch, matchesAssessorsFilter, matchesReviewersFilter, matchesObsRangeFilter]);
 
   // Assessments-by-year chart: apply all filters EXCEPT the year-based ones
   // (selectedYearRanges, selectedAssessmentYears) AND outdated. The Range bucket
@@ -1502,6 +1635,7 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
       if (endemicsOnly && s.countries.length !== 1) return;
       if (selectedGrowthForms.size > 0 && !s.growth_forms?.some(gf => selectedGrowthForms.has(gf))) return;
       if (!matchesAssessorsFilter(s)) return;
+      if (!matchesHabitatFilter(s)) return;
       if (!matchesReviewersFilter(s)) return;
       const year = String(new Date(s.assessment_date).getFullYear());
       counts[year] = (counts[year] || 0) + 1;
@@ -1515,7 +1649,7 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
         count,
         label: `${count.toLocaleString()} (${total > 0 ? ((count / total) * 100).toFixed(1) : 0}%)`,
       }));
-  }, [taxaFilteredSpeciesExceptOutdated, selectedCategories, selectedCountries, selectedObsRanges, selectedSystems, selectedPopulationTrends, selectedMovementPatterns, selectedThreats, selectedCriteria, endemicsOnly, selectedGrowthForms, matchesSearch, matchesAssessorsFilter, matchesReviewersFilter, matchesObsRangeFilter]);
+  }, [taxaFilteredSpeciesExceptOutdated, selectedCategories, selectedCountries, selectedObsRanges, selectedSystems, selectedPopulationTrends, selectedMovementPatterns, selectedThreats, selectedCriteria, matchesHabitatFilter, endemicsOnly, selectedGrowthForms, matchesSearch, matchesAssessorsFilter, matchesReviewersFilter, matchesObsRangeFilter]);
 
   const yearsTotalPages = Math.max(1, Math.ceil(assessmentYearsByYearData.length / YEARS_PAGE_SIZE));
   const paginatedAssessmentYearsData = useMemo(
@@ -1574,6 +1708,7 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
       if (endemicsOnly && s.countries.length !== 1) return;
       if (selectedGrowthForms.size > 0 && !s.growth_forms?.some(gf => selectedGrowthForms.has(gf))) return;
       if (!matchesAssessorsFilter(s)) return;
+      if (!matchesHabitatFilter(s)) return;
       if (!matchesReviewersFilter(s)) return;
       const obs = s.gbif_occurrence_count ?? 0;
       if (obs === 0) ranges[0].count++;
@@ -1588,7 +1723,7 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
       ...r,
       label: `${r.count.toLocaleString()} (${total > 0 ? ((r.count / total) * 100).toFixed(1) : 0}%)`,
     }));
-  }, [taxaFilteredSpecies, selectedCategories, selectedCountries, selectedYearRanges, selectedSystems, selectedPopulationTrends, selectedMovementPatterns, selectedThreats, selectedCriteria, endemicsOnly, selectedGrowthForms, matchesSearch, matchesAssessorsFilter, matchesReviewersFilter, matchesYearRangeFilter, selectedAssessmentYears, matchesAssessmentYearFilter]);
+  }, [taxaFilteredSpecies, selectedCategories, selectedCountries, selectedYearRanges, selectedSystems, selectedPopulationTrends, selectedMovementPatterns, selectedThreats, selectedCriteria, matchesHabitatFilter, endemicsOnly, selectedGrowthForms, matchesSearch, matchesAssessorsFilter, matchesReviewersFilter, matchesYearRangeFilter, selectedAssessmentYears, matchesAssessmentYearFilter]);
 
   // Year Described chart (NE / new-assessments only): per-bucket counts, cross-filtered
   // by every OTHER active filter (search, country, GBIF obs) but NOT the described-year
@@ -1632,6 +1767,7 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
       if (endemicsOnly && s.countries.length !== 1) return;
       if (selectedGrowthForms.size > 0 && !s.growth_forms?.some(gf => selectedGrowthForms.has(gf))) return;
       if (!matchesAssessorsFilter(s)) return;
+      if (!matchesHabitatFilter(s)) return;
       if (!matchesReviewersFilter(s)) return;
       // Gated on NE the same way the assessment-year filters above are, since NE species have no assessment.
       const outdated = s.category !== "NE" && isOutdated(s.assessment_date, dataAsOf);
@@ -1654,7 +1790,7 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
       ])
     );
     return { countryCounts: counts, uniqueCountries: sorted, countryStatsForMap: statsForMap };
-  }, [taxaFilteredSpecies, selectedCategories, selectedYearRanges, selectedObsRanges, selectedSystems, selectedPopulationTrends, selectedMovementPatterns, selectedThreats, selectedCriteria, endemicsOnly, selectedGrowthForms, matchesSearch, matchesAssessorsFilter, matchesReviewersFilter, matchesObsRangeFilter, matchesYearRangeFilter, selectedAssessmentYears, matchesAssessmentYearFilter, dataAsOf]);
+  }, [taxaFilteredSpecies, selectedCategories, selectedYearRanges, selectedObsRanges, selectedSystems, selectedPopulationTrends, selectedMovementPatterns, selectedThreats, selectedCriteria, matchesHabitatFilter, endemicsOnly, selectedGrowthForms, matchesSearch, matchesAssessorsFilter, matchesReviewersFilter, matchesObsRangeFilter, matchesYearRangeFilter, selectedAssessmentYears, matchesAssessmentYearFilter, dataAsOf]);
 
   // True per-country totals — taxon/subgroup selection only, no other filters —
   // so the Country map tooltip can show "142 of 3,847 total" instead of just
@@ -1696,13 +1832,14 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
       if (endemicsOnly && s.countries.length !== 1) return;
       if (selectedGrowthForms.size > 0 && !s.growth_forms?.some(gf => selectedGrowthForms.has(gf))) return;
       if (!matchesAssessorsFilter(s)) return;
+      if (!matchesHabitatFilter(s)) return;
       if (!matchesReviewersFilter(s)) return;
       for (const sys of s.systems ?? []) {
         if (sys in counts) counts[sys]++;
       }
     });
     return counts;
-  }, [taxaFilteredSpecies, selectedCategories, selectedCountries, selectedYearRanges, selectedObsRanges, selectedPopulationTrends, selectedMovementPatterns, selectedThreats, selectedCriteria, matchesSearch, matchesAssessorsFilter, matchesReviewersFilter, endemicsOnly, matchesObsRangeFilter, matchesYearRangeFilter, selectedGrowthForms, selectedAssessmentYears, matchesAssessmentYearFilter]);
+  }, [taxaFilteredSpecies, selectedCategories, selectedCountries, selectedYearRanges, selectedObsRanges, selectedPopulationTrends, selectedMovementPatterns, selectedThreats, selectedCriteria, matchesHabitatFilter, matchesSearch, matchesAssessorsFilter, matchesReviewersFilter, endemicsOnly, matchesObsRangeFilter, matchesYearRangeFilter, selectedGrowthForms, selectedAssessmentYears, matchesAssessmentYearFilter]);
 
   // Population trend counts: apply all filters EXCEPT population trend
   const populationTrendCounts = useMemo(() => {
@@ -1722,11 +1859,12 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
       if (endemicsOnly && s.countries.length !== 1) return;
       if (selectedGrowthForms.size > 0 && !s.growth_forms?.some(gf => selectedGrowthForms.has(gf))) return;
       if (!matchesAssessorsFilter(s)) return;
+      if (!matchesHabitatFilter(s)) return;
       if (!matchesReviewersFilter(s)) return;
       counts[s.population_trend] = (counts[s.population_trend] || 0) + 1;
     });
     return counts;
-  }, [taxaFilteredSpecies, selectedCategories, selectedCountries, selectedYearRanges, selectedObsRanges, selectedSystems, selectedMovementPatterns, selectedThreats, selectedCriteria, matchesSearch, matchesAssessorsFilter, matchesReviewersFilter, endemicsOnly, matchesObsRangeFilter, matchesYearRangeFilter, selectedGrowthForms, selectedAssessmentYears, matchesAssessmentYearFilter]);
+  }, [taxaFilteredSpecies, selectedCategories, selectedCountries, selectedYearRanges, selectedObsRanges, selectedSystems, selectedMovementPatterns, selectedThreats, selectedCriteria, matchesHabitatFilter, matchesSearch, matchesAssessorsFilter, matchesReviewersFilter, endemicsOnly, matchesObsRangeFilter, matchesYearRangeFilter, selectedGrowthForms, selectedAssessmentYears, matchesAssessmentYearFilter]);
 
   // Movement pattern counts: apply all filters EXCEPT movement pattern
   const movementPatternCounts = useMemo(() => {
@@ -1746,11 +1884,12 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
       if (endemicsOnly && s.countries.length !== 1) return;
       if (selectedGrowthForms.size > 0 && !s.growth_forms?.some(gf => selectedGrowthForms.has(gf))) return;
       if (!matchesAssessorsFilter(s)) return;
+      if (!matchesHabitatFilter(s)) return;
       if (!matchesReviewersFilter(s)) return;
       counts[s.movement_pattern] = (counts[s.movement_pattern] || 0) + 1;
     });
     return counts;
-  }, [taxaFilteredSpecies, selectedCategories, selectedCountries, selectedYearRanges, selectedObsRanges, selectedSystems, selectedPopulationTrends, selectedThreats, selectedCriteria, matchesSearch, matchesAssessorsFilter, matchesReviewersFilter, endemicsOnly, matchesObsRangeFilter, matchesYearRangeFilter, selectedGrowthForms, selectedAssessmentYears, matchesAssessmentYearFilter]);
+  }, [taxaFilteredSpecies, selectedCategories, selectedCountries, selectedYearRanges, selectedObsRanges, selectedSystems, selectedPopulationTrends, selectedThreats, selectedCriteria, matchesHabitatFilter, matchesSearch, matchesAssessorsFilter, matchesReviewersFilter, endemicsOnly, matchesObsRangeFilter, matchesYearRangeFilter, selectedGrowthForms, selectedAssessmentYears, matchesAssessmentYearFilter]);
 
   // Threat counts: apply all filters EXCEPT threats (count species per prefix, deduplicated)
   // Threat counts per code, plus the denominator (`threatTotal`) for percentages:
@@ -1772,6 +1911,7 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
       if (selectedMovementPatterns.size > 0 && (!s.movement_pattern || !selectedMovementPatterns.has(s.movement_pattern))) return;
       if (selectedCriteria.size > 0 && !parseCriteriaCodes(s.criteria).some(code => Array.from(selectedCriteria).some(sel => code === sel || code.startsWith(sel)))) return;
       if (!matchesAssessorsFilter(s)) return;
+      if (!matchesHabitatFilter(s)) return;
       if (!matchesReviewersFilter(s)) return;
       total++;
       if (!s.threat_codes?.length) return;
@@ -1789,7 +1929,7 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
       }
     });
     return { threatCounts: counts, threatTotal: total };
-  }, [taxaFilteredSpecies, selectedCategories, selectedCountries, selectedYearRanges, selectedObsRanges, selectedSystems, selectedPopulationTrends, selectedMovementPatterns, selectedCriteria, matchesSearch, matchesAssessorsFilter, matchesReviewersFilter, matchesObsRangeFilter, matchesYearRangeFilter, selectedAssessmentYears, matchesAssessmentYearFilter]);
+  }, [taxaFilteredSpecies, selectedCategories, selectedCountries, selectedYearRanges, selectedObsRanges, selectedSystems, selectedPopulationTrends, selectedMovementPatterns, selectedCriteria, matchesHabitatFilter, matchesSearch, matchesAssessorsFilter, matchesReviewersFilter, matchesObsRangeFilter, matchesYearRangeFilter, selectedAssessmentYears, matchesAssessmentYearFilter]);
 
   // Criteria counts: apply all filters EXCEPT criteria (count species per code — at every
   // depth: letter, number, sub-clause, roman numeral — deduplicated per species) — mirrors
@@ -1812,6 +1952,7 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
       if (selectedMovementPatterns.size > 0 && (!s.movement_pattern || !selectedMovementPatterns.has(s.movement_pattern))) return;
       if (selectedThreats.size > 0 && !s.threat_codes?.some(tc => Array.from(selectedThreats).some(sel => tc === sel || tc.startsWith(sel + ".")))) return;
       if (!matchesAssessorsFilter(s)) return;
+      if (!matchesHabitatFilter(s)) return;
       if (!matchesReviewersFilter(s)) return;
       const codes = parseCriteriaCodes(s.criteria);
       const letters = new Set(codes.map(c => c[0]));
@@ -1821,7 +1962,46 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
       for (const letter of letters) counts[letter] = (counts[letter] || 0) + 1;
     });
     return counts;
-  }, [taxaFilteredSpecies, selectedCategories, selectedCountries, selectedYearRanges, selectedObsRanges, selectedSystems, selectedPopulationTrends, selectedMovementPatterns, selectedThreats, matchesSearch, matchesAssessorsFilter, matchesReviewersFilter, matchesObsRangeFilter, matchesYearRangeFilter, selectedAssessmentYears, matchesAssessmentYearFilter]);
+  }, [taxaFilteredSpecies, selectedCategories, selectedCountries, selectedYearRanges, selectedObsRanges, selectedSystems, selectedPopulationTrends, selectedMovementPatterns, selectedThreats, matchesHabitatFilter, matchesSearch, matchesAssessorsFilter, matchesReviewersFilter, matchesObsRangeFilter, matchesYearRangeFilter, selectedAssessmentYears, matchesAssessmentYearFilter]);
+
+  // Habitat counts: apply all filters EXCEPT habitat (all 4 dimensions — code
+  // selection, specialists/major/resident toggles — so the drill-down counts and
+  // toggle buttons show what WOULD match if clicked, not what already does).
+  // Distinct codes per species are prefix-counted the same way threatCounts does
+  // (both are "." hierarchical), deduplicated so a species with both "1.1" and
+  // "1.2" only counts once toward top-level "1".
+  const habitatCounts = useMemo(() => {
+    const counts: Record<string, number> = {};
+    taxaFilteredSpecies.forEach(s => {
+      if (!matchesSearch(s)) return;
+      if (selectedCategories.size > 0 && !selectedCategories.has(s.category)) return;
+      if (selectedCountries.size > 0 && !s.countries.some(c => selectedCountries.has(c))) return;
+      if (s.category !== "NE" && selectedYearRanges.size > 0 && !matchesYearRangeFilter(s.assessment_date, selectedYearRanges)) return;
+      if (s.category !== "NE" && selectedAssessmentYears.size > 0 && !matchesAssessmentYearFilter(s.assessment_date, selectedAssessmentYears)) return;
+      if (selectedObsRanges.size > 0 && !matchesObsRangeFilter(s.gbif_occurrence_count, selectedObsRanges)) return;
+      if (selectedSystems.size > 0 && !s.systems?.some(sys => selectedSystems.has(sys))) return;
+      if (selectedPopulationTrends.size > 0 && (!s.population_trend || !selectedPopulationTrends.has(s.population_trend))) return;
+      if (selectedMovementPatterns.size > 0 && (!s.movement_pattern || !selectedMovementPatterns.has(s.movement_pattern))) return;
+      if (selectedThreats.size > 0 && !s.threat_codes?.some(tc => Array.from(selectedThreats).some(sel => tc === sel || tc.startsWith(sel + ".")))) return;
+      if (selectedCriteria.size > 0 && !parseCriteriaCodes(s.criteria).some(code => Array.from(selectedCriteria).some(sel => code === sel || code.startsWith(sel)))) return;
+      if (!matchesAssessorsFilter(s)) return;
+      if (!matchesReviewersFilter(s)) return;
+      const codes = Array.from(new Set(parseHabitatEntries(s.habitat_codes).map(e => e.code)));
+      if (codes.length === 0) return;
+      const counted = new Set<string>();
+      for (const code of codes) {
+        const parts = code.split(".");
+        for (let i = 1; i <= parts.length; i++) {
+          const prefix = parts.slice(0, i).join(".");
+          if (!counted.has(prefix)) {
+            counted.add(prefix);
+            counts[prefix] = (counts[prefix] || 0) + 1;
+          }
+        }
+      }
+    });
+    return counts;
+  }, [taxaFilteredSpecies, selectedCategories, selectedCountries, selectedYearRanges, selectedObsRanges, selectedSystems, selectedPopulationTrends, selectedMovementPatterns, selectedThreats, selectedCriteria, matchesSearch, matchesAssessorsFilter, matchesReviewersFilter, matchesObsRangeFilter, matchesYearRangeFilter, selectedAssessmentYears, matchesAssessmentYearFilter]);
 
   // Handle region filter — select all countries in the chosen region
   const handleRegionFilter = useCallback((region: string) => {
@@ -1847,6 +2027,7 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
       if (selectedMovementPatterns.size > 0 && (!s.movement_pattern || !selectedMovementPatterns.has(s.movement_pattern))) return;
       if (selectedThreats.size > 0 && !s.threat_codes?.some(tc => Array.from(selectedThreats).some(sel => tc === sel || tc.startsWith(sel + ".")))) return;
       if (selectedCriteria.size > 0 && !parseCriteriaCodes(s.criteria).some(code => Array.from(selectedCriteria).some(sel => code === sel || code.startsWith(sel)))) return;
+      if (!matchesHabitatFilter(s)) return;
       if (endemicsOnly && s.countries.length !== 1) return;
       if (selectedGrowthForms.size > 0 && !s.growth_forms?.some(gf => selectedGrowthForms.has(gf))) return;
       if (!matchesReviewersFilter(s)) return;
@@ -1862,7 +2043,7 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
         count,
         label: count.toLocaleString(),
       }));
-  }, [taxaFilteredSpecies, selectedCategories, selectedCountries, selectedYearRanges, selectedObsRanges, selectedSystems, selectedPopulationTrends, selectedMovementPatterns, selectedThreats, selectedCriteria, endemicsOnly, selectedGrowthForms, matchesSearch, matchesReviewersFilter, getSpeciesAssessors, matchesObsRangeFilter, matchesYearRangeFilter, selectedAssessmentYears, matchesAssessmentYearFilter]);
+  }, [taxaFilteredSpecies, selectedCategories, selectedCountries, selectedYearRanges, selectedObsRanges, selectedSystems, selectedPopulationTrends, selectedMovementPatterns, selectedThreats, selectedCriteria, matchesHabitatFilter, endemicsOnly, selectedGrowthForms, matchesSearch, matchesReviewersFilter, getSpeciesAssessors, matchesObsRangeFilter, matchesYearRangeFilter, selectedAssessmentYears, matchesAssessmentYearFilter]);
 
   // Reviewer chart: apply all filters EXCEPT reviewers (include assessors)
   const reviewerChartData = useMemo(() => {
@@ -1882,6 +2063,7 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
       if (endemicsOnly && s.countries.length !== 1) return;
       if (selectedGrowthForms.size > 0 && !s.growth_forms?.some(gf => selectedGrowthForms.has(gf))) return;
       if (!matchesAssessorsFilter(s)) return;
+      if (!matchesHabitatFilter(s)) return;
       const reviewers = getSpeciesReviewers(s);
       for (const r of reviewers) {
         counts[r] = (counts[r] || 0) + 1;
@@ -1894,7 +2076,7 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
         count,
         label: count.toLocaleString(),
       }));
-  }, [taxaFilteredSpecies, selectedCategories, selectedCountries, selectedYearRanges, selectedObsRanges, selectedSystems, selectedPopulationTrends, selectedMovementPatterns, selectedThreats, selectedCriteria, endemicsOnly, selectedGrowthForms, matchesSearch, matchesAssessorsFilter, getSpeciesReviewers, matchesObsRangeFilter, matchesYearRangeFilter, selectedAssessmentYears, matchesAssessmentYearFilter]);
+  }, [taxaFilteredSpecies, selectedCategories, selectedCountries, selectedYearRanges, selectedObsRanges, selectedSystems, selectedPopulationTrends, selectedMovementPatterns, selectedThreats, selectedCriteria, matchesHabitatFilter, endemicsOnly, selectedGrowthForms, matchesSearch, matchesAssessorsFilter, getSpeciesReviewers, matchesObsRangeFilter, matchesYearRangeFilter, selectedAssessmentYears, matchesAssessmentYearFilter]);
 
   // ── Client-side filtering and sorting ──────────────────────────────
   const { filteredSpecies, sortedSpecies } = useMemo(() => {
@@ -1913,6 +2095,7 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
       const matchesMovement = selectedMovementPatterns.size === 0 || (s.movement_pattern != null && selectedMovementPatterns.has(s.movement_pattern));
       const matchesThreat = selectedThreats.size === 0 || s.threat_codes?.some(tc => Array.from(selectedThreats).some(sel => tc === sel || tc.startsWith(sel + ".")));
       const matchesCriteria = selectedCriteria.size === 0 || parseCriteriaCodes(s.criteria).some(code => Array.from(selectedCriteria).some(sel => code === sel || code.startsWith(sel)));
+      const matchesHabitat = matchesHabitatFilter(s);
       const matchesEndemic = !endemicsOnly || s.countries.length === 1;
       const matchesGrowth = selectedGrowthForms.size === 0 || s.growth_forms?.some(gf => selectedGrowthForms.has(gf));
       const matchesSearch =
@@ -1923,7 +2106,7 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
       const matchesReviewer = matchesReviewersFilter(s);
       const pinnedKey = isNewAssessments ? Math.abs(s.id) : s.sis_taxon_id;
       const matchesStarred = !showOnlyStarred || (pinnedKey != null && pinnedSet.has(pinnedKey));
-      return matchesCategory && matchesYear && matchesDescribed && matchesObs && matchesCountry && matchesSystem && matchesTrend && matchesMovement && matchesThreat && matchesCriteria && matchesEndemic && matchesGrowth && matchesSearch && matchesAssessor && matchesReviewer && matchesStarred;
+      return matchesCategory && matchesYear && matchesDescribed && matchesObs && matchesCountry && matchesSystem && matchesTrend && matchesMovement && matchesThreat && matchesCriteria && matchesHabitat && matchesEndemic && matchesGrowth && matchesSearch && matchesAssessor && matchesReviewer && matchesStarred;
     });
 
     const sorted = [...filtered].sort((a, b) => {
@@ -1975,7 +2158,7 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
     });
 
     return { filteredSpecies: filtered, sortedSpecies: sorted };
-  }, [taxaFilteredSpecies, selectedCategories, selectedCountries, selectedSystems, selectedPopulationTrends, selectedMovementPatterns, selectedThreats, selectedCriteria, endemicsOnly, selectedGrowthForms, searchFilter, showOnlyStarred, pinnedSet, pinnedSpecies, sortField, sortDirection, matchesAssessorsFilter, matchesReviewersFilter, isNewAssessments, matchesObsRangeFilter, matchesYearRangeFilter, matchesAssessmentYearFilter, matchesDescribedYearFilter]);
+  }, [taxaFilteredSpecies, selectedCategories, selectedCountries, selectedSystems, selectedPopulationTrends, selectedMovementPatterns, selectedThreats, selectedCriteria, matchesHabitatFilter, endemicsOnly, selectedGrowthForms, searchFilter, showOnlyStarred, pinnedSet, pinnedSpecies, sortField, sortDirection, matchesAssessorsFilter, matchesReviewersFilter, isNewAssessments, matchesObsRangeFilter, matchesYearRangeFilter, matchesAssessmentYearFilter, matchesDescribedYearFilter]);
 
   // Giant aggregates (insects, invertebrates…) are capped at 400k server-side; surface
   // a banner so the list reads as "showing N of M — drill into a sub-group for the rest".
@@ -2546,6 +2729,10 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
     && selectedMovementPatterns.size === 0
     && selectedThreats.size === 0
     && selectedCriteria.size === 0
+    && selectedHabitat.size === 0
+    && !habitatSpecialistsOnly
+    && !habitatMajorOnly
+    && !habitatResidentOnly
     && selectedGrowthForms.size === 0
     && selectedAssessors.size === 0
     && selectedReviewers.size === 0
@@ -2865,6 +3052,126 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
             </>
           ) : (
             <div className="h-full flex items-center justify-center"><span className="text-sm text-zinc-400 dark:text-zinc-500">No threat data</span></div>
+          )}
+        </div>
+      </div>
+    );
+  })();
+
+  // Habitat card — same bar-chart + 2-level drill-down pattern as threatsCard
+  // above (18 top-level categories is a similar scale to threats' 12, so a bar
+  // chart with counts reads better here than Criteria's small pill set). Three
+  // toggle buttons in the header (mirroring Conservation Status's "Threatened"
+  // button) cover the issue's "specialists"/"major vs minor"/"resident vs"
+  // asks — kept as simple independent booleans rather than a second Set-based
+  // multi-select dimension, since each is a binary refinement, not a category.
+  const habitatCard = (() => {
+    const habitatLabelToCode = new Map(HABITAT_CATEGORIES.map(c => [c.label, c.code]));
+    const habitatBarData = HABITAT_CATEGORIES
+      .map(({ code, label }) => ({ code: label, habitatCode: code, count: habitatCounts[code] ?? 0, label: (habitatCounts[code] ?? 0).toLocaleString() }))
+      .filter(d => d.count > 0)
+      .sort((a, b) => b.count - a.count);
+    const selectedHabitatLabels = new Set(
+      Array.from(selectedHabitat).map(code => HABITAT_CATEGORIES.find(c => c.code === code)?.label).filter(Boolean) as string[]
+    );
+    const drillCat = expandedHabitat ? HABITAT_CATEGORIES.find(c => c.code === expandedHabitat) ?? null : null;
+    const drillSubData = drillCat
+      ? drillCat.children
+          .map(child => ({ code: child.label, habitatCode: child.code, count: habitatCounts[child.code] ?? 0, label: (habitatCounts[child.code] ?? 0).toLocaleString() }))
+          .filter(d => d.count > 0)
+          .sort((a, b) => b.count - a.count)
+      : [];
+    const isDrilled = drillCat !== null && drillSubData.length > 0;
+    const drillSelectedSubLabels = drillCat ? new Set(
+      Array.from(selectedHabitat).map(code => drillCat.children.find(c => c.code === code)?.label).filter(Boolean) as string[]
+    ) : new Set<string>();
+    const HABITAT_AREA_HEIGHT = 266;
+    const chartHeight = Math.max(200, habitatBarData.length * 18 + 30);
+    const loading = speciesLoading && assessedSpecies.length === 0;
+    const toggleClass = (active: boolean) => `px-2 py-0.5 text-xs font-semibold rounded transition-colors ${
+      active ? "bg-teal-600 text-white shadow-sm" : "bg-zinc-100 dark:bg-zinc-800 text-zinc-500 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-300"
+    }`;
+    return (
+      <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-3 flex flex-col">
+        <div className="flex items-center justify-between mb-1 min-h-[24px] flex-wrap gap-1">
+          <span className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">Habitat</span>
+          <div className="flex items-center gap-1">
+            <button type="button" onClick={() => setHabitatSpecialistsOnly(!habitatSpecialistsOnly)} className={toggleClass(habitatSpecialistsOnly)} aria-pressed={habitatSpecialistsOnly} title="Species recorded in exactly one habitat type">Specialists</button>
+            <button type="button" onClick={() => setHabitatMajorOnly(!habitatMajorOnly)} className={toggleClass(habitatMajorOnly)} aria-pressed={habitatMajorOnly} title="At least one habitat of major importance to the species">Major</button>
+            <button type="button" onClick={() => setHabitatResidentOnly(!habitatResidentOnly)} className={toggleClass(habitatResidentOnly)} aria-pressed={habitatResidentOnly} title="At least one habitat occupied year-round (Resident), not just seasonally">Resident</button>
+          </div>
+        </div>
+        <div style={{ height: HABITAT_AREA_HEIGHT }} className="flex flex-col overflow-hidden">
+          {loading ? (
+            <div className="h-full flex items-center justify-center"><Spinner /></div>
+          ) : habitatBarData.length > 0 ? (
+            <>
+              <div className="flex-1 min-h-0 overflow-y-auto">
+                <div style={{ height: chartHeight }}>
+                  <FilterBarChart
+                    data={habitatBarData}
+                    dataKey="code"
+                    selectedItems={selectedHabitatLabels}
+                    onBarClick={(data: { payload?: { code?: string; habitatCode?: string } }, event: React.MouseEvent) => {
+                      const label = data.payload?.code;
+                      const code = label ? habitatLabelToCode.get(label) : undefined;
+                      if (!code) return;
+                      const isMulti = event.metaKey || event.ctrlKey;
+                      setSelectedHabitat(prev => {
+                        if (isMulti) { const next = new Set(prev); if (next.has(code)) next.delete(code); else next.add(code); return next; }
+                        if (prev.size === 1 && prev.has(code)) return new Set();
+                        return new Set([code]);
+                      });
+                      setExpandedHabitat(prev => prev === code ? null : code);
+                    }}
+                    barColor="#0d9488"
+                    yAxisWidth={155}
+                    rightMargin={80}
+                    yAxisTickMaxLength={22}
+                  />
+                </div>
+              </div>
+              {isDrilled && (
+                <div className="shrink-0 mt-2 pt-2 border-t border-zinc-200 dark:border-zinc-800 flex flex-col" style={{ maxHeight: "50%" }}>
+                  <div className="flex items-center justify-between mb-1">
+                    <span className="text-xs font-medium text-zinc-500 dark:text-zinc-400 truncate">{drillCat!.label}</span>
+                    <button
+                      onClick={() => setExpandedHabitat(null)}
+                      className="shrink-0 text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300 transition-colors"
+                      aria-label="Close sub-habitats"
+                    >
+                      <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+                    </button>
+                  </div>
+                  <div className="min-h-0 overflow-y-auto">
+                    <div style={{ height: Math.max(80, drillSubData.length * 18 + 30) }}>
+                      <FilterBarChart
+                        data={drillSubData}
+                        dataKey="code"
+                        selectedItems={drillSelectedSubLabels}
+                        onBarClick={(data: { payload?: { code?: string } }, event: React.MouseEvent) => {
+                          const label = data.payload?.code;
+                          const child = drillCat!.children.find(c => c.label === label);
+                          if (!child) return;
+                          const isMulti = event.metaKey || event.ctrlKey;
+                          setSelectedHabitat(prev => {
+                            if (isMulti) { const next = new Set(prev); if (next.has(child.code)) next.delete(child.code); else next.add(child.code); return next; }
+                            if (prev.size === 1 && prev.has(child.code)) return new Set();
+                            return new Set([child.code]);
+                          });
+                        }}
+                        barColor="#5eead4"
+                        yAxisWidth={170}
+                        rightMargin={80}
+                        yAxisTickMaxLength={24}
+                      />
+                    </div>
+                  </div>
+                </div>
+              )}
+            </>
+          ) : (
+            <div className="h-full flex items-center justify-center"><span className="text-sm text-zinc-400 dark:text-zinc-500">No habitat data</span></div>
           )}
         </div>
       </div>
@@ -3438,21 +3745,22 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
               </svg>
               More Filters
-              {(selectedSystems.size + selectedGrowthForms.size + selectedPopulationTrends.size + selectedMovementPatterns.size + selectedThreats.size + selectedCriteria.size + selectedCountries.size + (endemicsOnly ? 1 : 0) > 0) && (
+              {(selectedSystems.size + selectedGrowthForms.size + selectedPopulationTrends.size + selectedMovementPatterns.size + selectedThreats.size + selectedCriteria.size + selectedHabitat.size + (habitatSpecialistsOnly ? 1 : 0) + (habitatMajorOnly ? 1 : 0) + (habitatResidentOnly ? 1 : 0) + selectedCountries.size + (endemicsOnly ? 1 : 0) > 0) && (
                 <span className="ml-1 px-1.5 py-0.5 text-[10px] rounded-full bg-zinc-200 dark:bg-zinc-700 text-zinc-600 dark:text-zinc-300">
-                  {selectedSystems.size + selectedGrowthForms.size + selectedPopulationTrends.size + selectedMovementPatterns.size + selectedThreats.size + selectedCriteria.size + selectedCountries.size + (endemicsOnly ? 1 : 0)} active
+                  {selectedSystems.size + selectedGrowthForms.size + selectedPopulationTrends.size + selectedMovementPatterns.size + selectedThreats.size + selectedCriteria.size + selectedHabitat.size + (habitatSpecialistsOnly ? 1 : 0) + (habitatMajorOnly ? 1 : 0) + (habitatResidentOnly ? 1 : 0) + selectedCountries.size + (endemicsOnly ? 1 : 0)} active
                 </span>
               )}
             </button>
             {moreFiltersOpen && (
               <div className="px-3 md:px-4 pb-3 md:pb-4 pt-3 md:pt-4 border-t border-zinc-200 dark:border-zinc-800 flex flex-col gap-3">
-                {/* Country map + Threats — moved here from the primary view (Charts row
-                    2) so that row stays focused on Conservation Status / Years Since
-                    Assessed / GBIF Records; these still filter live like
+                {/* Country map + Threats + Habitat — moved here from the primary view
+                    (Charts row 2) so that row stays focused on Conservation Status /
+                    Years Since Assessed / GBIF Records; these still filter live like
                     every other control on this page, just tucked a click away. */}
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                   {countryMapCard}
                   {threatsCard}
+                  {habitatCard}
                 </div>
 
                 {/* Growth Form (plants/fungi only) */}
@@ -3471,9 +3779,10 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
                     if (selectedPopulationTrends.size > 0 && (!s.population_trend || !selectedPopulationTrends.has(s.population_trend))) return;
                     if (selectedMovementPatterns.size > 0 && (!s.movement_pattern || !selectedMovementPatterns.has(s.movement_pattern))) return;
                     if (selectedThreats.size > 0 && !s.threat_codes?.some(tc => Array.from(selectedThreats).some(sel => tc === sel || tc.startsWith(sel + ".")))) return;
-      if (selectedCriteria.size > 0 && !parseCriteriaCodes(s.criteria).some(code => Array.from(selectedCriteria).some(sel => code === sel || code.startsWith(sel)))) return;
+                    if (selectedCriteria.size > 0 && !parseCriteriaCodes(s.criteria).some(code => Array.from(selectedCriteria).some(sel => code === sel || code.startsWith(sel)))) return;
                     if (endemicsOnly && s.countries.length !== 1) return;
                     if (!matchesAssessorsFilter(s)) return;
+                    if (!matchesHabitatFilter(s)) return;
                     if (!matchesReviewersFilter(s)) return;
                     for (const gf of s.growth_forms) {
                       gfCounts[gf] = (gfCounts[gf] || 0) + 1;
@@ -3725,13 +4034,14 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
               </svg>
             </div>
-            {(selectedTaxa.size > 0 || selectedSubgroups.size > 0 || selectedCategories.size > 0 || selectedYearRanges.size > 0 || selectedAssessmentYears.size > 0 || selectedDescribedYears.size > 0 || selectedObsRanges.size > 0 || selectedCountries.size > 0 || selectedSystems.size > 0 || endemicsOnly || selectedGrowthForms.size > 0 || selectedPopulationTrends.size > 0 || selectedMovementPatterns.size > 0 || selectedThreats.size > 0 || selectedCriteria.size > 0 || selectedAssessors.size > 0 || selectedReviewers.size > 0 || showOnlyStarred || exactFilters.outdated || exactFilters.minObs != null || exactFilters.maxObs != null || exactFilters.minAssessmentYear != null || exactFilters.maxAssessmentYear != null || exactFilters.minDescribedYear != null || exactFilters.maxDescribedYear != null) && (
+            {(selectedTaxa.size > 0 || selectedSubgroups.size > 0 || selectedCategories.size > 0 || selectedYearRanges.size > 0 || selectedAssessmentYears.size > 0 || selectedDescribedYears.size > 0 || selectedObsRanges.size > 0 || selectedCountries.size > 0 || selectedSystems.size > 0 || endemicsOnly || selectedGrowthForms.size > 0 || selectedPopulationTrends.size > 0 || selectedMovementPatterns.size > 0 || selectedThreats.size > 0 || selectedCriteria.size > 0 || selectedHabitat.size > 0 || habitatSpecialistsOnly || habitatMajorOnly || habitatResidentOnly || selectedAssessors.size > 0 || selectedReviewers.size > 0 || showOnlyStarred || exactFilters.outdated || exactFilters.minObs != null || exactFilters.maxObs != null || exactFilters.minAssessmentYear != null || exactFilters.maxAssessmentYear != null || exactFilters.minDescribedYear != null || exactFilters.maxDescribedYear != null) && (
               <button
                 onClick={() => {
                   clearAllFiltersAndTaxa();
                   setShowOnlyStarred(false);
                   setExpandedThreat(null);
                   setExpandedCriteria(new Set());
+                  setExpandedHabitat(null);
                 }}
                 title="Reset all filters and the selected taxon"
                 className="px-2 md:px-3 py-1.5 rounded-lg text-xs md:text-sm font-medium transition-colors flex items-center gap-1 md:gap-1.5 bg-white text-zinc-700 border border-zinc-200 hover:bg-zinc-50 dark:bg-zinc-800 dark:text-zinc-300 dark:border-zinc-700 shrink-0"
@@ -3943,6 +4253,48 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
                 </button>
               );
             })}
+            {Array.from(selectedHabitat).map(code => {
+              const cat = HABITAT_CATEGORIES.find(c => c.code === code);
+              const sub = !cat ? HABITAT_CATEGORIES.flatMap(c => c.children).find(c => c.code === code) : null;
+              const label = cat?.label || sub?.label || code;
+              return (
+                <button
+                  key={`habitat-${code}`}
+                  onClick={() => setSelectedHabitat(prev => { const next = new Set(prev); next.delete(code); return next; })}
+                  className="px-3 py-1.5 text-sm font-medium rounded-full bg-teal-100 text-teal-600 dark:bg-teal-900/30 dark:text-teal-400 flex items-center gap-1 hover:opacity-80"
+                >
+                  {label}
+                  <span className="text-sm">×</span>
+                </button>
+              );
+            })}
+            {habitatSpecialistsOnly && (
+              <button
+                onClick={() => setHabitatSpecialistsOnly(false)}
+                className="px-3 py-1.5 text-sm font-medium rounded-full bg-teal-100 text-teal-600 dark:bg-teal-900/30 dark:text-teal-400 flex items-center gap-1 hover:opacity-80"
+              >
+                Habitat specialists
+                <span className="text-sm">×</span>
+              </button>
+            )}
+            {habitatMajorOnly && (
+              <button
+                onClick={() => setHabitatMajorOnly(false)}
+                className="px-3 py-1.5 text-sm font-medium rounded-full bg-teal-100 text-teal-600 dark:bg-teal-900/30 dark:text-teal-400 flex items-center gap-1 hover:opacity-80"
+              >
+                Major habitat only
+                <span className="text-sm">×</span>
+              </button>
+            )}
+            {habitatResidentOnly && (
+              <button
+                onClick={() => setHabitatResidentOnly(false)}
+                className="px-3 py-1.5 text-sm font-medium rounded-full bg-teal-100 text-teal-600 dark:bg-teal-900/30 dark:text-teal-400 flex items-center gap-1 hover:opacity-80"
+              >
+                Resident only
+                <span className="text-sm">×</span>
+              </button>
+            )}
             {Array.from(selectedSystems).map(system => (
               <button
                 key={system}

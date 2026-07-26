@@ -39,6 +39,7 @@ function makeSpecies(overrides: Partial<RedlistSpecies> = {}): RedlistSpecies {
     possibly_extinct_in_the_wild: false,
     criteria: null,
     threat_codes: [],
+    habitat_codes: [],
     synonyms: [],
     ...overrides,
   };

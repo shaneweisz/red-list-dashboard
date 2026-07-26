@@ -68,7 +68,8 @@ const paramKey = (name: string, suffix: string): string => (suffix ? `${name}${s
 export const OWN_PARAM_NAMES = [
   "view", "layout", "origin", "countries", "region", "taxa", "subgroups",
   "categories", "years", "assessmentYears", "describedYears", "obsRanges",
-  "systems", "trends", "movement", "threats", "criteria", "bd", "endemics", "growthForms",
+  "systems", "trends", "movement", "threats", "criteria", "habitat", "habitatSpecialists",
+  "habitatMajor", "habitatResident", "bd", "endemics", "growthForms",
   "assessors", "reviewers", "search", "outdated", "minObs", "maxObs",
   "minAssessmentYear", "maxAssessmentYear", "minDescribedYear", "maxDescribedYear",
   "species", "tab", "sort", "dir", "mapview", "mapsort", "mapdir",
@@ -184,6 +185,17 @@ export function parseParams(search: string, suffix: string = "") {
     criteria: p.get(k("criteria"))
       ? new Set(p.get(k("criteria"))!.split(",").filter(Boolean))
       : new Set<string>(),
+    habitat: p.get(k("habitat"))
+      ? new Set(p.get(k("habitat"))!.split(",").filter(Boolean))
+      : new Set<string>(),
+    // Habitat-specialists: restrict to species with exactly one distinct habitat code.
+    habitatSpecialistsOnly: p.get(k("habitatSpecialists")) === "1",
+    // Habitat major-importance-only: restrict to species with at least one habitat
+    // entry flagged as of major importance (vs. marginal/unknown).
+    habitatMajorOnly: p.get(k("habitatMajor")) === "1",
+    // Habitat resident-only: restrict to species with at least one Resident-season
+    // habitat entry (vs. breeding/non-breeding/passage/unknown-only).
+    habitatResidentOnly: p.get(k("habitatResident")) === "1",
     breakdown: parseBreakdownParam(p, k("bd")),
     // Endemics-only: restrict to species occurring in exactly one country.
     endemicsOnly: p.get(k("endemics")) === "1",
@@ -245,6 +257,10 @@ export function buildQs(state: {
   movementPatterns: Set<string>;
   threats: Set<string>;
   criteria: Set<string>;
+  habitat: Set<string>;
+  habitatSpecialistsOnly: boolean;
+  habitatMajorOnly: boolean;
+  habitatResidentOnly: boolean;
   breakdown?: BreakdownParam | null;
   endemicsOnly: boolean;
   growthForms: Set<string>;
@@ -286,6 +302,10 @@ export function buildQs(state: {
   if (state.movementPatterns.size > 0) p.set(k("movement"), [...state.movementPatterns].join(","));
   if (state.threats.size > 0) p.set(k("threats"), [...state.threats].join(","));
   if (state.criteria.size > 0) p.set(k("criteria"), [...state.criteria].join(","));
+  if (state.habitat.size > 0) p.set(k("habitat"), [...state.habitat].join(","));
+  if (state.habitatSpecialistsOnly) p.set(k("habitatSpecialists"), "1");
+  if (state.habitatMajorOnly) p.set(k("habitatMajor"), "1");
+  if (state.habitatResidentOnly) p.set(k("habitatResident"), "1");
   if (state.breakdown) {
     let bd = `${state.breakdown.nodeId}:${state.breakdown.rank}:${state.breakdown.name}`;
     if (state.breakdown.onlyIds?.length) bd += `:only:${state.breakdown.onlyIds.join(",")}`;
@@ -667,6 +687,51 @@ export function useFilterParams(paramSuffix: string = "") {
     [syncUrl]
   );
 
+  const setSelectedHabitat = useCallback(
+    (updater: Set<string> | ((prev: Set<string>) => Set<string>)) => {
+      setState(prev => {
+        const nextVal = typeof updater === "function" ? updater(prev.habitat) : updater;
+        const next = { ...prev, habitat: nextVal };
+        queueMicrotask(() => syncUrl(next, false));
+        return next;
+      });
+    },
+    [syncUrl]
+  );
+
+  const setHabitatSpecialistsOnly = useCallback(
+    (value: boolean) => {
+      setState(prev => {
+        const next = { ...prev, habitatSpecialistsOnly: value };
+        queueMicrotask(() => syncUrl(next, false));
+        return next;
+      });
+    },
+    [syncUrl]
+  );
+
+  const setHabitatMajorOnly = useCallback(
+    (value: boolean) => {
+      setState(prev => {
+        const next = { ...prev, habitatMajorOnly: value };
+        queueMicrotask(() => syncUrl(next, false));
+        return next;
+      });
+    },
+    [syncUrl]
+  );
+
+  const setHabitatResidentOnly = useCallback(
+    (value: boolean) => {
+      setState(prev => {
+        const next = { ...prev, habitatResidentOnly: value };
+        queueMicrotask(() => syncUrl(next, false));
+        return next;
+      });
+    },
+    [syncUrl]
+  );
+
   const setSelectedGrowthForms = useCallback(
     (updater: Set<string> | ((prev: Set<string>) => Set<string>)) => {
       setState(prev => {
@@ -843,6 +908,10 @@ export function useFilterParams(paramSuffix: string = "") {
         movementPatterns: new Set<string>(),
         threats: new Set<string>(),
         criteria: new Set<string>(),
+        habitat: new Set<string>(),
+        habitatSpecialistsOnly: false,
+        habitatMajorOnly: false,
+        habitatResidentOnly: false,
         breakdown: null,
         endemicsOnly: false,
         growthForms: new Set<string>(),
@@ -877,6 +946,10 @@ export function useFilterParams(paramSuffix: string = "") {
         movementPatterns: new Set<string>(),
         threats: new Set<string>(),
         criteria: new Set<string>(),
+        habitat: new Set<string>(),
+        habitatSpecialistsOnly: false,
+        habitatMajorOnly: false,
+        habitatResidentOnly: false,
         breakdown: null,
         endemicsOnly: false,
         growthForms: new Set<string>(),
@@ -911,6 +984,10 @@ export function useFilterParams(paramSuffix: string = "") {
     selectedMovementPatterns: state.movementPatterns,
     selectedThreats: state.threats,
     selectedCriteria: state.criteria,
+    selectedHabitat: state.habitat,
+    habitatSpecialistsOnly: state.habitatSpecialistsOnly,
+    habitatMajorOnly: state.habitatMajorOnly,
+    habitatResidentOnly: state.habitatResidentOnly,
     breakdownFilter: state.breakdown,
     endemicsOnly: state.endemicsOnly,
     selectedGrowthForms: state.growthForms,
@@ -944,6 +1021,10 @@ export function useFilterParams(paramSuffix: string = "") {
     setSelectedMovementPatterns,
     setSelectedThreats,
     setSelectedCriteria,
+    setSelectedHabitat,
+    setHabitatSpecialistsOnly,
+    setHabitatMajorOnly,
+    setHabitatResidentOnly,
     setBreakdownFilter,
     setEndemicsOnly,
     setSelectedGrowthForms,
