@@ -3133,8 +3133,7 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
               <svg className={`w-3.5 h-3.5 transition-transform ${moreFiltersOpen ? "rotate-90" : ""}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
               </svg>
-              <span className="sm:hidden">More Filters</span>
-              <span className="hidden sm:inline">More Filters: Country, Threats, and more</span>
+              More Filters
               {(selectedSystems.size + selectedGrowthForms.size + selectedPopulationTrends.size + selectedMovementPatterns.size + selectedThreats.size + selectedCountries.size + (endemicsOnly ? 1 : 0) > 0) && (
                 <span className="ml-1 px-1.5 py-0.5 text-[10px] rounded-full bg-zinc-200 dark:bg-zinc-700 text-zinc-600 dark:text-zinc-300">
                   {selectedSystems.size + selectedGrowthForms.size + selectedPopulationTrends.size + selectedMovementPatterns.size + selectedThreats.size + selectedCountries.size + (endemicsOnly ? 1 : 0)} active
