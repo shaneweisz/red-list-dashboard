@@ -2743,7 +2743,7 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
                       : totalFiltered < taxaFilteredSpeciesBase.length ? (
                         <>
                           {totalFiltered.toLocaleString()}
-                          <span className="text-base font-normal text-zinc-400 dark:text-zinc-500"> matching filters of {taxaFilteredSpeciesBase.length.toLocaleString()} total</span>
+                          <span className="text-base font-normal text-zinc-400 dark:text-zinc-500"> matching filters, of {taxaFilteredSpeciesBase.length.toLocaleString()} total</span>
                         </>
                       ) : totalFiltered.toLocaleString()}
                   </div>
