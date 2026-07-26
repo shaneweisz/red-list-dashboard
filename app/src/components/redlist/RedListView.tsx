@@ -118,50 +118,166 @@ const THREAT_CATEGORIES: { code: string; label: string; children: { code: string
   ]},
 ];
 
-// IUCN Red List criteria (A-E) and their numbered sub-criteria — see
-// https://www.iucnredlist.org/resources/categories-and-criteria. Unlike
-// THREAT_CATEGORIES' children, "E" has none: it's a single quantitative-analysis
-// criterion with no sub-numbers.
-const CRITERIA_CATEGORIES: { code: string; label: string; children: { code: string; label: string }[] }[] = [
+interface CriteriaNode {
+  code: string;
+  label: string;
+  children: CriteriaNode[];
+}
+
+// Roman-numeral sub-items shared by B1b/B1c/B2b/B2c ("continuing decline in" /
+// "extreme fluctuations in" — same list of 5 parameters either way).
+const ROMAN_NUMERAL_LABELS: Record<string, string> = {
+  i: "extent of occurrence",
+  ii: "area of occupancy",
+  iii: "area, extent, and/or quality of habitat",
+  iv: "number of locations or subpopulations",
+  v: "number of mature individuals",
+};
+function romanChildren(prefix: string, numerals: readonly string[]): CriteriaNode[] {
+  return numerals.map(r => ({ code: `${prefix}(${r})`, label: `${prefix}(${r}) — ${ROMAN_NUMERAL_LABELS[r]}`, children: [] }));
+}
+const B_ROMANS = ["i", "ii", "iii", "iv", "v"] as const;
+function bSubclauses(num: string): CriteriaNode[] {
+  return [
+    { code: `B${num}a`, label: `B${num}a — Severely fragmented or few locations`, children: [] },
+    { code: `B${num}b`, label: `B${num}b — Continuing decline in`, children: romanChildren(`B${num}b`, B_ROMANS) },
+    { code: `B${num}c`, label: `B${num}c — Extreme fluctuations in`, children: romanChildren(`B${num}c`, B_ROMANS) },
+  ];
+}
+function aSubclauses(num: string): CriteriaNode[] {
+  return [
+    { code: `A${num}a`, label: `A${num}a — Direct observation`, children: [] },
+    { code: `A${num}b`, label: `A${num}b — Index of abundance`, children: [] },
+    { code: `A${num}c`, label: `A${num}c — Decline in area of occupancy, extent of occurrence, and/or habitat quality`, children: [] },
+    { code: `A${num}d`, label: `A${num}d — Levels of exploitation`, children: [] },
+    { code: `A${num}e`, label: `A${num}e — Effects of introduced taxa, hybridization, pathogens, pollutants, competitors, or parasites`, children: [] },
+  ];
+}
+
+// IUCN Red List criteria (A-E), their numbered sub-criteria (A1-A4/B1-B2/C1-C2/D1-D2/E),
+// and — where the framework defines them — the sub-clause letters and roman-numeral
+// qualifiers beneath those. Depth varies genuinely by branch, not just by how far someone
+// bothered to fill it in: A's a-e are evidence types with no further split; B1/B2's a/b/c
+// share one vocabulary, with only b/c carrying the 5 roman-numeral "declining/fluctuating
+// in ___" qualifiers; C1 and D1/D2/E have no sub-clauses at all; C2's a/b differ from B's
+// a/b/c entirely (population structure vs. extreme fluctuations), with only a(i)/a(ii)
+// going one level deeper. See https://www.iucnredlist.org/resources/categories-and-criteria.
+const CRITERIA_CATEGORIES: CriteriaNode[] = [
   { code: "A", label: "A — Population reduction", children: [
-    { code: "A1", label: "A1 — Past reduction, reversible & understood & ceased" },
-    { code: "A2", label: "A2 — Past reduction, may not be reversible" },
-    { code: "A3", label: "A3 — Future reduction projected" },
-    { code: "A4", label: "A4 — Reduction, past and future" },
+    { code: "A1", label: "A1 — Past reduction, reversible & understood & ceased", children: aSubclauses("1") },
+    { code: "A2", label: "A2 — Past reduction, may not be reversible", children: aSubclauses("2") },
+    { code: "A3", label: "A3 — Future reduction projected", children: aSubclauses("3") },
+    { code: "A4", label: "A4 — Reduction, past and future", children: aSubclauses("4") },
   ]},
   { code: "B", label: "B — Small range", children: [
-    { code: "B1", label: "B1 — Extent of occurrence" },
-    { code: "B2", label: "B2 — Area of occupancy" },
+    { code: "B1", label: "B1 — Extent of occurrence", children: bSubclauses("1") },
+    { code: "B2", label: "B2 — Area of occupancy", children: bSubclauses("2") },
   ]},
   { code: "C", label: "C — Small population & decline", children: [
-    { code: "C1", label: "C1 — Continuing decline (quantified rate)" },
-    { code: "C2", label: "C2 — Continuing decline (fragmented/fluctuating/subpopulations)" },
+    { code: "C1", label: "C1 — Continuing decline (quantified rate)", children: [] },
+    { code: "C2", label: "C2 — Continuing decline (fragmented/fluctuating/subpopulations)", children: [
+      { code: "C2a", label: "C2a — Population structure", children: [
+        { code: "C2a(i)", label: "C2a(i) — No subpopulation estimated to contain more than X mature individuals", children: [] },
+        { code: "C2a(ii)", label: "C2a(ii) — ~100% of individuals in one subpopulation", children: [] },
+      ]},
+      { code: "C2b", label: "C2b — Extreme fluctuations in number of mature individuals", children: [] },
+    ]},
   ]},
   { code: "D", label: "D — Very small or restricted population", children: [
-    { code: "D1", label: "D1 — Very small population" },
-    { code: "D2", label: "D2 — Restricted area of occupancy / very few locations" },
+    { code: "D1", label: "D1 — Very small population", children: [] },
+    { code: "D2", label: "D2 — Restricted area of occupancy / very few locations", children: [] },
   ]},
   { code: "E", label: "E — Quantitative analysis", children: [] },
 ];
 
-// Parses an IUCN criteria string (e.g. "B1ab(iii)+2ab(iii)", "A2acd+3cd", "D") into the
-// sub-criteria codes it satisfies (e.g. ["B1","B2"], ["A2","A3"], ["D"]). Top-level criteria
-// (A-E) are ";"-separated; a "+N" within one segment is IUCN shorthand for "also under
-// sub-criterion N of the same top-level letter" (e.g. "B1ab(iii)+2ab(iii)" = B1 and B2).
-// Bare letters with no trailing digit (D, E) are their own sub-criterion code.
+function findCriteriaNode(nodes: CriteriaNode[], code: string): CriteriaNode | null {
+  for (const node of nodes) {
+    if (node.code === code) return node;
+    const found = findCriteriaNode(node.children, code);
+    if (found) return found;
+  }
+  return null;
+}
+
+// Path of nodes from the root down to (and including) `code`, for rendering one pill
+// row per drilled-into level. Empty if `code` isn't in the tree (e.g. a raw-string
+// anomaly parseCriteriaCodes derived that doesn't match any defined node).
+function findCriteriaPath(nodes: CriteriaNode[], code: string): CriteriaNode[] {
+  for (const node of nodes) {
+    if (node.code === code) return [node];
+    const childPath = findCriteriaPath(node.children, code);
+    if (childPath.length > 0) return [node, ...childPath];
+  }
+  return [];
+}
+
+// Splits a criteria string on top-level "; " or ", " separators — real assessment data
+// uses both inconsistently (e.g. "B1+2c, D2" alongside "A3c; B2b(iii)") — without
+// splitting on commas *inside* a roman-numeral group like "(i,ii,iii)".
+function splitCriteriaTopLevel(criteria: string): string[] {
+  const segments: string[] = [];
+  let depth = 0;
+  let current = "";
+  for (const ch of criteria) {
+    if (ch === "(") depth++;
+    if (ch === ")") depth--;
+    if ((ch === ";" || ch === ",") && depth === 0) {
+      segments.push(current);
+      current = "";
+    } else {
+      current += ch;
+    }
+  }
+  if (current) segments.push(current);
+  return segments.map(s => s.trim()).filter(Boolean);
+}
+
+// Parses a raw IUCN criteria string into every code it satisfies, at every level: top
+// letter, number (B1), sub-clause (B1a), and roman-numeral qualifier (B1b(iii)). E.g.
+// "B1ab(iii)+2ab(iii)" -> ["B1","B1a","B1b","B1b(iii)","B2","B2a","B2b","B2b(iii)"].
+// Handles two real-world conventions for "+N" continuations (both seen in production
+// data): full repetition ("B1ab(iii)+2ab(iii)", sub-clauses spelled out for each number)
+// and B's compact form ("B1+2c", sub-clauses given once for the whole chain) — the
+// compact form is only safe to assume for B, since B1/B2 share one sub-clause vocabulary,
+// unlike e.g. C1/C2 which don't (so "C1+2a(i)" must NOT retroactively give C1 a sub-clause
+// it doesn't have).
 function parseCriteriaCodes(criteria: string | null | undefined): string[] {
   if (!criteria) return [];
   const codes = new Set<string>();
-  for (const segment of criteria.split(";")) {
-    const parts = segment.trim().split("+").map(p => p.trim()).filter(Boolean);
+  for (const segment of splitCriteriaTopLevel(criteria)) {
+    const parts = segment.split("+").map(p => p.trim()).filter(Boolean);
     if (parts.length === 0) continue;
-    const first = parts[0].match(/^([A-E])(\d*)/);
-    if (!first) continue;
-    const letter = first[1];
-    codes.add(letter + first[2]);
-    for (let i = 1; i < parts.length; i++) {
-      const cont = parts[i].match(/^(\d+)/);
-      if (cont) codes.add(letter + cont[1]);
+    let letter: string | null = null;
+    const parsed: { numberCode: string; rest: string }[] = [];
+    for (let i = 0; i < parts.length; i++) {
+      const part = parts[i];
+      const headMatch = i === 0 ? part.match(/^([A-E])(\d*)/) : part.match(/^(\d+)/);
+      if (!headMatch) { if (i === 0) break; else continue; }
+      if (i === 0) letter = headMatch[1];
+      if (!letter) continue;
+      const num = i === 0 ? headMatch[2] : headMatch[1];
+      parsed.push({ numberCode: letter + num, rest: part.slice(headMatch[0].length) });
+    }
+    if (letter === "B") {
+      const withRest = parsed.filter(p => p.rest !== "");
+      if (withRest.length === 1 && parsed.length > 1) {
+        const shared = withRest[0].rest;
+        for (const p of parsed) p.rest = shared;
+      }
+    }
+    for (const { numberCode, rest } of parsed) {
+      codes.add(numberCode);
+      const subRe = /([a-e])(?:\(([^)]*)\))?/g;
+      let sm: RegExpExecArray | null;
+      while ((sm = subRe.exec(rest)) !== null) {
+        const subCode = numberCode + sm[1];
+        codes.add(subCode);
+        if (sm[2]) {
+          for (const numeral of sm[2].split(",").map(x => x.trim()).filter(Boolean)) {
+            codes.add(`${subCode}(${numeral})`);
+          }
+        }
+      }
     }
   }
   return [...codes];
@@ -1678,13 +1794,13 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
     return { threatCounts: counts, threatTotal: total };
   }, [taxaFilteredSpecies, selectedCategories, selectedCountries, selectedYearRanges, selectedObsRanges, selectedSystems, selectedPopulationTrends, selectedMovementPatterns, selectedCriteria, matchesSearch, matchesAssessorsFilter, matchesReviewersFilter, matchesObsRangeFilter, matchesYearRangeFilter, selectedAssessmentYears, matchesAssessmentYearFilter]);
 
-  // Criteria counts: apply all filters EXCEPT criteria (count species per sub-criterion,
-  // deduplicated per species) — mirrors threatCounts/threatTotal above, but criteria codes
-  // have no "." hierarchy to expand: parseCriteriaCodes already returns the full set of
-  // sub-codes a species satisfies (e.g. ["B1","B2"]), and the top-level letter's count is
-  // just the sum of species having ANY sub-code under that letter (computed in the UI from
-  // this same map, not stored separately, to avoid double-counting a species under both a
-  // sub-code and its parent letter here).
+  // Criteria counts: apply all filters EXCEPT criteria (count species per code — at every
+  // depth: letter, number, sub-clause, roman numeral — deduplicated per species) — mirrors
+  // threatCounts/threatTotal above. parseCriteriaCodes already returns the full set of codes
+  // a species satisfies at every level (e.g. ["B1","B1a","B1b","B1b(iii)"]); the top-level
+  // letter's own count is derived separately here (via `letters`) rather than reusing a
+  // same-named code, since D/E's bare letter ("D") is otherwise indistinguishable from a
+  // "number" level entry and would double-count.
   const { criteriaCounts, criteriaTotal } = useMemo(() => {
     const counts: Record<string, number> = {};
     let total = 0;
@@ -2748,6 +2864,47 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
     );
   })();
 
+  // Renders one pill row for a level of the Criteria drill-down (top-level A-E, then
+  // number, sub-clause, or roman-numeral rows as the user drills deeper — see
+  // CRITERIA_CATEGORIES' doc comment for why the depth varies per branch). Clicking a
+  // pill always toggles it into/out of selectedCriteria (same single/multi-select
+  // pattern as every other filter chip); if it has children, it ALSO becomes the new
+  // expandedCriterion, revealing its children as the next row down — mirroring the
+  // Threats chart's category/sub-category drill-down, generalized to arbitrary depth.
+  const renderCriteriaRow = (nodes: CriteriaNode[], indent: boolean) => (
+    <div className={`flex flex-wrap gap-1.5 ${indent ? "pl-0 sm:pl-[88px]" : ""}`}>
+      {nodes.map(node => {
+        const isSelected = selectedCriteria.has(node.code);
+        const count = criteriaCounts[node.code] ?? 0;
+        if (count === 0 && !isSelected) return null;
+        return (
+          <button
+            key={node.code}
+            onClick={(e) => {
+              const isMulti = e.metaKey || e.ctrlKey;
+              setSelectedCriteria(prev => {
+                if (isMulti) { const next = new Set(prev); if (next.has(node.code)) next.delete(node.code); else next.add(node.code); return next; }
+                if (prev.size === 1 && prev.has(node.code)) return new Set();
+                return new Set([node.code]);
+              });
+              if (node.children.length > 0) setExpandedCriterion(prev => prev === node.code ? null : node.code);
+            }}
+            className={`px-2 py-1 text-xs rounded-full transition-colors cursor-pointer ${
+              isSelected
+                ? indent ? "bg-indigo-300 text-indigo-900 dark:bg-indigo-400 dark:text-indigo-950" : "bg-indigo-500 text-white"
+                : indent
+                  ? "bg-white text-zinc-600 border border-zinc-200 hover:bg-zinc-100 dark:bg-zinc-900 dark:text-zinc-400 dark:border-zinc-700 dark:hover:bg-zinc-800"
+                  : "bg-zinc-100 text-zinc-600 hover:bg-zinc-200 dark:bg-zinc-800 dark:text-zinc-400 dark:hover:bg-zinc-700"
+            }`}
+            title={node.label}
+          >
+            {node.code} ({count.toLocaleString()})
+          </button>
+        );
+      })}
+    </div>
+  );
+
   return (
     <div className="space-y-4 min-w-0 flex-1 flex flex-col min-h-0">
       {/* Always show Taxa Summary table */}
@@ -3431,80 +3588,25 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
                 </div>
 
                 {/* Criteria — top-level A-E pills; clicking one both selects it as a
-                    filter AND expands its numbered sub-criteria below (mirrors the
-                    Threats chart's category/sub-category drill-down, but as pills
-                    rather than a bar chart since there are only 5 possible top-level
-                    values). A species can satisfy multiple sub-criteria under the
-                    same letter (e.g. B1+B2), so selecting the bare letter matches
-                    any of them (see parseCriteriaCodes' startsWith-based matching). */}
+                    filter AND expands its next level below (number -> sub-clause ->
+                    roman numeral, as deep as that branch goes — mirrors the Threats
+                    chart's category/sub-category drill-down, generalized to arbitrary
+                    depth via renderCriteriaRow/findCriteriaPath since criteria nests
+                    up to 4 levels vs. threats' 2). A species can satisfy multiple
+                    codes under the same letter (e.g. B1+B2, or B1a and B1b together),
+                    so selecting any code matches species with that code OR a more
+                    specific one beneath it (see parseCriteriaCodes' startsWith-based
+                    matching). */}
                 {!isNewAssessments && (
                   <div className="flex flex-col gap-2 bg-zinc-50 dark:bg-zinc-800/50 border border-zinc-200 dark:border-zinc-700 rounded-lg px-3 py-2">
                     <div className="flex items-center gap-2">
                       <span className="text-sm font-semibold text-zinc-900 dark:text-zinc-100 shrink-0 w-20">Criteria</span>
-                      <div className="flex flex-wrap gap-1.5">
-                        {CRITERIA_CATEGORIES.map(cat => {
-                          const isSelected = selectedCriteria.has(cat.code);
-                          const count = criteriaCounts[cat.code] ?? 0;
-                          if (count === 0 && !isSelected) return null;
-                          return (
-                            <button
-                              key={cat.code}
-                              onClick={(e) => {
-                                const isMulti = e.metaKey || e.ctrlKey;
-                                setSelectedCriteria(prev => {
-                                  if (isMulti) { const next = new Set(prev); if (next.has(cat.code)) next.delete(cat.code); else next.add(cat.code); return next; }
-                                  if (prev.size === 1 && prev.has(cat.code)) return new Set();
-                                  return new Set([cat.code]);
-                                });
-                                setExpandedCriterion(prev => prev === cat.code ? null : cat.code);
-                              }}
-                              className={`px-2 py-1 text-xs rounded-full transition-colors cursor-pointer ${
-                                isSelected
-                                  ? "bg-indigo-500 text-white"
-                                  : "bg-zinc-100 text-zinc-600 hover:bg-zinc-200 dark:bg-zinc-800 dark:text-zinc-400 dark:hover:bg-zinc-700"
-                              }`}
-                              title={cat.label}
-                            >
-                              {cat.code} ({count.toLocaleString()})
-                            </button>
-                          );
-                        })}
-                      </div>
+                      {renderCriteriaRow(CRITERIA_CATEGORIES, false)}
                     </div>
-                    {(() => {
-                      const drillCat = expandedCriterion ? CRITERIA_CATEGORIES.find(c => c.code === expandedCriterion) : null;
-                      if (!drillCat || drillCat.children.length === 0) return null;
-                      return (
-                        <div className="pl-0 sm:pl-[88px] flex flex-wrap gap-1.5">
-                          {drillCat.children.map(child => {
-                            const isSelected = selectedCriteria.has(child.code);
-                            const count = criteriaCounts[child.code] ?? 0;
-                            if (count === 0 && !isSelected) return null;
-                            return (
-                              <button
-                                key={child.code}
-                                onClick={(e) => {
-                                  const isMulti = e.metaKey || e.ctrlKey;
-                                  setSelectedCriteria(prev => {
-                                    if (isMulti) { const next = new Set(prev); if (next.has(child.code)) next.delete(child.code); else next.add(child.code); return next; }
-                                    if (prev.size === 1 && prev.has(child.code)) return new Set();
-                                    return new Set([child.code]);
-                                  });
-                                }}
-                                className={`px-2 py-1 text-xs rounded-full transition-colors cursor-pointer ${
-                                  isSelected
-                                    ? "bg-indigo-300 text-indigo-900 dark:bg-indigo-400 dark:text-indigo-950"
-                                    : "bg-white text-zinc-600 border border-zinc-200 hover:bg-zinc-100 dark:bg-zinc-900 dark:text-zinc-400 dark:border-zinc-700 dark:hover:bg-zinc-800"
-                                }`}
-                                title={child.label}
-                              >
-                                {child.code} ({count.toLocaleString()})
-                              </button>
-                            );
-                          })}
-                        </div>
-                      );
-                    })()}
+                    {(expandedCriterion ? findCriteriaPath(CRITERIA_CATEGORIES, expandedCriterion) : [])
+                      .map(node => node.children.length > 0 && (
+                        <React.Fragment key={node.code}>{renderCriteriaRow(node.children, true)}</React.Fragment>
+                      ))}
                   </div>
                 )}
 
@@ -3780,9 +3882,7 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
               );
             })}
             {Array.from(selectedCriteria).map(code => {
-              const cat = CRITERIA_CATEGORIES.find(c => c.code === code);
-              const sub = !cat ? CRITERIA_CATEGORIES.flatMap(c => c.children).find(c => c.code === code) : null;
-              const label = cat?.label || sub?.label || code;
+              const label = findCriteriaNode(CRITERIA_CATEGORIES, code)?.label || code;
               return (
                 <button
                   key={`criteria-${code}`}
