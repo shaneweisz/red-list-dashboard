@@ -148,16 +148,14 @@ interface Props {
    * button can return to it. */
   layoutMode: "table1a" | "ssc" | "country" | null;
   onLayoutModeChange: (mode: "table1a" | "ssc" | "country" | null) => void;
-  /** Rendered in place of the taxa table when layoutMode === "country" — a
+  /** Rendered full width, always visible, when layoutMode === "country" — a
    * promoted WorldMap/CountryStatsList panel built by RedListView (which already
    * owns the country-stats data and click-through wiring), kept out of this
    * component so it doesn't need its own dynamic WorldMap import. */
   countryModeContent?: React.ReactNode;
-  /** Rendered above BOTH the map and the table in Country View — the current
-   * selection as removable name chips (built by RedListView, which owns the
-   * selection/hover state). Living above the whole grid rather than inside
-   * either column means neither the map nor the (zoomed) table ever resizes
-   * as chips are added/removed while hovering/locking/clearing countries. */
+  /** Rendered above the taxa table in Country View, once at least one country
+   * is selected — the current selection as removable name chips (built by
+   * RedListView, which owns the selection state). */
   countryPillsContent?: React.ReactNode;
   /** Set whenever at least one country is selected — independent of layoutMode,
    * so selecting countries anywhere (not just via the Country view landing page)
@@ -2836,46 +2834,23 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
       </div>,
       document.body
     )}
-    {/* Country view: map on the left half, taxa table on the right half.
-        The table always uses the plain 3-column style in this mode
-        (countryStyleColumns, derived from layoutMode — see its definition
-        above), whether or not a country is picked yet. The selected
-        country's identity shows as removable chips in a row of its own
-        ABOVE this whole grid — same grid-cols template so its columns line
-        up with the map/table below, but with the left (map) cell left
-        empty and the chips confined to the right (table) cell. min-h-
-        [34px] on that cell reserves the space unconditionally (a blank gap
-        before anything's hovered/selected), so it never grows *this* grid
-        below it into needing align-items: stretch to force the map's card
-        to match a taller table. Chips living inside either component
-        (tried both: atop just the table, floated over the map, enclosed in
-        the table's own card) always ended up needing some mechanism to
-        keep the map's card the same height as the table's — a separate row
-        above both sidesteps the problem entirely, since neither column's
-        own natural height is ever affected by how many chips are showing.
-        Uses `contents` to no-op this grouping entirely outside country
-        mode, rather than branching (and duplicating) the huge table JSX
-        below per mode. */}
+    {/* Country view: map-first. The map is always full width and is the only
+        thing shown until a country is actually clicked — no side-by-side
+        table, no hover preview (see RedListView's handleCountryDrilldown/
+        countryScope). Once countryScoped (at least one country locked in),
+        the chips row and then the taxa table appear full width below the
+        map, in that order. The table always uses the plain 3-column style in
+        this mode (countryStyleColumns, derived from layoutMode — see its
+        definition above). Uses `contents` to no-op the table wrapper
+        entirely outside country mode, rather than branching (and
+        duplicating) the huge table JSX below per mode. */}
     {countryMode && (
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-1.5">
-        <div aria-hidden="true" />
-        <div className="min-h-[34px]">{countryPillsContent}</div>
-      </div>
+      <div className="mb-4">{countryModeContent}</div>
     )}
-    <div className={countryMode ? "grid grid-cols-1 lg:grid-cols-2 gap-4 mb-4" : "contents"}>
-      {/* No extra wrapper here — WorldMap already renders its own card (bg/border/
-          padding); wrapping it again doubled up the box and, since neither div had
-          an explicit height, left the map's own h-full with nothing to fill,
-          which is why it didn't match the table's height. Grid's default
-          align-items: stretch now makes both columns match the taller one — no
-          artificial min-height on the map side, so the row settles at the
-          table's own natural content height instead of leaving dead space
-          below the last row. Even 1/2-1/2 split (col-span-1 each); the table's
-          own scrollRef box below is zoomed down to compensate for the narrower
-          column (was 2/3 width, now 1/2 — zoom-[.75] keeps everything, fonts
-          included, at the same proportions just smaller, rather than letting
-          columns get cramped or triggering horizontal scroll). */}
-      {countryMode && <div>{countryModeContent}</div>}
+    {countryMode && countryScoped && (
+      <div className="mb-1.5">{countryPillsContent}</div>
+    )}
+    <div className={countryMode ? (countryScoped ? "mb-4" : "hidden") : "contents"}>
       <div className={countryMode ? "min-w-0 flex flex-col h-full" : "contents"}>
         {/* No "country name atop the table" heading here anymore — a country
             scoped outside Country View now shows only as the normal removable
@@ -2886,10 +2861,10 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
             outside country mode — a contents element's own margin is dropped
             per spec, so space-y-4's margin-bottom on it silently no-ops,
             leaving zero visible gap before the charts/species-table block
-            below. Country mode already gets its gap from the real grid box's
+            below. Country mode already gets its gap from the real wrapper's
             own mb-4 (see the ternary a few lines up), so skip it here to avoid
             doubling up. */}
-        <div ref={scrollRef} className={`relative bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl overflow-x-auto ${countryMode ? "flex-1 [zoom:.75]" : "mb-4"}`}>
+        <div ref={scrollRef} className={`relative bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl overflow-x-auto ${countryMode ? "flex-1" : "mb-4"}`}>
           {/* Country-switch refetch indicator — see the loading-gate comment
               above renderRow's skeleton branch for why this doesn't blank the table. */}
           {loading && taxa.length > 0 && (
@@ -3354,7 +3329,7 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
     {perTaxa.length > 0 && selectedTaxa.size === 0 && (
       <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1.5 mt-1.5">
         <span className="hidden sm:inline pl-3 md:pl-4 text-xs text-zinc-400 dark:text-zinc-500">
-          {countryMode ? "Hover over a country, or click to lock it and multi-select." : "Click to filter, Cmd/Ctrl+click to multi-select."}
+          {countryMode ? "Click a country to view its species, Cmd/Ctrl+click to multi-select." : "Click to filter, Cmd/Ctrl+click to multi-select."}
         </span>
         <span className="inline-flex items-center gap-1.5 ml-auto pr-3 sm:pr-0">
           {/* Assessed/Not Evaluated toggle used to be paired here too, but it's

@@ -2311,38 +2311,22 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
   // each species once regardless of how many of these codes it matches (see
   // country-taxa-summary-duckdb.ts's countriesWhere), so there's no reason to
   // special-case region vs. multi-select here.
-  // Hover preview — separate from selectedCountries (the real, locked
-  // selection) so scanning the map with the mouse never itself writes to
-  // URL-synced state. Only consulted as a countryScope fallback below when
-  // nothing's actually locked yet; once selectedCountries is non-empty this
-  // is ignored entirely, matching "hover only works if no country is
-  // selected" (see handleCountryDrilldown/selectOnHover).
-  const [hoverPreviewCountry, setHoverPreviewCountry] = useState<string | null>(null);
+  const countryScope = selectedCountries.size > 0 ? [...selectedCountries] : null;
 
-  const countryScope = selectedCountries.size > 0 ? [...selectedCountries]
-    : hoverPreviewCountry ? [hoverPreviewCountry]
-    : null;
-
-  // Country view's own map/list select. Before anything's picked, hovering
-  // previews the table (see WorldMap's selectOnHover, gated below on
-  // selectedCountries.size === 0 so it stops once a country's locked in).
-  // The first click locks in a single country and switches off hover; every
-  // click after that toggles a country in/out of the selection, so you can
-  // build up a multi-select by clicking (no ctrl/cmd needed) — clicking the
-  // already-sole-selected country again clears back to the empty/hover state.
-  // ctrl/cmd-click still toggles directly even before anything's locked, for
-  // building a multi-select from scratch without an initial single pick.
-  // Routed through enterCountryDrilldown so the country change stays atomic
-  // with clearing taxa/subgroups (see its own comment).
+  // Country view's own map click select — click-only (no hover preview: the
+  // table only appears once a country is actually locked in, so scanning the
+  // map with the mouse never itself changes what's shown below it). The
+  // first click locks in a single country; every click after that toggles a
+  // country in/out of the selection, so you can build up a multi-select by
+  // clicking (no ctrl/cmd needed) — clicking the already-sole-selected
+  // country again clears back to the empty/map-only state. ctrl/cmd-click
+  // still toggles directly even before anything's locked, for building a
+  // multi-select from scratch without an initial single pick. Routed through
+  // enterCountryDrilldown so the country change stays atomic with clearing
+  // taxa/subgroups (see its own comment).
   const handleCountryDrilldown = useCallback(
     (code: string, _name: string, event: React.MouseEvent) => {
       const isMultiSelect = event.metaKey || event.ctrlKey;
-      // A real click always supersedes any leftover hover preview — without
-      // this, clearing a locked selection back to empty (self-toggle-off)
-      // would leave the table reading a stale hoverPreviewCountry from
-      // before the lock, since countryScope falls back to it whenever
-      // selectedCountries is empty (see its definition above).
-      setHoverPreviewCountry(null);
       enterCountryDrilldown(prev => {
         if (prev.size === 0 && !isMultiSelect) {
           return new Set([code]);
@@ -2392,8 +2376,6 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
     <WorldMap
       selectedCountries={selectedCountries}
       onCountrySelect={handleCountryDrilldown}
-      selectOnHover={selectedCountries.size === 0}
-      onCountryHover={setHoverPreviewCountry}
       precomputedStats={countryLandingStats ?? {}}
       selectedTaxa={selectedTaxa}
       speciesLabel={isNewAssessments ? "# Unassessed" : undefined}
@@ -2408,55 +2390,42 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
     />
   );
 
-  // Selection chips — rendered by TaxaSummary in a dedicated row of its own
-  // above BOTH the map and the table (aligned under the table's half via a
-  // matching grid template, with the map's half left blank), not inside
-  // either component, so neither one's own height is ever affected by how
-  // many chips are showing or whether they've wrapped to a second line.
-  // One chip per selected country (not collapsed into a region name,
+  // Selection chips — rendered by TaxaSummary in a dedicated row of its own,
+  // above the table, once at least one country is locked in (the table only
+  // mounts once something's selected — see TaxaSummary's countryScoped
+  // gate). One chip per selected country (not collapsed into a region name,
   // unlike the atop-table "France ×" chip elsewhere), each individually
-  // removable, plus "Clear all" once there's more than one.
-  // Before anything's locked, hovering shows its own preview chip (dashed,
-  // non-removable — there's nothing to remove yet, moving the mouse away
-  // already clears it) so the table's live hover-preview has a visual
-  // anchor. Reuses handleCountryDrilldown for removal — clicking a chip's ✕
-  // for a country that's already selected always toggles it off, whichever
-  // branch handleCountryDrilldown takes.
-  const countryPillsContent = (selectedCountries.size > 0 || hoverPreviewCountry) && (
+  // removable, plus "Clear all" once there's more than one. Reuses
+  // handleCountryDrilldown for removal — clicking a chip's ✕ for a country
+  // that's already selected always toggles it off, whichever branch
+  // handleCountryDrilldown takes.
+  const countryPillsContent = selectedCountries.size > 0 && (
     <div className="flex flex-wrap items-center gap-1.5">
-      {selectedCountries.size > 0 ? (
-        <>
-          {[...selectedCountries]
-            .map(code => ({ code, name: ALPHA2_TO_NAME[code] ?? code }))
-            .sort((a, b) => a.name.localeCompare(b.name))
-            .map(({ code, name }) => (
-              <span
-                key={code}
-                className="inline-flex items-center gap-1.5 pl-3 pr-1.5 py-1 rounded-full bg-zinc-100 dark:bg-zinc-800 text-sm text-zinc-700 dark:text-zinc-300 max-w-full"
-              >
-                <span className="truncate">{name}</span>
-                <button
-                  onClick={(e) => handleCountryDrilldown(code, name, e)}
-                  className="shrink-0 text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300 transition-colors"
-                  title={`Remove ${name}`}
-                >
-                  ✕
-                </button>
-              </span>
-            ))}
-          {selectedCountries.size > 1 && (
+      {[...selectedCountries]
+        .map(code => ({ code, name: ALPHA2_TO_NAME[code] ?? code }))
+        .sort((a, b) => a.name.localeCompare(b.name))
+        .map(({ code, name }) => (
+          <span
+            key={code}
+            className="inline-flex items-center gap-1.5 pl-3 pr-1.5 py-1 rounded-full bg-zinc-100 dark:bg-zinc-800 text-sm text-zinc-700 dark:text-zinc-300 max-w-full"
+          >
+            <span className="truncate">{name}</span>
             <button
-              onClick={() => { enterCountryDrilldown(new Set()); setHoverPreviewCountry(null); }}
-              className="text-sm text-zinc-400 dark:text-zinc-500 hover:text-zinc-600 dark:hover:text-zinc-300 underline transition-colors"
+              onClick={(e) => handleCountryDrilldown(code, name, e)}
+              className="shrink-0 text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300 transition-colors"
+              title={`Remove ${name}`}
             >
-              Clear all
+              ✕
             </button>
-          )}
-        </>
-      ) : (
-        <span className="inline-flex items-center pl-3 pr-3 py-1 rounded-full bg-white dark:bg-zinc-800 border border-dashed border-zinc-300 dark:border-zinc-600 text-sm text-zinc-500 dark:text-zinc-400 max-w-full">
-          <span className="truncate">{ALPHA2_TO_NAME[hoverPreviewCountry!] ?? hoverPreviewCountry}</span>
-        </span>
+          </span>
+        ))}
+      {selectedCountries.size > 1 && (
+        <button
+          onClick={() => enterCountryDrilldown(new Set())}
+          className="text-sm text-zinc-400 dark:text-zinc-500 hover:text-zinc-600 dark:hover:text-zinc-300 underline transition-colors"
+        >
+          Clear all
+        </button>
       )}
     </div>
   );
