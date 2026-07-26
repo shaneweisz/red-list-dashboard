@@ -955,6 +955,28 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
   const [habitatPage, setHabitatPage] = useState(0);
   const HABITAT_PAGE_SIZE = 10;
 
+  // Importance/Season dropdown-with-checkboxes menus in the Habitat card header
+  // (replacing a wall of individual toggle buttons — Exclude minor is a single
+  // checkbox, Season a multi-select list of all 5 IUCN values).
+  const [habitatImportanceMenuOpen, setHabitatImportanceMenuOpen] = useState(false);
+  const [habitatSeasonMenuOpen, setHabitatSeasonMenuOpen] = useState(false);
+  const habitatImportanceMenuRef = useRef<HTMLDivElement>(null);
+  const habitatSeasonMenuRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!habitatImportanceMenuOpen && !habitatSeasonMenuOpen) return;
+    const handler = (e: MouseEvent) => {
+      if (habitatImportanceMenuRef.current && !habitatImportanceMenuRef.current.contains(e.target as Node)) {
+        setHabitatImportanceMenuOpen(false);
+      }
+      if (habitatSeasonMenuRef.current && !habitatSeasonMenuRef.current.contains(e.target as Node)) {
+        setHabitatSeasonMenuOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [habitatImportanceMenuOpen, habitatSeasonMenuOpen]);
+
   // Stable callback for debounced search input
   const handleSearch = useCallback((value: string) => {
     setSearchFilter(value);
@@ -3130,30 +3152,74 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
           <span className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">Habitat</span>
           <div className="flex items-center flex-wrap gap-1 justify-end">
             <button type="button" onClick={() => setHabitatSpecialistsOnly(!habitatSpecialistsOnly)} className={toggleClass(habitatSpecialistsOnly)} aria-pressed={habitatSpecialistsOnly} title="Species recorded in exactly one habitat type">Specialists</button>
-            <button type="button" onClick={() => setHabitatExcludeMinor(!habitatExcludeMinor)} className={toggleClass(habitatExcludeMinor)} aria-pressed={habitatExcludeMinor} title="Exclude matches where the (selected, or any) habitat is confirmed not of major importance — entries with unrecorded importance are kept">Exclude minor</button>
-            <span className="w-px h-3.5 bg-zinc-200 dark:bg-zinc-700 mx-0.5" aria-hidden="true" />
-            {HABITAT_SEASON_OPTIONS.map(({ value, short }) => {
-              const isSelected = selectedHabitatSeasons.has(value);
-              return (
-                <button
-                  key={value}
-                  type="button"
-                  onClick={(e) => {
-                    const isMulti = e.metaKey || e.ctrlKey;
-                    setSelectedHabitatSeasons(prev => {
-                      if (isMulti) { const next = new Set(prev); if (next.has(value)) next.delete(value); else next.add(value); return next; }
-                      if (prev.size === 1 && prev.has(value)) return new Set();
-                      return new Set([value]);
-                    });
-                  }}
-                  className={toggleClass(isSelected)}
-                  aria-pressed={isSelected}
-                  title={value}
-                >
-                  {short}
-                </button>
-              );
-            })}
+
+            {/* Importance — a single "Exclude minor" checkbox in a dropdown
+                rather than its own always-visible button. */}
+            <div className="relative" ref={habitatImportanceMenuRef}>
+              <button
+                type="button"
+                onClick={() => { setHabitatImportanceMenuOpen(prev => !prev); setHabitatSeasonMenuOpen(false); }}
+                className={toggleClass(habitatExcludeMinor)}
+                aria-expanded={habitatImportanceMenuOpen}
+              >
+                Importance{habitatExcludeMinor ? " (1)" : ""} ▾
+              </button>
+              {habitatImportanceMenuOpen && (
+                <div className="absolute right-0 top-full mt-1 z-20 bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-lg shadow-lg py-1 w-56">
+                  <label className="flex items-start gap-2 px-3 py-1.5 text-xs text-zinc-700 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-700/50 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={habitatExcludeMinor}
+                      onChange={() => setHabitatExcludeMinor(!habitatExcludeMinor)}
+                      className="mt-0.5 rounded border-zinc-300 dark:border-zinc-600 text-teal-600 focus:ring-teal-500"
+                    />
+                    <span>
+                      Exclude minor
+                      <br />
+                      <span className="text-[10px] text-zinc-400 dark:text-zinc-500">
+                        Drops matches confirmed not of major importance (keeps unrecorded)
+                      </span>
+                    </span>
+                  </label>
+                </div>
+              )}
+            </div>
+
+            {/* Season — multi-select checkbox list in a dropdown, covering all
+                5 IUCN season values instead of one always-visible chip per value. */}
+            <div className="relative" ref={habitatSeasonMenuRef}>
+              <button
+                type="button"
+                onClick={() => { setHabitatSeasonMenuOpen(prev => !prev); setHabitatImportanceMenuOpen(false); }}
+                className={toggleClass(selectedHabitatSeasons.size > 0)}
+                aria-expanded={habitatSeasonMenuOpen}
+              >
+                Season{selectedHabitatSeasons.size > 0 ? ` (${selectedHabitatSeasons.size})` : ""} ▾
+              </button>
+              {habitatSeasonMenuOpen && (
+                <div className="absolute right-0 top-full mt-1 z-20 bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-lg shadow-lg py-1 w-48">
+                  {HABITAT_SEASON_OPTIONS.map(({ value, short }) => (
+                    <label
+                      key={value}
+                      className="flex items-center gap-2 px-3 py-1.5 text-xs text-zinc-700 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-700/50 cursor-pointer"
+                      title={value}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={selectedHabitatSeasons.has(value)}
+                        onChange={() => setSelectedHabitatSeasons(prev => {
+                          const next = new Set(prev);
+                          if (next.has(value)) next.delete(value); else next.add(value);
+                          return next;
+                        })}
+                        className="rounded border-zinc-300 dark:border-zinc-600 text-teal-600 focus:ring-teal-500"
+                      />
+                      {short}
+                    </label>
+                  ))}
+                </div>
+              )}
+            </div>
           </div>
         </div>
         <div style={{ height: HABITAT_AREA_HEIGHT }} className="flex flex-col overflow-hidden">
@@ -3829,13 +3895,84 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
             </button>
             {moreFiltersOpen && (
               <div className="px-3 md:px-4 pb-3 md:pb-4 pt-3 md:pt-4 border-t border-zinc-200 dark:border-zinc-800 flex flex-col gap-3">
-                {/* Country map + Threats — moved here from the primary view
+                {/* Country map (left) alongside Realm + Movement stacked in the
+                    right column (right) — moved here from the primary view
                     (Charts row 2) so that row stays focused on Conservation Status /
                     Years Since Assessed / GBIF Records; these still filter live like
-                    every other control on this page, just tucked a click away. */}
+                    every other control on this page, just tucked a click away. Realm
+                    and Movement are short single-row filters, so pairing them
+                    stacked against the taller map balances the row instead of
+                    leaving them squeezed into a third equal-width column. */}
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                   {countryMapCard}
-                  {threatsCard}
+                  <div className="flex flex-col gap-3">
+                    {/* Realm */}
+                    <div className="flex items-center gap-2 bg-zinc-50 dark:bg-zinc-800/50 border border-zinc-200 dark:border-zinc-700 rounded-lg px-3 py-2">
+                      <span className="text-sm font-semibold text-zinc-900 dark:text-zinc-100 shrink-0 w-20">Realm</span>
+                      <div className="flex flex-wrap gap-1.5">
+                        {(["Terrestrial", "Freshwater", "Marine"] as const).map(system => {
+                          const isSelected = selectedSystems.has(system);
+                          const count = realmCounts[system] ?? 0;
+                          return (
+                            <button
+                              key={system}
+                              onClick={(e) => {
+                                const isMulti = e.metaKey || e.ctrlKey;
+                                setSelectedSystems(prev => {
+                                  if (isMulti) { const next = new Set(prev); if (next.has(system)) next.delete(system); else next.add(system); return next; }
+                                  if (prev.size === 1 && prev.has(system)) return new Set();
+                                  return new Set([system]);
+                                });
+                              }}
+                              className={`px-2 py-1 text-xs rounded-full transition-colors cursor-pointer ${
+                                isSelected
+                                  ? system === "Terrestrial" ? "bg-amber-500 text-white"
+                                  : system === "Freshwater" ? "bg-cyan-500 text-white"
+                                  : "bg-blue-600 text-white"
+                                  : "bg-zinc-100 text-zinc-600 hover:bg-zinc-200 dark:bg-zinc-800 dark:text-zinc-400 dark:hover:bg-zinc-700"
+                              }`}
+                            >
+                              {system} ({count.toLocaleString()})
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+
+                    {/* Movement Patterns */}
+                    {!isNewAssessments && (
+                      <div className="flex items-center gap-2 bg-zinc-50 dark:bg-zinc-800/50 border border-zinc-200 dark:border-zinc-700 rounded-lg px-3 py-2">
+                        <span className="text-sm font-semibold text-zinc-900 dark:text-zinc-100 shrink-0 w-20">Movement</span>
+                          <div className="flex flex-wrap gap-1.5">
+                            {(["Full Migrant", "Altitudinal Migrant", "Nomadic", "Not a Migrant", "Unknown"] as const).map(pattern => {
+                              const isSelected = selectedMovementPatterns.has(pattern);
+                              const count = movementPatternCounts[pattern] ?? 0;
+                              if (count === 0) return null;
+                              return (
+                                <button
+                                  key={pattern}
+                                  onClick={(e) => {
+                                    const isMulti = e.metaKey || e.ctrlKey;
+                                    setSelectedMovementPatterns(prev => {
+                                      if (isMulti) { const next = new Set(prev); if (next.has(pattern)) next.delete(pattern); else next.add(pattern); return next; }
+                                      if (prev.size === 1 && prev.has(pattern)) return new Set();
+                                      return new Set([pattern]);
+                                    });
+                                  }}
+                                  className={`px-2 py-1 text-xs rounded-full transition-colors cursor-pointer ${
+                                    isSelected
+                                      ? "bg-teal-500 text-white"
+                                      : "bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400 hover:bg-zinc-200 dark:hover:bg-zinc-700"
+                                  }`}
+                                >
+                                  {pattern} ({count.toLocaleString()})
+                                </button>
+                              );
+                            })}
+                          </div>
+                      </div>
+                    )}
+                  </div>
                 </div>
 
                 {/* Growth Form (plants/fungi only) */}
@@ -3897,77 +4034,11 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
                   );
                 })()}
 
-                {/* Realm, Habitat, Movement — side by side as three columns rather
-                    than stacked rows, since each is a short, independent filter. */}
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                  {/* Realm */}
-                  <div className="flex items-center gap-2 bg-zinc-50 dark:bg-zinc-800/50 border border-zinc-200 dark:border-zinc-700 rounded-lg px-3 py-2">
-                    <span className="text-sm font-semibold text-zinc-900 dark:text-zinc-100 shrink-0 w-20">Realm</span>
-                    <div className="flex flex-wrap gap-1.5">
-                      {(["Terrestrial", "Freshwater", "Marine"] as const).map(system => {
-                        const isSelected = selectedSystems.has(system);
-                        const count = realmCounts[system] ?? 0;
-                        return (
-                          <button
-                            key={system}
-                            onClick={(e) => {
-                              const isMulti = e.metaKey || e.ctrlKey;
-                              setSelectedSystems(prev => {
-                                if (isMulti) { const next = new Set(prev); if (next.has(system)) next.delete(system); else next.add(system); return next; }
-                                if (prev.size === 1 && prev.has(system)) return new Set();
-                                return new Set([system]);
-                              });
-                            }}
-                            className={`px-2 py-1 text-xs rounded-full transition-colors cursor-pointer ${
-                              isSelected
-                                ? system === "Terrestrial" ? "bg-amber-500 text-white"
-                                : system === "Freshwater" ? "bg-cyan-500 text-white"
-                                : "bg-blue-600 text-white"
-                                : "bg-zinc-100 text-zinc-600 hover:bg-zinc-200 dark:bg-zinc-800 dark:text-zinc-400 dark:hover:bg-zinc-700"
-                            }`}
-                          >
-                            {system} ({count.toLocaleString()})
-                          </button>
-                        );
-                      })}
-                    </div>
-                  </div>
-
+                {/* Habitat, Threats — same bar-chart + drill-down scale, paired
+                    side by side. */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                   {habitatCard}
-
-                  {/* Movement Patterns */}
-                  {!isNewAssessments && (
-                    <div className="flex items-center gap-2 bg-zinc-50 dark:bg-zinc-800/50 border border-zinc-200 dark:border-zinc-700 rounded-lg px-3 py-2">
-                      <span className="text-sm font-semibold text-zinc-900 dark:text-zinc-100 shrink-0 w-20">Movement</span>
-                        <div className="flex flex-wrap gap-1.5">
-                          {(["Full Migrant", "Altitudinal Migrant", "Nomadic", "Not a Migrant", "Unknown"] as const).map(pattern => {
-                            const isSelected = selectedMovementPatterns.has(pattern);
-                            const count = movementPatternCounts[pattern] ?? 0;
-                            if (count === 0) return null;
-                            return (
-                              <button
-                                key={pattern}
-                                onClick={(e) => {
-                                  const isMulti = e.metaKey || e.ctrlKey;
-                                  setSelectedMovementPatterns(prev => {
-                                    if (isMulti) { const next = new Set(prev); if (next.has(pattern)) next.delete(pattern); else next.add(pattern); return next; }
-                                    if (prev.size === 1 && prev.has(pattern)) return new Set();
-                                    return new Set([pattern]);
-                                  });
-                                }}
-                                className={`px-2 py-1 text-xs rounded-full transition-colors cursor-pointer ${
-                                  isSelected
-                                    ? "bg-teal-500 text-white"
-                                    : "bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400 hover:bg-zinc-200 dark:hover:bg-zinc-700"
-                                }`}
-                              >
-                                {pattern} ({count.toLocaleString()})
-                              </button>
-                            );
-                          })}
-                        </div>
-                    </div>
-                  )}
+                  {threatsCard}
                 </div>
 
                 {/* Criteria and Trend, side by side. Criteria — top-level A-E pills;
