@@ -330,6 +330,25 @@ interface RedListViewProps {
 export default function RedListView({ viewMode = "reassessments", onViewModeChange, sharedTaxa, sharedSubgroups, onTaxaChange, onSubgroupsChange, paramSuffix = "" }: RedListViewProps = {}) {
   const isNewAssessments = viewMode === "new-assessments";
 
+  // The ">10 yrs old" outdated threshold is computed against this everywhere
+  // in this component (species filtering, the by-year chart, the map, the
+  // toggle's tooltip) instead of "today" — TaxaSummary's own table numbers
+  // (data/taxa-summary.json) are baked in at the last sync, not live, so
+  // computing "outdated" against today's wall-clock date here would drift
+  // further from the table's counts the longer it's been since the last
+  // rebuild. Falls back to isOutdated/outdatedCutoffDate's own `now =
+  // new Date()` default until this resolves (same fetch OutdatedInfoIcon
+  // in TaxaSummary.tsx already makes, kept independent rather than shared
+  // state since it's a one-off, cached-for-an-hour value either component
+  // can fetch on its own).
+  const [dataAsOf, setDataAsOf] = useState<Date | undefined>(undefined);
+  useEffect(() => {
+    fetch("/api/data-sync-date")
+      .then(res => (res.ok ? res.json() : null))
+      .then(data => { if (data?.dataAsOf) setDataAsOf(new Date(data.dataAsOf)); })
+      .catch(() => {});
+  }, []);
+
   // The species table scrolls horizontally on narrow screens, so an expanded
   // detail row's `<td colSpan>` is as wide as the (often off-screen) table, not
   // the viewport. Expose the scroll container's *visible* width as a CSS var so
@@ -853,8 +872,8 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
   const taxaFilteredSpecies = useMemo(() => {
     if (!exactFilters.outdated) return taxaFilteredSpeciesExceptOutdated;
     const wantOutdated = exactFilters.outdated === "yes";
-    return taxaFilteredSpeciesExceptOutdated.filter(s => isOutdated(s.assessment_date) === wantOutdated);
-  }, [taxaFilteredSpeciesExceptOutdated, exactFilters.outdated]);
+    return taxaFilteredSpeciesExceptOutdated.filter(s => isOutdated(s.assessment_date, dataAsOf) === wantOutdated);
+  }, [taxaFilteredSpeciesExceptOutdated, exactFilters.outdated, dataAsOf]);
 
   // Helper to check if species matches year range filter
   const matchesYearRangeFilter = useCallback((assessmentDate: string | null, yearRanges: Set<string> = selectedYearRanges): boolean => {
@@ -1433,7 +1452,7 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
       if (!matchesAssessorsFilter(s)) return;
       if (!matchesReviewersFilter(s)) return;
       // Gated on NE the same way the assessment-year filters above are, since NE species have no assessment.
-      const outdated = s.category !== "NE" && isOutdated(s.assessment_date);
+      const outdated = s.category !== "NE" && isOutdated(s.assessment_date, dataAsOf);
       s.countries.forEach(code => {
         counts[code] = (counts[code] || 0) + 1;
         if (outdated) outdatedCounts[code] = (outdatedCounts[code] || 0) + 1;
@@ -1453,7 +1472,7 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
       ])
     );
     return { countryCounts: counts, uniqueCountries: sorted, countryStatsForMap: statsForMap };
-  }, [taxaFilteredSpecies, selectedCategories, selectedYearRanges, selectedObsRanges, selectedSystems, selectedPopulationTrends, selectedMovementPatterns, selectedThreats, endemicsOnly, selectedGrowthForms, matchesSearch, matchesAssessorsFilter, matchesReviewersFilter, matchesObsRangeFilter, matchesYearRangeFilter, selectedAssessmentYears, matchesAssessmentYearFilter]);
+  }, [taxaFilteredSpecies, selectedCategories, selectedYearRanges, selectedObsRanges, selectedSystems, selectedPopulationTrends, selectedMovementPatterns, selectedThreats, endemicsOnly, selectedGrowthForms, matchesSearch, matchesAssessorsFilter, matchesReviewersFilter, matchesObsRangeFilter, matchesYearRangeFilter, selectedAssessmentYears, matchesAssessmentYearFilter, dataAsOf]);
 
   // True per-country totals — taxon/subgroup selection only, no other filters —
   // so the Country map tooltip can show "142 of 3,847 total" instead of just
@@ -1464,7 +1483,7 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
     const counts: Record<string, number> = {};
     const outdatedCounts: Record<string, number> = {};
     taxaFilteredSpeciesBase.forEach(s => {
-      const outdated = s.category !== "NE" && isOutdated(s.assessment_date);
+      const outdated = s.category !== "NE" && isOutdated(s.assessment_date, dataAsOf);
       s.countries.forEach(code => {
         counts[code] = (counts[code] || 0) + 1;
         if (outdated) outdatedCounts[code] = (outdatedCounts[code] || 0) + 1;
@@ -1476,7 +1495,7 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
         { occurrences: 0, species: count, outdated: outdatedCounts[code] || 0 }
       ])
     );
-  }, [taxaFilteredSpeciesBase]);
+  }, [taxaFilteredSpeciesBase, dataAsOf]);
 
   // Realm counts: apply all filters EXCEPT systems (for realm button tooltips)
   const realmCounts = useMemo(() => {
@@ -2100,7 +2119,7 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
   const assessmentYearSelectedItems = useMemo(() => {
     if (selectedAssessmentYears.size > 0) return selectedAssessmentYears;
     if (!exactFilters.outdated) return selectedAssessmentYears;
-    const cutoffYear = outdatedCutoffDate().getFullYear();
+    const cutoffYear = outdatedCutoffDate(dataAsOf).getFullYear();
     const wantOutdated = exactFilters.outdated === "yes";
     const matching = new Set<string>();
     assessmentYearsByYearData.forEach(d => {
@@ -2108,7 +2127,7 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
       if (isYearOutdated === wantOutdated) matching.add(d.code);
     });
     return matching;
-  }, [selectedAssessmentYears, exactFilters.outdated, assessmentYearsByYearData]);
+  }, [selectedAssessmentYears, exactFilters.outdated, assessmentYearsByYearData, dataAsOf]);
 
   // Handle year range bar click (Cmd/Ctrl+click for multi-select, regular click replaces)
   const handleYearClick = (data: { payload?: { range?: string } }, event: React.MouseEvent) => {
@@ -2315,25 +2334,40 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
 
   // Country view's own map click select — click-only (no hover preview: the
   // table only appears once a country is actually locked in, so scanning the
-  // map with the mouse never itself changes what's shown below it). The
-  // first click locks in a single country; every click after that toggles a
-  // country in/out of the selection, so you can build up a multi-select by
-  // clicking (no ctrl/cmd needed) — clicking the already-sole-selected
-  // country again clears back to the empty/map-only state. ctrl/cmd-click
-  // still toggles directly even before anything's locked, for building a
-  // multi-select from scratch without an initial single pick. Routed through
-  // enterCountryDrilldown so the country change stays atomic with clearing
-  // taxa/subgroups (see its own comment).
+  // map with the mouse never itself changes what's shown below it). A plain
+  // click always REPLACES the selection with just that country (clicking a
+  // second country swaps to it, it doesn't add to the first) — except
+  // clicking the already-sole-selected country again clears back to the
+  // empty/map-only state. Only ctrl/cmd-click builds a multi-select, toggling
+  // a country in/out of the set regardless of what's already selected.
+  // Routed through enterCountryDrilldown so the country change stays atomic
+  // with clearing taxa/subgroups (see its own comment).
   const handleCountryDrilldown = useCallback(
     (code: string, _name: string, event: React.MouseEvent) => {
       const isMultiSelect = event.metaKey || event.ctrlKey;
       enterCountryDrilldown(prev => {
-        if (prev.size === 0 && !isMultiSelect) {
-          return new Set([code]);
+        if (isMultiSelect) {
+          const next = new Set(prev);
+          if (next.has(code)) next.delete(code);
+          else next.add(code);
+          return next;
         }
+        if (prev.size === 1 && prev.has(code)) return new Set();
+        return new Set([code]);
+      });
+    },
+    [enterCountryDrilldown]
+  );
+
+  // Pill removal (✕ button / Clear all) always removes just that one country
+  // regardless of how many are selected — unlike a map click, it's never a
+  // "replace the whole selection" gesture, so it can't reuse
+  // handleCountryDrilldown's replace-on-plain-click semantics.
+  const handleCountryRemove = useCallback(
+    (code: string) => {
+      enterCountryDrilldown(prev => {
         const next = new Set(prev);
-        if (next.has(code)) next.delete(code);
-        else next.add(code);
+        next.delete(code);
         return next;
       });
     },
@@ -2404,10 +2438,8 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
   // mounts once something's selected — see TaxaSummary's countryScoped
   // gate). One chip per selected country (not collapsed into a region name,
   // unlike the atop-table "France ×" chip elsewhere), each individually
-  // removable, plus "Clear all" once there's more than one. Reuses
-  // handleCountryDrilldown for removal — clicking a chip's ✕ for a country
-  // that's already selected always toggles it off, whichever branch
-  // handleCountryDrilldown takes.
+  // removable via handleCountryRemove, plus "Clear all" once there's more
+  // than one.
   const countryPillsContent = selectedCountries.size > 0 && (
     <div className="flex flex-wrap items-center gap-1.5">
       {[...selectedCountries]
@@ -2420,7 +2452,7 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
           >
             <span className="truncate">{name}</span>
             <button
-              onClick={(e) => handleCountryDrilldown(code, name, e)}
+              onClick={() => handleCountryRemove(code)}
               className="shrink-0 text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300 transition-colors"
               title={`Remove ${name}`}
             >
@@ -2728,7 +2760,7 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
                           : "bg-zinc-100 dark:bg-zinc-800 text-zinc-500 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-300"
                       }`}
                       aria-pressed={isOutdatedSelected}
-                      title={`Filter to species last assessed before ${outdatedCutoffDate().toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })}`}
+                      title={`Filter to species last assessed before ${outdatedCutoffDate(dataAsOf).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })}`}
                     >
                       Outdated
                     </button>
@@ -3917,7 +3949,7 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
                                 : "—"}
                             </span>
                           </HoverTooltip>
-                          {yearsSinceAssessment !== null && isOutdated(s.assessment_date) && (
+                          {yearsSinceAssessment !== null && isOutdated(s.assessment_date, dataAsOf) && (
                             <span className="ml-1 text-xs text-amber-600">({yearsSinceAssessment}y ago)</span>
                           )}
                         </>

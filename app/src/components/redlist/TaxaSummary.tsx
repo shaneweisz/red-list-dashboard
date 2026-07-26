@@ -18,7 +18,6 @@ import { TAXONOMY_VIEWS } from "@/config/taxonomy-views";
 import { IUCN_SOURCE_URL } from "@/config/taxonomy-tree";
 import { isLiveDrilldownNode, nextDynamicRank, isDynamicNodeId, dynamicNodeDisplayName, dynamicNodeFilter, dynamicNodeRankInfo, parseDynamicNodeId } from "@/lib/dynamic-taxon";
 import type { RedListSpecies } from "@/hooks/useRedListSpeciesQuery";
-import { outdatedCutoffDate } from "@/lib/outdated";
 
 // See scripts/build-taxa-summary.ts's classifyNoMatch for what each reason means.
 // Modular/additive on top of colBreakdown[].noMatchIds — safe to drop independently
@@ -189,14 +188,13 @@ const getAssessedBarColor = (percent: number) =>
 const getOutdatedBarColor = (percent: number) =>
   percent < 20 ? "#22c55e" : percent <= 50 ? "#f97316" : "#ef4444";
 
-// Info icon for the "# Outdated" header: states the exact rolling cutoff date
-// (today minus 10 years) so the ">10 yrs old" threshold isn't just an abstract rule.
-// This column's counts come from the static data/taxa-summary.json build
-// artifact (see README § Data Sync Pipeline), computed as of the last data
-// sync — not live, unlike the rest of the dashboard. So the cutoff date shown
-// here must be anchored to that sync date, not "today": otherwise, the longer
-// it's been since the last rebuild, the more the displayed cutoff would drift
-// from the one actually used to compute the count next to it.
+// Info icon for the "# Outdated" header. This column's counts come from the
+// static data/taxa-summary.json build artifact (see README § Data Sync
+// Pipeline), computed as of the last data sync — not live, unlike the rest
+// of the dashboard — so the tooltip states that sync date directly rather
+// than a cutoff derived from "today", which would drift from the date
+// actually used to compute the count next to it the longer it's been since
+// the last rebuild.
 function OutdatedInfoIcon() {
   const [dataAsOf, setDataAsOf] = useState<Date | null>(null);
   useEffect(() => {
@@ -206,7 +204,6 @@ function OutdatedInfoIcon() {
       .catch(() => {});
   }, []);
   const dateFormat = { day: "numeric", month: "short", year: "numeric" } as const;
-  const cutoffLabel = outdatedCutoffDate(dataAsOf ?? undefined).toLocaleDateString("en-GB", dateFormat);
   return (
     <span className="relative group normal-case font-normal">
       <FaInfoCircle size={11} className="text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300" />
@@ -215,8 +212,8 @@ function OutdatedInfoIcon() {
           (right), since this header sits at the right edge of the table. */}
       <span className="absolute top-full right-0 mt-2 px-2 py-1 text-xs text-white bg-zinc-800 dark:bg-zinc-700 rounded whitespace-nowrap opacity-0 invisible group-hover:opacity-100 group-hover:visible z-50 shadow-lg">
         {dataAsOf
-          ? <>Not assessed since {cutoffLabel} (Last sync date: {dataAsOf.toLocaleDateString("en-GB", dateFormat)})</>
-          : <>Not assessed since {cutoffLabel}</>}
+          ? <>As of last sync date: {dataAsOf.toLocaleDateString("en-GB", dateFormat)}</>
+          : <>As of last sync date</>}
       </span>
     </span>
   );
@@ -2699,36 +2696,36 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
       </div>,
       document.body
     )}
-    {/* Country view: map-first. The map is always full width and is the only
-        thing shown until a country is actually clicked — no side-by-side
-        table, no hover preview (see RedListView's handleCountryDrilldown/
-        countryScope). Once countryScoped (at least one country locked in),
-        the chips row and then the taxa table appear full width below the
-        map, in that order. The table always uses the plain 3-column style in
-        this mode (countryStyleColumns, derived from layoutMode — see its
-        definition above). Uses `contents` to no-op the table wrapper
+    {/* Country view: map-only landing until a country's actually picked (no
+        hover preview — see RedListView's handleCountryDrilldown/countryScope),
+        THEN side-by-side map/table, same half-half layout this had before
+        the map-first rework. Uses `contents` to no-op the table wrapper
         entirely outside country mode, rather than branching (and
         duplicating) the huge table JSX below per mode.
-        Before anything's picked, the map grows to fill the rest of the
-        viewport (flex-1, via the flex chain from page.tsx's <main> through
-        RedListView's root down to here) so it reads as a full-height
-        landing map rather than a small box sitting above empty space — on a
-        13" laptop screen that leaves just the footer's first line visible
-        without scrolling. WorldMap's own root is already `h-full flex
-        flex-col` for exactly this. The map keeps that same size once a
-        country's picked and the table appears below it — flex-1 alone
-        would shrink it back down there (the table's own natural height
-        competes for the same slack, and flex-grow has nothing left to give
-        once the page already needs to scroll), so min-h-[55vh] is a floor
-        that holds it steady regardless of what's below; the table then
-        just extends the page rather than the map giving up room to it. */}
-    {countryMode && (
-      <div className="flex flex-col flex-1 min-h-[55vh] mb-4">{countryModeContent}</div>
+        Landing (not countryScoped): the map is full width AND grows to fill
+        the rest of the viewport (flex-1 min-h-0, via the flex chain from
+        page.tsx's <main> through RedListView's root down to here) so it
+        reads as a full-height landing map rather than a small box sitting
+        above empty space — on a 13" laptop screen that leaves just the
+        footer's first line visible without scrolling. WorldMap's own root
+        is already `h-full flex flex-col` for exactly this.
+        Scoped: map moves into the left half of a 2-col grid, table into the
+        right half — grid's default align-items: stretch matches the map's
+        height to the table's own natural content height (no flex-1 needed
+        here), same as before this rework. The table's own scrollRef box
+        below is zoomed down (zoom-[.75]) to compensate for the narrower
+        (1/2, was 2/3) column. */}
+    {countryMode && !countryScoped && (
+      <div className="flex flex-col flex-1 min-h-0 mb-4">{countryModeContent}</div>
     )}
     {countryMode && countryScoped && (
-      <div className="mb-1.5">{countryPillsContent}</div>
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-1.5">
+        <div aria-hidden="true" />
+        <div>{countryPillsContent}</div>
+      </div>
     )}
-    <div className={countryMode ? (countryScoped ? "mb-4" : "hidden") : "contents"}>
+    <div className={countryMode ? (countryScoped ? "grid grid-cols-1 lg:grid-cols-2 gap-4 mb-4" : "hidden") : "contents"}>
+      {countryMode && countryScoped && <div>{countryModeContent}</div>}
       <div className={countryMode ? "min-w-0 flex flex-col h-full" : "contents"}>
         {/* No "country name atop the table" heading here anymore — a country
             scoped outside Country View now shows only as the normal removable
@@ -2739,10 +2736,10 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
             outside country mode — a contents element's own margin is dropped
             per spec, so space-y-4's margin-bottom on it silently no-ops,
             leaving zero visible gap before the charts/species-table block
-            below. Country mode already gets its gap from the real wrapper's
+            below. Country mode already gets its gap from the real grid box's
             own mb-4 (see the ternary a few lines up), so skip it here to avoid
             doubling up. */}
-        <div ref={scrollRef} className={`relative bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl overflow-x-auto ${countryMode ? "flex-1" : "mb-4"}`}>
+        <div ref={scrollRef} className={`relative bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl overflow-x-auto ${countryMode ? "flex-1 [zoom:.75]" : "mb-4"}`}>
           {/* Country-switch refetch indicator — see the loading-gate comment
               above renderRow's skeleton branch for why this doesn't blank the table. */}
           {loading && taxa.length > 0 && (
