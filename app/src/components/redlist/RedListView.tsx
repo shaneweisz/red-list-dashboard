@@ -199,18 +199,6 @@ function findCriteriaNode(nodes: CriteriaNode[], code: string): CriteriaNode | n
   return null;
 }
 
-// Path of nodes from the root down to (and including) `code`, for rendering one pill
-// row per drilled-into level. Empty if `code` isn't in the tree (e.g. a raw-string
-// anomaly parseCriteriaCodes derived that doesn't match any defined node).
-function findCriteriaPath(nodes: CriteriaNode[], code: string): CriteriaNode[] {
-  for (const node of nodes) {
-    if (node.code === code) return [node];
-    const childPath = findCriteriaPath(node.children, code);
-    if (childPath.length > 0) return [node, ...childPath];
-  }
-  return [];
-}
-
 // Splits a criteria string on top-level "; " or ", " separators — real assessment data
 // uses both inconsistently (e.g. "B1+2c, D2" alongside "A3c; B2b(iii)") — without
 // splitting on commas *inside* a roman-numeral group like "(i,ii,iii)".
@@ -667,7 +655,7 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
     setSelectedThreats(new Set());
     setExpandedThreat(null);
     setSelectedCriteria(new Set());
-    setExpandedCriterion(null);
+    setExpandedCriteria(new Set());
     setEndemicsOnly(false);
     setSelectedGrowthForms(new Set());
     setSelectedAssessors(new Set());
@@ -678,7 +666,7 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
     if (viewMode === "new-assessments") {
       setSelectedTaxa(prev => prev.has("all") ? new Set<string>() : prev);
     }
-  }, [viewMode, setSelectedTaxa, setSelectedCategories, setSelectedYearRanges, setSelectedAssessmentYears, setSelectedDescribedYears, setSelectedCountries, setSelectedObsRanges, setSelectedSystems, setSelectedPopulationTrends, setSelectedMovementPatterns, setSelectedThreats, setEndemicsOnly, setSelectedGrowthForms, setSelectedAssessors, setSelectedReviewers, setSort]);
+  }, [viewMode, setSelectedTaxa, setSelectedCategories, setSelectedYearRanges, setSelectedAssessmentYears, setSelectedDescribedYears, setSelectedCountries, setSelectedObsRanges, setSelectedSystems, setSelectedPopulationTrends, setSelectedMovementPatterns, setSelectedThreats, setSelectedCriteria, setEndemicsOnly, setSelectedGrowthForms, setSelectedAssessors, setSelectedReviewers, setSort]);
 
   // Taxon toggle handler (used by TaxaSummary)
   // Regular click: select only that taxon (or deselect if already sole selection)
@@ -807,17 +795,26 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
     if (!stillSelected) setExpandedThreat(null);
   }, [selectedThreats, expandedThreat]);
 
-  const [expandedCriterion, setExpandedCriterion] = useState<string | null>(null);
+  // Set, not a single string, so multiple branches can be drilled into and stay open
+  // at once (e.g. B1b AND C2a both expanded simultaneously) — needed for proper
+  // multi-select across branches; a single "last expanded" value would collapse
+  // whichever branch you weren't currently clicking in.
+  const [expandedCriteria, setExpandedCriteria] = useState<Set<string>>(new Set());
 
-  // Mirrors the threats drill-down effect above: collapse the sub-criteria pane
-  // once its top-level letter is no longer represented in the selection.
+  // Mirrors the threats drill-down effect above: collapse each expanded branch once
+  // it's no longer represented in the selection (independently — clearing one
+  // branch's selection doesn't touch another still-selected branch's expansion).
   useEffect(() => {
-    if (!expandedCriterion) return;
-    const stillSelected = Array.from(selectedCriteria).some(
-      c => c === expandedCriterion || c.startsWith(expandedCriterion)
-    );
-    if (!stillSelected) setExpandedCriterion(null);
-  }, [selectedCriteria, expandedCriterion]);
+    setExpandedCriteria(prev => {
+      let changed = false;
+      const next = new Set(prev);
+      for (const ec of prev) {
+        const stillSelected = Array.from(selectedCriteria).some(c => c === ec || c.startsWith(ec));
+        if (!stillSelected) { next.delete(ec); changed = true; }
+      }
+      return changed ? next : prev;
+    });
+  }, [selectedCriteria]);
 
   // Stable callback for debounced search input
   const handleSearch = useCallback((value: string) => {
@@ -1801,9 +1798,8 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
   // letter's own count is derived separately here (via `letters`) rather than reusing a
   // same-named code, since D/E's bare letter ("D") is otherwise indistinguishable from a
   // "number" level entry and would double-count.
-  const { criteriaCounts, criteriaTotal } = useMemo(() => {
+  const criteriaCounts = useMemo(() => {
     const counts: Record<string, number> = {};
-    let total = 0;
     taxaFilteredSpecies.forEach(s => {
       if (!matchesSearch(s)) return;
       if (selectedCategories.size > 0 && !selectedCategories.has(s.category)) return;
@@ -1817,7 +1813,6 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
       if (selectedThreats.size > 0 && !s.threat_codes?.some(tc => Array.from(selectedThreats).some(sel => tc === sel || tc.startsWith(sel + ".")))) return;
       if (!matchesAssessorsFilter(s)) return;
       if (!matchesReviewersFilter(s)) return;
-      total++;
       const codes = parseCriteriaCodes(s.criteria);
       const letters = new Set(codes.map(c => c[0]));
       // Bare-letter codes (D, E — no trailing digit) ARE the top-level letter, so
@@ -1825,7 +1820,7 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
       for (const code of codes) if (code.length > 1) counts[code] = (counts[code] || 0) + 1;
       for (const letter of letters) counts[letter] = (counts[letter] || 0) + 1;
     });
-    return { criteriaCounts: counts, criteriaTotal: total };
+    return counts;
   }, [taxaFilteredSpecies, selectedCategories, selectedCountries, selectedYearRanges, selectedObsRanges, selectedSystems, selectedPopulationTrends, selectedMovementPatterns, selectedThreats, matchesSearch, matchesAssessorsFilter, matchesReviewersFilter, matchesObsRangeFilter, matchesYearRangeFilter, selectedAssessmentYears, matchesAssessmentYearFilter]);
 
   // Handle region filter — select all countries in the chosen region
@@ -1848,6 +1843,12 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
       if (s.category !== "NE" && selectedAssessmentYears.size > 0 && !matchesAssessmentYearFilter(s.assessment_date, selectedAssessmentYears)) return;
       if (selectedObsRanges.size > 0 && !matchesObsRangeFilter(s.gbif_occurrence_count, selectedObsRanges)) return;
       if (selectedSystems.size > 0 && !s.systems?.some(sys => selectedSystems.has(sys))) return;
+      if (selectedPopulationTrends.size > 0 && (!s.population_trend || !selectedPopulationTrends.has(s.population_trend))) return;
+      if (selectedMovementPatterns.size > 0 && (!s.movement_pattern || !selectedMovementPatterns.has(s.movement_pattern))) return;
+      if (selectedThreats.size > 0 && !s.threat_codes?.some(tc => Array.from(selectedThreats).some(sel => tc === sel || tc.startsWith(sel + ".")))) return;
+      if (selectedCriteria.size > 0 && !parseCriteriaCodes(s.criteria).some(code => Array.from(selectedCriteria).some(sel => code === sel || code.startsWith(sel)))) return;
+      if (endemicsOnly && s.countries.length !== 1) return;
+      if (selectedGrowthForms.size > 0 && !s.growth_forms?.some(gf => selectedGrowthForms.has(gf))) return;
       if (!matchesReviewersFilter(s)) return;
       const assessors = getSpeciesAssessors(s);
       for (const a of assessors) {
@@ -1861,7 +1862,7 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
         count,
         label: count.toLocaleString(),
       }));
-  }, [taxaFilteredSpecies, selectedCategories, selectedCountries, selectedYearRanges, selectedObsRanges, selectedSystems, matchesSearch, matchesReviewersFilter, getSpeciesAssessors, matchesObsRangeFilter, matchesYearRangeFilter, selectedAssessmentYears, matchesAssessmentYearFilter]);
+  }, [taxaFilteredSpecies, selectedCategories, selectedCountries, selectedYearRanges, selectedObsRanges, selectedSystems, selectedPopulationTrends, selectedMovementPatterns, selectedThreats, selectedCriteria, endemicsOnly, selectedGrowthForms, matchesSearch, matchesReviewersFilter, getSpeciesAssessors, matchesObsRangeFilter, matchesYearRangeFilter, selectedAssessmentYears, matchesAssessmentYearFilter]);
 
   // Reviewer chart: apply all filters EXCEPT reviewers (include assessors)
   const reviewerChartData = useMemo(() => {
@@ -1874,6 +1875,12 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
       if (s.category !== "NE" && selectedAssessmentYears.size > 0 && !matchesAssessmentYearFilter(s.assessment_date, selectedAssessmentYears)) return;
       if (selectedObsRanges.size > 0 && !matchesObsRangeFilter(s.gbif_occurrence_count, selectedObsRanges)) return;
       if (selectedSystems.size > 0 && !s.systems?.some(sys => selectedSystems.has(sys))) return;
+      if (selectedPopulationTrends.size > 0 && (!s.population_trend || !selectedPopulationTrends.has(s.population_trend))) return;
+      if (selectedMovementPatterns.size > 0 && (!s.movement_pattern || !selectedMovementPatterns.has(s.movement_pattern))) return;
+      if (selectedThreats.size > 0 && !s.threat_codes?.some(tc => Array.from(selectedThreats).some(sel => tc === sel || tc.startsWith(sel + ".")))) return;
+      if (selectedCriteria.size > 0 && !parseCriteriaCodes(s.criteria).some(code => Array.from(selectedCriteria).some(sel => code === sel || code.startsWith(sel)))) return;
+      if (endemicsOnly && s.countries.length !== 1) return;
+      if (selectedGrowthForms.size > 0 && !s.growth_forms?.some(gf => selectedGrowthForms.has(gf))) return;
       if (!matchesAssessorsFilter(s)) return;
       const reviewers = getSpeciesReviewers(s);
       for (const r of reviewers) {
@@ -1887,7 +1894,7 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
         count,
         label: count.toLocaleString(),
       }));
-  }, [taxaFilteredSpecies, selectedCategories, selectedCountries, selectedYearRanges, selectedObsRanges, selectedSystems, matchesSearch, matchesAssessorsFilter, getSpeciesReviewers, matchesObsRangeFilter, matchesYearRangeFilter, selectedAssessmentYears, matchesAssessmentYearFilter]);
+  }, [taxaFilteredSpecies, selectedCategories, selectedCountries, selectedYearRanges, selectedObsRanges, selectedSystems, selectedPopulationTrends, selectedMovementPatterns, selectedThreats, selectedCriteria, endemicsOnly, selectedGrowthForms, matchesSearch, matchesAssessorsFilter, getSpeciesReviewers, matchesObsRangeFilter, matchesYearRangeFilter, selectedAssessmentYears, matchesAssessmentYearFilter]);
 
   // ── Client-side filtering and sorting ──────────────────────────────
   const { filteredSpecies, sortedSpecies } = useMemo(() => {
@@ -2866,11 +2873,16 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
 
   // Renders one pill row for a level of the Criteria drill-down (top-level A-E, then
   // number, sub-clause, or roman-numeral rows as the user drills deeper — see
-  // CRITERIA_CATEGORIES' doc comment for why the depth varies per branch). Clicking a
-  // pill always toggles it into/out of selectedCriteria (same single/multi-select
-  // pattern as every other filter chip); if it has children, it ALSO becomes the new
-  // expandedCriterion, revealing its children as the next row down — mirroring the
-  // Threats chart's category/sub-category drill-down, generalized to arbitrary depth.
+  // CRITERIA_CATEGORIES' doc comment for why the depth varies per branch). A plain
+  // click replaces the whole selection with just this code (or clears it, if it was
+  // already the sole selection) — the same single-select convention every other
+  // filter chip in this file uses. Cmd/ctrl-click instead TOGGLES this code in/out of
+  // selectedCriteria without touching the rest, for real multi-select across branches
+  // (e.g. B1b(iii) AND C2a(i) together). Independently, clicking a node with children
+  // toggles ITS OWN membership in expandedCriteria (not a single shared "last expanded"
+  // value), so drilling into one branch never collapses another branch you already
+  // had open — mirrors the Threats chart's category/sub-category drill-down,
+  // generalized to arbitrary depth and to multiple simultaneously-open branches.
   const renderCriteriaRow = (nodes: CriteriaNode[], indent: boolean) => (
     <div className={`flex flex-wrap gap-1.5 ${indent ? "pl-0 sm:pl-[88px]" : ""}`}>
       {nodes.map(node => {
@@ -2882,12 +2894,14 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
             key={node.code}
             onClick={(e) => {
               const isMulti = e.metaKey || e.ctrlKey;
-              setSelectedCriteria(prev => {
-                if (isMulti) { const next = new Set(prev); if (next.has(node.code)) next.delete(node.code); else next.add(node.code); return next; }
-                if (prev.size === 1 && prev.has(node.code)) return new Set();
-                return new Set([node.code]);
-              });
-              if (node.children.length > 0) setExpandedCriterion(prev => prev === node.code ? null : node.code);
+              if (isMulti) {
+                setSelectedCriteria(prev => { const next = new Set(prev); if (next.has(node.code)) next.delete(node.code); else next.add(node.code); return next; });
+              } else {
+                setSelectedCriteria(prev => (prev.size === 1 && prev.has(node.code)) ? new Set() : new Set([node.code]));
+              }
+              if (node.children.length > 0) {
+                setExpandedCriteria(prev => { const next = new Set(prev); if (next.has(node.code)) next.delete(node.code); else next.add(node.code); return next; });
+              }
             }}
             className={`px-2 py-1 text-xs rounded-full transition-colors cursor-pointer ${
               isSelected
@@ -2903,6 +2917,20 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
         );
       })}
     </div>
+  );
+
+  // Recursively renders a level and, for every node in it that's currently expanded,
+  // that node's children level right after — so any number of branches (at any depth)
+  // can be open simultaneously, not just one linear drill path.
+  const renderCriteriaLevel = (nodes: CriteriaNode[], depth = 0): React.ReactNode => (
+    <React.Fragment>
+      {renderCriteriaRow(nodes, depth > 0)}
+      {nodes.map(node => (
+        expandedCriteria.has(node.code) && node.children.length > 0 ? (
+          <React.Fragment key={`${node.code}-children`}>{renderCriteriaLevel(node.children, depth + 1)}</React.Fragment>
+        ) : null
+      ))}
+    </React.Fragment>
   );
 
   return (
@@ -3591,22 +3619,26 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
                     filter AND expands its next level below (number -> sub-clause ->
                     roman numeral, as deep as that branch goes — mirrors the Threats
                     chart's category/sub-category drill-down, generalized to arbitrary
-                    depth via renderCriteriaRow/findCriteriaPath since criteria nests
-                    up to 4 levels vs. threats' 2). A species can satisfy multiple
-                    codes under the same letter (e.g. B1+B2, or B1a and B1b together),
-                    so selecting any code matches species with that code OR a more
-                    specific one beneath it (see parseCriteriaCodes' startsWith-based
-                    matching). */}
+                    depth via renderCriteriaLevel since criteria nests up to 4 levels
+                    vs. threats' 2). Cmd/ctrl-click for real multi-select — any number
+                    of branches can be drilled into and selected simultaneously (e.g.
+                    B1b(iii) AND C2a(i) together), each independently expanded via
+                    expandedCriteria (a Set, not a single "last expanded" value). A
+                    species can satisfy multiple codes under the same letter too (e.g.
+                    B1+B2, or B1a and B1b together), so selecting any code matches
+                    species with that code OR a more specific one beneath it (see
+                    parseCriteriaCodes' startsWith-based matching). */}
                 {!isNewAssessments && (
                   <div className="flex flex-col gap-2 bg-zinc-50 dark:bg-zinc-800/50 border border-zinc-200 dark:border-zinc-700 rounded-lg px-3 py-2">
                     <div className="flex items-center gap-2">
                       <span className="text-sm font-semibold text-zinc-900 dark:text-zinc-100 shrink-0 w-20">Criteria</span>
                       {renderCriteriaRow(CRITERIA_CATEGORIES, false)}
                     </div>
-                    {(expandedCriterion ? findCriteriaPath(CRITERIA_CATEGORIES, expandedCriterion) : [])
-                      .map(node => node.children.length > 0 && (
-                        <React.Fragment key={node.code}>{renderCriteriaRow(node.children, true)}</React.Fragment>
-                      ))}
+                    {CRITERIA_CATEGORIES.map(node => (
+                      expandedCriteria.has(node.code) && node.children.length > 0 ? (
+                        <React.Fragment key={node.code}>{renderCriteriaLevel(node.children, 1)}</React.Fragment>
+                      ) : null
+                    ))}
                   </div>
                 )}
 
@@ -3693,6 +3725,23 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
               </svg>
             </div>
+            {(selectedTaxa.size > 0 || selectedSubgroups.size > 0 || selectedCategories.size > 0 || selectedYearRanges.size > 0 || selectedAssessmentYears.size > 0 || selectedDescribedYears.size > 0 || selectedObsRanges.size > 0 || selectedCountries.size > 0 || selectedSystems.size > 0 || endemicsOnly || selectedGrowthForms.size > 0 || selectedPopulationTrends.size > 0 || selectedMovementPatterns.size > 0 || selectedThreats.size > 0 || selectedCriteria.size > 0 || selectedAssessors.size > 0 || selectedReviewers.size > 0 || showOnlyStarred || exactFilters.outdated || exactFilters.minObs != null || exactFilters.maxObs != null || exactFilters.minAssessmentYear != null || exactFilters.maxAssessmentYear != null || exactFilters.minDescribedYear != null || exactFilters.maxDescribedYear != null) && (
+              <button
+                onClick={() => {
+                  clearAllFiltersAndTaxa();
+                  setShowOnlyStarred(false);
+                  setExpandedThreat(null);
+                  setExpandedCriteria(new Set());
+                }}
+                title="Reset all filters and the selected taxon"
+                className="px-2 md:px-3 py-1.5 rounded-lg text-xs md:text-sm font-medium transition-colors flex items-center gap-1 md:gap-1.5 bg-white text-zinc-700 border border-zinc-200 hover:bg-zinc-50 dark:bg-zinc-800 dark:text-zinc-300 dark:border-zinc-700 shrink-0"
+              >
+                <svg className="w-3.5 h-3.5 md:w-4 md:h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+                <span className="hidden sm:inline">Clear all</span>
+              </button>
+            )}
             {pinnedSpecies.length > 0 && (
               <button
                 onClick={() => setShowOnlyStarred(!showOnlyStarred)}
@@ -3951,22 +4000,13 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
                 </button>
               ));
             })()}
-            {(selectedTaxa.size > 0 || selectedSubgroups.size > 0 || selectedCategories.size > 0 || selectedYearRanges.size > 0 || selectedAssessmentYears.size > 0 || selectedDescribedYears.size > 0 || selectedObsRanges.size > 0 || selectedCountries.size > 0 || selectedSystems.size > 0 || endemicsOnly || selectedGrowthForms.size > 0 || selectedPopulationTrends.size > 0 || selectedMovementPatterns.size > 0 || selectedThreats.size > 0 || selectedCriteria.size > 0 || selectedAssessors.size > 0 || selectedReviewers.size > 0 || showOnlyStarred || exactFilters.outdated || exactFilters.minObs != null || exactFilters.maxObs != null || exactFilters.minAssessmentYear != null || exactFilters.maxAssessmentYear != null || exactFilters.minDescribedYear != null || exactFilters.maxDescribedYear != null) && (
-              <button
-                onClick={() => {
-                  clearAllFiltersAndTaxa();
-                  setShowOnlyStarred(false);
-                  setExpandedThreat(null);
-                }}
-                title="Reset all filters and the selected taxon"
-                className="ml-auto px-2 md:px-3 py-1.5 rounded-lg text-xs md:text-sm font-medium transition-colors flex items-center gap-1 md:gap-1.5 bg-white text-zinc-700 border border-zinc-200 hover:bg-zinc-50 dark:bg-zinc-800 dark:text-zinc-300 dark:border-zinc-700 shrink-0"
-              >
-                <svg className="w-3.5 h-3.5 md:w-4 md:h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                </svg>
-                <span className="hidden sm:inline">Clear all</span>
-              </button>
-            )}
+            <span className="ml-auto text-sm md:text-base font-semibold text-zinc-700 dark:text-zinc-300 tabular-nums flex items-center gap-2">
+              {speciesLoading && totalFiltered === 0 && !singleSpeciesPreview ? (
+                <Spinner className="h-4 w-4" />
+              ) : (
+                <>{totalFiltered.toLocaleString()} species</>
+              )}
+            </span>
             {!isNewAssessments && (neCount > 0 || neBlockedForAll) && (
               <button
                 disabled={neBlockedForAll}
@@ -3982,7 +4022,7 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
                     return next;
                   });
                 }}
-                className={`ml-auto px-2 md:px-3 py-1.5 rounded-lg text-xs md:text-sm font-medium transition-colors flex items-center gap-1 md:gap-1.5 ${
+                className={`px-2 md:px-3 py-1.5 rounded-lg text-xs md:text-sm font-medium transition-colors flex items-center gap-1 md:gap-1.5 ${
                   neBlockedForAll
                     ? "bg-white text-zinc-400 border border-zinc-200 opacity-60 cursor-not-allowed dark:bg-zinc-800 dark:text-zinc-500 dark:border-zinc-700"
                     : selectedCategories.has("NE")
