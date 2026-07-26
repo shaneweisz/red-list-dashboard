@@ -2372,11 +2372,16 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
   // multi-country selection. No endemics toggle here — the country-scoped
   // taxa summary is a live per-country DuckDB query that doesn't take an
   // endemics parameter, so the button would have nothing to actually filter.
-  const countryModeContent = (
+  // Before countryLandingStats has actually arrived, don't mount WorldMap at
+  // all — passing it an empty stats object rendered every country in its
+  // no-data (white) fill for a beat before the real colors popped in. A
+  // spinner card matching WorldMap's own root sizing (h-full flex-1 min-h-0)
+  // avoids any layout jump when it's swapped in for the real map.
+  const countryModeContent = countryLandingStats ? (
     <WorldMap
       selectedCountries={selectedCountries}
       onCountrySelect={handleCountryDrilldown}
-      precomputedStats={countryLandingStats ?? {}}
+      precomputedStats={countryLandingStats}
       selectedTaxa={selectedTaxa}
       speciesLabel={isNewAssessments ? "# Unassessed" : undefined}
       showOutdatedMode={!isNewAssessments}
@@ -2388,6 +2393,10 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
       mapSortDirection={mapSortDirection}
       onMapSortChange={setMapSort}
     />
+  ) : (
+    <div className="relative bg-white dark:bg-zinc-900 rounded-xl shadow-sm border border-zinc-200 dark:border-zinc-800 p-3 h-full flex-1 min-h-0 flex flex-col items-center justify-center">
+      <Spinner className="h-8 w-8" />
+    </div>
   );
 
   // Selection chips — rendered by TaxaSummary in a dedicated row of its own,

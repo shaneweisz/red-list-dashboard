@@ -143,7 +143,7 @@ export default function RedListPage() {
           </SpeciesCacheProvider>
         </main>
 
-        <footer className="max-w-xl mx-auto w-full shrink-0 mt-2 pt-4 border-t border-zinc-200 dark:border-zinc-800">
+        <footer className="max-w-xl mx-auto w-full shrink-0 mt-2 pb-4 pt-4 border-t border-zinc-200 dark:border-zinc-800">
           <p className="text-center text-xs text-zinc-400 dark:text-zinc-500">
             Questions or feedback? Contact{" "}
             <a

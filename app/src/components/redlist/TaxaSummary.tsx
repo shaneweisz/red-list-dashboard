@@ -1710,158 +1710,23 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
     return () => controller.abort();
   }, [countryKey]);
 
-  // Only the very first load (no data yet) shows the full-table skeleton below —
-  // a country-switch refetch (countryScope changing with taxa already populated)
-  // keeps rendering the existing table with its stale data, plus a small corner
-  // spinner (see the scrollRef wrapper below), so the map/table/toolbar don't
-  // blank out and reappear on every country click.
+  // Only the very first load (no data yet) shows this — a country-switch
+  // refetch (countryScope changing with taxa already populated) keeps
+  // rendering the existing table with its stale data, plus a small corner
+  // spinner (see the scrollRef wrapper below), so the table doesn't blank
+  // out and reappear on every country click.
   if (loading && taxa.length === 0) {
-    // Skeleton rows matching actual table structure
-    const skeletonRows = Array.from({ length: 9 }, (_, i) => (
-      <tr key={i} className={i === 0 ? "bg-zinc-50/80 dark:bg-zinc-800/60" : ""}>
-        <td className={`${stickyClasses} bg-white dark:bg-zinc-900 ${cellPad} w-0`}>
-          <div className="flex items-center gap-2">
-            <div className="w-[22px] h-[22px] rounded-full bg-zinc-200 dark:bg-zinc-700" />
-            <div className="h-4 w-20 bg-zinc-200 dark:bg-zinc-700 rounded" />
-          </div>
-        </td>
-        {isVisible("described") && (
-          <td className={numericTdNoDividerClasses}>
-            <div className="h-4 w-16 bg-zinc-200 dark:bg-zinc-700 rounded ml-auto" />
-          </td>
-        )}
-        {isVisible("colDescribed") && (
-          <td className={numericTdClasses}>
-            <div className="h-4 w-16 bg-zinc-200 dark:bg-zinc-700 rounded ml-auto" />
-          </td>
-        )}
-        {isVisible("assessed") && (
-          <td className={flexTdClasses}>
-            <div className="flex items-center gap-1.5 sm:gap-3 min-w-[150px] sm:min-w-[230px] md:min-w-[250px]">
-              <div className="h-4 w-[48px] sm:w-[60px] bg-zinc-200 dark:bg-zinc-700 rounded flex-shrink-0" />
-              <div className="flex-1 min-w-[40px] h-3.5 sm:h-2.5 rounded-full bg-zinc-200 dark:bg-zinc-700" />
-              <div className="h-3 w-[44px] sm:w-[52px] bg-zinc-200 dark:bg-zinc-700 rounded flex-shrink-0" />
-            </div>
-          </td>
-        )}
-        {isVisible("outdated") && (
-          <td className={flexTdClasses}>
-            <div className="flex items-center gap-1.5 sm:gap-3 min-w-[150px] sm:min-w-[230px] md:min-w-[250px]">
-              <div className="h-4 w-[48px] sm:w-[60px] bg-zinc-200 dark:bg-zinc-700 rounded flex-shrink-0" />
-              <div className="flex-1 min-w-[40px] h-3.5 sm:h-2.5 rounded-full bg-zinc-200 dark:bg-zinc-700" />
-              <div className="h-3 w-[44px] sm:w-[52px] bg-zinc-200 dark:bg-zinc-700 rounded flex-shrink-0" />
-            </div>
-          </td>
-        )}
-        {countryStyleColumns && (
-          <td className={numericTdNoDividerClasses}>
-            <div className="h-4 w-12 bg-zinc-200 dark:bg-zinc-700 rounded ml-auto" />
-          </td>
-        )}
-        {isVisible("gbifUnassessed") && (
-          <td className={flexTdClasses}>
-            <div className="flex items-center gap-1.5 sm:gap-3 min-w-[150px] sm:min-w-[230px] md:min-w-[250px]">
-              <div className="h-4 w-[48px] sm:w-[60px] bg-zinc-200 dark:bg-zinc-700 rounded flex-shrink-0" />
-              <div className="flex-1 min-w-[40px] h-3.5 sm:h-2.5 rounded-full bg-zinc-200 dark:bg-zinc-700" />
-              <div className="h-3 w-[44px] sm:w-[52px] bg-zinc-200 dark:bg-zinc-700 rounded flex-shrink-0" />
-            </div>
-          </td>
-        )}
-        {isVisible("colNe") && (
-          <td className={flexTdClasses}>
-            <div className="flex items-center gap-1.5 sm:gap-3 min-w-[150px] sm:min-w-[230px] md:min-w-[250px]">
-              <div className="h-4 w-[48px] sm:w-[60px] bg-zinc-200 dark:bg-zinc-700 rounded flex-shrink-0" />
-              <div className="flex-1 min-w-[40px] h-3.5 sm:h-2.5 rounded-full bg-zinc-200 dark:bg-zinc-700" />
-              <div className="h-3 w-[44px] sm:w-[52px] bg-zinc-200 dark:bg-zinc-700 rounded flex-shrink-0" />
-            </div>
-          </td>
-        )}
-        {isVisible("totalGbifObs") && (
-          <td className={numericTdClasses}>
-            <div className="h-4 w-20 bg-zinc-200 dark:bg-zinc-700 rounded ml-auto" />
-          </td>
-        )}
-        {isVisible("gbifDistribution") && (
-          <td className={flexTdClasses}>
-            <div className="min-w-[100px] md:min-w-[120px]">
-              <div className="h-5 w-full rounded bg-zinc-200 dark:bg-zinc-700" />
-            </div>
-          </td>
-        )}
-        {isVisible("meanGbifObs") && (
-          <td className={numericTdClasses}>
-            <div className="h-4 w-16 bg-zinc-200 dark:bg-zinc-700 rounded ml-auto" />
-          </td>
-        )}
-        {isVisible("medianGbifObs") && (
-          <td className={numericTdClasses}>
-            <div className="h-4 w-16 bg-zinc-200 dark:bg-zinc-700 rounded ml-auto" />
-          </td>
-        )}
-        {isVisible("breakdown") && (
-          <td className={flexTdClasses}>
-            <div className="min-w-[80px] md:min-w-[100px]">
-              <div className="h-4 sm:h-3 w-full rounded-full bg-zinc-200 dark:bg-zinc-700" />
-            </div>
-          </td>
-        )}
-      </tr>
-    ));
-
     return (
-      <div className="relative bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl overflow-x-auto">
-        {/* Spinner overlay */}
-        <div className="absolute inset-0 flex items-center justify-center bg-white/60 dark:bg-zinc-900/60 z-20">
-          <svg
-            className="animate-spin h-8 w-8 text-zinc-400"
-            xmlns="http://www.w3.org/2000/svg"
-            fill="none"
-            viewBox="0 0 24 24"
-          >
-            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
-          </svg>
-        </div>
-        <table className="w-full">
-          <thead>
-            <tr className="bg-zinc-50 dark:bg-zinc-800 border-b border-zinc-200 dark:border-zinc-700">
-              <th className={`${stickyClasses} bg-zinc-50 dark:bg-zinc-800 ${taxonCellPad} text-center text-sm font-bold text-zinc-600 dark:text-zinc-300 whitespace-nowrap w-0`}>Taxonomic Group</th>
-              {isVisible("described") && <th className={numericThNoDividerClasses}># Described Species</th>}
-              {isVisible("colDescribed") && <th className={numericThClasses}># Described Species (CoL)</th>}
-              {isVisible("assessed") && (
-                <th className={countryStyleColumns ? `${centeredThClasses} whitespace-nowrap min-w-[80px]` : centeredThClasses}>
-                  {countryStyleColumns ? "# Assessed" : "# Red List Assessed"}
-                </th>
-              )}
-              {isVisible("outdated") && (
-                <th className={countryStyleColumns ? numericThNoDividerClasses : centeredThClasses}>
-                  {countryStyleColumns ? (
-                    "# Outdated"
-                  ) : (
-                    <span className="inline-flex items-center gap-1"># Outdated (&gt;10 yrs old) <OutdatedInfoIcon /></span>
-                  )}
-                </th>
-              )}
-              {countryStyleColumns && <th className={numericThNoDividerClasses}>% Outdated</th>}
-              {isVisible("gbifUnassessed") && <th className={centeredThClasses}># Unassessed, 1+ GBIF Obs</th>}
-              {isVisible("colNe") && <th className={centeredThClasses}># Not Evaluated</th>}
-              {isVisible("totalGbifObs") && <th className={numericThClasses}>Total Obs</th>}
-              {isVisible("gbifDistribution") && <th className={flexThClasses}>Obs Distribution</th>}
-              {isVisible("meanGbifObs") && <th className={numericThClasses}>Mean Obs</th>}
-              {isVisible("medianGbifObs") && <th className={numericThClasses}>Median Obs</th>}
-              {isVisible("breakdown") && <th className={flexThClasses}>Conservation Status Breakdown</th>}
-            </tr>
-          </thead>
-          <tbody>
-            {skeletonRows[0]}
-            <tr>
-              <td colSpan={visibleColCount} className="p-0">
-                <div className="border-b-2 border-zinc-200 dark:border-zinc-700" />
-              </td>
-            </tr>
-            {skeletonRows.slice(1)}
-          </tbody>
-        </table>
+      <div className="flex items-center justify-center bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl py-24">
+        <svg
+          className="animate-spin h-8 w-8 text-zinc-400"
+          xmlns="http://www.w3.org/2000/svg"
+          fill="none"
+          viewBox="0 0 24 24"
+        >
+          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+        </svg>
       </div>
     );
   }
@@ -2850,12 +2715,15 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
         landing map rather than a small box sitting above empty space — on a
         13" laptop screen that leaves just the footer's first line visible
         without scrolling. WorldMap's own root is already `h-full flex
-        flex-col` for exactly this. Once a country's picked and the table
-        needs room below it, the map drops back to its normal
-        content-sized height (governed by WorldMap's own internal
-        minHeight, not this wrapper). */}
+        flex-col` for exactly this. The map keeps that same size once a
+        country's picked and the table appears below it — flex-1 alone
+        would shrink it back down there (the table's own natural height
+        competes for the same slack, and flex-grow has nothing left to give
+        once the page already needs to scroll), so min-h-[55vh] is a floor
+        that holds it steady regardless of what's below; the table then
+        just extends the page rather than the map giving up room to it. */}
     {countryMode && (
-      <div className={`flex flex-col ${countryScoped ? "mb-4" : "flex-1 min-h-0 mb-4"}`}>{countryModeContent}</div>
+      <div className="flex flex-col flex-1 min-h-[55vh] mb-4">{countryModeContent}</div>
     )}
     {countryMode && countryScoped && (
       <div className="mb-1.5">{countryPillsContent}</div>
