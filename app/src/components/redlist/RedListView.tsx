@@ -2544,19 +2544,16 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
               sub-group row drilled into via TaxaSummary's own tree
               (selectedSubgroupTaxon: dynamic order/family/genus, or a static SSC
               group), or a non-curated arbitrary rank reached via search
-              (arbitraryTaxon). Two fixed stat cards — the taxon (name + rank)
-              and its total species count (taxaFilteredSpeciesBase) — neither
-              reacts to pill filters, so this row never grows/changes as
-              filters are added; the applied-filters row below (right above
-              the species table) is what shows the live, filtered picture.
-              The Species card's Assessed/Not Evaluated toggle sits to the
-              right of its label, vertically centered against the whole card;
-              it lives here (not the landing-only row with the View selector)
-              so it's usable at any drill-down depth. TaxaSummary's own
-              breadcrumb table above already shows the tree branch that led
-              here (Mammals → Rodentia → Heteromyidae → ...) when applicable —
-              this is purely an additional, more prominent summary, not a
-              replacement for it. */}
+              (arbitraryTaxon). Two stat cards: the taxon (name + rank) and the
+              Species card. The Species card's number is totalFiltered (live,
+              reacts to pill filters), with a "of Y" qualifier + "matching
+              filters" caption once a filter narrows it below the taxon's own
+              total (taxaFilteredSpeciesBase) — naming it explicitly avoids
+              reading as some other ratio (e.g. assessed-of-described).
+              TaxaSummary's own breadcrumb table above already shows the tree
+              branch that led here (Mammals → Rodentia → Heteromyidae → ...)
+              when applicable — this is purely an additional, more prominent
+              summary, not a replacement for it. */}
           {focusedTaxonCard && !isSingleSpecies && (
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-3">
@@ -2567,15 +2564,20 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
                   {focusedTaxonCard.name}
                 </div>
               </div>
-              <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-3 flex items-center justify-between gap-3">
-                <div>
+              <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-3 flex flex-col sm:flex-row sm:items-center justify-between gap-2 sm:gap-3">
+                <div className="min-w-0">
                   <div className="text-xs font-medium uppercase tracking-wide text-zinc-500 dark:text-zinc-400">
                     {isNewAssessments ? "Not Evaluated Species" : "Assessed Species"}
                   </div>
                   <div className="mt-0.5 text-2xl font-bold text-zinc-900 dark:text-zinc-100">
                     {speciesLoading && assessedSpecies.length === 0
                       ? <Spinner className="h-6 w-6" />
-                      : taxaFilteredSpeciesBase.length.toLocaleString()}
+                      : totalFiltered < taxaFilteredSpeciesBase.length ? (
+                        <>
+                          {totalFiltered.toLocaleString()}
+                          <span className="text-base font-normal text-zinc-400 dark:text-zinc-500"> matching filters of {taxaFilteredSpeciesBase.length.toLocaleString()} total</span>
+                        </>
+                      ) : totalFiltered.toLocaleString()}
                   </div>
                 </div>
                 {onViewModeChange && (
