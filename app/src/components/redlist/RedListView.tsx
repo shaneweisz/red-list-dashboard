@@ -3142,6 +3142,15 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
             </button>
             {moreFiltersOpen && (
               <div className="px-3 md:px-4 pb-3 md:pb-4 pt-3 md:pt-4 border-t border-zinc-200 dark:border-zinc-800 flex flex-col gap-3">
+                {/* Country map + Threats — moved here from the primary view (Charts row
+                    2) so that row stays focused on Conservation Status / Years Since
+                    Assessed / Geospatial GBIF Records; these still filter live like
+                    every other control on this page, just tucked a click away. */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  {countryMapCard}
+                  {threatsCard}
+                </div>
+
                 {/* Realm */}
                 <div className="flex items-center gap-2 bg-zinc-50 dark:bg-zinc-800/50 border border-zinc-200 dark:border-zinc-700 rounded-lg px-3 py-2">
                   <span className="text-sm font-semibold text-zinc-900 dark:text-zinc-100 shrink-0 w-20">Realm</span>
@@ -3297,15 +3306,6 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
                       </div>
                   </div>
                 )}
-
-                {/* Country map + Threats — moved here from the primary view (Charts row
-                    2) so that row stays focused on Conservation Status / Years Since
-                    Assessed / Geospatial GBIF Records; these still filter live like
-                    every other control on this page, just tucked a click away. */}
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                  {countryMapCard}
-                  {threatsCard}
-                </div>
 
                 {/* Assessors and Reviewers, shown side by side */}
                 {isSingleSpecies && singleSpecies ? (
