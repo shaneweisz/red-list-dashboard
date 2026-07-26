@@ -69,7 +69,7 @@ export const OWN_PARAM_NAMES = [
   "view", "layout", "origin", "countries", "region", "taxa", "subgroups",
   "categories", "years", "assessmentYears", "describedYears", "obsRanges",
   "systems", "trends", "movement", "threats", "criteria", "habitat", "habitatSpecialists",
-  "habitatMajor", "habitatResident", "bd", "endemics", "growthForms",
+  "habitatExclMinor", "habitatSeasons", "bd", "endemics", "growthForms",
   "assessors", "reviewers", "search", "outdated", "minObs", "maxObs",
   "minAssessmentYear", "maxAssessmentYear", "minDescribedYear", "maxDescribedYear",
   "species", "tab", "sort", "dir", "mapview", "mapsort", "mapdir",
@@ -190,12 +190,15 @@ export function parseParams(search: string, suffix: string = "") {
       : new Set<string>(),
     // Habitat-specialists: restrict to species with exactly one distinct habitat code.
     habitatSpecialistsOnly: p.get(k("habitatSpecialists")) === "1",
-    // Habitat major-importance-only: restrict to species with at least one habitat
-    // entry flagged as of major importance (vs. marginal/unknown).
-    habitatMajorOnly: p.get(k("habitatMajor")) === "1",
-    // Habitat resident-only: restrict to species with at least one Resident-season
-    // habitat entry (vs. breeding/non-breeding/passage/unknown-only).
-    habitatResidentOnly: p.get(k("habitatResident")) === "1",
+    // Exclude-minor: drop matches where the relevant habitat entry (the one matching
+    // the selected habitat, or any entry if none selected) is confirmed NOT of major
+    // importance. Entries with unrecorded importance are kept, not treated as minor.
+    habitatExcludeMinor: p.get(k("habitatExclMinor")) === "1",
+    // Habitat seasons: restrict to species with a matching habitat entry recorded in
+    // any of the selected seasons (Resident/Breeding/Non-Breeding/Passage/Unknown).
+    habitatSeasons: p.get(k("habitatSeasons"))
+      ? new Set(p.get(k("habitatSeasons"))!.split(",").filter(Boolean))
+      : new Set<string>(),
     breakdown: parseBreakdownParam(p, k("bd")),
     // Endemics-only: restrict to species occurring in exactly one country.
     endemicsOnly: p.get(k("endemics")) === "1",
@@ -259,8 +262,8 @@ export function buildQs(state: {
   criteria: Set<string>;
   habitat: Set<string>;
   habitatSpecialistsOnly: boolean;
-  habitatMajorOnly: boolean;
-  habitatResidentOnly: boolean;
+  habitatExcludeMinor: boolean;
+  habitatSeasons: Set<string>;
   breakdown?: BreakdownParam | null;
   endemicsOnly: boolean;
   growthForms: Set<string>;
@@ -304,8 +307,8 @@ export function buildQs(state: {
   if (state.criteria.size > 0) p.set(k("criteria"), [...state.criteria].join(","));
   if (state.habitat.size > 0) p.set(k("habitat"), [...state.habitat].join(","));
   if (state.habitatSpecialistsOnly) p.set(k("habitatSpecialists"), "1");
-  if (state.habitatMajorOnly) p.set(k("habitatMajor"), "1");
-  if (state.habitatResidentOnly) p.set(k("habitatResident"), "1");
+  if (state.habitatExcludeMinor) p.set(k("habitatExclMinor"), "1");
+  if (state.habitatSeasons.size > 0) p.set(k("habitatSeasons"), [...state.habitatSeasons].join(","));
   if (state.breakdown) {
     let bd = `${state.breakdown.nodeId}:${state.breakdown.rank}:${state.breakdown.name}`;
     if (state.breakdown.onlyIds?.length) bd += `:only:${state.breakdown.onlyIds.join(",")}`;
@@ -710,10 +713,10 @@ export function useFilterParams(paramSuffix: string = "") {
     [syncUrl]
   );
 
-  const setHabitatMajorOnly = useCallback(
+  const setHabitatExcludeMinor = useCallback(
     (value: boolean) => {
       setState(prev => {
-        const next = { ...prev, habitatMajorOnly: value };
+        const next = { ...prev, habitatExcludeMinor: value };
         queueMicrotask(() => syncUrl(next, false));
         return next;
       });
@@ -721,10 +724,11 @@ export function useFilterParams(paramSuffix: string = "") {
     [syncUrl]
   );
 
-  const setHabitatResidentOnly = useCallback(
-    (value: boolean) => {
+  const setSelectedHabitatSeasons = useCallback(
+    (updater: Set<string> | ((prev: Set<string>) => Set<string>)) => {
       setState(prev => {
-        const next = { ...prev, habitatResidentOnly: value };
+        const nextVal = typeof updater === "function" ? updater(prev.habitatSeasons) : updater;
+        const next = { ...prev, habitatSeasons: nextVal };
         queueMicrotask(() => syncUrl(next, false));
         return next;
       });
@@ -910,8 +914,8 @@ export function useFilterParams(paramSuffix: string = "") {
         criteria: new Set<string>(),
         habitat: new Set<string>(),
         habitatSpecialistsOnly: false,
-        habitatMajorOnly: false,
-        habitatResidentOnly: false,
+        habitatExcludeMinor: false,
+        habitatSeasons: new Set<string>(),
         breakdown: null,
         endemicsOnly: false,
         growthForms: new Set<string>(),
@@ -948,8 +952,8 @@ export function useFilterParams(paramSuffix: string = "") {
         criteria: new Set<string>(),
         habitat: new Set<string>(),
         habitatSpecialistsOnly: false,
-        habitatMajorOnly: false,
-        habitatResidentOnly: false,
+        habitatExcludeMinor: false,
+        habitatSeasons: new Set<string>(),
         breakdown: null,
         endemicsOnly: false,
         growthForms: new Set<string>(),
@@ -986,8 +990,8 @@ export function useFilterParams(paramSuffix: string = "") {
     selectedCriteria: state.criteria,
     selectedHabitat: state.habitat,
     habitatSpecialistsOnly: state.habitatSpecialistsOnly,
-    habitatMajorOnly: state.habitatMajorOnly,
-    habitatResidentOnly: state.habitatResidentOnly,
+    habitatExcludeMinor: state.habitatExcludeMinor,
+    selectedHabitatSeasons: state.habitatSeasons,
     breakdownFilter: state.breakdown,
     endemicsOnly: state.endemicsOnly,
     selectedGrowthForms: state.growthForms,
@@ -1023,8 +1027,8 @@ export function useFilterParams(paramSuffix: string = "") {
     setSelectedCriteria,
     setSelectedHabitat,
     setHabitatSpecialistsOnly,
-    setHabitatMajorOnly,
-    setHabitatResidentOnly,
+    setHabitatExcludeMinor,
+    setSelectedHabitatSeasons,
     setBreakdownFilter,
     setEndemicsOnly,
     setSelectedGrowthForms,

@@ -335,31 +335,47 @@ interface HabitatEntry {
   code: string;
   season: string;
   suitability: string;
-  major: boolean;
+  /** "Major" | "Not major" | "Unknown" (importance not recorded in the IUCN DB) */
+  importance: string;
 }
 
-// Decodes the single-letter season/suitability codes fetch-redlist-species.ts writes
-// into habitat_codes (see SEASON_CODES/SUITABILITY_CODES there) back to full labels.
-// "-" covers habitat entries with no season/suitability recorded in the IUCN DB.
+// Decodes the single-letter season/suitability/importance codes
+// fetch-redlist-species.ts writes into habitat_codes (see SEASON_CODES/
+// SUITABILITY_CODES/MAJOR_IMPORTANCE_CODES there) back to full labels.
+// "-" covers habitat entries with no season/suitability/importance recorded
+// in the IUCN DB.
 const HABITAT_SEASON_LABELS: Record<string, string> = {
   R: "Resident", B: "Breeding Season", N: "Non-Breeding Season", P: "Passage", U: "Seasonal Occurrence Unknown", "-": "Unknown",
 };
 const HABITAT_SUITABILITY_LABELS: Record<string, string> = {
   S: "Suitable", M: "Marginal", U: "Unknown", "-": "Unknown",
 };
+const HABITAT_IMPORTANCE_LABELS: Record<string, string> = {
+  "1": "Major", "0": "Not major", "-": "Unknown",
+};
+// Season chip options for the Habitat card's season multi-select — full IUCN
+// labels (used for matching and as the button title) paired with a shorter
+// display label so five chips fit in a narrow card.
+const HABITAT_SEASON_OPTIONS: { value: string; short: string }[] = [
+  { value: "Resident", short: "Resident" },
+  { value: "Breeding Season", short: "Breeding" },
+  { value: "Non-Breeding Season", short: "Non-breeding" },
+  { value: "Passage", short: "Passage" },
+  { value: "Seasonal Occurrence Unknown", short: "Unknown" },
+];
 
-// Parses a species' habitat_codes (compact "code:season:suitability:major" tuples)
-// into structured entries — see fetch-redlist-species.ts's RedlistSpecies.habitat_codes
-// doc comment for the encoding.
+// Parses a species' habitat_codes (compact "code:season:suitability:importance"
+// tuples) into structured entries — see fetch-redlist-species.ts's
+// RedlistSpecies.habitat_codes doc comment for the encoding.
 function parseHabitatEntries(habitatCodes: string[] | null | undefined): HabitatEntry[] {
   if (!habitatCodes) return [];
   return habitatCodes.map(tuple => {
-    const [code, season, suitability, major] = tuple.split(":");
+    const [code, season, suitability, importance] = tuple.split(":");
     return {
       code: code ?? tuple,
       season: HABITAT_SEASON_LABELS[season] ?? "Unknown",
       suitability: HABITAT_SUITABILITY_LABELS[suitability] ?? "Unknown",
-      major: major === "1",
+      importance: HABITAT_IMPORTANCE_LABELS[importance] ?? "Unknown",
     };
   });
 }
@@ -633,8 +649,8 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
     selectedCriteria, setSelectedCriteria,
     selectedHabitat, setSelectedHabitat,
     habitatSpecialistsOnly, setHabitatSpecialistsOnly,
-    habitatMajorOnly, setHabitatMajorOnly,
-    habitatResidentOnly, setHabitatResidentOnly,
+    habitatExcludeMinor, setHabitatExcludeMinor,
+    selectedHabitatSeasons, setSelectedHabitatSeasons,
     breakdownFilter, setBreakdownFilter,
     endemicsOnly, setEndemicsOnly,
     selectedGrowthForms, setSelectedGrowthForms,
@@ -756,8 +772,8 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
     setSelectedHabitat(new Set());
     setExpandedHabitat(null);
     setHabitatSpecialistsOnly(false);
-    setHabitatMajorOnly(false);
-    setHabitatResidentOnly(false);
+    setHabitatExcludeMinor(false);
+    setSelectedHabitatSeasons(new Set());
     setEndemicsOnly(false);
     setSelectedGrowthForms(new Set());
     setSelectedAssessors(new Set());
@@ -768,7 +784,7 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
     if (viewMode === "new-assessments") {
       setSelectedTaxa(prev => prev.has("all") ? new Set<string>() : prev);
     }
-  }, [viewMode, setSelectedTaxa, setSelectedCategories, setSelectedYearRanges, setSelectedAssessmentYears, setSelectedDescribedYears, setSelectedCountries, setSelectedObsRanges, setSelectedSystems, setSelectedPopulationTrends, setSelectedMovementPatterns, setSelectedThreats, setSelectedCriteria, setSelectedHabitat, setHabitatSpecialistsOnly, setHabitatMajorOnly, setHabitatResidentOnly, setEndemicsOnly, setSelectedGrowthForms, setSelectedAssessors, setSelectedReviewers, setSort]);
+  }, [viewMode, setSelectedTaxa, setSelectedCategories, setSelectedYearRanges, setSelectedAssessmentYears, setSelectedDescribedYears, setSelectedCountries, setSelectedObsRanges, setSelectedSystems, setSelectedPopulationTrends, setSelectedMovementPatterns, setSelectedThreats, setSelectedCriteria, setSelectedHabitat, setHabitatSpecialistsOnly, setHabitatExcludeMinor, setSelectedHabitatSeasons, setEndemicsOnly, setSelectedGrowthForms, setSelectedAssessors, setSelectedReviewers, setSort]);
 
   // Taxon toggle handler (used by TaxaSummary)
   // Regular click: select only that taxon (or deselect if already sole selection)
@@ -930,6 +946,14 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
     );
     if (!stillSelected) setExpandedHabitat(null);
   }, [selectedHabitat, expandedHabitat]);
+
+  // Habitat chart pagination — 18 top-level categories is more than
+  // comfortably fits in the card's fixed chart height, so page through them
+  // (max 10/page) rather than scroll. Clamped inline (not reset via effect)
+  // so a shrinking result set after other filters change just lands on the
+  // last valid page instead of an empty one.
+  const [habitatPage, setHabitatPage] = useState(0);
+  const HABITAT_PAGE_SIZE = 10;
 
   // Stable callback for debounced search input
   const handleSearch = useCallback((value: string) => {
@@ -1278,15 +1302,21 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
   // need the full parsed entry list, not just codes — cheaper to parse once per
   // species per call than to re-derive it 2-3x over.
   const matchesHabitatFilter = useCallback((s: Species): boolean => {
-    if (selectedHabitat.size === 0 && !habitatSpecialistsOnly && !habitatMajorOnly && !habitatResidentOnly) return true;
+    if (selectedHabitat.size === 0 && !habitatSpecialistsOnly && !habitatExcludeMinor && selectedHabitatSeasons.size === 0) return true;
     const entries = parseHabitatEntries(s.habitat_codes);
     const codes = Array.from(new Set(entries.map(e => e.code)));
     if (selectedHabitat.size > 0 && !codes.some(code => Array.from(selectedHabitat).some(sel => code === sel || code.startsWith(sel + ".")))) return false;
     if (habitatSpecialistsOnly && codes.length !== 1) return false;
-    if (habitatMajorOnly && !entries.some(e => e.major)) return false;
-    if (habitatResidentOnly && !entries.some(e => e.season === "Resident")) return false;
+    // Exclude-minor and season scope to the entries matching the current habitat
+    // selection (so they refine "this specific habitat match"), falling back to
+    // all entries when no habitat is selected.
+    const relevant = selectedHabitat.size > 0
+      ? entries.filter(e => Array.from(selectedHabitat).some(sel => e.code === sel || e.code.startsWith(sel + ".")))
+      : entries;
+    if (habitatExcludeMinor && !relevant.some(e => e.importance !== "Not major")) return false;
+    if (selectedHabitatSeasons.size > 0 && !relevant.some(e => selectedHabitatSeasons.has(e.season))) return false;
     return true;
-  }, [selectedHabitat, habitatSpecialistsOnly, habitatMajorOnly, habitatResidentOnly]);
+  }, [selectedHabitat, habitatSpecialistsOnly, habitatExcludeMinor, selectedHabitatSeasons]);
 
   // Species details cache (images, criteria, common names)
   const [speciesDetails, setSpeciesDetails] = useState<Record<number, SpeciesDetails>>({});
@@ -2731,8 +2761,8 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
     && selectedCriteria.size === 0
     && selectedHabitat.size === 0
     && !habitatSpecialistsOnly
-    && !habitatMajorOnly
-    && !habitatResidentOnly
+    && !habitatExcludeMinor
+    && selectedHabitatSeasons.size === 0
     && selectedGrowthForms.size === 0
     && selectedAssessors.size === 0
     && selectedReviewers.size === 0
@@ -3071,6 +3101,9 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
       .map(({ code, label }) => ({ code: label, habitatCode: code, count: habitatCounts[code] ?? 0, label: (habitatCounts[code] ?? 0).toLocaleString() }))
       .filter(d => d.count > 0)
       .sort((a, b) => b.count - a.count);
+    const habitatTotalPages = Math.max(1, Math.ceil(habitatBarData.length / HABITAT_PAGE_SIZE));
+    const safeHabitatPage = Math.min(habitatPage, habitatTotalPages - 1);
+    const pagedHabitatBarData = habitatBarData.slice(safeHabitatPage * HABITAT_PAGE_SIZE, (safeHabitatPage + 1) * HABITAT_PAGE_SIZE);
     const selectedHabitatLabels = new Set(
       Array.from(selectedHabitat).map(code => HABITAT_CATEGORIES.find(c => c.code === code)?.label).filter(Boolean) as string[]
     );
@@ -3086,7 +3119,7 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
       Array.from(selectedHabitat).map(code => drillCat.children.find(c => c.code === code)?.label).filter(Boolean) as string[]
     ) : new Set<string>();
     const HABITAT_AREA_HEIGHT = 266;
-    const chartHeight = Math.max(200, habitatBarData.length * 18 + 30);
+    const chartHeight = Math.max(150, pagedHabitatBarData.length * 18 + 30);
     const loading = speciesLoading && assessedSpecies.length === 0;
     const toggleClass = (active: boolean) => `px-2 py-0.5 text-xs font-semibold rounded transition-colors ${
       active ? "bg-teal-600 text-white shadow-sm" : "bg-zinc-100 dark:bg-zinc-800 text-zinc-500 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-300"
@@ -3095,10 +3128,32 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
       <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-3 flex flex-col">
         <div className="flex items-center justify-between mb-1 min-h-[24px] flex-wrap gap-1">
           <span className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">Habitat</span>
-          <div className="flex items-center gap-1">
+          <div className="flex items-center flex-wrap gap-1 justify-end">
             <button type="button" onClick={() => setHabitatSpecialistsOnly(!habitatSpecialistsOnly)} className={toggleClass(habitatSpecialistsOnly)} aria-pressed={habitatSpecialistsOnly} title="Species recorded in exactly one habitat type">Specialists</button>
-            <button type="button" onClick={() => setHabitatMajorOnly(!habitatMajorOnly)} className={toggleClass(habitatMajorOnly)} aria-pressed={habitatMajorOnly} title="At least one habitat of major importance to the species">Major</button>
-            <button type="button" onClick={() => setHabitatResidentOnly(!habitatResidentOnly)} className={toggleClass(habitatResidentOnly)} aria-pressed={habitatResidentOnly} title="At least one habitat occupied year-round (Resident), not just seasonally">Resident</button>
+            <button type="button" onClick={() => setHabitatExcludeMinor(!habitatExcludeMinor)} className={toggleClass(habitatExcludeMinor)} aria-pressed={habitatExcludeMinor} title="Exclude matches where the (selected, or any) habitat is confirmed not of major importance — entries with unrecorded importance are kept">Exclude minor</button>
+            <span className="w-px h-3.5 bg-zinc-200 dark:bg-zinc-700 mx-0.5" aria-hidden="true" />
+            {HABITAT_SEASON_OPTIONS.map(({ value, short }) => {
+              const isSelected = selectedHabitatSeasons.has(value);
+              return (
+                <button
+                  key={value}
+                  type="button"
+                  onClick={(e) => {
+                    const isMulti = e.metaKey || e.ctrlKey;
+                    setSelectedHabitatSeasons(prev => {
+                      if (isMulti) { const next = new Set(prev); if (next.has(value)) next.delete(value); else next.add(value); return next; }
+                      if (prev.size === 1 && prev.has(value)) return new Set();
+                      return new Set([value]);
+                    });
+                  }}
+                  className={toggleClass(isSelected)}
+                  aria-pressed={isSelected}
+                  title={value}
+                >
+                  {short}
+                </button>
+              );
+            })}
           </div>
         </div>
         <div style={{ height: HABITAT_AREA_HEIGHT }} className="flex flex-col overflow-hidden">
@@ -3106,30 +3161,51 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
             <div className="h-full flex items-center justify-center"><Spinner /></div>
           ) : habitatBarData.length > 0 ? (
             <>
-              <div className="flex-1 min-h-0 overflow-y-auto">
-                <div style={{ height: chartHeight }}>
-                  <FilterBarChart
-                    data={habitatBarData}
-                    dataKey="code"
-                    selectedItems={selectedHabitatLabels}
-                    onBarClick={(data: { payload?: { code?: string; habitatCode?: string } }, event: React.MouseEvent) => {
-                      const label = data.payload?.code;
-                      const code = label ? habitatLabelToCode.get(label) : undefined;
-                      if (!code) return;
-                      const isMulti = event.metaKey || event.ctrlKey;
-                      setSelectedHabitat(prev => {
-                        if (isMulti) { const next = new Set(prev); if (next.has(code)) next.delete(code); else next.add(code); return next; }
-                        if (prev.size === 1 && prev.has(code)) return new Set();
-                        return new Set([code]);
-                      });
-                      setExpandedHabitat(prev => prev === code ? null : code);
-                    }}
-                    barColor="#0d9488"
-                    yAxisWidth={155}
-                    rightMargin={80}
-                    yAxisTickMaxLength={22}
-                  />
+              <div className="flex-1 min-h-0 flex flex-col">
+                <div className="flex-1 min-h-0 overflow-y-auto">
+                  <div style={{ height: chartHeight }}>
+                    <FilterBarChart
+                      data={pagedHabitatBarData}
+                      dataKey="code"
+                      selectedItems={selectedHabitatLabels}
+                      onBarClick={(data: { payload?: { code?: string; habitatCode?: string } }, event: React.MouseEvent) => {
+                        const label = data.payload?.code;
+                        const code = label ? habitatLabelToCode.get(label) : undefined;
+                        if (!code) return;
+                        const isMulti = event.metaKey || event.ctrlKey;
+                        setSelectedHabitat(prev => {
+                          if (isMulti) { const next = new Set(prev); if (next.has(code)) next.delete(code); else next.add(code); return next; }
+                          if (prev.size === 1 && prev.has(code)) return new Set();
+                          return new Set([code]);
+                        });
+                        setExpandedHabitat(prev => prev === code ? null : code);
+                      }}
+                      barColor="#0d9488"
+                      yAxisWidth={155}
+                      rightMargin={80}
+                      yAxisTickMaxLength={22}
+                    />
+                  </div>
                 </div>
+                {habitatTotalPages > 1 && (
+                  <div className="shrink-0 flex items-center justify-between pt-1 text-[10px] text-zinc-400 dark:text-zinc-500">
+                    <button
+                      onClick={() => setHabitatPage(p => Math.max(0, p - 1))}
+                      disabled={safeHabitatPage === 0}
+                      className="px-1.5 py-0.5 rounded hover:bg-zinc-100 dark:hover:bg-zinc-800 disabled:opacity-30 disabled:cursor-not-allowed"
+                    >
+                      Prev
+                    </button>
+                    <span className="tabular-nums">Page {safeHabitatPage + 1} of {habitatTotalPages}</span>
+                    <button
+                      onClick={() => setHabitatPage(p => Math.min(habitatTotalPages - 1, p + 1))}
+                      disabled={safeHabitatPage >= habitatTotalPages - 1}
+                      className="px-1.5 py-0.5 rounded hover:bg-zinc-100 dark:hover:bg-zinc-800 disabled:opacity-30 disabled:cursor-not-allowed"
+                    >
+                      Next
+                    </button>
+                  </div>
+                )}
               </div>
               {isDrilled && (
                 <div className="shrink-0 mt-2 pt-2 border-t border-zinc-200 dark:border-zinc-800 flex flex-col" style={{ maxHeight: "50%" }}>
@@ -3745,22 +3821,21 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
               </svg>
               More Filters
-              {(selectedSystems.size + selectedGrowthForms.size + selectedPopulationTrends.size + selectedMovementPatterns.size + selectedThreats.size + selectedCriteria.size + selectedHabitat.size + (habitatSpecialistsOnly ? 1 : 0) + (habitatMajorOnly ? 1 : 0) + (habitatResidentOnly ? 1 : 0) + selectedCountries.size + (endemicsOnly ? 1 : 0) > 0) && (
+              {(selectedSystems.size + selectedGrowthForms.size + selectedPopulationTrends.size + selectedMovementPatterns.size + selectedThreats.size + selectedCriteria.size + selectedHabitat.size + (habitatSpecialistsOnly ? 1 : 0) + (habitatExcludeMinor ? 1 : 0) + selectedHabitatSeasons.size + selectedCountries.size + (endemicsOnly ? 1 : 0) > 0) && (
                 <span className="ml-1 px-1.5 py-0.5 text-[10px] rounded-full bg-zinc-200 dark:bg-zinc-700 text-zinc-600 dark:text-zinc-300">
-                  {selectedSystems.size + selectedGrowthForms.size + selectedPopulationTrends.size + selectedMovementPatterns.size + selectedThreats.size + selectedCriteria.size + selectedHabitat.size + (habitatSpecialistsOnly ? 1 : 0) + (habitatMajorOnly ? 1 : 0) + (habitatResidentOnly ? 1 : 0) + selectedCountries.size + (endemicsOnly ? 1 : 0)} active
+                  {selectedSystems.size + selectedGrowthForms.size + selectedPopulationTrends.size + selectedMovementPatterns.size + selectedThreats.size + selectedCriteria.size + selectedHabitat.size + (habitatSpecialistsOnly ? 1 : 0) + (habitatExcludeMinor ? 1 : 0) + selectedHabitatSeasons.size + selectedCountries.size + (endemicsOnly ? 1 : 0)} active
                 </span>
               )}
             </button>
             {moreFiltersOpen && (
               <div className="px-3 md:px-4 pb-3 md:pb-4 pt-3 md:pt-4 border-t border-zinc-200 dark:border-zinc-800 flex flex-col gap-3">
-                {/* Country map + Threats + Habitat — moved here from the primary view
+                {/* Country map + Threats — moved here from the primary view
                     (Charts row 2) so that row stays focused on Conservation Status /
                     Years Since Assessed / GBIF Records; these still filter live like
                     every other control on this page, just tucked a click away. */}
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                   {countryMapCard}
                   {threatsCard}
-                  {habitatCard}
                 </div>
 
                 {/* Growth Form (plants/fungi only) */}
@@ -3822,7 +3897,7 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
                   );
                 })()}
 
-                {/* Realm, Trend, Movement — side by side as three columns rather
+                {/* Realm, Habitat, Movement — side by side as three columns rather
                     than stacked rows, since each is a short, independent filter. */}
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                   {/* Realm */}
@@ -3858,36 +3933,7 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
                     </div>
                   </div>
 
-                  {/* Trend */}
-                  <div className="flex items-center gap-2 bg-zinc-50 dark:bg-zinc-800/50 border border-zinc-200 dark:border-zinc-700 rounded-lg px-3 py-2">
-                    <span className="text-sm font-semibold text-zinc-900 dark:text-zinc-100 shrink-0 w-20">Trend</span>
-                    <div className="flex flex-wrap gap-1.5">
-                      {(["Increasing", "Stable", "Decreasing", "Unknown"] as const).map(trend => {
-                        const isSelected = selectedPopulationTrends.has(trend);
-                        const count = populationTrendCounts[trend] ?? 0;
-                        return (
-                          <button
-                            key={trend}
-                            onClick={(e) => {
-                              const isMulti = e.metaKey || e.ctrlKey;
-                              setSelectedPopulationTrends(prev => {
-                                if (isMulti) { const next = new Set(prev); if (next.has(trend)) next.delete(trend); else next.add(trend); return next; }
-                                if (prev.size === 1 && prev.has(trend)) return new Set();
-                                return new Set([trend]);
-                              });
-                            }}
-                            className={`px-2 py-1 text-xs rounded-full transition-colors cursor-pointer ${
-                              isSelected
-                                ? "bg-orange-500 text-white"
-                                : "bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400 hover:bg-zinc-200 dark:hover:bg-zinc-700"
-                            }`}
-                          >
-                            {trend === "Increasing" ? "↑" : trend === "Decreasing" ? "↓" : trend === "Stable" ? "→" : "?"} {trend} ({count.toLocaleString()})
-                          </button>
-                        );
-                      })}
-                    </div>
-                  </div>
+                  {habitatCard}
 
                   {/* Movement Patterns */}
                   {!isNewAssessments && (
@@ -3924,12 +3970,13 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
                   )}
                 </div>
 
-                {/* Criteria — top-level A-E pills; clicking one both selects it as a
-                    filter AND expands its next level below (number -> sub-clause ->
-                    roman numeral, as deep as that branch goes — mirrors the Threats
-                    chart's category/sub-category drill-down, generalized to arbitrary
-                    depth via renderCriteriaLevel since criteria nests up to 4 levels
-                    vs. threats' 2). Cmd/ctrl-click for real multi-select — any number
+                {/* Criteria and Trend, side by side. Criteria — top-level A-E pills;
+                    clicking one both selects it as a filter AND expands its next
+                    level below (number -> sub-clause -> roman numeral, as deep as
+                    that branch goes — mirrors the Threats chart's category/
+                    sub-category drill-down, generalized to arbitrary depth via
+                    renderCriteriaLevel since criteria nests up to 4 levels vs.
+                    threats' 2). Cmd/ctrl-click for real multi-select — any number
                     of branches can be drilled into and selected simultaneously (e.g.
                     B1b(iii) AND C2a(i) together), each independently expanded via
                     expandedCriteria (a Set, not a single "last expanded" value). A
@@ -3937,19 +3984,52 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
                     B1+B2, or B1a and B1b together), so selecting any code matches
                     species with that code OR a more specific one beneath it (see
                     parseCriteriaCodes' startsWith-based matching). */}
-                {!isNewAssessments && (
-                  <div className="flex flex-col gap-2 bg-zinc-50 dark:bg-zinc-800/50 border border-zinc-200 dark:border-zinc-700 rounded-lg px-3 py-2">
-                    <div className="flex items-center gap-2">
-                      <span className="text-sm font-semibold text-zinc-900 dark:text-zinc-100 shrink-0 w-20">Criteria</span>
-                      {renderCriteriaRow(CRITERIA_CATEGORIES, false)}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  {!isNewAssessments && (
+                    <div className="flex flex-col gap-2 bg-zinc-50 dark:bg-zinc-800/50 border border-zinc-200 dark:border-zinc-700 rounded-lg px-3 py-2">
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm font-semibold text-zinc-900 dark:text-zinc-100 shrink-0 w-20">Criteria</span>
+                        {renderCriteriaRow(CRITERIA_CATEGORIES, false)}
+                      </div>
+                      {CRITERIA_CATEGORIES.map(node => (
+                        expandedCriteria.has(node.code) && node.children.length > 0 ? (
+                          <React.Fragment key={node.code}>{renderCriteriaLevel(node.children, 1)}</React.Fragment>
+                        ) : null
+                      ))}
                     </div>
-                    {CRITERIA_CATEGORIES.map(node => (
-                      expandedCriteria.has(node.code) && node.children.length > 0 ? (
-                        <React.Fragment key={node.code}>{renderCriteriaLevel(node.children, 1)}</React.Fragment>
-                      ) : null
-                    ))}
+                  )}
+
+                  {/* Trend */}
+                  <div className="flex items-center gap-2 bg-zinc-50 dark:bg-zinc-800/50 border border-zinc-200 dark:border-zinc-700 rounded-lg px-3 py-2">
+                    <span className="text-sm font-semibold text-zinc-900 dark:text-zinc-100 shrink-0 w-20">Trend</span>
+                    <div className="flex flex-wrap gap-1.5">
+                      {(["Increasing", "Stable", "Decreasing", "Unknown"] as const).map(trend => {
+                        const isSelected = selectedPopulationTrends.has(trend);
+                        const count = populationTrendCounts[trend] ?? 0;
+                        return (
+                          <button
+                            key={trend}
+                            onClick={(e) => {
+                              const isMulti = e.metaKey || e.ctrlKey;
+                              setSelectedPopulationTrends(prev => {
+                                if (isMulti) { const next = new Set(prev); if (next.has(trend)) next.delete(trend); else next.add(trend); return next; }
+                                if (prev.size === 1 && prev.has(trend)) return new Set();
+                                return new Set([trend]);
+                              });
+                            }}
+                            className={`px-2 py-1 text-xs rounded-full transition-colors cursor-pointer ${
+                              isSelected
+                                ? "bg-orange-500 text-white"
+                                : "bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400 hover:bg-zinc-200 dark:hover:bg-zinc-700"
+                            }`}
+                          >
+                            {trend === "Increasing" ? "↑" : trend === "Decreasing" ? "↓" : trend === "Stable" ? "→" : "?"} {trend} ({count.toLocaleString()})
+                          </button>
+                        );
+                      })}
+                    </div>
                   </div>
-                )}
+                </div>
 
                 {/* Assessors and Reviewers, shown side by side */}
                 {isSingleSpecies && singleSpecies ? (
@@ -4034,7 +4114,7 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
               </svg>
             </div>
-            {(selectedTaxa.size > 0 || selectedSubgroups.size > 0 || selectedCategories.size > 0 || selectedYearRanges.size > 0 || selectedAssessmentYears.size > 0 || selectedDescribedYears.size > 0 || selectedObsRanges.size > 0 || selectedCountries.size > 0 || selectedSystems.size > 0 || endemicsOnly || selectedGrowthForms.size > 0 || selectedPopulationTrends.size > 0 || selectedMovementPatterns.size > 0 || selectedThreats.size > 0 || selectedCriteria.size > 0 || selectedHabitat.size > 0 || habitatSpecialistsOnly || habitatMajorOnly || habitatResidentOnly || selectedAssessors.size > 0 || selectedReviewers.size > 0 || showOnlyStarred || exactFilters.outdated || exactFilters.minObs != null || exactFilters.maxObs != null || exactFilters.minAssessmentYear != null || exactFilters.maxAssessmentYear != null || exactFilters.minDescribedYear != null || exactFilters.maxDescribedYear != null) && (
+            {(selectedTaxa.size > 0 || selectedSubgroups.size > 0 || selectedCategories.size > 0 || selectedYearRanges.size > 0 || selectedAssessmentYears.size > 0 || selectedDescribedYears.size > 0 || selectedObsRanges.size > 0 || selectedCountries.size > 0 || selectedSystems.size > 0 || endemicsOnly || selectedGrowthForms.size > 0 || selectedPopulationTrends.size > 0 || selectedMovementPatterns.size > 0 || selectedThreats.size > 0 || selectedCriteria.size > 0 || selectedHabitat.size > 0 || habitatSpecialistsOnly || habitatExcludeMinor || selectedHabitatSeasons.size > 0 || selectedAssessors.size > 0 || selectedReviewers.size > 0 || showOnlyStarred || exactFilters.outdated || exactFilters.minObs != null || exactFilters.maxObs != null || exactFilters.minAssessmentYear != null || exactFilters.maxAssessmentYear != null || exactFilters.minDescribedYear != null || exactFilters.maxDescribedYear != null) && (
               <button
                 onClick={() => {
                   clearAllFiltersAndTaxa();
@@ -4277,24 +4357,25 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
                 <span className="text-sm">×</span>
               </button>
             )}
-            {habitatMajorOnly && (
+            {habitatExcludeMinor && (
               <button
-                onClick={() => setHabitatMajorOnly(false)}
+                onClick={() => setHabitatExcludeMinor(false)}
                 className="px-3 py-1.5 text-sm font-medium rounded-full bg-teal-100 text-teal-600 dark:bg-teal-900/30 dark:text-teal-400 flex items-center gap-1 hover:opacity-80"
               >
-                Major habitat only
+                Exclude minor habitat
                 <span className="text-sm">×</span>
               </button>
             )}
-            {habitatResidentOnly && (
+            {Array.from(selectedHabitatSeasons).map(season => (
               <button
-                onClick={() => setHabitatResidentOnly(false)}
+                key={`habitat-season-${season}`}
+                onClick={() => setSelectedHabitatSeasons(prev => { const next = new Set(prev); next.delete(season); return next; })}
                 className="px-3 py-1.5 text-sm font-medium rounded-full bg-teal-100 text-teal-600 dark:bg-teal-900/30 dark:text-teal-400 flex items-center gap-1 hover:opacity-80"
               >
-                Resident only
+                {season}
                 <span className="text-sm">×</span>
               </button>
-            )}
+            ))}
             {Array.from(selectedSystems).map(system => (
               <button
                 key={system}

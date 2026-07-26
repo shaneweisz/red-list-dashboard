@@ -100,6 +100,15 @@ export const SUITABILITY_CODES: Record<string, string> = {
   "Marginal": "M",
   "Unknown": "U",
 };
+// majorImportance is a raw Yes/No/blank field in the source data (not an
+// enumerated lookup like season/suitability) — blank is the single largest
+// bucket (~35% of rows), so it gets its own code ("-") rather than being
+// folded into "No", which would make "exclude minor" wrongly exclude species
+// whose importance was simply never recorded.
+export const MAJOR_IMPORTANCE_CODES: Record<string, string> = {
+  "Yes": "1",
+  "No": "0",
+};
 
 // =============================================================================
 // DATA FETCHING (from IUCN PostgreSQL)
@@ -341,7 +350,7 @@ export async function fetchFromIucnDb(
       const aid = Number(row.assessment_id);
       const seasonCode = SEASON_CODES[row.season] ?? "-";
       const suitabilityCode = SUITABILITY_CODES[row.suitability] ?? "-";
-      const majorFlag = row.major_importance === "Yes" ? "1" : "0";
+      const majorFlag = MAJOR_IMPORTANCE_CODES[row.major_importance] ?? "-";
       if (!habitatsByAssessment.has(aid)) habitatsByAssessment.set(aid, new Set());
       habitatsByAssessment.get(aid)!.add(`${row.code}:${seasonCode}:${suitabilityCode}:${majorFlag}`);
     }
