@@ -3151,40 +3151,6 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
                   {threatsCard}
                 </div>
 
-                {/* Realm */}
-                <div className="flex items-center gap-2 bg-zinc-50 dark:bg-zinc-800/50 border border-zinc-200 dark:border-zinc-700 rounded-lg px-3 py-2">
-                  <span className="text-sm font-semibold text-zinc-900 dark:text-zinc-100 shrink-0 w-20">Realm</span>
-                  <div className="flex flex-wrap gap-1.5">
-                    {(["Terrestrial", "Freshwater", "Marine"] as const).map(system => {
-                      const isSelected = selectedSystems.has(system);
-                      const count = realmCounts[system] ?? 0;
-                      return (
-                        <button
-                          key={system}
-                          onClick={(e) => {
-                            const isMulti = e.metaKey || e.ctrlKey;
-                            setSelectedSystems(prev => {
-                              if (isMulti) { const next = new Set(prev); if (next.has(system)) next.delete(system); else next.add(system); return next; }
-                              if (prev.size === 1 && prev.has(system)) return new Set();
-                              return new Set([system]);
-                            });
-                          }}
-                          className={`px-2 py-1 text-xs rounded-full transition-colors cursor-pointer ${
-                            isSelected
-                              ? system === "Terrestrial" ? "bg-amber-500 text-white"
-                              : system === "Freshwater" ? "bg-cyan-500 text-white"
-                              : "bg-blue-600 text-white"
-                              : "bg-zinc-100 text-zinc-600 hover:bg-zinc-200 dark:bg-zinc-800 dark:text-zinc-400 dark:hover:bg-zinc-700"
-                          }`}
-                        >
-                          {system} ({count.toLocaleString()})
-                        </button>
-                      );
-                    })}
-                  </div>
-                </div>
-
-
                 {/* Growth Form (plants/fungi only) */}
                 {(() => {
                   // Compute growth form counts cross-filtered (exclude own filter)
@@ -3242,8 +3208,44 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
                   );
                 })()}
 
-                {/* Trend */}
-                <div className="flex items-center gap-2 bg-zinc-50 dark:bg-zinc-800/50 border border-zinc-200 dark:border-zinc-700 rounded-lg px-3 py-2">
+                {/* Realm, Trend, Movement — side by side as three columns rather
+                    than stacked rows, since each is a short, independent filter. */}
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                  {/* Realm */}
+                  <div className="flex items-center gap-2 bg-zinc-50 dark:bg-zinc-800/50 border border-zinc-200 dark:border-zinc-700 rounded-lg px-3 py-2">
+                    <span className="text-sm font-semibold text-zinc-900 dark:text-zinc-100 shrink-0 w-20">Realm</span>
+                    <div className="flex flex-wrap gap-1.5">
+                      {(["Terrestrial", "Freshwater", "Marine"] as const).map(system => {
+                        const isSelected = selectedSystems.has(system);
+                        const count = realmCounts[system] ?? 0;
+                        return (
+                          <button
+                            key={system}
+                            onClick={(e) => {
+                              const isMulti = e.metaKey || e.ctrlKey;
+                              setSelectedSystems(prev => {
+                                if (isMulti) { const next = new Set(prev); if (next.has(system)) next.delete(system); else next.add(system); return next; }
+                                if (prev.size === 1 && prev.has(system)) return new Set();
+                                return new Set([system]);
+                              });
+                            }}
+                            className={`px-2 py-1 text-xs rounded-full transition-colors cursor-pointer ${
+                              isSelected
+                                ? system === "Terrestrial" ? "bg-amber-500 text-white"
+                                : system === "Freshwater" ? "bg-cyan-500 text-white"
+                                : "bg-blue-600 text-white"
+                                : "bg-zinc-100 text-zinc-600 hover:bg-zinc-200 dark:bg-zinc-800 dark:text-zinc-400 dark:hover:bg-zinc-700"
+                            }`}
+                          >
+                            {system} ({count.toLocaleString()})
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  {/* Trend */}
+                  <div className="flex items-center gap-2 bg-zinc-50 dark:bg-zinc-800/50 border border-zinc-200 dark:border-zinc-700 rounded-lg px-3 py-2">
                     <span className="text-sm font-semibold text-zinc-900 dark:text-zinc-100 shrink-0 w-20">Trend</span>
                     <div className="flex flex-wrap gap-1.5">
                       {(["Increasing", "Stable", "Decreasing", "Unknown"] as const).map(trend => {
@@ -3273,39 +3275,40 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
                     </div>
                   </div>
 
-                {/* Movement Patterns */}
-                {!isNewAssessments && (
-                  <div className="flex items-center gap-2 bg-zinc-50 dark:bg-zinc-800/50 border border-zinc-200 dark:border-zinc-700 rounded-lg px-3 py-2">
-                    <span className="text-sm font-semibold text-zinc-900 dark:text-zinc-100 shrink-0 w-20">Movement</span>
-                      <div className="flex flex-wrap gap-1.5">
-                        {(["Full Migrant", "Altitudinal Migrant", "Nomadic", "Not a Migrant", "Unknown"] as const).map(pattern => {
-                          const isSelected = selectedMovementPatterns.has(pattern);
-                          const count = movementPatternCounts[pattern] ?? 0;
-                          if (count === 0) return null;
-                          return (
-                            <button
-                              key={pattern}
-                              onClick={(e) => {
-                                const isMulti = e.metaKey || e.ctrlKey;
-                                setSelectedMovementPatterns(prev => {
-                                  if (isMulti) { const next = new Set(prev); if (next.has(pattern)) next.delete(pattern); else next.add(pattern); return next; }
-                                  if (prev.size === 1 && prev.has(pattern)) return new Set();
-                                  return new Set([pattern]);
-                                });
-                              }}
-                              className={`px-2 py-1 text-xs rounded-full transition-colors cursor-pointer ${
-                                isSelected
-                                  ? "bg-teal-500 text-white"
-                                  : "bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400 hover:bg-zinc-200 dark:hover:bg-zinc-700"
-                              }`}
-                            >
-                              {pattern} ({count.toLocaleString()})
-                            </button>
-                          );
-                        })}
-                      </div>
-                  </div>
-                )}
+                  {/* Movement Patterns */}
+                  {!isNewAssessments && (
+                    <div className="flex items-center gap-2 bg-zinc-50 dark:bg-zinc-800/50 border border-zinc-200 dark:border-zinc-700 rounded-lg px-3 py-2">
+                      <span className="text-sm font-semibold text-zinc-900 dark:text-zinc-100 shrink-0 w-20">Movement</span>
+                        <div className="flex flex-wrap gap-1.5">
+                          {(["Full Migrant", "Altitudinal Migrant", "Nomadic", "Not a Migrant", "Unknown"] as const).map(pattern => {
+                            const isSelected = selectedMovementPatterns.has(pattern);
+                            const count = movementPatternCounts[pattern] ?? 0;
+                            if (count === 0) return null;
+                            return (
+                              <button
+                                key={pattern}
+                                onClick={(e) => {
+                                  const isMulti = e.metaKey || e.ctrlKey;
+                                  setSelectedMovementPatterns(prev => {
+                                    if (isMulti) { const next = new Set(prev); if (next.has(pattern)) next.delete(pattern); else next.add(pattern); return next; }
+                                    if (prev.size === 1 && prev.has(pattern)) return new Set();
+                                    return new Set([pattern]);
+                                  });
+                                }}
+                                className={`px-2 py-1 text-xs rounded-full transition-colors cursor-pointer ${
+                                  isSelected
+                                    ? "bg-teal-500 text-white"
+                                    : "bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400 hover:bg-zinc-200 dark:hover:bg-zinc-700"
+                                }`}
+                              >
+                                {pattern} ({count.toLocaleString()})
+                              </button>
+                            );
+                          })}
+                        </div>
+                    </div>
+                  )}
+                </div>
 
                 {/* Assessors and Reviewers, shown side by side */}
                 {isSingleSpecies && singleSpecies ? (
@@ -3390,22 +3393,6 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
               </svg>
             </div>
-            {(selectedTaxa.size > 0 || selectedSubgroups.size > 0 || selectedCategories.size > 0 || selectedYearRanges.size > 0 || selectedAssessmentYears.size > 0 || selectedDescribedYears.size > 0 || selectedObsRanges.size > 0 || selectedCountries.size > 0 || selectedSystems.size > 0 || endemicsOnly || selectedGrowthForms.size > 0 || selectedPopulationTrends.size > 0 || selectedMovementPatterns.size > 0 || selectedThreats.size > 0 || selectedAssessors.size > 0 || selectedReviewers.size > 0 || showOnlyStarred || exactFilters.outdated || exactFilters.minObs != null || exactFilters.maxObs != null || exactFilters.minAssessmentYear != null || exactFilters.maxAssessmentYear != null || exactFilters.minDescribedYear != null || exactFilters.maxDescribedYear != null) && (
-              <button
-                onClick={() => {
-                  clearAllFiltersAndTaxa();
-                  setShowOnlyStarred(false);
-                  setExpandedThreat(null);
-                }}
-                title="Reset all filters and the selected taxon"
-                className="px-2 md:px-3 py-1.5 rounded-lg text-xs md:text-sm font-medium transition-colors flex items-center gap-1 md:gap-1.5 bg-white text-zinc-700 border border-zinc-200 hover:bg-zinc-50 dark:bg-zinc-800 dark:text-zinc-300 dark:border-zinc-700 shrink-0"
-              >
-                <svg className="w-3.5 h-3.5 md:w-4 md:h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                </svg>
-                <span className="hidden sm:inline">Clear all</span>
-              </button>
-            )}
             {pinnedSpecies.length > 0 && (
               <button
                 onClick={() => setShowOnlyStarred(!showOnlyStarred)}
@@ -3651,13 +3638,22 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
                 </button>
               ));
             })()}
-            <span className="ml-auto text-sm md:text-base font-semibold text-zinc-700 dark:text-zinc-300 tabular-nums flex items-center gap-2">
-              {speciesLoading && totalFiltered === 0 && !singleSpeciesPreview ? (
-                <Spinner className="h-4 w-4" />
-              ) : (
-                <>{totalFiltered.toLocaleString()} species</>
-              )}
-            </span>
+            {(selectedTaxa.size > 0 || selectedSubgroups.size > 0 || selectedCategories.size > 0 || selectedYearRanges.size > 0 || selectedAssessmentYears.size > 0 || selectedDescribedYears.size > 0 || selectedObsRanges.size > 0 || selectedCountries.size > 0 || selectedSystems.size > 0 || endemicsOnly || selectedGrowthForms.size > 0 || selectedPopulationTrends.size > 0 || selectedMovementPatterns.size > 0 || selectedThreats.size > 0 || selectedAssessors.size > 0 || selectedReviewers.size > 0 || showOnlyStarred || exactFilters.outdated || exactFilters.minObs != null || exactFilters.maxObs != null || exactFilters.minAssessmentYear != null || exactFilters.maxAssessmentYear != null || exactFilters.minDescribedYear != null || exactFilters.maxDescribedYear != null) && (
+              <button
+                onClick={() => {
+                  clearAllFiltersAndTaxa();
+                  setShowOnlyStarred(false);
+                  setExpandedThreat(null);
+                }}
+                title="Reset all filters and the selected taxon"
+                className="ml-auto px-2 md:px-3 py-1.5 rounded-lg text-xs md:text-sm font-medium transition-colors flex items-center gap-1 md:gap-1.5 bg-white text-zinc-700 border border-zinc-200 hover:bg-zinc-50 dark:bg-zinc-800 dark:text-zinc-300 dark:border-zinc-700 shrink-0"
+              >
+                <svg className="w-3.5 h-3.5 md:w-4 md:h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+                <span className="hidden sm:inline">Clear all</span>
+              </button>
+            )}
             {!isNewAssessments && (neCount > 0 || neBlockedForAll) && (
               <button
                 disabled={neBlockedForAll}
@@ -3673,7 +3669,7 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
                     return next;
                   });
                 }}
-                className={`px-2 md:px-3 py-1.5 rounded-lg text-xs md:text-sm font-medium transition-colors flex items-center gap-1 md:gap-1.5 ${
+                className={`ml-auto px-2 md:px-3 py-1.5 rounded-lg text-xs md:text-sm font-medium transition-colors flex items-center gap-1 md:gap-1.5 ${
                   neBlockedForAll
                     ? "bg-white text-zinc-400 border border-zinc-200 opacity-60 cursor-not-allowed dark:bg-zinc-800 dark:text-zinc-500 dark:border-zinc-700"
                     : selectedCategories.has("NE")
