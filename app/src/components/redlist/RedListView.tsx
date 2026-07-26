@@ -18,6 +18,7 @@ import ReviewerChart from "./ReviewerChart";
 import { parseAssessors } from "@/lib/parseAssessors";
 import { iucnRegionCountries, countryToIucnRegion } from "@/lib/regions";
 import { useFilterParams } from "@/hooks/useFilterParams";
+import { parseHabitatEntries, matchesHabitatFilter as matchesHabitatCriteria } from "@/lib/habitat-filter";
 import { type RedListSpecies } from "@/hooks/useRedListSpeciesQuery";
 import { useSpeciesCache } from "@/contexts/SpeciesCacheContext";
 import { isOutdated, outdatedCutoffDate } from "@/lib/outdated";
@@ -331,28 +332,6 @@ function parseCriteriaCodes(criteria: string | null | undefined): string[] {
   return [...codes];
 }
 
-interface HabitatEntry {
-  code: string;
-  season: string;
-  suitability: string;
-  /** "Major" | "Not major" | "Unknown" (importance not recorded in the IUCN DB) */
-  importance: string;
-}
-
-// Decodes the single-letter season/suitability/importance codes
-// fetch-redlist-species.ts writes into habitat_codes (see SEASON_CODES/
-// SUITABILITY_CODES/MAJOR_IMPORTANCE_CODES there) back to full labels.
-// "-" covers habitat entries with no season/suitability/importance recorded
-// in the IUCN DB.
-const HABITAT_SEASON_LABELS: Record<string, string> = {
-  R: "Resident", B: "Breeding Season", N: "Non-Breeding Season", P: "Passage", U: "Seasonal Occurrence Unknown", "-": "Unknown",
-};
-const HABITAT_SUITABILITY_LABELS: Record<string, string> = {
-  S: "Suitable", M: "Marginal", U: "Unknown", "-": "Unknown",
-};
-const HABITAT_IMPORTANCE_LABELS: Record<string, string> = {
-  "1": "Major", "0": "Not major", "-": "Unknown",
-};
 // Season chip options for the Habitat card's season multi-select — full IUCN
 // labels (used for matching and as the button title) paired with a shorter
 // display label so five chips fit in a narrow card.
@@ -363,22 +342,6 @@ const HABITAT_SEASON_OPTIONS: { value: string; short: string }[] = [
   { value: "Passage", short: "Passage" },
   { value: "Seasonal Occurrence Unknown", short: "Unknown" },
 ];
-
-// Parses a species' habitat_codes (compact "code:season:suitability:importance"
-// tuples) into structured entries — see fetch-redlist-species.ts's
-// RedlistSpecies.habitat_codes doc comment for the encoding.
-function parseHabitatEntries(habitatCodes: string[] | null | undefined): HabitatEntry[] {
-  if (!habitatCodes) return [];
-  return habitatCodes.map(tuple => {
-    const [code, season, suitability, importance] = tuple.split(":");
-    return {
-      code: code ?? tuple,
-      season: HABITAT_SEASON_LABELS[season] ?? "Unknown",
-      suitability: HABITAT_SUITABILITY_LABELS[suitability] ?? "Unknown",
-      importance: HABITAT_IMPORTANCE_LABELS[importance] ?? "Unknown",
-    };
-  });
-}
 
 interface InatDefaultImage {
   squareUrl: string | null;
@@ -1323,22 +1286,17 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
   // separate inline checks repeated at every filter site) since major/resident both
   // need the full parsed entry list, not just codes — cheaper to parse once per
   // species per call than to re-derive it 2-3x over.
-  const matchesHabitatFilter = useCallback((s: Species): boolean => {
-    if (selectedHabitat.size === 0 && !habitatSpecialistsOnly && !habitatExcludeMinor && selectedHabitatSeasons.size === 0) return true;
-    const entries = parseHabitatEntries(s.habitat_codes);
-    const codes = Array.from(new Set(entries.map(e => e.code)));
-    if (selectedHabitat.size > 0 && !codes.some(code => Array.from(selectedHabitat).some(sel => code === sel || code.startsWith(sel + ".")))) return false;
-    if (habitatSpecialistsOnly && codes.length !== 1) return false;
-    // Exclude-minor and season scope to the entries matching the current habitat
-    // selection (so they refine "this specific habitat match"), falling back to
-    // all entries when no habitat is selected.
-    const relevant = selectedHabitat.size > 0
-      ? entries.filter(e => Array.from(selectedHabitat).some(sel => e.code === sel || e.code.startsWith(sel + ".")))
-      : entries;
-    if (habitatExcludeMinor && !relevant.some(e => e.importance !== "Not major")) return false;
-    if (selectedHabitatSeasons.size > 0 && !relevant.some(e => selectedHabitatSeasons.has(e.season))) return false;
-    return true;
-  }, [selectedHabitat, habitatSpecialistsOnly, habitatExcludeMinor, selectedHabitatSeasons]);
+  // The specialists/exclude-minor/season logic itself lives in @/lib/habitat-filter
+  // (a pure function, unit tested) — this just binds it to the component's
+  // current filter state.
+  const matchesHabitatFilter = useCallback((s: Species): boolean =>
+    matchesHabitatCriteria(s.habitat_codes, {
+      selectedHabitat,
+      specialistsOnly: habitatSpecialistsOnly,
+      excludeMinor: habitatExcludeMinor,
+      seasons: selectedHabitatSeasons,
+    }),
+  [selectedHabitat, habitatSpecialistsOnly, habitatExcludeMinor, selectedHabitatSeasons]);
 
   // Species details cache (images, criteria, common names)
   const [speciesDetails, setSpeciesDetails] = useState<Record<number, SpeciesDetails>>({});
@@ -3151,7 +3109,7 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
         <div className="flex items-center justify-between mb-1 min-h-[24px] flex-wrap gap-1">
           <span className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">Habitat</span>
           <div className="flex items-center flex-wrap gap-1 justify-end">
-            <button type="button" onClick={() => setHabitatSpecialistsOnly(!habitatSpecialistsOnly)} className={toggleClass(habitatSpecialistsOnly)} aria-pressed={habitatSpecialistsOnly} title="Species recorded in exactly one habitat type">Specialists</button>
+            <button type="button" onClick={() => setHabitatSpecialistsOnly(!habitatSpecialistsOnly)} className={toggleClass(habitatSpecialistsOnly)} aria-pressed={habitatSpecialistsOnly} title="Species recorded in exactly one top-level habitat category (subtypes of the same category still count as one; Unknown habitat doesn't count)">Specialists</button>
 
             {/* Importance — a single "Exclude minor" checkbox in a dropdown
                 rather than its own always-visible button. */}
@@ -3895,14 +3853,14 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
             </button>
             {moreFiltersOpen && (
               <div className="px-3 md:px-4 pb-3 md:pb-4 pt-3 md:pt-4 border-t border-zinc-200 dark:border-zinc-800 flex flex-col gap-3">
-                {/* Country map (left) alongside Realm + Movement stacked in the
-                    right column (right) — moved here from the primary view
+                {/* Country map (left) alongside Realm, Movement, Criteria, Trend
+                    stacked in the right column — moved here from the primary view
                     (Charts row 2) so that row stays focused on Conservation Status /
                     Years Since Assessed / GBIF Records; these still filter live like
-                    every other control on this page, just tucked a click away. Realm
-                    and Movement are short single-row filters, so pairing them
-                    stacked against the taller map balances the row instead of
-                    leaving them squeezed into a third equal-width column. */}
+                    every other control on this page, just tucked a click away. All
+                    four right-column filters are short/compact controls, so
+                    stacking them against the taller map balances the row instead
+                    of spreading them across their own separate rows. */}
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                   {countryMapCard}
                   <div className="flex flex-col gap-3">
@@ -3972,6 +3930,66 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
                           </div>
                       </div>
                     )}
+
+                    {/* Criteria — top-level A-E pills; clicking one both selects it
+                        as a filter AND expands its next level below (number ->
+                        sub-clause -> roman numeral, as deep as that branch goes —
+                        mirrors the Threats chart's category/sub-category drill-down,
+                        generalized to arbitrary depth via renderCriteriaLevel since
+                        criteria nests up to 4 levels vs. threats' 2). Cmd/ctrl-click
+                        for real multi-select — any number of branches can be
+                        drilled into and selected simultaneously (e.g. B1b(iii) AND
+                        C2a(i) together), each independently expanded via
+                        expandedCriteria (a Set, not a single "last expanded" value).
+                        A species can satisfy multiple codes under the same letter
+                        too (e.g. B1+B2, or B1a and B1b together), so selecting any
+                        code matches species with that code OR a more specific one
+                        beneath it (see parseCriteriaCodes' startsWith-based
+                        matching). */}
+                    {!isNewAssessments && (
+                      <div className="flex flex-col gap-2 bg-zinc-50 dark:bg-zinc-800/50 border border-zinc-200 dark:border-zinc-700 rounded-lg px-3 py-2">
+                        <div className="flex items-center gap-2">
+                          <span className="text-sm font-semibold text-zinc-900 dark:text-zinc-100 shrink-0 w-20">Criteria</span>
+                          {renderCriteriaRow(CRITERIA_CATEGORIES, false)}
+                        </div>
+                        {CRITERIA_CATEGORIES.map(node => (
+                          expandedCriteria.has(node.code) && node.children.length > 0 ? (
+                            <React.Fragment key={node.code}>{renderCriteriaLevel(node.children, 1)}</React.Fragment>
+                          ) : null
+                        ))}
+                      </div>
+                    )}
+
+                    {/* Trend */}
+                    <div className="flex items-center gap-2 bg-zinc-50 dark:bg-zinc-800/50 border border-zinc-200 dark:border-zinc-700 rounded-lg px-3 py-2">
+                      <span className="text-sm font-semibold text-zinc-900 dark:text-zinc-100 shrink-0 w-20">Trend</span>
+                      <div className="flex flex-wrap gap-1.5">
+                        {(["Increasing", "Stable", "Decreasing", "Unknown"] as const).map(trend => {
+                          const isSelected = selectedPopulationTrends.has(trend);
+                          const count = populationTrendCounts[trend] ?? 0;
+                          return (
+                            <button
+                              key={trend}
+                              onClick={(e) => {
+                                const isMulti = e.metaKey || e.ctrlKey;
+                                setSelectedPopulationTrends(prev => {
+                                  if (isMulti) { const next = new Set(prev); if (next.has(trend)) next.delete(trend); else next.add(trend); return next; }
+                                  if (prev.size === 1 && prev.has(trend)) return new Set();
+                                  return new Set([trend]);
+                                });
+                              }}
+                              className={`px-2 py-1 text-xs rounded-full transition-colors cursor-pointer ${
+                                isSelected
+                                  ? "bg-orange-500 text-white"
+                                  : "bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400 hover:bg-zinc-200 dark:hover:bg-zinc-700"
+                              }`}
+                            >
+                              {trend === "Increasing" ? "↑" : trend === "Decreasing" ? "↓" : trend === "Stable" ? "→" : "?"} {trend} ({count.toLocaleString()})
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
                   </div>
                 </div>
 
@@ -4039,67 +4057,6 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                   {habitatCard}
                   {threatsCard}
-                </div>
-
-                {/* Criteria and Trend, side by side. Criteria — top-level A-E pills;
-                    clicking one both selects it as a filter AND expands its next
-                    level below (number -> sub-clause -> roman numeral, as deep as
-                    that branch goes — mirrors the Threats chart's category/
-                    sub-category drill-down, generalized to arbitrary depth via
-                    renderCriteriaLevel since criteria nests up to 4 levels vs.
-                    threats' 2). Cmd/ctrl-click for real multi-select — any number
-                    of branches can be drilled into and selected simultaneously (e.g.
-                    B1b(iii) AND C2a(i) together), each independently expanded via
-                    expandedCriteria (a Set, not a single "last expanded" value). A
-                    species can satisfy multiple codes under the same letter too (e.g.
-                    B1+B2, or B1a and B1b together), so selecting any code matches
-                    species with that code OR a more specific one beneath it (see
-                    parseCriteriaCodes' startsWith-based matching). */}
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                  {!isNewAssessments && (
-                    <div className="flex flex-col gap-2 bg-zinc-50 dark:bg-zinc-800/50 border border-zinc-200 dark:border-zinc-700 rounded-lg px-3 py-2">
-                      <div className="flex items-center gap-2">
-                        <span className="text-sm font-semibold text-zinc-900 dark:text-zinc-100 shrink-0 w-20">Criteria</span>
-                        {renderCriteriaRow(CRITERIA_CATEGORIES, false)}
-                      </div>
-                      {CRITERIA_CATEGORIES.map(node => (
-                        expandedCriteria.has(node.code) && node.children.length > 0 ? (
-                          <React.Fragment key={node.code}>{renderCriteriaLevel(node.children, 1)}</React.Fragment>
-                        ) : null
-                      ))}
-                    </div>
-                  )}
-
-                  {/* Trend */}
-                  <div className="flex items-center gap-2 bg-zinc-50 dark:bg-zinc-800/50 border border-zinc-200 dark:border-zinc-700 rounded-lg px-3 py-2">
-                    <span className="text-sm font-semibold text-zinc-900 dark:text-zinc-100 shrink-0 w-20">Trend</span>
-                    <div className="flex flex-wrap gap-1.5">
-                      {(["Increasing", "Stable", "Decreasing", "Unknown"] as const).map(trend => {
-                        const isSelected = selectedPopulationTrends.has(trend);
-                        const count = populationTrendCounts[trend] ?? 0;
-                        return (
-                          <button
-                            key={trend}
-                            onClick={(e) => {
-                              const isMulti = e.metaKey || e.ctrlKey;
-                              setSelectedPopulationTrends(prev => {
-                                if (isMulti) { const next = new Set(prev); if (next.has(trend)) next.delete(trend); else next.add(trend); return next; }
-                                if (prev.size === 1 && prev.has(trend)) return new Set();
-                                return new Set([trend]);
-                              });
-                            }}
-                            className={`px-2 py-1 text-xs rounded-full transition-colors cursor-pointer ${
-                              isSelected
-                                ? "bg-orange-500 text-white"
-                                : "bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400 hover:bg-zinc-200 dark:hover:bg-zinc-700"
-                            }`}
-                          >
-                            {trend === "Increasing" ? "↑" : trend === "Decreasing" ? "↓" : trend === "Stable" ? "→" : "?"} {trend} ({count.toLocaleString()})
-                          </button>
-                        );
-                      })}
-                    </div>
-                  </div>
                 </div>
 
                 {/* Assessors and Reviewers, shown side by side */}
