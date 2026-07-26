@@ -2843,9 +2843,19 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
         this mode (countryStyleColumns, derived from layoutMode — see its
         definition above). Uses `contents` to no-op the table wrapper
         entirely outside country mode, rather than branching (and
-        duplicating) the huge table JSX below per mode. */}
+        duplicating) the huge table JSX below per mode.
+        Before anything's picked, the map grows to fill the rest of the
+        viewport (flex-1, via the flex chain from page.tsx's <main> through
+        RedListView's root down to here) so it reads as a full-height
+        landing map rather than a small box sitting above empty space — on a
+        13" laptop screen that leaves just the footer's first line visible
+        without scrolling. WorldMap's own root is already `h-full flex
+        flex-col` for exactly this. Once a country's picked and the table
+        needs room below it, the map drops back to its normal
+        content-sized height (governed by WorldMap's own internal
+        minHeight, not this wrapper). */}
     {countryMode && (
-      <div className="mb-4">{countryModeContent}</div>
+      <div className={`flex flex-col ${countryScoped ? "mb-4" : "flex-1 min-h-0 mb-4"}`}>{countryModeContent}</div>
     )}
     {countryMode && countryScoped && (
       <div className="mb-1.5">{countryPillsContent}</div>
@@ -3328,8 +3338,8 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
         hold the previous country's data). */}
     {perTaxa.length > 0 && selectedTaxa.size === 0 && (
       <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1.5 mt-1.5">
-        <span className="hidden sm:inline pl-3 md:pl-4 text-xs text-zinc-400 dark:text-zinc-500">
-          {countryMode ? "Click a country to view its species, Cmd/Ctrl+click to multi-select." : "Click to filter, Cmd/Ctrl+click to multi-select."}
+        <span className="hidden sm:inline pl-3 md:pl-4 text-sm text-zinc-400 dark:text-zinc-500">
+          {countryMode ? "Click a country to view its species, Cmd/Ctrl+click to multi-select." : "Click to filter, use charts and search to explore species. Cmd/Ctrl+click to multi-select."}
         </span>
         <span className="inline-flex items-center gap-1.5 ml-auto pr-3 sm:pr-0">
           {/* Assessed/Not Evaluated toggle used to be paired here too, but it's

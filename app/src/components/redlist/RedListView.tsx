@@ -2431,7 +2431,7 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
   );
 
   return (
-    <div className="space-y-4 min-w-0">
+    <div className="space-y-4 min-w-0 flex-1 flex flex-col min-h-0">
       {/* Always show Taxa Summary table */}
       <TaxaSummary
         onToggleTaxon={handleToggleTaxon}
