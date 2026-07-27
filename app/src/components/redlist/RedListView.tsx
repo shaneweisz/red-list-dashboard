@@ -586,6 +586,18 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
   // detail row's `<td colSpan>` is as wide as the (often off-screen) table, not
   // the viewport. Expose the scroll container's *visible* width as a CSS var so
   // the detail panel can size itself to fit the screen instead of overflowing.
+  //
+  // This div is also where the table's sticky header row resolves — its
+  // wrapper needs overflow-x-auto for wide tables on narrow screens, and per
+  // the CSS overflow spec, setting overflow-x to anything but visible forces
+  // overflow-y to compute as auto too, so this becomes the header's nearest
+  // scrolling ancestor no matter what sits outside it: a sticky top offset
+  // relative to the *page* silently doesn't work here (confirmed empirically
+  // — the header rendered off-screen instead of pinning). The fix is to stop
+  // fighting that and give it a real, bounded scroll box (max-h-[70vh] +
+  // overflow-y-auto below) so "sticky top-0" resolves correctly within it —
+  // visually indistinguishable from a page-pinned header, since it sits
+  // directly under the (separately) page-pinned toolbar above.
   const tableScrollCleanupRef = useRef<(() => void) | null>(null);
   const tableScrollRef = useCallback((el: HTMLDivElement | null) => {
     tableScrollCleanupRef.current?.();
@@ -3393,7 +3405,7 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
   );
 
   return (
-    <div className="space-y-4 min-w-0 flex-1 flex flex-col min-h-0">
+    <div className="space-y-2 min-w-0 flex-1 flex flex-col min-h-0">
       {/* Always show Taxa Summary table */}
       <div ref={taxaSummaryScrollRef}>
       <TaxaSummary
@@ -3896,11 +3908,13 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
                   );
                 })()}
 
-                {/* Realm, Movement, Trend stacked in the left column, alongside
-                    Habitat — these three are short, compact controls, so
-                    stacking them against the taller Habitat card balances the
-                    row instead of spreading them across their own rows. */}
+                {/* Habitat (left) alongside Realm, Movement, Trend, Criteria
+                    stacked in the right column — these four are short,
+                    compact controls, so stacking them against the taller
+                    Habitat card balances the row instead of spreading them
+                    across their own rows. */}
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  {habitatCard}
                   <div className="flex flex-col gap-3">
                     {/* Realm */}
                     <div className="flex items-center gap-2 bg-zinc-50 dark:bg-zinc-800/50 border border-zinc-200 dark:border-zinc-700 rounded-lg px-3 py-2">
@@ -3999,39 +4013,39 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
                         })}
                       </div>
                     </div>
-                  </div>
-                  {habitatCard}
-                </div>
 
-                {/* Criteria — its own row. Top-level A-E pills; clicking one
-                    both selects it as a filter AND expands its next level
-                    below (number -> sub-clause -> roman numeral, as deep as
-                    that branch goes — mirrors the Threats chart's category/
-                    sub-category drill-down, generalized to arbitrary depth
-                    via renderCriteriaLevel since criteria nests up to 4
-                    levels vs. threats' 2). Cmd/ctrl-click for real
-                    multi-select — any number of branches can be drilled into
-                    and selected simultaneously (e.g. B1b(iii) AND C2a(i)
-                    together), each independently expanded via
-                    expandedCriteria (a Set, not a single "last expanded"
-                    value). A species can satisfy multiple codes under the
-                    same letter too (e.g. B1+B2, or B1a and B1b together), so
-                    selecting any code matches species with that code OR a
-                    more specific one beneath it (see parseCriteriaCodes'
-                    startsWith-based matching). */}
-                {!isNewAssessments && (
-                  <div className="flex flex-col gap-2 bg-zinc-50 dark:bg-zinc-800/50 border border-zinc-200 dark:border-zinc-700 rounded-lg px-3 py-2">
-                    <div className="flex items-center gap-2">
-                      <span className="text-sm font-semibold text-zinc-900 dark:text-zinc-100 shrink-0 w-20">Criteria</span>
-                      {renderCriteriaRow(CRITERIA_CATEGORIES, false)}
-                    </div>
-                    {CRITERIA_CATEGORIES.map(node => (
-                      expandedCriteria.has(node.code) && node.children.length > 0 ? (
-                        <React.Fragment key={node.code}>{renderCriteriaLevel(node.children, 1)}</React.Fragment>
-                      ) : null
-                    ))}
+                    {/* Criteria — top-level A-E pills; clicking one both
+                        selects it as a filter AND expands its next level
+                        below (number -> sub-clause -> roman numeral, as deep
+                        as that branch goes — mirrors the Threats chart's
+                        category/sub-category drill-down, generalized to
+                        arbitrary depth via renderCriteriaLevel since
+                        criteria nests up to 4 levels vs. threats' 2).
+                        Cmd/ctrl-click for real multi-select — any number of
+                        branches can be drilled into and selected
+                        simultaneously (e.g. B1b(iii) AND C2a(i) together),
+                        each independently expanded via expandedCriteria (a
+                        Set, not a single "last expanded" value). A species
+                        can satisfy multiple codes under the same letter too
+                        (e.g. B1+B2, or B1a and B1b together), so selecting
+                        any code matches species with that code OR a more
+                        specific one beneath it (see parseCriteriaCodes'
+                        startsWith-based matching). */}
+                    {!isNewAssessments && (
+                      <div className="flex flex-col gap-2 bg-zinc-50 dark:bg-zinc-800/50 border border-zinc-200 dark:border-zinc-700 rounded-lg px-3 py-2">
+                        <div className="flex items-center gap-2">
+                          <span className="text-sm font-semibold text-zinc-900 dark:text-zinc-100 shrink-0 w-20">Criteria</span>
+                          {renderCriteriaRow(CRITERIA_CATEGORIES, false)}
+                        </div>
+                        {CRITERIA_CATEGORIES.map(node => (
+                          expandedCriteria.has(node.code) && node.children.length > 0 ? (
+                            <React.Fragment key={node.code}>{renderCriteriaLevel(node.children, 1)}</React.Fragment>
+                          ) : null
+                        ))}
+                      </div>
+                    )}
                   </div>
-                )}
+                </div>
 
                 {/* Assessors and Reviewers, shown side by side */}
                 {isSingleSpecies && singleSpecies ? (
@@ -4098,10 +4112,12 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
             filters". The free-text box narrows the visible table by name in
             place, composing with the pills beside it — distinct from the page
             header's SpeciesSearchBar, which navigates elsewhere instead of
-            narrowing here (see DebouncedSearchInput's own doc comment). Not
-            sticky itself — the filters panel's capped height (max-h-[60vh]
-            above) already keeps this a short, predictable scroll away. */}
-        <div className="p-3 md:p-4 border-b border-zinc-200 dark:border-zinc-800 rounded-t-xl">
+            narrowing here (see DebouncedSearchInput's own doc comment).
+            Pinned (position: sticky) at the top of the viewport — see the
+            comment above tableScrollRef for why the table's own header row
+            is pinned separately, relative to its own bounded scroll box,
+            rather than stacked with this via a shared offset. */}
+        <div className="sticky top-0 z-30 bg-white dark:bg-zinc-900 p-3 md:p-4 border-b border-zinc-200 dark:border-zinc-800 rounded-t-xl">
           <div className="flex flex-wrap items-center gap-2 md:gap-4">
             <div className="relative flex-1 min-w-[140px] max-w-md">
               <DebouncedSearchInput
@@ -4537,7 +4553,7 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
         )}
         <div
           ref={tableScrollRef}
-          className={`bg-white dark:bg-zinc-900 rounded-xl shadow-sm border border-zinc-200 dark:border-zinc-800 overflow-x-auto transition-opacity duration-150 ${speciesLoading && !singleSpeciesPreview ? "opacity-50 pointer-events-none" : ""}`}
+          className={`bg-white dark:bg-zinc-900 rounded-xl shadow-sm border border-zinc-200 dark:border-zinc-800 overflow-x-auto overflow-y-auto max-h-[70vh] transition-opacity duration-150 ${speciesLoading && !singleSpeciesPreview ? "opacity-50 pointer-events-none" : ""}`}
           onScroll={(e) => {
             e.currentTarget.style.setProperty('--scroll-left', `${e.currentTarget.scrollLeft}px`);
           }}
@@ -4545,17 +4561,17 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
           <table className="w-full text-sm">
             <thead className="bg-zinc-50 dark:bg-zinc-800">
               <tr>
-                <th className="sticky left-0 z-10 bg-zinc-50 dark:bg-zinc-800 px-2 py-3 text-center text-xs font-medium text-zinc-500 uppercase tracking-wider w-10">
+                <th className="sticky top-0 left-0 z-20 bg-zinc-50 dark:bg-zinc-800 px-2 py-3 text-center text-xs font-medium text-zinc-500 uppercase tracking-wider w-10">
                   <svg className="w-4 h-4 mx-auto text-zinc-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.197-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.784-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z" />
                   </svg>
                 </th>
-                <th className="sticky left-[40px] z-10 bg-zinc-50 dark:bg-zinc-800 px-2 md:px-4 py-3 text-left text-xs font-medium text-zinc-500 uppercase tracking-wider">
+                <th className="sticky top-0 left-[40px] z-20 bg-zinc-50 dark:bg-zinc-800 px-2 md:px-4 py-3 text-left text-xs font-medium text-zinc-500 uppercase tracking-wider">
                   Species
                 </th>
                 {!isNewAssessments && (
                 <th
-                  className="px-2 md:px-4 py-3 text-left text-xs font-medium text-zinc-500 uppercase tracking-wider cursor-pointer hover:text-zinc-700 dark:hover:text-zinc-300 select-none whitespace-nowrap"
+                  className="sticky top-0 z-20 bg-zinc-50 dark:bg-zinc-800 px-2 md:px-4 py-3 text-left text-xs font-medium text-zinc-500 uppercase tracking-wider cursor-pointer hover:text-zinc-700 dark:hover:text-zinc-300 select-none whitespace-nowrap"
                   onClick={() => handleSort("category")}
                 >
                   <span className="flex items-center gap-1">
@@ -4568,7 +4584,7 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
                 )}
                 {!isNewAssessments && (
                 <th
-                  className="px-2 md:px-4 py-3 text-left text-xs font-medium text-zinc-500 uppercase tracking-wider cursor-pointer hover:text-zinc-700 dark:hover:text-zinc-300 select-none whitespace-nowrap"
+                  className="sticky top-0 z-20 bg-zinc-50 dark:bg-zinc-800 px-2 md:px-4 py-3 text-left text-xs font-medium text-zinc-500 uppercase tracking-wider cursor-pointer hover:text-zinc-700 dark:hover:text-zinc-300 select-none whitespace-nowrap"
                   onClick={() => handleSort("year")}
                 >
                   <span className="flex items-center gap-1">
@@ -4581,7 +4597,7 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
                 )}
                 {isNewAssessments && (
                 <th
-                  className="px-2 md:px-4 py-3 text-left text-xs font-medium text-zinc-500 uppercase tracking-wider cursor-pointer hover:text-zinc-700 dark:hover:text-zinc-300 select-none whitespace-nowrap"
+                  className="sticky top-0 z-20 bg-zinc-50 dark:bg-zinc-800 px-2 md:px-4 py-3 text-left text-xs font-medium text-zinc-500 uppercase tracking-wider cursor-pointer hover:text-zinc-700 dark:hover:text-zinc-300 select-none whitespace-nowrap"
                   onClick={() => handleSort("describedYear")}
                 >
                   <span className="flex items-center gap-1">
@@ -4593,7 +4609,7 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
                 </th>
                 )}
                 <th
-                  className="px-3 md:px-4 py-3 text-right text-xs font-medium text-zinc-500 uppercase tracking-wider min-w-[60px] cursor-pointer hover:text-zinc-700 dark:hover:text-zinc-300 select-none"
+                  className="sticky top-0 z-20 bg-zinc-50 dark:bg-zinc-800 px-3 md:px-4 py-3 text-right text-xs font-medium text-zinc-500 uppercase tracking-wider min-w-[60px] cursor-pointer hover:text-zinc-700 dark:hover:text-zinc-300 select-none"
                   onClick={() => handleSort("totalGbif")}
                 >
                   <span className="flex items-center justify-end gap-1">
@@ -4606,7 +4622,7 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
                 </th>
                 {!isNewAssessments && (
                 <th
-                  className="px-3 md:px-4 py-3 text-right text-xs font-medium text-zinc-500 uppercase tracking-wider min-w-[60px] cursor-pointer hover:text-zinc-700 dark:hover:text-zinc-300 select-none"
+                  className="sticky top-0 z-20 bg-zinc-50 dark:bg-zinc-800 px-3 md:px-4 py-3 text-right text-xs font-medium text-zinc-500 uppercase tracking-wider min-w-[60px] cursor-pointer hover:text-zinc-700 dark:hover:text-zinc-300 select-none"
                   onClick={() => handleSort("newGbif")}
                 >
                   <span className="flex items-center justify-end gap-1">
@@ -4625,7 +4641,7 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
                 )}
                 {!isNewAssessments && (
                 <th
-                  className="px-3 md:px-4 py-3 text-right text-xs font-medium text-zinc-500 uppercase tracking-wider min-w-[60px] cursor-pointer hover:text-zinc-700 dark:hover:text-zinc-300 select-none"
+                  className="sticky top-0 z-20 bg-zinc-50 dark:bg-zinc-800 px-3 md:px-4 py-3 text-right text-xs font-medium text-zinc-500 uppercase tracking-wider min-w-[60px] cursor-pointer hover:text-zinc-700 dark:hover:text-zinc-300 select-none"
                   onClick={() => handleSort("pctNewGbif")}
                 >
                   <span className="flex items-center justify-end gap-1">
