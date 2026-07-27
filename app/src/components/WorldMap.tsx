@@ -266,7 +266,7 @@ interface WorldMapProps {
 }
 
 const DEFAULT_CENTER: [number, number] = [10, 10];
-const DEFAULT_ZOOM = 1.0;
+const DEFAULT_ZOOM = 1.5;
 const MIN_ZOOM = 1.0;
 const MAX_ZOOM = 8.0;
 
