@@ -898,6 +898,7 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
   }, [selectedTaxa, clearAllFilters, fromPopstateRef]);
 
   const [showOnlyStarred, setShowOnlyStarred] = useState(false);
+  const [moreFiltersOpen, setMoreFiltersOpen] = useState(false);
   const [expandedThreat, setExpandedThreat] = useState<string | null>(null);
 
   // Keep the threats drill-down in sync with the selection. Whenever the expanded
@@ -3532,14 +3533,6 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
             );
           })()}
 
-          {/* Charts + filters panel — everything that used to live behind a
-              "More Filters" click now renders continuously here instead, in a
-              capped-height, independently-scrollable box. This keeps the panel
-              from growing unbounded as more chart cards get added, so the table
-              toolbar right below it (itself pinned — see statRowRef above)
-              stays reachable at a short, predictable scroll distance rather
-              than depending on how many cards happen to be open. */}
-          <div className="max-h-[40vh] overflow-y-auto space-y-4 pr-1 -mr-1">
           {/* Charts row 1: bar charts (new-assessments mode only shows GBIF Observations) */}
           {!isNewAssessments && (
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
@@ -3825,10 +3818,13 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
           </div>
           )}
 
-          {/* No more "More Filters" card/label — everything below flows as
-              plain rows directly in the scrollable panel, same as Charts
-              row 1 above, with no visual distinction between "primary" and
-              "more" filters. */}
+          {/* Country + Threats are always visible, alongside Charts row 1
+              above — everything past that (Growth Form, Habitat + Realm/
+              Movement/Trend/Criteria, Assessors/Reviewers) lives behind the
+              "More Filters" toggle below. No independently-scrollable panel
+              here anymore — nested scrollbars (the panel's own, inside the
+              page's) read as confusing, so this reverts to plain
+              click-to-expand instead. */}
           {!isNewAssessments && (
             <>
                 {/* Country, Threats — paired side by side. */}
@@ -3837,6 +3833,25 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
                   {threatsCard}
                 </div>
 
+                <button
+                  onClick={() => setMoreFiltersOpen(prev => !prev)}
+                  className="w-full flex items-center gap-1.5 px-3 py-2 text-sm font-medium text-zinc-700 dark:text-zinc-300 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl hover:bg-zinc-50 dark:hover:bg-zinc-800 transition-colors"
+                >
+                  <svg className={`w-3.5 h-3.5 transition-transform ${moreFiltersOpen ? "rotate-90" : ""}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                  </svg>
+                  More Filters
+                  {(selectedGrowthForms.size + selectedHabitat.size + (habitatBreadth ? 1 : 0) + (habitatImportanceActive ? 1 : 0) + (habitatSeasonsActive ? 1 : 0) + selectedSystems.size + selectedMovementPatterns.size + selectedPopulationTrends.size + selectedCriteria.size + selectedAssessors.size + selectedReviewers.size > 0) && (
+                    <span className="ml-1 px-1.5 py-0.5 text-[10px] rounded-full bg-zinc-200 dark:bg-zinc-700 text-zinc-600 dark:text-zinc-300">
+                      {selectedGrowthForms.size + selectedHabitat.size + (habitatBreadth ? 1 : 0) + (habitatImportanceActive ? 1 : 0) + (habitatSeasonsActive ? 1 : 0) + selectedSystems.size + selectedMovementPatterns.size + selectedPopulationTrends.size + selectedCriteria.size + selectedAssessors.size + selectedReviewers.size} active
+                    </span>
+                  )}
+                </button>
+            </>
+          )}
+
+          {!isNewAssessments && moreFiltersOpen && (
+            <>
                 {/* Growth Form (plants/fungi only) */}
                 {(() => {
                   // Compute growth form counts cross-filtered (exclude own filter)
@@ -4088,7 +4103,6 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
                 )}
             </>
           )}
-          </div>
 
       {/* Species Table */}
       <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl">
