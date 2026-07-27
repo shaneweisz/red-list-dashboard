@@ -1,9 +1,9 @@
 import { describe, it, expect } from "vitest";
-import { parseHabitatEntries, matchesHabitatFilter, type HabitatFilterCriteria } from "../habitat-filter";
+import { parseHabitatEntries, matchesHabitatFilter, coarseKnownCategories, type HabitatFilterCriteria } from "../habitat-filter";
 
 const noFilter: HabitatFilterCriteria = {
   selectedHabitat: new Set(),
-  specialistsOnly: false,
+  breadth: null,
   excludeMinor: false,
   seasons: new Set(),
 };
@@ -27,6 +27,14 @@ describe("parseHabitatEntries", () => {
     expect(parseHabitatEntries(["1:P:S:1"])[0]).toMatchObject({ season: "Passage" });
     expect(parseHabitatEntries(["1:U:S:1"])[0]).toMatchObject({ season: "Seasonal Occurrence Unknown" });
     expect(parseHabitatEntries(["1:-:S:1"])[0]).toMatchObject({ season: "Unknown" });
+  });
+});
+
+describe("coarseKnownCategories", () => {
+  it("dedupes to top-level codes and drops the Unknown category (18)", () => {
+    expect(coarseKnownCategories(["1.1", "1.5", "4.1", "18"])).toEqual(new Set(["1", "4"]));
+    expect(coarseKnownCategories(["18"])).toEqual(new Set());
+    expect(coarseKnownCategories([])).toEqual(new Set());
   });
 });
 
@@ -54,8 +62,8 @@ describe("matchesHabitatFilter — selectedHabitat", () => {
   });
 });
 
-describe("matchesHabitatFilter — specialistsOnly", () => {
-  const specialistFilter = { ...noFilter, specialistsOnly: true };
+describe("matchesHabitatFilter — breadth: specialist", () => {
+  const specialistFilter = { ...noFilter, breadth: "specialist" as const };
 
   it("is a specialist with exactly one coarse category, even via one exact code", () => {
     expect(matchesHabitatFilter(["1.1:R:S:1"], specialistFilter)).toBe(true);
@@ -84,6 +92,28 @@ describe("matchesHabitatFilter — specialistsOnly", () => {
 
   it("is not a specialist with one known category plus a second known category alongside Unknown", () => {
     expect(matchesHabitatFilter(["1.1:R:S:1", "4.1:R:S:1", "18:-:U:-"], specialistFilter)).toBe(false);
+  });
+});
+
+describe("matchesHabitatFilter — breadth: generalist", () => {
+  const generalistFilter = { ...noFilter, breadth: "generalist" as const };
+
+  it("is not a generalist with only one coarse category", () => {
+    expect(matchesHabitatFilter(["1.1:R:S:1", "1.5:R:S:0"], generalistFilter)).toBe(false);
+  });
+
+  it("is a generalist with two or more distinct coarse categories", () => {
+    expect(matchesHabitatFilter(["1.1:R:S:1", "4.1:R:S:1"], generalistFilter)).toBe(true);
+    expect(matchesHabitatFilter(["1.1:R:S:1", "4.1:R:S:1", "5.1:R:S:1"], generalistFilter)).toBe(true);
+  });
+
+  it("Unknown entries don't count toward the 2+ categories needed", () => {
+    expect(matchesHabitatFilter(["1.1:R:S:1", "18:-:U:-"], generalistFilter)).toBe(false);
+  });
+
+  it("is not a generalist with no habitat data at all", () => {
+    expect(matchesHabitatFilter([], generalistFilter)).toBe(false);
+    expect(matchesHabitatFilter(null, generalistFilter)).toBe(false);
   });
 });
 
@@ -125,16 +155,16 @@ describe("matchesHabitatFilter — seasons", () => {
 });
 
 describe("matchesHabitatFilter — combined filters", () => {
-  it("ANDs selectedHabitat, specialistsOnly, excludeMinor, and seasons together", () => {
+  it("ANDs selectedHabitat, breadth, excludeMinor, and seasons together", () => {
     const f: HabitatFilterCriteria = {
       selectedHabitat: new Set(["1"]),
-      specialistsOnly: true,
+      breadth: "specialist",
       excludeMinor: true,
       seasons: new Set(["Resident"]),
     };
     // Passes all four: only Forest, matches selection, major, Resident.
     expect(matchesHabitatFilter(["1.1:R:S:1"], f)).toBe(true);
-    // Fails specialistsOnly (two coarse categories).
+    // Fails breadth (two coarse categories, not a specialist).
     expect(matchesHabitatFilter(["1.1:R:S:1", "4.1:R:S:1"], f)).toBe(false);
     // Fails excludeMinor (Forest entry confirmed minor).
     expect(matchesHabitatFilter(["1.1:R:S:0"], f)).toBe(false);

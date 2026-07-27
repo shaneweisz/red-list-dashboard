@@ -68,7 +68,7 @@ const paramKey = (name: string, suffix: string): string => (suffix ? `${name}${s
 export const OWN_PARAM_NAMES = [
   "view", "layout", "origin", "countries", "region", "taxa", "subgroups",
   "categories", "years", "assessmentYears", "describedYears", "obsRanges",
-  "systems", "trends", "movement", "threats", "criteria", "habitat", "habitatSpecialists",
+  "systems", "trends", "movement", "threats", "criteria", "habitat", "habitatBreadth",
   "habitatExclMinor", "habitatSeasons", "bd", "endemics", "growthForms",
   "assessors", "reviewers", "search", "outdated", "minObs", "maxObs",
   "minAssessmentYear", "maxAssessmentYear", "minDescribedYear", "maxDescribedYear",
@@ -188,8 +188,13 @@ export function parseParams(search: string, suffix: string = "") {
     habitat: p.get(k("habitat"))
       ? new Set(p.get(k("habitat"))!.split(",").filter(Boolean))
       : new Set<string>(),
-    // Habitat-specialists: restrict to species with exactly one distinct habitat code.
-    habitatSpecialistsOnly: p.get(k("habitatSpecialists")) === "1",
+    // Habitat breadth: "specialist" = exactly one known coarse habitat category,
+    // "generalist" = two or more. Any other/missing value means no filter.
+    habitatBreadth: (
+      p.get(k("habitatBreadth")) === "specialist" ? "specialist"
+      : p.get(k("habitatBreadth")) === "generalist" ? "generalist"
+      : null
+    ) as "specialist" | "generalist" | null,
     // Exclude-minor: drop matches where the relevant habitat entry (the one matching
     // the selected habitat, or any entry if none selected) is confirmed NOT of major
     // importance. Entries with unrecorded importance are kept, not treated as minor.
@@ -261,7 +266,7 @@ export function buildQs(state: {
   threats: Set<string>;
   criteria: Set<string>;
   habitat: Set<string>;
-  habitatSpecialistsOnly: boolean;
+  habitatBreadth: "specialist" | "generalist" | null;
   habitatExcludeMinor: boolean;
   habitatSeasons: Set<string>;
   breakdown?: BreakdownParam | null;
@@ -306,7 +311,7 @@ export function buildQs(state: {
   if (state.threats.size > 0) p.set(k("threats"), [...state.threats].join(","));
   if (state.criteria.size > 0) p.set(k("criteria"), [...state.criteria].join(","));
   if (state.habitat.size > 0) p.set(k("habitat"), [...state.habitat].join(","));
-  if (state.habitatSpecialistsOnly) p.set(k("habitatSpecialists"), "1");
+  if (state.habitatBreadth) p.set(k("habitatBreadth"), state.habitatBreadth);
   if (state.habitatExcludeMinor) p.set(k("habitatExclMinor"), "1");
   if (state.habitatSeasons.size > 0) p.set(k("habitatSeasons"), [...state.habitatSeasons].join(","));
   if (state.breakdown) {
@@ -702,10 +707,10 @@ export function useFilterParams(paramSuffix: string = "") {
     [syncUrl]
   );
 
-  const setHabitatSpecialistsOnly = useCallback(
-    (value: boolean) => {
+  const setHabitatBreadth = useCallback(
+    (value: "specialist" | "generalist" | null) => {
       setState(prev => {
-        const next = { ...prev, habitatSpecialistsOnly: value };
+        const next = { ...prev, habitatBreadth: value };
         queueMicrotask(() => syncUrl(next, false));
         return next;
       });
@@ -913,7 +918,7 @@ export function useFilterParams(paramSuffix: string = "") {
         threats: new Set<string>(),
         criteria: new Set<string>(),
         habitat: new Set<string>(),
-        habitatSpecialistsOnly: false,
+        habitatBreadth: null,
         habitatExcludeMinor: false,
         habitatSeasons: new Set<string>(),
         breakdown: null,
@@ -951,7 +956,7 @@ export function useFilterParams(paramSuffix: string = "") {
         threats: new Set<string>(),
         criteria: new Set<string>(),
         habitat: new Set<string>(),
-        habitatSpecialistsOnly: false,
+        habitatBreadth: null,
         habitatExcludeMinor: false,
         habitatSeasons: new Set<string>(),
         breakdown: null,
@@ -989,7 +994,7 @@ export function useFilterParams(paramSuffix: string = "") {
     selectedThreats: state.threats,
     selectedCriteria: state.criteria,
     selectedHabitat: state.habitat,
-    habitatSpecialistsOnly: state.habitatSpecialistsOnly,
+    habitatBreadth: state.habitatBreadth,
     habitatExcludeMinor: state.habitatExcludeMinor,
     selectedHabitatSeasons: state.habitatSeasons,
     breakdownFilter: state.breakdown,
@@ -1026,7 +1031,7 @@ export function useFilterParams(paramSuffix: string = "") {
     setSelectedThreats,
     setSelectedCriteria,
     setSelectedHabitat,
-    setHabitatSpecialistsOnly,
+    setHabitatBreadth,
     setHabitatExcludeMinor,
     setSelectedHabitatSeasons,
     setBreakdownFilter,

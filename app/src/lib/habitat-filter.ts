@@ -44,9 +44,21 @@ export function parseHabitatEntries(habitatCodes: string[] | null | undefined): 
   });
 }
 
+/** Distinct top-level habitat categories a set of codes belongs to, with the
+ *  IUCN "Unknown" category (18, no subtypes) excluded — a species recorded
+ *  only there has no *known* habitat, so it shouldn't count toward either
+ *  "specialist" (1 known category) or "generalist" (2+ known categories). */
+export function coarseKnownCategories(codes: string[]): Set<string> {
+  return new Set(codes.map(code => code.split(".")[0]).filter(top => top !== UNKNOWN_HABITAT_CATEGORY));
+}
+
+/** null = no breadth filter; "specialist" = exactly one known coarse
+ *  category; "generalist" = two or more. */
+export type HabitatBreadth = "specialist" | "generalist" | null;
+
 export interface HabitatFilterCriteria {
   selectedHabitat: Set<string>;
-  specialistsOnly: boolean;
+  breadth: HabitatBreadth;
   excludeMinor: boolean;
   seasons: Set<string>;
 }
@@ -55,8 +67,8 @@ export function matchesHabitatFilter(
   habitatCodes: string[] | null | undefined,
   criteria: HabitatFilterCriteria
 ): boolean {
-  const { selectedHabitat, specialistsOnly, excludeMinor, seasons } = criteria;
-  if (selectedHabitat.size === 0 && !specialistsOnly && !excludeMinor && seasons.size === 0) return true;
+  const { selectedHabitat, breadth, excludeMinor, seasons } = criteria;
+  if (selectedHabitat.size === 0 && !breadth && !excludeMinor && seasons.size === 0) return true;
 
   const entries = parseHabitatEntries(habitatCodes);
   const codes = Array.from(new Set(entries.map(e => e.code)));
@@ -65,16 +77,13 @@ export function matchesHabitatFilter(
     return false;
   }
 
-  if (specialistsOnly) {
-    // "Specialist" is about the coarse (top-level) category, not the exact
-    // code — a species recorded in two Forest subtypes (1.1 and 1.5) is
-    // still a Forest specialist, not a 2-habitat generalist. Unknown entries
-    // are excluded entirely: a species with no known habitat isn't a
-    // specialist in anything.
-    const coarseKnownCategories = new Set(
-      codes.map(code => code.split(".")[0]).filter(top => top !== UNKNOWN_HABITAT_CATEGORY)
-    );
-    if (coarseKnownCategories.size !== 1) return false;
+  if (breadth) {
+    // Breadth is about the coarse (top-level) category, not the exact code —
+    // a species recorded in two Forest subtypes (1.1 and 1.5) is still a
+    // 1-category (specialist) species, not a 2-habitat generalist.
+    const known = coarseKnownCategories(codes);
+    if (breadth === "specialist" && known.size !== 1) return false;
+    if (breadth === "generalist" && known.size < 2) return false;
   }
 
   // Exclude-minor and season scope to the entries matching the current
