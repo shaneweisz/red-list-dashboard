@@ -12,8 +12,8 @@ import EolSummary from "../EolSummary";
 import TaxaIcon from "../TaxaIcon";
 import { ALPHA2_TO_NAME, type CountryStats } from "../WorldMap";
 import { CATEGORY_COLORS, TAXA_BY_ID, THREATENED_CATEGORIES } from "@/config/taxa";
-import { speciesMatchesNode, getNodeDef, getViewRootForNode, findNode, matchesBreakdownName, breakdownDisplayName, primaryFilterRank } from "@/lib/taxonomy-utils";
-import { dynamicNodeDisplayName, isDynamicNodeId, dynamicNodeRankInfo } from "@/lib/dynamic-taxon";
+import { speciesMatchesNode, getNodeDef, getViewRootForNode, findNode, matchesBreakdownName, breakdownDisplayName } from "@/lib/taxonomy-utils";
+import { dynamicNodeDisplayName } from "@/lib/dynamic-taxon";
 import ReviewerChart from "./ReviewerChart";
 import { parseAssessors } from "@/lib/parseAssessors";
 import { iucnRegionCountries, countryToIucnRegion } from "@/lib/regions";
@@ -597,21 +597,11 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
     ro.observe(el);
     tableScrollCleanupRef.current = () => ro.disconnect();
   }, []);
-  // The Taxon/Assessed-species stat-card row is pinned (position: sticky) above
-  // the table toolbar, which is itself pinned right below it — so both stay in
-  // view while the filters panel and table scroll underneath. The toolbar's
-  // sticky `top` offset has to equal the stat row's real rendered height (it
-  // wraps to two lines on narrow screens), so measure it live instead of
-  // guessing a fixed pixel value.
-  const [statRowHeight, setStatRowHeight] = useState(0);
-  const statRowRef = useCallback((el: HTMLDivElement | null) => {
-    if (!el) return;
-    const update = () => setStatRowHeight(el.getBoundingClientRect().height);
-    update();
-    const ro = new ResizeObserver(update);
-    ro.observe(el);
-    return () => ro.disconnect();
-  }, []);
+  // Scroll target for the auto-focus effect below — the TaxaSummary table's
+  // wrapper, not a dedicated stat-card row (there isn't one; the tree's own
+  // selected-row + breadcrumb carries that context, and the toolbar's
+  // species count covers the rest).
+  const taxaSummaryScrollRef = useRef<HTMLDivElement>(null);
   // Filters synced with URL search params for shareable links
   const {
     layoutMode, setLayoutMode,
@@ -653,6 +643,23 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
     setSpeciesParam, setTabParam,
     fromPopstateRef,
   } = useFilterParams(paramSuffix);
+
+  // Auto-scroll to the top of the TaxaSummary table whenever the focused
+  // taxon changes (any tree click — top-level taxon, subgroup drill-down, or
+  // navigating both at once). That table's own selected row + breadcrumb is
+  // what carries "which taxon am I looking at" context (see TaxaSummary),
+  // so scrolling it into view puts the tree row, the filters panel, and the
+  // table toolbar all in frame together — the table that got you here stays
+  // just one scroll above. Skips the very first render (a direct/bookmarked
+  // taxon URL shouldn't jump-scroll on load) via isFirstTaxonFocusRef, then
+  // fires on every subsequent identity change, including landing-page →
+  // first taxon.
+  const taxonFocusKey = `${[...selectedTaxa].sort().join(",")}|${[...selectedSubgroups].sort().join(",")}`;
+  const isFirstTaxonFocusRef = useRef(true);
+  useEffect(() => {
+    if (isFirstTaxonFocusRef.current) { isFirstTaxonFocusRef.current = false; return; }
+    taxaSummaryScrollRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }, [taxonFocusKey]);
 
   // Both habitat checkbox-dropdowns default to "everything checked" (see
   // useFilterParams.ts) — only a proper subset actually restricts anything,
@@ -2718,63 +2725,6 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
   const GBIF_FILTERS = "has_coordinate=true&has_geospatial_issue=false&basis_of_record=HUMAN_OBSERVATION&basis_of_record=MACHINE_OBSERVATION&basis_of_record=OCCURRENCE&basis_of_record=MATERIAL_SAMPLE&basis_of_record=OBSERVATION";
   const isNE = (s: Species) => s.category === "NE";
 
-  // A single selected taxon that isn't a curated tree node — an arbitrary rank
-  // (e.g. ?taxa=felidae) reached via search. TaxaSummary can't label it (it only
-  // knows curated nodes), so the results block shows a thin header instead. The
-  // matched rank is read off the loaded species (all matched class/order/family
-  // = the token; the first row's matching field is that rank).
-  const arbitraryTaxon = useMemo(() => {
-    if (selectedTaxa.size !== 1) return null;
-    const id = [...selectedTaxa][0];
-    if (id === "all" || findNode(id)) return null;
-    const v = id.toLowerCase();
-    let rank: "family" | "order" | "class" | null = null;
-    for (const s of species) {
-      if ((s.family ?? "").toLowerCase() === v) { rank = "family"; break; }
-      if ((s.order_name ?? "").toLowerCase() === v) { rank = "order"; break; }
-      if ((s.class_name ?? "").toLowerCase() === v) { rank = "class"; break; }
-    }
-    return { name: id.charAt(0).toUpperCase() + id.slice(1), rank };
-  }, [selectedTaxa, species]);
-
-  // A single selected sub-group — a dynamic taxonomic-drilldown node (e.g. an
-  // order/family/genus reached via TaxaSummary's own tree) or a static SSC
-  // group/subgroup node — gets the exact same stat-card treatment as
-  // arbitraryTaxon above, even though it's reached through a completely
-  // different mechanism (selectedSubgroups, not a raw ?taxa= search token: see
-  // TaxaSummary.tsx's ancestor-breadcrumb rendering, which keeps its own tree
-  // branch — Mammals → Rodentia → Heteromyidae → ... — visible in the table
-  // above this regardless). A dynamic node has no NODE_INDEX entry (findNode
-  // fails), so it's resolved via dynamicNodeRankInfo/dynamicNodeDisplayName
-  // instead — the same distinction DescribedInfoIcon already draws.
-  const selectedSubgroupTaxon = useMemo(() => {
-    if (selectedSubgroups.size !== 1) return null;
-    const id = [...selectedSubgroups][0];
-    const node = findNode(id);
-    if (node) return { name: node.name, rank: primaryFilterRank(node.filter)?.label ?? null };
-    if (isDynamicNodeId(id)) return { name: dynamicNodeDisplayName(id), rank: dynamicNodeRankInfo(id)?.label ?? null };
-    return null;
-  }, [selectedSubgroups]);
-
-  // A single selected top-level taxon (Mammals, or the "All Species" root
-  // itself) with no sub-group drilled into — the same stat-card treatment as
-  // above, so the card (and the view-mode toggle it now carries — see below)
-  // is reachable at every level, not just once you're already several rows
-  // deep. primaryFilterRank returns null for "All Species" (no positive
-  // dimension in its filter), which is fine — the card falls back to the
-  // generic "Taxon" label for it, same as for a remainder/catch-all node.
-  const selectedTopLevelTaxon = useMemo(() => {
-    if (selectedSubgroups.size !== 0 || selectedTaxa.size !== 1) return null;
-    const node = findNode([...selectedTaxa][0]);
-    if (!node) return null; // arbitraryTaxon handles the non-tree-node case
-    return { name: node.name, rank: primaryFilterRank(node.filter)?.label ?? null };
-  }, [selectedTaxa, selectedSubgroups]);
-
-  // Whichever of the three applies — a selected sub-group takes priority
-  // (most specific), then a selected top-level taxon, then an arbitrary
-  // search-reached rank.
-  const focusedTaxonCard = selectedSubgroupTaxon ?? selectedTopLevelTaxon ?? arbitraryTaxon;
-
   // GBIF occurrence counts aren't filterable per-country/category/etc. — only show
   // that color/list column when no filter narrower than "a whole top-level taxon"
   // is active. Shared by both WorldMap instances (the always-visible Country chart
@@ -3445,6 +3395,7 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
   return (
     <div className="space-y-4 min-w-0 flex-1 flex flex-col min-h-0">
       {/* Always show Taxa Summary table */}
+      <div ref={taxaSummaryScrollRef}>
       <TaxaSummary
         onToggleTaxon={handleToggleTaxon}
         selectedTaxa={selectedTaxa}
@@ -3493,6 +3444,7 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
           navigateToTaxonSubgroup(taxonId, subgroupId);
         }}
       />
+      </div>
 
       {/* Error state */}
       {error && (
@@ -3519,79 +3471,6 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
         </div>
       ) : (
       <div className="space-y-3">
-
-          {/* Taxon-focus header — any single selected taxon: a top-level taxon
-              (selectedTopLevelTaxon, e.g. Mammals, or "All Species" itself), a
-              sub-group row drilled into via TaxaSummary's own tree
-              (selectedSubgroupTaxon: dynamic order/family/genus, or a static SSC
-              group), or a non-curated arbitrary rank reached via search
-              (arbitraryTaxon). Two stat cards: the taxon (name + rank) and the
-              Species card. The Species card's number is totalFiltered (live,
-              reacts to pill filters), with a "of Y" qualifier + "matching
-              filters" caption once a filter narrows it below the taxon's own
-              total (taxaFilteredSpeciesBase) — naming it explicitly avoids
-              reading as some other ratio (e.g. assessed-of-described).
-              TaxaSummary's own breadcrumb table above already shows the tree
-              branch that led here (Mammals → Rodentia → Heteromyidae → ...)
-              when applicable — this is purely an additional, more prominent
-              summary, not a replacement for it. */}
-          {focusedTaxonCard && !isSingleSpecies && (
-            <div ref={statRowRef} className="sticky top-0 z-30 bg-zinc-50 dark:bg-zinc-950 pb-3 -mt-3 pt-3">
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-3">
-                  <div className="text-xs font-medium uppercase tracking-wide text-zinc-500 dark:text-zinc-400">
-                    {focusedTaxonCard.rank ?? "Taxon"}
-                  </div>
-                  <div className="mt-0.5 text-2xl font-bold text-zinc-900 dark:text-zinc-100">
-                    {focusedTaxonCard.name}
-                  </div>
-                </div>
-                <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-3 flex flex-col sm:flex-row sm:items-center justify-between gap-2 sm:gap-3">
-                  <div className="min-w-0">
-                    <div className="text-xs font-medium uppercase tracking-wide text-zinc-500 dark:text-zinc-400">
-                      {isNewAssessments ? "Not Evaluated Species" : "Assessed Species"}
-                    </div>
-                    <div className="mt-0.5 text-2xl font-bold text-zinc-900 dark:text-zinc-100">
-                      {speciesLoading && assessedSpecies.length === 0
-                        ? <Spinner className="h-6 w-6" />
-                        : totalFiltered < taxaFilteredSpeciesBase.length ? (
-                          <>
-                            {totalFiltered.toLocaleString()}
-                            <span className="text-base font-normal text-zinc-400 dark:text-zinc-500"> matching filters, of {taxaFilteredSpeciesBase.length.toLocaleString()} total</span>
-                          </>
-                        ) : totalFiltered.toLocaleString()}
-                    </div>
-                  </div>
-                  {onViewModeChange && (
-                    <div className="flex rounded-lg border border-zinc-200 dark:border-zinc-700 overflow-hidden text-xs shrink-0">
-                      <button
-                        type="button"
-                        onClick={() => onViewModeChange("reassessments")}
-                        className={`px-2 py-1 font-medium transition-colors ${
-                          !isNewAssessments
-                            ? "bg-zinc-800 dark:bg-zinc-100 text-white dark:text-zinc-900"
-                            : "bg-white dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400 hover:bg-zinc-50 dark:hover:bg-zinc-700"
-                        }`}
-                      >
-                        Assessed
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => onViewModeChange("new-assessments")}
-                        className={`px-2 py-1 font-medium transition-colors ${
-                          isNewAssessments
-                            ? "bg-zinc-800 dark:bg-zinc-100 text-white dark:text-zinc-900"
-                            : "bg-white dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400 hover:bg-zinc-50 dark:hover:bg-zinc-700"
-                        }`}
-                      >
-                        Not Evaluated
-                      </button>
-                    </div>
-                  )}
-                </div>
-              </div>
-            </div>
-          )}
 
           {/* Single species header — skeleton while loading */}
           {!isSingleSpecies && urlSpecies != null && speciesLoading && (
@@ -3946,23 +3825,82 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
           </div>
           )}
 
-          {/* More Filters — no longer a click-to-expand card; always rendered
-              (hidden for New Assessments), inside the scrollable panel above. */}
-          {!isNewAssessments && <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl">
-            <div className="px-3 md:px-4 py-2.5 text-sm font-medium text-zinc-700 dark:text-zinc-300">
-              More Filters
-            </div>
-              <div className="px-3 md:px-4 pb-3 md:pb-4 pt-3 md:pt-4 border-t border-zinc-200 dark:border-zinc-800 flex flex-col gap-3">
-                {/* Country map (left) alongside Realm, Movement, Criteria, Trend
-                    stacked in the right column — moved here from the primary view
-                    (Charts row 2) so that row stays focused on Conservation Status /
-                    Years Since Assessed / GBIF Records; these still filter live like
-                    every other control on this page, just tucked a click away. All
-                    four right-column filters are short/compact controls, so
-                    stacking them against the taller map balances the row instead
-                    of spreading them across their own separate rows. */}
+          {/* No more "More Filters" card/label — everything below flows as
+              plain rows directly in the scrollable panel, same as Charts
+              row 1 above, with no visual distinction between "primary" and
+              "more" filters. */}
+          {!isNewAssessments && (
+            <>
+                {/* Country, Threats — paired side by side. */}
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                   {countryMapCard}
+                  {threatsCard}
+                </div>
+
+                {/* Growth Form (plants/fungi only) */}
+                {(() => {
+                  // Compute growth form counts cross-filtered (exclude own filter)
+                  const gfCounts: Record<string, number> = {};
+                  taxaFilteredSpecies.forEach(s => {
+                    if (!s.growth_forms?.length) return;
+                    if (!matchesSearch(s)) return;
+                    if (selectedCategories.size > 0 && !selectedCategories.has(s.category)) return;
+                    if (selectedCountries.size > 0 && !s.countries.some(c => selectedCountries.has(c))) return;
+                    if (s.category !== "NE" && selectedYearRanges.size > 0 && !matchesYearRangeFilter(s.assessment_date, selectedYearRanges)) return;
+                    if (s.category !== "NE" && selectedAssessmentYears.size > 0 && !matchesAssessmentYearFilter(s.assessment_date, selectedAssessmentYears)) return;
+                    if (selectedObsRanges.size > 0 && !matchesObsRangeFilter(s.gbif_occurrence_count, selectedObsRanges)) return;
+                    if (selectedSystems.size > 0 && !s.systems?.some(sys => selectedSystems.has(sys))) return;
+                    if (selectedPopulationTrends.size > 0 && (!s.population_trend || !selectedPopulationTrends.has(s.population_trend))) return;
+                    if (selectedMovementPatterns.size > 0 && (!s.movement_pattern || !selectedMovementPatterns.has(s.movement_pattern))) return;
+                    if (selectedThreats.size > 0 && !s.threat_codes?.some(tc => Array.from(selectedThreats).some(sel => tc === sel || tc.startsWith(sel + ".")))) return;
+                    if (selectedCriteria.size > 0 && !parseCriteriaCodes(s.criteria).some(code => Array.from(selectedCriteria).some(sel => code === sel || code.startsWith(sel)))) return;
+                    if (endemicsOnly && s.countries.length !== 1) return;
+                    if (!matchesAssessorsFilter(s)) return;
+                    if (!matchesHabitatFilter(s)) return;
+                    if (!matchesReviewersFilter(s)) return;
+                    for (const gf of s.growth_forms) {
+                      gfCounts[gf] = (gfCounts[gf] || 0) + 1;
+                    }
+                  });
+                  const sorted = Object.entries(gfCounts).sort((a, b) => b[1] - a[1]);
+                  if (sorted.length === 0) return null;
+                  return (
+                    <div className="flex items-start gap-2 bg-zinc-50 dark:bg-zinc-800/50 border border-zinc-200 dark:border-zinc-700 rounded-lg px-3 py-2">
+                      <span className="text-sm font-semibold text-zinc-900 dark:text-zinc-100 shrink-0 w-20 pt-1">Growth</span>
+                      <div className="flex flex-wrap gap-1.5">
+                        {sorted.map(([gf, count]) => {
+                          const isSelected = selectedGrowthForms.has(gf);
+                          return (
+                            <button
+                              key={gf}
+                              onClick={(e) => {
+                                const isMulti = e.metaKey || e.ctrlKey;
+                                setSelectedGrowthForms(prev => {
+                                  if (isMulti) { const next = new Set(prev); if (next.has(gf)) next.delete(gf); else next.add(gf); return next; }
+                                  if (prev.size === 1 && prev.has(gf)) return new Set();
+                                  return new Set([gf]);
+                                });
+                              }}
+                              className={`px-2 py-1 text-xs rounded-full transition-colors cursor-pointer ${
+                                isSelected
+                                  ? "bg-lime-500 text-white"
+                                  : "bg-zinc-100 text-zinc-600 hover:bg-zinc-200 dark:bg-zinc-800 dark:text-zinc-400 dark:hover:bg-zinc-700"
+                              }`}
+                            >
+                              {gf} ({count.toLocaleString()})
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  );
+                })()}
+
+                {/* Realm, Movement, Trend stacked in the left column, alongside
+                    Habitat — these three are short, compact controls, so
+                    stacking them against the taller Habitat card balances the
+                    row instead of spreading them across their own rows. */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                   <div className="flex flex-col gap-3">
                     {/* Realm */}
                     <div className="flex items-center gap-2 bg-zinc-50 dark:bg-zinc-800/50 border border-zinc-200 dark:border-zinc-700 rounded-lg px-3 py-2">
@@ -4031,35 +3969,6 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
                       </div>
                     )}
 
-                    {/* Criteria — top-level A-E pills; clicking one both selects it
-                        as a filter AND expands its next level below (number ->
-                        sub-clause -> roman numeral, as deep as that branch goes —
-                        mirrors the Threats chart's category/sub-category drill-down,
-                        generalized to arbitrary depth via renderCriteriaLevel since
-                        criteria nests up to 4 levels vs. threats' 2). Cmd/ctrl-click
-                        for real multi-select — any number of branches can be
-                        drilled into and selected simultaneously (e.g. B1b(iii) AND
-                        C2a(i) together), each independently expanded via
-                        expandedCriteria (a Set, not a single "last expanded" value).
-                        A species can satisfy multiple codes under the same letter
-                        too (e.g. B1+B2, or B1a and B1b together), so selecting any
-                        code matches species with that code OR a more specific one
-                        beneath it (see parseCriteriaCodes' startsWith-based
-                        matching). */}
-                    {!isNewAssessments && (
-                      <div className="flex flex-col gap-2 bg-zinc-50 dark:bg-zinc-800/50 border border-zinc-200 dark:border-zinc-700 rounded-lg px-3 py-2">
-                        <div className="flex items-center gap-2">
-                          <span className="text-sm font-semibold text-zinc-900 dark:text-zinc-100 shrink-0 w-20">Criteria</span>
-                          {renderCriteriaRow(CRITERIA_CATEGORIES, false)}
-                        </div>
-                        {CRITERIA_CATEGORIES.map(node => (
-                          expandedCriteria.has(node.code) && node.children.length > 0 ? (
-                            <React.Fragment key={node.code}>{renderCriteriaLevel(node.children, 1)}</React.Fragment>
-                          ) : null
-                        ))}
-                      </div>
-                    )}
-
                     {/* Trend */}
                     <div className="flex items-center gap-2 bg-zinc-50 dark:bg-zinc-800/50 border border-zinc-200 dark:border-zinc-700 rounded-lg px-3 py-2">
                       <span className="text-sm font-semibold text-zinc-900 dark:text-zinc-100 shrink-0 w-20">Trend</span>
@@ -4091,73 +4000,38 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
                       </div>
                     </div>
                   </div>
-                </div>
-
-                {/* Growth Form (plants/fungi only) */}
-                {(() => {
-                  // Compute growth form counts cross-filtered (exclude own filter)
-                  const gfCounts: Record<string, number> = {};
-                  taxaFilteredSpecies.forEach(s => {
-                    if (!s.growth_forms?.length) return;
-                    if (!matchesSearch(s)) return;
-                    if (selectedCategories.size > 0 && !selectedCategories.has(s.category)) return;
-                    if (selectedCountries.size > 0 && !s.countries.some(c => selectedCountries.has(c))) return;
-                    if (s.category !== "NE" && selectedYearRanges.size > 0 && !matchesYearRangeFilter(s.assessment_date, selectedYearRanges)) return;
-                    if (s.category !== "NE" && selectedAssessmentYears.size > 0 && !matchesAssessmentYearFilter(s.assessment_date, selectedAssessmentYears)) return;
-                    if (selectedObsRanges.size > 0 && !matchesObsRangeFilter(s.gbif_occurrence_count, selectedObsRanges)) return;
-                    if (selectedSystems.size > 0 && !s.systems?.some(sys => selectedSystems.has(sys))) return;
-                    if (selectedPopulationTrends.size > 0 && (!s.population_trend || !selectedPopulationTrends.has(s.population_trend))) return;
-                    if (selectedMovementPatterns.size > 0 && (!s.movement_pattern || !selectedMovementPatterns.has(s.movement_pattern))) return;
-                    if (selectedThreats.size > 0 && !s.threat_codes?.some(tc => Array.from(selectedThreats).some(sel => tc === sel || tc.startsWith(sel + ".")))) return;
-                    if (selectedCriteria.size > 0 && !parseCriteriaCodes(s.criteria).some(code => Array.from(selectedCriteria).some(sel => code === sel || code.startsWith(sel)))) return;
-                    if (endemicsOnly && s.countries.length !== 1) return;
-                    if (!matchesAssessorsFilter(s)) return;
-                    if (!matchesHabitatFilter(s)) return;
-                    if (!matchesReviewersFilter(s)) return;
-                    for (const gf of s.growth_forms) {
-                      gfCounts[gf] = (gfCounts[gf] || 0) + 1;
-                    }
-                  });
-                  const sorted = Object.entries(gfCounts).sort((a, b) => b[1] - a[1]);
-                  if (sorted.length === 0) return null;
-                  return (
-                    <div className="flex items-start gap-2 bg-zinc-50 dark:bg-zinc-800/50 border border-zinc-200 dark:border-zinc-700 rounded-lg px-3 py-2">
-                      <span className="text-sm font-semibold text-zinc-900 dark:text-zinc-100 shrink-0 w-20 pt-1">Growth</span>
-                      <div className="flex flex-wrap gap-1.5">
-                        {sorted.map(([gf, count]) => {
-                          const isSelected = selectedGrowthForms.has(gf);
-                          return (
-                            <button
-                              key={gf}
-                              onClick={(e) => {
-                                const isMulti = e.metaKey || e.ctrlKey;
-                                setSelectedGrowthForms(prev => {
-                                  if (isMulti) { const next = new Set(prev); if (next.has(gf)) next.delete(gf); else next.add(gf); return next; }
-                                  if (prev.size === 1 && prev.has(gf)) return new Set();
-                                  return new Set([gf]);
-                                });
-                              }}
-                              className={`px-2 py-1 text-xs rounded-full transition-colors cursor-pointer ${
-                                isSelected
-                                  ? "bg-lime-500 text-white"
-                                  : "bg-zinc-100 text-zinc-600 hover:bg-zinc-200 dark:bg-zinc-800 dark:text-zinc-400 dark:hover:bg-zinc-700"
-                              }`}
-                            >
-                              {gf} ({count.toLocaleString()})
-                            </button>
-                          );
-                        })}
-                      </div>
-                    </div>
-                  );
-                })()}
-
-                {/* Habitat, Threats — same bar-chart + drill-down scale, paired
-                    side by side. */}
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                   {habitatCard}
-                  {threatsCard}
                 </div>
+
+                {/* Criteria — its own row. Top-level A-E pills; clicking one
+                    both selects it as a filter AND expands its next level
+                    below (number -> sub-clause -> roman numeral, as deep as
+                    that branch goes — mirrors the Threats chart's category/
+                    sub-category drill-down, generalized to arbitrary depth
+                    via renderCriteriaLevel since criteria nests up to 4
+                    levels vs. threats' 2). Cmd/ctrl-click for real
+                    multi-select — any number of branches can be drilled into
+                    and selected simultaneously (e.g. B1b(iii) AND C2a(i)
+                    together), each independently expanded via
+                    expandedCriteria (a Set, not a single "last expanded"
+                    value). A species can satisfy multiple codes under the
+                    same letter too (e.g. B1+B2, or B1a and B1b together), so
+                    selecting any code matches species with that code OR a
+                    more specific one beneath it (see parseCriteriaCodes'
+                    startsWith-based matching). */}
+                {!isNewAssessments && (
+                  <div className="flex flex-col gap-2 bg-zinc-50 dark:bg-zinc-800/50 border border-zinc-200 dark:border-zinc-700 rounded-lg px-3 py-2">
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm font-semibold text-zinc-900 dark:text-zinc-100 shrink-0 w-20">Criteria</span>
+                      {renderCriteriaRow(CRITERIA_CATEGORIES, false)}
+                    </div>
+                    {CRITERIA_CATEGORIES.map(node => (
+                      expandedCriteria.has(node.code) && node.children.length > 0 ? (
+                        <React.Fragment key={node.code}>{renderCriteriaLevel(node.children, 1)}</React.Fragment>
+                      ) : null
+                    ))}
+                  </div>
+                )}
 
                 {/* Assessors and Reviewers, shown side by side */}
                 {isSingleSpecies && singleSpecies ? (
@@ -4210,8 +4084,8 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
                     />
                   </div>
                 )}
-              </div>
-          </div>}
+            </>
+          )}
           </div>
 
       {/* Species Table */}
@@ -4224,14 +4098,10 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
             filters". The free-text box narrows the visible table by name in
             place, composing with the pills beside it — distinct from the page
             header's SpeciesSearchBar, which navigates elsewhere instead of
-            narrowing here (see DebouncedSearchInput's own doc comment).
-            Pinned (position: sticky) right below the stat-card row above, so
-            it — and the rest of the table it heads — stay reachable without
-            re-scrolling past the filters panel. */}
-        <div
-          className="sticky z-20 bg-white dark:bg-zinc-900 p-3 md:p-4 border-b border-zinc-200 dark:border-zinc-800 rounded-t-xl"
-          style={{ top: statRowHeight }}
-        >
+            narrowing here (see DebouncedSearchInput's own doc comment). Not
+            sticky itself — the filters panel's capped height (max-h-[60vh]
+            above) already keeps this a short, predictable scroll away. */}
+        <div className="p-3 md:p-4 border-b border-zinc-200 dark:border-zinc-800 rounded-t-xl">
           <div className="flex flex-wrap items-center gap-2 md:gap-4">
             <div className="relative flex-1 min-w-[140px] max-w-md">
               <DebouncedSearchInput
@@ -4574,10 +4444,47 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
             <span className="ml-auto text-sm md:text-base font-semibold text-zinc-700 dark:text-zinc-300 tabular-nums flex items-center gap-2">
               {speciesLoading && totalFiltered === 0 && !singleSpeciesPreview ? (
                 <Spinner className="h-4 w-4" />
+              ) : totalFiltered < taxaFilteredSpeciesBase.length ? (
+                <>
+                  {totalFiltered.toLocaleString()} species
+                  <span className="text-xs md:text-sm font-normal text-zinc-400 dark:text-zinc-500"> matching filters, of {taxaFilteredSpeciesBase.length.toLocaleString()} total</span>
+                </>
               ) : (
                 <>{totalFiltered.toLocaleString()} species</>
               )}
             </span>
+            {/* Assessed/Not Evaluated — a full view-mode switch (a different
+                dataset entirely), moved here from the old dedicated stat-card
+                row now that there isn't one. Distinct from the "Not
+                Evaluated (N)" filter-chip button just below, which mixes NE
+                species INTO this same reassessments view instead of
+                switching away from it. */}
+            {onViewModeChange && (
+              <div className="flex rounded-lg border border-zinc-200 dark:border-zinc-700 overflow-hidden text-xs shrink-0">
+                <button
+                  type="button"
+                  onClick={() => onViewModeChange("reassessments")}
+                  className={`px-2 py-1 font-medium transition-colors ${
+                    !isNewAssessments
+                      ? "bg-zinc-800 dark:bg-zinc-100 text-white dark:text-zinc-900"
+                      : "bg-white dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400 hover:bg-zinc-50 dark:hover:bg-zinc-700"
+                  }`}
+                >
+                  Assessed
+                </button>
+                <button
+                  type="button"
+                  onClick={() => onViewModeChange("new-assessments")}
+                  className={`px-2 py-1 font-medium transition-colors ${
+                    isNewAssessments
+                      ? "bg-zinc-800 dark:bg-zinc-100 text-white dark:text-zinc-900"
+                      : "bg-white dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400 hover:bg-zinc-50 dark:hover:bg-zinc-700"
+                  }`}
+                >
+                  Not Evaluated
+                </button>
+              </div>
+            )}
             {!isNewAssessments && (neCount > 0 || neBlockedForAll) && (
               <button
                 disabled={neBlockedForAll}
