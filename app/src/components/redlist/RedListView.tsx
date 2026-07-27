@@ -597,6 +597,21 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
     ro.observe(el);
     tableScrollCleanupRef.current = () => ro.disconnect();
   }, []);
+  // The Taxon/Assessed-species stat-card row is pinned (position: sticky) above
+  // the table toolbar, which is itself pinned right below it — so both stay in
+  // view while the filters panel and table scroll underneath. The toolbar's
+  // sticky `top` offset has to equal the stat row's real rendered height (it
+  // wraps to two lines on narrow screens), so measure it live instead of
+  // guessing a fixed pixel value.
+  const [statRowHeight, setStatRowHeight] = useState(0);
+  const statRowRef = useCallback((el: HTMLDivElement | null) => {
+    if (!el) return;
+    const update = () => setStatRowHeight(el.getBoundingClientRect().height);
+    update();
+    const ro = new ResizeObserver(update);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
   // Filters synced with URL search params for shareable links
   const {
     layoutMode, setLayoutMode,
@@ -876,7 +891,6 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
   }, [selectedTaxa, clearAllFilters, fromPopstateRef]);
 
   const [showOnlyStarred, setShowOnlyStarred] = useState(false);
-  const [moreFiltersOpen, setMoreFiltersOpen] = useState(false);
   const [expandedThreat, setExpandedThreat] = useState<string | null>(null);
 
   // Keep the threats drill-down in sync with the selection. Whenever the expanded
@@ -3522,57 +3536,59 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
               when applicable — this is purely an additional, more prominent
               summary, not a replacement for it. */}
           {focusedTaxonCard && !isSingleSpecies && (
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-3">
-                <div className="text-xs font-medium uppercase tracking-wide text-zinc-500 dark:text-zinc-400">
-                  {focusedTaxonCard.rank ?? "Taxon"}
-                </div>
-                <div className="mt-0.5 text-2xl font-bold text-zinc-900 dark:text-zinc-100">
-                  {focusedTaxonCard.name}
-                </div>
-              </div>
-              <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-3 flex flex-col sm:flex-row sm:items-center justify-between gap-2 sm:gap-3">
-                <div className="min-w-0">
+            <div ref={statRowRef} className="sticky top-0 z-30 bg-zinc-50 dark:bg-zinc-950 pb-3 -mt-3 pt-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-3">
                   <div className="text-xs font-medium uppercase tracking-wide text-zinc-500 dark:text-zinc-400">
-                    {isNewAssessments ? "Not Evaluated Species" : "Assessed Species"}
+                    {focusedTaxonCard.rank ?? "Taxon"}
                   </div>
                   <div className="mt-0.5 text-2xl font-bold text-zinc-900 dark:text-zinc-100">
-                    {speciesLoading && assessedSpecies.length === 0
-                      ? <Spinner className="h-6 w-6" />
-                      : totalFiltered < taxaFilteredSpeciesBase.length ? (
-                        <>
-                          {totalFiltered.toLocaleString()}
-                          <span className="text-base font-normal text-zinc-400 dark:text-zinc-500"> matching filters, of {taxaFilteredSpeciesBase.length.toLocaleString()} total</span>
-                        </>
-                      ) : totalFiltered.toLocaleString()}
+                    {focusedTaxonCard.name}
                   </div>
                 </div>
-                {onViewModeChange && (
-                  <div className="flex rounded-lg border border-zinc-200 dark:border-zinc-700 overflow-hidden text-xs shrink-0">
-                    <button
-                      type="button"
-                      onClick={() => onViewModeChange("reassessments")}
-                      className={`px-2 py-1 font-medium transition-colors ${
-                        !isNewAssessments
-                          ? "bg-zinc-800 dark:bg-zinc-100 text-white dark:text-zinc-900"
-                          : "bg-white dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400 hover:bg-zinc-50 dark:hover:bg-zinc-700"
-                      }`}
-                    >
-                      Assessed
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => onViewModeChange("new-assessments")}
-                      className={`px-2 py-1 font-medium transition-colors ${
-                        isNewAssessments
-                          ? "bg-zinc-800 dark:bg-zinc-100 text-white dark:text-zinc-900"
-                          : "bg-white dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400 hover:bg-zinc-50 dark:hover:bg-zinc-700"
-                      }`}
-                    >
-                      Not Evaluated
-                    </button>
+                <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-3 flex flex-col sm:flex-row sm:items-center justify-between gap-2 sm:gap-3">
+                  <div className="min-w-0">
+                    <div className="text-xs font-medium uppercase tracking-wide text-zinc-500 dark:text-zinc-400">
+                      {isNewAssessments ? "Not Evaluated Species" : "Assessed Species"}
+                    </div>
+                    <div className="mt-0.5 text-2xl font-bold text-zinc-900 dark:text-zinc-100">
+                      {speciesLoading && assessedSpecies.length === 0
+                        ? <Spinner className="h-6 w-6" />
+                        : totalFiltered < taxaFilteredSpeciesBase.length ? (
+                          <>
+                            {totalFiltered.toLocaleString()}
+                            <span className="text-base font-normal text-zinc-400 dark:text-zinc-500"> matching filters, of {taxaFilteredSpeciesBase.length.toLocaleString()} total</span>
+                          </>
+                        ) : totalFiltered.toLocaleString()}
+                    </div>
                   </div>
-                )}
+                  {onViewModeChange && (
+                    <div className="flex rounded-lg border border-zinc-200 dark:border-zinc-700 overflow-hidden text-xs shrink-0">
+                      <button
+                        type="button"
+                        onClick={() => onViewModeChange("reassessments")}
+                        className={`px-2 py-1 font-medium transition-colors ${
+                          !isNewAssessments
+                            ? "bg-zinc-800 dark:bg-zinc-100 text-white dark:text-zinc-900"
+                            : "bg-white dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400 hover:bg-zinc-50 dark:hover:bg-zinc-700"
+                        }`}
+                      >
+                        Assessed
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => onViewModeChange("new-assessments")}
+                        className={`px-2 py-1 font-medium transition-colors ${
+                          isNewAssessments
+                            ? "bg-zinc-800 dark:bg-zinc-100 text-white dark:text-zinc-900"
+                            : "bg-white dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400 hover:bg-zinc-50 dark:hover:bg-zinc-700"
+                        }`}
+                      >
+                        Not Evaluated
+                      </button>
+                    </div>
+                  )}
+                </div>
               </div>
             </div>
           )}
@@ -3637,6 +3653,14 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
             );
           })()}
 
+          {/* Charts + filters panel — everything that used to live behind a
+              "More Filters" click now renders continuously here instead, in a
+              capped-height, independently-scrollable box. This keeps the panel
+              from growing unbounded as more chart cards get added, so the table
+              toolbar right below it (itself pinned — see statRowRef above)
+              stays reachable at a short, predictable scroll distance rather
+              than depending on how many cards happen to be open. */}
+          <div className="max-h-[60vh] overflow-y-auto space-y-4 pr-1 -mr-1">
           {/* Charts row 1: bar charts (new-assessments mode only shows GBIF Observations) */}
           {!isNewAssessments && (
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
@@ -3922,24 +3946,12 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
           </div>
           )}
 
-          {/* More Filters — a full-width collapsible card row, consistent with
-              the other cards on the page (hidden for New Assessments) */}
+          {/* More Filters — no longer a click-to-expand card; always rendered
+              (hidden for New Assessments), inside the scrollable panel above. */}
           {!isNewAssessments && <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl">
-            <button
-              onClick={() => setMoreFiltersOpen(prev => !prev)}
-              className="w-full flex items-center gap-1.5 px-3 md:px-4 py-2.5 text-sm font-medium text-zinc-700 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800 rounded-t-xl transition-colors"
-            >
-              <svg className={`w-3.5 h-3.5 transition-transform ${moreFiltersOpen ? "rotate-90" : ""}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-              </svg>
+            <div className="px-3 md:px-4 py-2.5 text-sm font-medium text-zinc-700 dark:text-zinc-300">
               More Filters
-              {(selectedSystems.size + selectedGrowthForms.size + selectedPopulationTrends.size + selectedMovementPatterns.size + selectedThreats.size + selectedCriteria.size + selectedHabitat.size + (habitatBreadth ? 1 : 0) + (habitatImportanceActive ? 1 : 0) + (habitatSeasonsActive ? 1 : 0) + selectedCountries.size + (endemicsOnly ? 1 : 0) > 0) && (
-                <span className="ml-1 px-1.5 py-0.5 text-[10px] rounded-full bg-zinc-200 dark:bg-zinc-700 text-zinc-600 dark:text-zinc-300">
-                  {selectedSystems.size + selectedGrowthForms.size + selectedPopulationTrends.size + selectedMovementPatterns.size + selectedThreats.size + selectedCriteria.size + selectedHabitat.size + (habitatBreadth ? 1 : 0) + (habitatImportanceActive ? 1 : 0) + (habitatSeasonsActive ? 1 : 0) + selectedCountries.size + (endemicsOnly ? 1 : 0)} active
-                </span>
-              )}
-            </button>
-            {moreFiltersOpen && (
+            </div>
               <div className="px-3 md:px-4 pb-3 md:pb-4 pt-3 md:pt-4 border-t border-zinc-200 dark:border-zinc-800 flex flex-col gap-3">
                 {/* Country map (left) alongside Realm, Movement, Criteria, Trend
                     stacked in the right column — moved here from the primary view
@@ -4199,8 +4211,8 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
                   </div>
                 )}
               </div>
-            )}
           </div>}
+          </div>
 
       {/* Species Table */}
       <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl">
@@ -4212,8 +4224,14 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
             filters". The free-text box narrows the visible table by name in
             place, composing with the pills beside it — distinct from the page
             header's SpeciesSearchBar, which navigates elsewhere instead of
-            narrowing here (see DebouncedSearchInput's own doc comment). */}
-        <div className="p-3 md:p-4 border-b border-zinc-200 dark:border-zinc-800 rounded-t-xl">
+            narrowing here (see DebouncedSearchInput's own doc comment).
+            Pinned (position: sticky) right below the stat-card row above, so
+            it — and the rest of the table it heads — stay reachable without
+            re-scrolling past the filters panel. */}
+        <div
+          className="sticky z-20 bg-white dark:bg-zinc-900 p-3 md:p-4 border-b border-zinc-200 dark:border-zinc-800 rounded-t-xl"
+          style={{ top: statRowHeight }}
+        >
           <div className="flex flex-wrap items-center gap-2 md:gap-4">
             <div className="relative flex-1 min-w-[140px] max-w-md">
               <DebouncedSearchInput
