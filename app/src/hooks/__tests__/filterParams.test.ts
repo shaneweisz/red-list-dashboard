@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { parseParams, buildQs, mergeParamsIntoSearch, OWN_PARAM_NAMES } from "../useFilterParams";
+import { ALL_HABITAT_SEASONS, ALL_HABITAT_IMPORTANCE } from "../../lib/habitat-filter";
 
 describe("parseParams", () => {
   it("defaults viewMode to reassessments", () => {
@@ -253,8 +254,8 @@ describe("buildQs", () => {
     criteria: new Set<string>(),
     habitat: new Set<string>(),
     habitatBreadth: null,
-    habitatExcludeMinor: false,
-    habitatSeasons: new Set<string>(),
+    habitatImportance: new Set<string>(ALL_HABITAT_IMPORTANCE),
+    habitatSeasons: new Set<string>(ALL_HABITAT_SEASONS),
     endemicsOnly: false,
     growthForms: new Set<string>(),
     assessors: new Set<string>(),
@@ -483,8 +484,8 @@ describe("parseParams ↔ buildQs round-trip", () => {
       criteria: new Set<string>(),
       habitat: new Set<string>(),
       habitatBreadth: null,
-      habitatExcludeMinor: false,
-      habitatSeasons: new Set<string>(),
+      habitatImportance: new Set<string>(ALL_HABITAT_IMPORTANCE),
+      habitatSeasons: new Set<string>(ALL_HABITAT_SEASONS),
       endemicsOnly: false,
       growthForms: new Set<string>(),
       assessors: new Set<string>(),
@@ -527,8 +528,8 @@ describe("parseParams ↔ buildQs round-trip", () => {
       criteria: new Set<string>(),
       habitat: new Set<string>(),
       habitatBreadth: null,
-      habitatExcludeMinor: false,
-      habitatSeasons: new Set<string>(),
+      habitatImportance: new Set<string>(ALL_HABITAT_IMPORTANCE),
+      habitatSeasons: new Set<string>(ALL_HABITAT_SEASONS),
       endemicsOnly: false,
       growthForms: new Set<string>(),
       assessors: new Set<string>(),
@@ -548,6 +549,70 @@ describe("parseParams ↔ buildQs round-trip", () => {
     expect(parsed.search).toBe("");
     expect(parsed.sortField).toBe(null);
     expect(parsed.sortDirection).toBe("desc");
+  });
+
+  const baseHabitatDefaultsState = {
+    viewMode: "reassessments" as const,
+    taxa: new Set<string>(),
+    subgroups: new Set<string>(),
+    categories: new Set<string>(),
+    yearRanges: new Set<string>(),
+    assessmentYears: new Set<string>(),
+    describedYears: new Set<string>(),
+    countries: new Set<string>(),
+    obsRanges: new Set<string>(),
+    systems: new Set<string>(),
+    populationTrends: new Set<string>(),
+    movementPatterns: new Set<string>(),
+    threats: new Set<string>(),
+    criteria: new Set<string>(),
+    habitat: new Set<string>(),
+    habitatBreadth: null,
+    endemicsOnly: false,
+    growthForms: new Set<string>(),
+    assessors: new Set<string>(),
+    reviewers: new Set<string>(),
+    search: "",
+    sortField: null as "year" | "category" | "totalGbif" | "newGbif" | "pctNewGbif" | null,
+    sortDirection: "desc" as const,
+    species: null as number | null,
+    tab: null as "gbif" | "literature" | "redlist" | "wikipedia" | "cites" | "assessors" | null,
+  };
+
+  it("omits habitatImportance/habitatSeasons from the query string when at their default (everything checked)", () => {
+    const qs = buildQs({
+      ...baseHabitatDefaultsState,
+      habitatImportance: new Set<string>(ALL_HABITAT_IMPORTANCE),
+      habitatSeasons: new Set<string>(ALL_HABITAT_SEASONS),
+    });
+    expect(qs).not.toContain("habitatImportance");
+    expect(qs).not.toContain("habitatSeasons");
+  });
+
+  it("round-trips a restricted habitatImportance/habitatSeasons selection", () => {
+    const original = {
+      ...baseHabitatDefaultsState,
+      habitatImportance: new Set(["Major"]),
+      habitatSeasons: new Set(["Resident", "Passage"]),
+    };
+    const qs = buildQs(original);
+    const parsed = parseParams(qs);
+    expect(parsed.habitatImportance).toEqual(new Set(["Major"]));
+    expect(parsed.habitatSeasons).toEqual(new Set(["Resident", "Passage"]));
+  });
+
+  it("round-trips a fully-unchecked habitatImportance/habitatSeasons selection (not the same as default)", () => {
+    const original = {
+      ...baseHabitatDefaultsState,
+      habitatImportance: new Set<string>(),
+      habitatSeasons: new Set<string>(),
+    };
+    const qs = buildQs(original);
+    expect(qs).toContain("habitatImportance=");
+    expect(qs).toContain("habitatSeasons=");
+    const parsed = parseParams(qs);
+    expect(parsed.habitatImportance.size).toBe(0);
+    expect(parsed.habitatSeasons.size).toBe(0);
   });
 
   it("round-trips subgroups", () => {
@@ -570,8 +635,8 @@ describe("parseParams ↔ buildQs round-trip", () => {
       criteria: new Set<string>(),
       habitat: new Set<string>(),
       habitatBreadth: null,
-      habitatExcludeMinor: false,
-      habitatSeasons: new Set<string>(),
+      habitatImportance: new Set<string>(ALL_HABITAT_IMPORTANCE),
+      habitatSeasons: new Set<string>(ALL_HABITAT_SEASONS),
       endemicsOnly: false,
       growthForms: new Set<string>(),
       assessors: new Set<string>(),
@@ -607,8 +672,8 @@ describe("parseParams ↔ buildQs round-trip", () => {
       criteria: new Set<string>(),
       habitat: new Set<string>(),
       habitatBreadth: null,
-      habitatExcludeMinor: false,
-      habitatSeasons: new Set<string>(),
+      habitatImportance: new Set<string>(ALL_HABITAT_IMPORTANCE),
+      habitatSeasons: new Set<string>(ALL_HABITAT_SEASONS),
       endemicsOnly: false,
       growthForms: new Set<string>(),
       assessors: new Set<string>(),
@@ -643,8 +708,8 @@ describe("parseParams ↔ buildQs round-trip", () => {
       criteria: new Set<string>(),
       habitat: new Set<string>(),
       habitatBreadth: null,
-      habitatExcludeMinor: false,
-      habitatSeasons: new Set<string>(),
+      habitatImportance: new Set<string>(ALL_HABITAT_IMPORTANCE),
+      habitatSeasons: new Set<string>(ALL_HABITAT_SEASONS),
       endemicsOnly: false,
       growthForms: new Set<string>(),
       assessors: new Set<string>(),
@@ -679,8 +744,8 @@ describe("param suffixing (compare mode)", () => {
     criteria: new Set<string>(),
     habitat: new Set<string>(),
     habitatBreadth: null,
-    habitatExcludeMinor: false,
-    habitatSeasons: new Set<string>(),
+    habitatImportance: new Set<string>(ALL_HABITAT_IMPORTANCE),
+    habitatSeasons: new Set<string>(ALL_HABITAT_SEASONS),
     endemicsOnly: false,
     growthForms: new Set<string>(),
     assessors: new Set<string>(),
@@ -804,7 +869,7 @@ describe("OWN_PARAM_NAMES stays in sync with buildQs", () => {
       criteria: new Set(["B1"]),
       habitat: new Set(["5.1"]),
       habitatBreadth: "specialist" as const,
-      habitatExcludeMinor: true,
+      habitatImportance: new Set(["Major"]),
       habitatSeasons: new Set(["Resident"]),
       breakdown: { nodeId: "n1", rank: "order" as const, name: "Test" },
       endemicsOnly: true,

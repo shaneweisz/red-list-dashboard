@@ -18,7 +18,7 @@ import ReviewerChart from "./ReviewerChart";
 import { parseAssessors } from "@/lib/parseAssessors";
 import { iucnRegionCountries, countryToIucnRegion } from "@/lib/regions";
 import { useFilterParams } from "@/hooks/useFilterParams";
-import { parseHabitatEntries, matchesHabitatFilter as matchesHabitatCriteria, coarseKnownCategories } from "@/lib/habitat-filter";
+import { parseHabitatEntries, matchesHabitatFilter as matchesHabitatCriteria, coarseKnownCategories, isRestrictiveSelection, ALL_HABITAT_SEASONS, ALL_HABITAT_IMPORTANCE } from "@/lib/habitat-filter";
 import { type RedListSpecies } from "@/hooks/useRedListSpeciesQuery";
 import { useSpeciesCache } from "@/contexts/SpeciesCacheContext";
 import { isOutdated, outdatedCutoffDate } from "@/lib/outdated";
@@ -343,6 +343,14 @@ const HABITAT_SEASON_OPTIONS: { value: string; short: string }[] = [
   { value: "Seasonal Occurrence Unknown", short: "Unknown" },
 ];
 
+// Importance dropdown options — same checkbox-multi-select shape as season,
+// covering all 3 possible parseHabitatEntries().importance values.
+const HABITAT_IMPORTANCE_OPTIONS: { value: string; short: string }[] = [
+  { value: "Major", short: "Major" },
+  { value: "Not major", short: "Minor" },
+  { value: "Unknown", short: "Unknown" },
+];
+
 interface InatDefaultImage {
   squareUrl: string | null;
   mediumUrl: string | null;
@@ -612,7 +620,7 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
     selectedCriteria, setSelectedCriteria,
     selectedHabitat, setSelectedHabitat,
     habitatBreadth, setHabitatBreadth,
-    habitatExcludeMinor, setHabitatExcludeMinor,
+    selectedHabitatImportance, setSelectedHabitatImportance,
     selectedHabitatSeasons, setSelectedHabitatSeasons,
     breakdownFilter, setBreakdownFilter,
     endemicsOnly, setEndemicsOnly,
@@ -630,6 +638,13 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
     setSpeciesParam, setTabParam,
     fromPopstateRef,
   } = useFilterParams(paramSuffix);
+
+  // Both habitat checkbox-dropdowns default to "everything checked" (see
+  // useFilterParams.ts) — only a proper subset actually restricts anything,
+  // so "is this filter active" (for badges/gating/chips) checks that, not
+  // just `.size > 0`.
+  const habitatImportanceActive = isRestrictiveSelection(selectedHabitatImportance, ALL_HABITAT_IMPORTANCE);
+  const habitatSeasonsActive = isRestrictiveSelection(selectedHabitatSeasons, ALL_HABITAT_SEASONS);
 
   const cache = useSpeciesCache();
   const speciesApiUrl = useCallback(
@@ -735,8 +750,8 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
     setSelectedHabitat(new Set());
     setExpandedHabitat(null);
     setHabitatBreadth(null);
-    setHabitatExcludeMinor(false);
-    setSelectedHabitatSeasons(new Set());
+    setSelectedHabitatImportance(new Set(ALL_HABITAT_IMPORTANCE));
+    setSelectedHabitatSeasons(new Set(ALL_HABITAT_SEASONS));
     setEndemicsOnly(false);
     setSelectedGrowthForms(new Set());
     setSelectedAssessors(new Set());
@@ -747,7 +762,7 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
     if (viewMode === "new-assessments") {
       setSelectedTaxa(prev => prev.has("all") ? new Set<string>() : prev);
     }
-  }, [viewMode, setSelectedTaxa, setSelectedCategories, setSelectedYearRanges, setSelectedAssessmentYears, setSelectedDescribedYears, setSelectedCountries, setSelectedObsRanges, setSelectedSystems, setSelectedPopulationTrends, setSelectedMovementPatterns, setSelectedThreats, setSelectedCriteria, setSelectedHabitat, setHabitatBreadth, setHabitatExcludeMinor, setSelectedHabitatSeasons, setEndemicsOnly, setSelectedGrowthForms, setSelectedAssessors, setSelectedReviewers, setSort]);
+  }, [viewMode, setSelectedTaxa, setSelectedCategories, setSelectedYearRanges, setSelectedAssessmentYears, setSelectedDescribedYears, setSelectedCountries, setSelectedObsRanges, setSelectedSystems, setSelectedPopulationTrends, setSelectedMovementPatterns, setSelectedThreats, setSelectedCriteria, setSelectedHabitat, setHabitatBreadth, setSelectedHabitatImportance, setSelectedHabitatSeasons, setEndemicsOnly, setSelectedGrowthForms, setSelectedAssessors, setSelectedReviewers, setSort]);
 
   // Taxon toggle handler (used by TaxaSummary)
   // Regular click: select only that taxon (or deselect if already sole selection)
@@ -1299,10 +1314,10 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
     matchesHabitatCriteria(s.habitat_codes, {
       selectedHabitat,
       breadth: habitatBreadth,
-      excludeMinor: habitatExcludeMinor,
+      importance: selectedHabitatImportance,
       seasons: selectedHabitatSeasons,
     }),
-  [selectedHabitat, habitatBreadth, habitatExcludeMinor, selectedHabitatSeasons]);
+  [selectedHabitat, habitatBreadth, selectedHabitatImportance, selectedHabitatSeasons]);
 
   // Species details cache (images, criteria, common names)
   const [speciesDetails, setSpeciesDetails] = useState<Record<number, SpeciesDetails>>({});
@@ -2004,7 +2019,7 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
       if (!matchesReviewersFilter(s)) return;
       // selectedHabitat itself is excluded from this cross-filter (so every bar
       // stays visible to compare against, even once one is picked) but Breadth/
-      // Exclude minor/Season are refinements, not "the axis being explored" —
+      // Importance/Season are refinements, not "the axis being explored" —
       // they DO narrow these counts, same as any other active filter.
       const entries = parseHabitatEntries(s.habitat_codes);
       if (entries.length === 0) return;
@@ -2020,14 +2035,14 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
         for (let i = 1; i <= parts.length; i++) {
           const prefix = parts.slice(0, i).join(".");
           if (counted.has(prefix)) continue;
-          // Exclude minor/Season are checked against entries belonging to THIS
-          // bar's category specifically — e.g. with Exclude minor on, the
+          // Importance/Season are checked against entries belonging to THIS
+          // bar's category specifically — e.g. with "Not major" unchecked, the
           // Forest bar only counts species whose Forest entry (not some other
           // habitat of theirs) is confirmed non-minor.
-          if (habitatExcludeMinor || selectedHabitatSeasons.size > 0) {
+          if (habitatImportanceActive || habitatSeasonsActive) {
             const relevantForPrefix = entries.filter(e => e.code === prefix || e.code.startsWith(prefix + "."));
-            if (habitatExcludeMinor && !relevantForPrefix.some(e => e.importance !== "Not major")) continue;
-            if (selectedHabitatSeasons.size > 0 && !relevantForPrefix.some(e => selectedHabitatSeasons.has(e.season))) continue;
+            if (habitatImportanceActive && !relevantForPrefix.some(e => selectedHabitatImportance.has(e.importance))) continue;
+            if (habitatSeasonsActive && !relevantForPrefix.some(e => selectedHabitatSeasons.has(e.season))) continue;
           }
           counted.add(prefix);
           counts[prefix] = (counts[prefix] || 0) + 1;
@@ -2035,7 +2050,7 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
       }
     });
     return counts;
-  }, [taxaFilteredSpecies, selectedCategories, selectedCountries, selectedYearRanges, selectedObsRanges, selectedSystems, selectedPopulationTrends, selectedMovementPatterns, selectedThreats, selectedCriteria, matchesSearch, matchesAssessorsFilter, matchesReviewersFilter, matchesObsRangeFilter, matchesYearRangeFilter, selectedAssessmentYears, matchesAssessmentYearFilter, habitatBreadth, habitatExcludeMinor, selectedHabitatSeasons]);
+  }, [taxaFilteredSpecies, selectedCategories, selectedCountries, selectedYearRanges, selectedObsRanges, selectedSystems, selectedPopulationTrends, selectedMovementPatterns, selectedThreats, selectedCriteria, matchesSearch, matchesAssessorsFilter, matchesReviewersFilter, matchesObsRangeFilter, matchesYearRangeFilter, selectedAssessmentYears, matchesAssessmentYearFilter, habitatBreadth, selectedHabitatImportance, selectedHabitatSeasons, habitatImportanceActive, habitatSeasonsActive]);
 
   // Handle region filter — select all countries in the chosen region
   const handleRegionFilter = useCallback((region: string) => {
@@ -2765,8 +2780,8 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
     && selectedCriteria.size === 0
     && selectedHabitat.size === 0
     && !habitatBreadth
-    && !habitatExcludeMinor
-    && selectedHabitatSeasons.size === 0
+    && !habitatImportanceActive
+    && !habitatSeasonsActive
     && selectedGrowthForms.size === 0
     && selectedAssessors.size === 0
     && selectedReviewers.size === 0
@@ -3178,48 +3193,54 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
               )}
             </div>
 
-            {/* Importance — a single "Exclude minor" checkbox in a dropdown
-                rather than its own always-visible button. */}
+            {/* Importance — multi-select checkbox list, all checked by default
+                (nothing excluded); unchecking e.g. "Minor" behaves like the old
+                "Exclude minor" toggle but reads less ambiguously as one option
+                among an explicit, fully-visible set (matching Season below). */}
             <div className="relative" ref={habitatImportanceMenuRef}>
               <button
                 type="button"
                 onClick={() => { setHabitatImportanceMenuOpen(prev => !prev); setHabitatBreadthMenuOpen(false); setHabitatSeasonMenuOpen(false); }}
-                className={toggleClass(habitatExcludeMinor)}
+                className={toggleClass(habitatImportanceActive)}
                 aria-expanded={habitatImportanceMenuOpen}
               >
-                Importance{habitatExcludeMinor ? " (1)" : ""} ▾
+                Importance{habitatImportanceActive ? ` (${selectedHabitatImportance.size})` : ""} ▾
               </button>
               {habitatImportanceMenuOpen && (
-                <div className="absolute right-0 top-full mt-1 z-20 bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-lg shadow-lg py-1 w-56">
-                  <label className="flex items-start gap-2 px-3 py-1.5 text-xs text-zinc-700 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-700/50 cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={habitatExcludeMinor}
-                      onChange={() => setHabitatExcludeMinor(!habitatExcludeMinor)}
-                      className="mt-0.5 rounded border-zinc-300 dark:border-zinc-600 text-teal-600 focus:ring-teal-500"
-                    />
-                    <span>
-                      Exclude minor
-                      <br />
-                      <span className="text-[10px] text-zinc-400 dark:text-zinc-500">
-                        Drops matches confirmed not of major importance (keeps unrecorded)
-                      </span>
-                    </span>
-                  </label>
+                <div className="absolute right-0 top-full mt-1 z-20 bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-lg shadow-lg py-1 w-48">
+                  {HABITAT_IMPORTANCE_OPTIONS.map(({ value, short }) => (
+                    <label
+                      key={value}
+                      className="flex items-center gap-2 px-3 py-1.5 text-xs text-zinc-700 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-700/50 cursor-pointer"
+                      title={value === "Unknown" ? "Importance not recorded in the IUCN DB" : value}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={selectedHabitatImportance.has(value)}
+                        onChange={() => setSelectedHabitatImportance(prev => {
+                          const next = new Set(prev);
+                          if (next.has(value)) next.delete(value); else next.add(value);
+                          return next;
+                        })}
+                        className="rounded border-zinc-300 dark:border-zinc-600 text-teal-600 focus:ring-teal-500"
+                      />
+                      {short}
+                    </label>
+                  ))}
                 </div>
               )}
             </div>
 
-            {/* Season — multi-select checkbox list in a dropdown, covering all
-                5 IUCN season values instead of one always-visible chip per value. */}
+            {/* Season — multi-select checkbox list in a dropdown, all checked by
+                default (nothing excluded), covering all 5 IUCN season values. */}
             <div className="relative" ref={habitatSeasonMenuRef}>
               <button
                 type="button"
                 onClick={() => { setHabitatSeasonMenuOpen(prev => !prev); setHabitatBreadthMenuOpen(false); setHabitatImportanceMenuOpen(false); }}
-                className={toggleClass(selectedHabitatSeasons.size > 0)}
+                className={toggleClass(habitatSeasonsActive)}
                 aria-expanded={habitatSeasonMenuOpen}
               >
-                Season{selectedHabitatSeasons.size > 0 ? ` (${selectedHabitatSeasons.size})` : ""} ▾
+                Season{habitatSeasonsActive ? ` (${selectedHabitatSeasons.size})` : ""} ▾
               </button>
               {habitatSeasonMenuOpen && (
                 <div className="absolute right-0 top-full mt-1 z-20 bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-lg shadow-lg py-1 w-48">
@@ -3912,9 +3933,9 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
               </svg>
               More Filters
-              {(selectedSystems.size + selectedGrowthForms.size + selectedPopulationTrends.size + selectedMovementPatterns.size + selectedThreats.size + selectedCriteria.size + selectedHabitat.size + (habitatBreadth ? 1 : 0) + (habitatExcludeMinor ? 1 : 0) + selectedHabitatSeasons.size + selectedCountries.size + (endemicsOnly ? 1 : 0) > 0) && (
+              {(selectedSystems.size + selectedGrowthForms.size + selectedPopulationTrends.size + selectedMovementPatterns.size + selectedThreats.size + selectedCriteria.size + selectedHabitat.size + (habitatBreadth ? 1 : 0) + (habitatImportanceActive ? 1 : 0) + (habitatSeasonsActive ? 1 : 0) + selectedCountries.size + (endemicsOnly ? 1 : 0) > 0) && (
                 <span className="ml-1 px-1.5 py-0.5 text-[10px] rounded-full bg-zinc-200 dark:bg-zinc-700 text-zinc-600 dark:text-zinc-300">
-                  {selectedSystems.size + selectedGrowthForms.size + selectedPopulationTrends.size + selectedMovementPatterns.size + selectedThreats.size + selectedCriteria.size + selectedHabitat.size + (habitatBreadth ? 1 : 0) + (habitatExcludeMinor ? 1 : 0) + selectedHabitatSeasons.size + selectedCountries.size + (endemicsOnly ? 1 : 0)} active
+                  {selectedSystems.size + selectedGrowthForms.size + selectedPopulationTrends.size + selectedMovementPatterns.size + selectedThreats.size + selectedCriteria.size + selectedHabitat.size + (habitatBreadth ? 1 : 0) + (habitatImportanceActive ? 1 : 0) + (habitatSeasonsActive ? 1 : 0) + selectedCountries.size + (endemicsOnly ? 1 : 0)} active
                 </span>
               )}
             </button>
@@ -4209,7 +4230,7 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
               </svg>
             </div>
-            {(selectedTaxa.size > 0 || selectedSubgroups.size > 0 || selectedCategories.size > 0 || selectedYearRanges.size > 0 || selectedAssessmentYears.size > 0 || selectedDescribedYears.size > 0 || selectedObsRanges.size > 0 || selectedCountries.size > 0 || selectedSystems.size > 0 || endemicsOnly || selectedGrowthForms.size > 0 || selectedPopulationTrends.size > 0 || selectedMovementPatterns.size > 0 || selectedThreats.size > 0 || selectedCriteria.size > 0 || selectedHabitat.size > 0 || habitatBreadth || habitatExcludeMinor || selectedHabitatSeasons.size > 0 || selectedAssessors.size > 0 || selectedReviewers.size > 0 || showOnlyStarred || exactFilters.outdated || exactFilters.minObs != null || exactFilters.maxObs != null || exactFilters.minAssessmentYear != null || exactFilters.maxAssessmentYear != null || exactFilters.minDescribedYear != null || exactFilters.maxDescribedYear != null) && (
+            {(selectedTaxa.size > 0 || selectedSubgroups.size > 0 || selectedCategories.size > 0 || selectedYearRanges.size > 0 || selectedAssessmentYears.size > 0 || selectedDescribedYears.size > 0 || selectedObsRanges.size > 0 || selectedCountries.size > 0 || selectedSystems.size > 0 || endemicsOnly || selectedGrowthForms.size > 0 || selectedPopulationTrends.size > 0 || selectedMovementPatterns.size > 0 || selectedThreats.size > 0 || selectedCriteria.size > 0 || selectedHabitat.size > 0 || habitatBreadth || habitatImportanceActive || habitatSeasonsActive || selectedAssessors.size > 0 || selectedReviewers.size > 0 || showOnlyStarred || exactFilters.outdated || exactFilters.minObs != null || exactFilters.maxObs != null || exactFilters.minAssessmentYear != null || exactFilters.maxAssessmentYear != null || exactFilters.minDescribedYear != null || exactFilters.maxDescribedYear != null) && (
               <button
                 onClick={() => {
                   clearAllFiltersAndTaxa();
@@ -4452,22 +4473,26 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
                 <span className="text-sm">×</span>
               </button>
             )}
-            {habitatExcludeMinor && (
+            {/* Importance/Season both default to "everything checked" — the
+                chip shows what's been EXCLUDED (unchecked), since that's the
+                meaningful deviation from default; clicking × re-checks it. */}
+            {habitatImportanceActive && HABITAT_IMPORTANCE_OPTIONS.filter(({ value }) => !selectedHabitatImportance.has(value)).map(({ value, short }) => (
               <button
-                onClick={() => setHabitatExcludeMinor(false)}
+                key={`habitat-importance-excl-${value}`}
+                onClick={() => setSelectedHabitatImportance(prev => new Set(prev).add(value))}
                 className="px-3 py-1.5 text-sm font-medium rounded-full bg-teal-100 text-teal-600 dark:bg-teal-900/30 dark:text-teal-400 flex items-center gap-1 hover:opacity-80"
               >
-                Exclude minor habitat
+                No {short} habitat
                 <span className="text-sm">×</span>
               </button>
-            )}
-            {Array.from(selectedHabitatSeasons).map(season => (
+            ))}
+            {habitatSeasonsActive && HABITAT_SEASON_OPTIONS.filter(({ value }) => !selectedHabitatSeasons.has(value)).map(({ value, short }) => (
               <button
-                key={`habitat-season-${season}`}
-                onClick={() => setSelectedHabitatSeasons(prev => { const next = new Set(prev); next.delete(season); return next; })}
+                key={`habitat-season-excl-${value}`}
+                onClick={() => setSelectedHabitatSeasons(prev => new Set(prev).add(value))}
                 className="px-3 py-1.5 text-sm font-medium rounded-full bg-teal-100 text-teal-600 dark:bg-teal-900/30 dark:text-teal-400 flex items-center gap-1 hover:opacity-80"
               >
-                {season}
+                No {short}
                 <span className="text-sm">×</span>
               </button>
             ))}

@@ -1,11 +1,21 @@
 import { describe, it, expect } from "vitest";
-import { parseHabitatEntries, matchesHabitatFilter, coarseKnownCategories, type HabitatFilterCriteria } from "../habitat-filter";
+import {
+  parseHabitatEntries,
+  matchesHabitatFilter,
+  coarseKnownCategories,
+  ALL_HABITAT_SEASONS,
+  ALL_HABITAT_IMPORTANCE,
+  type HabitatFilterCriteria,
+} from "../habitat-filter";
 
+// Reflects the app's actual default: every checkbox starts checked (nothing
+// excluded), not empty sets — see the "empty selection" tests below for why
+// both ends of that spectrum behave the same.
 const noFilter: HabitatFilterCriteria = {
   selectedHabitat: new Set(),
   breadth: null,
-  excludeMinor: false,
-  seasons: new Set(),
+  importance: new Set(ALL_HABITAT_IMPORTANCE),
+  seasons: new Set(ALL_HABITAT_SEASONS),
 };
 
 describe("parseHabitatEntries", () => {
@@ -43,6 +53,12 @@ describe("matchesHabitatFilter — no filters active", () => {
     expect(matchesHabitatFilter(null, noFilter)).toBe(true);
     expect(matchesHabitatFilter([], noFilter)).toBe(true);
     expect(matchesHabitatFilter(["1.1:R:S:1"], noFilter)).toBe(true);
+  });
+
+  it("an empty selection behaves the same as a fully-checked one (not restrictive)", () => {
+    const f = { ...noFilter, importance: new Set<string>(), seasons: new Set<string>() };
+    expect(matchesHabitatFilter(["1.1:R:S:0"], f)).toBe(true);
+    expect(matchesHabitatFilter(["1.1:B:S:1"], f)).toBe(true);
   });
 });
 
@@ -117,9 +133,9 @@ describe("matchesHabitatFilter — breadth: generalist", () => {
   });
 });
 
-describe("matchesHabitatFilter — excludeMinor", () => {
-  it("with no habitat selected, keeps species with at least one non-minor (major or unknown-importance) entry", () => {
-    const f = { ...noFilter, excludeMinor: true };
+describe("matchesHabitatFilter — importance", () => {
+  it("unchecking 'Not major' keeps species with at least one non-minor (major or unknown-importance) entry", () => {
+    const f = { ...noFilter, importance: new Set(["Major", "Unknown"]) };
     expect(matchesHabitatFilter(["1.1:R:S:1"], f)).toBe(true); // major
     expect(matchesHabitatFilter(["1.1:R:S:-"], f)).toBe(true); // unrecorded, kept
     expect(matchesHabitatFilter(["1.1:R:S:0"], f)).toBe(false); // confirmed minor only
@@ -127,7 +143,7 @@ describe("matchesHabitatFilter — excludeMinor", () => {
   });
 
   it("scopes to the selected habitat's own entries, not just any habitat", () => {
-    const f = { ...noFilter, selectedHabitat: new Set(["1"]), excludeMinor: true };
+    const f = { ...noFilter, selectedHabitat: new Set(["1"]), importance: new Set(["Major", "Unknown"]) };
     // Forest (1.1) is confirmed minor; a different, unselected habitat (4.1) is major —
     // should NOT rescue the Forest match.
     expect(matchesHabitatFilter(["1.1:R:S:0", "4.1:R:S:1"], f)).toBe(false);
@@ -136,10 +152,22 @@ describe("matchesHabitatFilter — excludeMinor", () => {
     // Forest importance unrecorded — kept, not treated as minor.
     expect(matchesHabitatFilter(["1.1:R:S:-"], f)).toBe(true);
   });
+
+  it("checking only one value (e.g. just 'Not major') restricts to that value alone", () => {
+    const f = { ...noFilter, importance: new Set(["Not major"]) };
+    expect(matchesHabitatFilter(["1.1:R:S:0"], f)).toBe(true);
+    expect(matchesHabitatFilter(["1.1:R:S:1"], f)).toBe(false);
+  });
 });
 
 describe("matchesHabitatFilter — seasons", () => {
-  it("matches any one of multiple selected seasons (OR)", () => {
+  it("unchecking a season excludes species whose relevant entries are only that season", () => {
+    const f = { ...noFilter, seasons: new Set(["Resident", "Breeding Season", "Non-Breeding Season", "Passage"]) }; // Unknown unchecked
+    expect(matchesHabitatFilter(["1.1:R:S:1"], f)).toBe(true);
+    expect(matchesHabitatFilter(["1.1:U:S:1"], f)).toBe(false);
+  });
+
+  it("checking only one or two values restricts to those (OR)", () => {
     const f = { ...noFilter, seasons: new Set(["Breeding Season", "Passage"]) };
     expect(matchesHabitatFilter(["1.1:B:S:1"], f)).toBe(true);
     expect(matchesHabitatFilter(["1.1:P:S:1"], f)).toBe(true);
@@ -155,18 +183,18 @@ describe("matchesHabitatFilter — seasons", () => {
 });
 
 describe("matchesHabitatFilter — combined filters", () => {
-  it("ANDs selectedHabitat, breadth, excludeMinor, and seasons together", () => {
+  it("ANDs selectedHabitat, breadth, importance, and seasons together", () => {
     const f: HabitatFilterCriteria = {
       selectedHabitat: new Set(["1"]),
       breadth: "specialist",
-      excludeMinor: true,
+      importance: new Set(["Major", "Unknown"]),
       seasons: new Set(["Resident"]),
     };
     // Passes all four: only Forest, matches selection, major, Resident.
     expect(matchesHabitatFilter(["1.1:R:S:1"], f)).toBe(true);
     // Fails breadth (two coarse categories, not a specialist).
     expect(matchesHabitatFilter(["1.1:R:S:1", "4.1:R:S:1"], f)).toBe(false);
-    // Fails excludeMinor (Forest entry confirmed minor).
+    // Fails importance (Forest entry confirmed minor, "Not major" unchecked).
     expect(matchesHabitatFilter(["1.1:R:S:0"], f)).toBe(false);
     // Fails seasons (Forest entry is Breeding, not Resident).
     expect(matchesHabitatFilter(["1.1:B:S:1"], f)).toBe(false);

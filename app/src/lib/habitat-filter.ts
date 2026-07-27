@@ -1,7 +1,7 @@
 /**
  * Habitat filter predicate — extracted from RedListView.tsx so the
- * specialists/exclude-minor/season logic (and its edge cases) can be unit
- * tested directly instead of only through the component.
+ * breadth/importance/season logic (and its edge cases) can be unit tested
+ * directly instead of only through the component.
  *
  * habitat_codes tuples are "code:season:suitability:importance", written by
  * fetch-redlist-species.ts — see that file's SEASON_CODES/SUITABILITY_CODES/
@@ -25,6 +25,11 @@ const HABITAT_SUITABILITY_LABELS: Record<string, string> = {
 const HABITAT_IMPORTANCE_LABELS: Record<string, string> = {
   "1": "Major", "0": "Not major", "-": "Unknown",
 };
+
+/** Every value parseHabitatEntries can produce for `season`/`importance` —
+ *  the full "nothing excluded" set for each checkbox dropdown's default. */
+export const ALL_HABITAT_SEASONS = ["Resident", "Breeding Season", "Non-Breeding Season", "Passage", "Seasonal Occurrence Unknown"];
+export const ALL_HABITAT_IMPORTANCE = ["Major", "Not major", "Unknown"];
 
 /** The IUCN "Unknown" top-level habitat category — has no subtypes, so a
  *  species recorded only here has no *known* habitat and can't be a
@@ -52,6 +57,14 @@ export function coarseKnownCategories(codes: string[]): Set<string> {
   return new Set(codes.map(code => code.split(".")[0]).filter(top => top !== UNKNOWN_HABITAT_CATEGORY));
 }
 
+/** A checkbox-dropdown selection only restricts anything once it's a proper
+ *  subset of "all" values — fully checked (the default) or fully unchecked
+ *  both mean "no restriction" here, so an accidental clear-all doesn't trap
+ *  the user in a permanent zero-results state. */
+export function isRestrictiveSelection(selected: Set<string>, all: string[]): boolean {
+  return selected.size > 0 && selected.size < all.length;
+}
+
 /** null = no breadth filter; "specialist" = exactly one known coarse
  *  category; "generalist" = two or more. */
 export type HabitatBreadth = "specialist" | "generalist" | null;
@@ -59,7 +72,11 @@ export type HabitatBreadth = "specialist" | "generalist" | null;
 export interface HabitatFilterCriteria {
   selectedHabitat: Set<string>;
   breadth: HabitatBreadth;
-  excludeMinor: boolean;
+  /** Which importance values to include — defaults to ALL_HABITAT_IMPORTANCE
+   *  (nothing excluded); unchecking a value excludes matches whose relevant
+   *  entries are ONLY that value. */
+  importance: Set<string>;
+  /** Which season values to include — defaults to ALL_HABITAT_SEASONS. */
   seasons: Set<string>;
 }
 
@@ -67,8 +84,10 @@ export function matchesHabitatFilter(
   habitatCodes: string[] | null | undefined,
   criteria: HabitatFilterCriteria
 ): boolean {
-  const { selectedHabitat, breadth, excludeMinor, seasons } = criteria;
-  if (selectedHabitat.size === 0 && !breadth && !excludeMinor && seasons.size === 0) return true;
+  const { selectedHabitat, breadth, importance, seasons } = criteria;
+  const importanceActive = isRestrictiveSelection(importance, ALL_HABITAT_IMPORTANCE);
+  const seasonsActive = isRestrictiveSelection(seasons, ALL_HABITAT_SEASONS);
+  if (selectedHabitat.size === 0 && !breadth && !importanceActive && !seasonsActive) return true;
 
   const entries = parseHabitatEntries(habitatCodes);
   const codes = Array.from(new Set(entries.map(e => e.code)));
@@ -86,15 +105,15 @@ export function matchesHabitatFilter(
     if (breadth === "generalist" && known.size < 2) return false;
   }
 
-  // Exclude-minor and season scope to the entries matching the current
-  // habitat selection (so they refine "this specific habitat match"),
-  // falling back to all entries when no habitat is selected.
+  // Importance and season scope to the entries matching the current habitat
+  // selection (so they refine "this specific habitat match"), falling back
+  // to all entries when no habitat is selected.
   const relevant = selectedHabitat.size > 0
     ? entries.filter(e => Array.from(selectedHabitat).some(sel => e.code === sel || e.code.startsWith(sel + ".")))
     : entries;
 
-  if (excludeMinor && !relevant.some(e => e.importance !== "Not major")) return false;
-  if (seasons.size > 0 && !relevant.some(e => seasons.has(e.season))) return false;
+  if (importanceActive && !relevant.some(e => importance.has(e.importance))) return false;
+  if (seasonsActive && !relevant.some(e => seasons.has(e.season))) return false;
 
   return true;
 }
