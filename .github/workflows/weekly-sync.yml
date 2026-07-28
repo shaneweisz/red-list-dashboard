@@ -4,9 +4,11 @@ name: Weekly data sync
 # derived taxa-summary stats (incl. isOutdated, which drifts stale over time
 # even when no new data has arrived — see src/lib/outdated.ts) on a schedule,
 # without needing the IUCN Postgres DB (see scripts/sync.ts's --skip-redlist:
-# only phase 1, fetch-redlist-species, needs DB access). The Red List data
-# itself stays on its own manual ~6-month refresh cadence (README § Data Sync
-# Pipeline) — this job only refreshes everything downstream of it.
+# skips phase 1, fetch-redlist-species, plus phases 14-15, upload-range-maps/
+# upload-aoh-maps, which need that same DB access or local-only STAR pipeline
+# output). The Red List data itself stays on its own manual ~6-month refresh
+# cadence (README § Data Sync Pipeline) — this job only refreshes everything
+# downstream of it.
 #
 # Weekly (not monthly) so the resulting PR lands Sunday night and can be
 # reviewed/merged Monday morning. Note the CoL backbone (phases 7-9) refetches
