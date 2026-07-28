@@ -3988,7 +3988,7 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
                             Reassessed
                           </button>
                         </div>
-                        <div style={{ height: 205 }} className="flex items-center justify-center">
+                        <div style={{ height: 216 }} className="flex items-center justify-center">
                           {speciesLoading && assessedSpecies.length === 0 ? (
                             <Spinner />
                           ) : isSingleSpecies && singleSpecies ? (
