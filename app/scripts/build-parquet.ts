@@ -8,7 +8,8 @@
  *      occurrence counts summed across ALL their mapping links (canonical-
  *      preferred representative key). Rich schema; columns match SpeciesRow.
  *      Includes denormalized latest_assessors/latest_reviewers (history seq 0)
- *      so the species list needs no history join (full history is lazy).
+ *      and assessment_count (count of history rows) so the species list needs
+ *      no history join (full history is lazy).
  *  - unassessed.parquet   = GBIF species not linked to any assessment (minus
  *      domesticated), category 'NE'. Lean schema — taxonomy + occurrence count
  *      only (no assessment-only columns, no obs-after-assessment-year).
@@ -134,6 +135,17 @@ export async function run(): Promise<void> {
       FROM hist WHERE seq = 0;
   `);
 
+  // Number of assessments per species (#423 item 1) — one row in hist per past
+  // assessment (already deduplicated to one per year by fetchAssessmentHistory),
+  // so a plain count is exactly "how many times has this species been assessed."
+  // Denormalized into assessed.parquet like latest_assess above, so the species
+  // list needs no join at query time.
+  await conn.run(`
+    CREATE TEMP TABLE assess_count AS
+      SELECT sis_taxon_id, count(*) AS assessment_count
+      FROM hist GROUP BY sis_taxon_id;
+  `);
+
   // Assessed (IUCN Red List) — the hot, bounded, rich dataset.
   await conn.run(`
     COPY (
@@ -160,10 +172,12 @@ export async function run(): Promise<void> {
         coalesce(CAST(r.possibly_extinct_in_the_wild AS VARCHAR), '') = 'true' AS possibly_extinct_in_the_wild,
         nullif(r.criteria, '')            AS criteria,
         r.threat_codes, r.habitat_codes,
-        la.latest_assessors, la.latest_reviewers
+        la.latest_assessors, la.latest_reviewers,
+        coalesce(ac.assessment_count, 1)  AS assessment_count
       FROM read_csv_auto('${redlistGlob}', union_by_name=true) r
       LEFT JOIN enrich e ON e.sis_taxon_id = r.sis_taxon_id
       LEFT JOIN latest_assess la ON la.sis_taxon_id = r.sis_taxon_id
+      LEFT JOIN assess_count ac ON ac.sis_taxon_id = r.sis_taxon_id
       ORDER BY class_name, order_name, family, scientific_name
     ) TO '${assessedOut}' (FORMAT PARQUET, COMPRESSION ZSTD);
   `);

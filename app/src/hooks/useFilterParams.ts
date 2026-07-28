@@ -75,7 +75,7 @@ const paramKey = (name: string, suffix: string): string => (suffix ? `${name}${s
 // sync" test).
 export const OWN_PARAM_NAMES = [
   "view", "layout", "origin", "countries", "region", "taxa", "subgroups",
-  "categories", "years", "assessmentYears", "describedYears", "obsRanges",
+  "categories", "years", "assessmentYears", "describedYears", "obsRanges", "assessmentCounts",
   "systems", "trends", "movement", "threats", "criteria", "habitat", "habitatBreadth",
   "habitatImportance", "habitatSeasons", "habitatSuitability", "bd", "endemics", "growthForms",
   "assessors", "reviewers", "search", "outdated", "minObs", "maxObs",
@@ -178,6 +178,9 @@ export function parseParams(search: string, suffix: string = "") {
     obsRanges: p.get(k("obsRanges"))
       ? new Set(p.get(k("obsRanges"))!.split(",").filter(Boolean))
       : new Set<string>(),
+    assessmentCounts: p.get(k("assessmentCounts"))
+      ? new Set(p.get(k("assessmentCounts"))!.split(",").filter(Boolean))
+      : new Set<string>(),
     systems: p.get(k("systems"))
       ? new Set(p.get(k("systems"))!.split(",").filter(Boolean))
       : new Set<string>(),
@@ -274,6 +277,7 @@ export function buildQs(state: {
   describedYears: Set<string>;
   countries: Set<string>;
   obsRanges: Set<string>;
+  assessmentCounts: Set<string>;
   systems: Set<string>;
   populationTrends: Set<string>;
   movementPatterns: Set<string>;
@@ -320,6 +324,7 @@ export function buildQs(state: {
   if (state.describedYears.size > 0) p.set(k("describedYears"), [...state.describedYears].join(","));
   if (state.countries.size > 0) p.set(k("countries"), [...state.countries].join(","));
   if (state.obsRanges.size > 0) p.set(k("obsRanges"), [...state.obsRanges].join(","));
+  if (state.assessmentCounts.size > 0) p.set(k("assessmentCounts"), [...state.assessmentCounts].join(","));
   if (state.systems.size > 0) p.set(k("systems"), [...state.systems].join(","));
   if (state.populationTrends.size > 0) p.set(k("trends"), [...state.populationTrends].join(","));
   if (state.movementPatterns.size > 0) p.set(k("movement"), [...state.movementPatterns].join(","));
@@ -522,6 +527,18 @@ export function useFilterParams(paramSuffix: string = "") {
       setState(prev => {
         const nextObsRanges = typeof updater === "function" ? updater(prev.obsRanges) : updater;
         const next = { ...prev, obsRanges: nextObsRanges };
+        queueMicrotask(() => syncUrl(next, false));
+        return next;
+      });
+    },
+    [syncUrl]
+  );
+
+  const setSelectedAssessmentCounts = useCallback(
+    (updater: Set<string> | ((prev: Set<string>) => Set<string>)) => {
+      setState(prev => {
+        const nextAssessmentCounts = typeof updater === "function" ? updater(prev.assessmentCounts) : updater;
+        const next = { ...prev, assessmentCounts: nextAssessmentCounts };
         queueMicrotask(() => syncUrl(next, false));
         return next;
       });
@@ -941,6 +958,7 @@ export function useFilterParams(paramSuffix: string = "") {
         describedYears: new Set<string>(),
         countries: new Set<string>(),
         obsRanges: new Set<string>(),
+        assessmentCounts: new Set<string>(),
         systems: new Set<string>(),
         populationTrends: new Set<string>(),
         movementPatterns: new Set<string>(),
@@ -980,6 +998,7 @@ export function useFilterParams(paramSuffix: string = "") {
         describedYears: new Set<string>(),
         countries: new Set<string>(),
         obsRanges: new Set<string>(),
+        assessmentCounts: new Set<string>(),
         systems: new Set<string>(),
         populationTrends: new Set<string>(),
         movementPatterns: new Set<string>(),
@@ -1019,6 +1038,7 @@ export function useFilterParams(paramSuffix: string = "") {
     selectedDescribedYears: state.describedYears,
     selectedCountries: state.countries,
     selectedObsRanges: state.obsRanges,
+    selectedAssessmentCounts: state.assessmentCounts,
     selectedSystems: state.systems,
     selectedPopulationTrends: state.populationTrends,
     selectedMovementPatterns: state.movementPatterns,
@@ -1057,6 +1077,7 @@ export function useFilterParams(paramSuffix: string = "") {
     setSelectedDescribedYears,
     setSelectedCountries,
     setSelectedObsRanges,
+    setSelectedAssessmentCounts,
     setSelectedSystems,
     setSelectedPopulationTrends,
     setSelectedMovementPatterns,
