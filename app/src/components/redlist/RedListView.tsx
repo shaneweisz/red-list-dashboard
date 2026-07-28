@@ -4017,188 +4017,188 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
                   );
                 })()}
 
-                {/* Number of Assessments (#423 item 1) — how many times a species
-                    has been assessed, with a "Reassessed" shortcut selecting every
-                    bucket >= 2 in one click (flags species reassessed at least
-                    once, per the issue's explicit ask), same shape as the
-                    Outdated shortcut next to Years Since Assessed. */}
-                {!isNewAssessments && (
-                  <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-3 flex flex-col">
-                    <div className="flex items-center justify-between mb-1">
-                      <span className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">Number of Assessments</span>
-                      <button
-                        type="button"
-                        onClick={handleReassessedClick}
-                        className={`px-2 py-0.5 text-xs font-semibold rounded transition-colors ${
-                          isReassessedSelected
-                            ? "bg-red-600 text-white shadow-sm"
-                            : "bg-zinc-100 dark:bg-zinc-800 text-zinc-500 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-300"
-                        }`}
-                        aria-pressed={isReassessedSelected}
-                        title="Filter to species assessed 2 or more times (reassessed at least once)"
-                      >
-                        Reassessed
-                      </button>
-                    </div>
-                    <div style={{ height: 150 }} className="flex items-center justify-center">
-                      {speciesLoading && assessedSpecies.length === 0 ? (
-                        <Spinner />
-                      ) : isSingleSpecies && singleSpecies ? (
-                        <span className="text-4xl font-bold text-zinc-900 dark:text-zinc-100">
-                          {assessmentCountBucket(singleSpecies.assessment_count)}
-                        </span>
-                      ) : assessmentCountData.length > 0 ? (
-                        <FilterBarChart
-                          data={assessmentCountData}
-                          dataKey="shortRange"
-                          selectedItems={selectedAssessmentCounts}
-                          onBarClick={handleAssessmentCountClick}
-                          barColor="#8b5cf6"
-                          yAxisWidth={42}
-                          rightMargin={85}
-                        />
-                      ) : null}
-                    </div>
-                  </div>
-                )}
-
-                {/* Habitat (left) alongside Realm, Movement, Trend, Criteria
-                    stacked in the right column — these four are short,
-                    compact controls, so stacking them against the taller
-                    Habitat card balances the row instead of spreading them
-                    across their own rows. */}
+                {/* Habitat (left) alongside Number of Assessments (right). */}
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                   {habitatCard}
-                  <div className="flex flex-col gap-3">
-                    {/* Realm */}
-                    <div className="flex items-center gap-2 bg-zinc-50 dark:bg-zinc-800/50 border border-zinc-200 dark:border-zinc-700 rounded-lg px-3 py-2">
-                      <span className="text-sm font-semibold text-zinc-900 dark:text-zinc-100 shrink-0 w-20">Realm</span>
-                      <div className="flex flex-wrap gap-1.5">
-                        {(["Terrestrial", "Freshwater", "Marine"] as const).map(system => {
-                          const isSelected = selectedSystems.has(system);
-                          const count = realmCounts[system] ?? 0;
-                          return (
-                            <button
-                              key={system}
-                              onClick={(e) => {
-                                const isMulti = e.metaKey || e.ctrlKey;
-                                setSelectedSystems(prev => {
-                                  if (isMulti) { const next = new Set(prev); if (next.has(system)) next.delete(system); else next.add(system); return next; }
-                                  if (prev.size === 1 && prev.has(system)) return new Set();
-                                  return new Set([system]);
-                                });
-                              }}
-                              className={`px-2 py-1 text-xs rounded-full transition-colors cursor-pointer ${
-                                isSelected
-                                  ? system === "Terrestrial" ? "bg-amber-500 text-white"
-                                  : system === "Freshwater" ? "bg-cyan-500 text-white"
-                                  : "bg-blue-600 text-white"
-                                  : "bg-zinc-100 text-zinc-600 hover:bg-zinc-200 dark:bg-zinc-800 dark:text-zinc-400 dark:hover:bg-zinc-700"
-                              }`}
-                            >
-                              {system} ({count.toLocaleString()})
-                            </button>
-                          );
-                        })}
+                  {/* Number of Assessments (#423 item 1) — how many times a species
+                      has been assessed, with a "Reassessed" shortcut selecting every
+                      bucket >= 2 in one click (flags species reassessed at least
+                      once, per the issue's explicit ask), same shape as the
+                      Outdated shortcut next to Years Since Assessed. */}
+                  {!isNewAssessments && (
+                    <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-3 flex flex-col">
+                      <div className="flex items-center justify-between mb-1">
+                        <span className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">Number of Assessments</span>
+                        <button
+                          type="button"
+                          onClick={handleReassessedClick}
+                          className={`px-2 py-0.5 text-xs font-semibold rounded transition-colors ${
+                            isReassessedSelected
+                              ? "bg-red-600 text-white shadow-sm"
+                              : "bg-zinc-100 dark:bg-zinc-800 text-zinc-500 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-300"
+                          }`}
+                          aria-pressed={isReassessedSelected}
+                          title="Filter to species assessed 2 or more times (reassessed at least once)"
+                        >
+                          Reassessed
+                        </button>
+                      </div>
+                      <div style={{ height: 150 }} className="flex items-center justify-center">
+                        {speciesLoading && assessedSpecies.length === 0 ? (
+                          <Spinner />
+                        ) : isSingleSpecies && singleSpecies ? (
+                          <span className="text-4xl font-bold text-zinc-900 dark:text-zinc-100">
+                            {assessmentCountBucket(singleSpecies.assessment_count)}
+                          </span>
+                        ) : assessmentCountData.length > 0 ? (
+                          <FilterBarChart
+                            data={assessmentCountData}
+                            dataKey="shortRange"
+                            selectedItems={selectedAssessmentCounts}
+                            onBarClick={handleAssessmentCountClick}
+                            barColor="#8b5cf6"
+                            yAxisWidth={42}
+                            rightMargin={85}
+                          />
+                        ) : null}
                       </div>
                     </div>
+                  )}
+                </div>
 
-                    {/* Movement Patterns */}
-                    {!isNewAssessments && (
-                      <div className="flex items-center gap-2 bg-zinc-50 dark:bg-zinc-800/50 border border-zinc-200 dark:border-zinc-700 rounded-lg px-3 py-2">
-                        <span className="text-sm font-semibold text-zinc-900 dark:text-zinc-100 shrink-0 w-20">Movement</span>
-                          <div className="flex flex-wrap gap-1.5">
-                            {(["Full Migrant", "Altitudinal Migrant", "Nomadic", "Not a Migrant", "Unknown"] as const).map(pattern => {
-                              const isSelected = selectedMovementPatterns.has(pattern);
-                              const count = movementPatternCounts[pattern] ?? 0;
-                              if (count === 0) return null;
-                              return (
-                                <button
-                                  key={pattern}
-                                  onClick={(e) => {
-                                    const isMulti = e.metaKey || e.ctrlKey;
-                                    setSelectedMovementPatterns(prev => {
-                                      if (isMulti) { const next = new Set(prev); if (next.has(pattern)) next.delete(pattern); else next.add(pattern); return next; }
-                                      if (prev.size === 1 && prev.has(pattern)) return new Set();
-                                      return new Set([pattern]);
-                                    });
-                                  }}
-                                  className={`px-2 py-1 text-xs rounded-full transition-colors cursor-pointer ${
-                                    isSelected
-                                      ? "bg-teal-500 text-white"
-                                      : "bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400 hover:bg-zinc-200 dark:hover:bg-zinc-700"
-                                  }`}
-                                >
-                                  {pattern} ({count.toLocaleString()})
-                                </button>
-                              );
-                            })}
-                          </div>
-                      </div>
-                    )}
-
-                    {/* Trend */}
-                    <div className="flex items-center gap-2 bg-zinc-50 dark:bg-zinc-800/50 border border-zinc-200 dark:border-zinc-700 rounded-lg px-3 py-2">
-                      <span className="text-sm font-semibold text-zinc-900 dark:text-zinc-100 shrink-0 w-20">Trend</span>
-                      <div className="flex flex-wrap gap-1.5">
-                        {(["Increasing", "Stable", "Decreasing", "Unknown"] as const).map(trend => {
-                          const isSelected = selectedPopulationTrends.has(trend);
-                          const count = populationTrendCounts[trend] ?? 0;
-                          return (
-                            <button
-                              key={trend}
-                              onClick={(e) => {
-                                const isMulti = e.metaKey || e.ctrlKey;
-                                setSelectedPopulationTrends(prev => {
-                                  if (isMulti) { const next = new Set(prev); if (next.has(trend)) next.delete(trend); else next.add(trend); return next; }
-                                  if (prev.size === 1 && prev.has(trend)) return new Set();
-                                  return new Set([trend]);
-                                });
-                              }}
-                              className={`px-2 py-1 text-xs rounded-full transition-colors cursor-pointer ${
-                                isSelected
-                                  ? "bg-orange-500 text-white"
-                                  : "bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400 hover:bg-zinc-200 dark:hover:bg-zinc-700"
-                              }`}
-                            >
-                              {trend === "Increasing" ? "↑" : trend === "Decreasing" ? "↓" : trend === "Stable" ? "→" : "?"} {trend} ({count.toLocaleString()})
-                            </button>
-                          );
-                        })}
-                      </div>
+                {/* Realm and Movement side by side. */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  {/* Realm */}
+                  <div className="flex items-center gap-2 bg-zinc-50 dark:bg-zinc-800/50 border border-zinc-200 dark:border-zinc-700 rounded-lg px-3 py-2">
+                    <span className="text-sm font-semibold text-zinc-900 dark:text-zinc-100 shrink-0 w-20">Realm</span>
+                    <div className="flex flex-wrap gap-1.5">
+                      {(["Terrestrial", "Freshwater", "Marine"] as const).map(system => {
+                        const isSelected = selectedSystems.has(system);
+                        const count = realmCounts[system] ?? 0;
+                        return (
+                          <button
+                            key={system}
+                            onClick={(e) => {
+                              const isMulti = e.metaKey || e.ctrlKey;
+                              setSelectedSystems(prev => {
+                                if (isMulti) { const next = new Set(prev); if (next.has(system)) next.delete(system); else next.add(system); return next; }
+                                if (prev.size === 1 && prev.has(system)) return new Set();
+                                return new Set([system]);
+                              });
+                            }}
+                            className={`px-2 py-1 text-xs rounded-full transition-colors cursor-pointer ${
+                              isSelected
+                                ? system === "Terrestrial" ? "bg-amber-500 text-white"
+                                : system === "Freshwater" ? "bg-cyan-500 text-white"
+                                : "bg-blue-600 text-white"
+                                : "bg-zinc-100 text-zinc-600 hover:bg-zinc-200 dark:bg-zinc-800 dark:text-zinc-400 dark:hover:bg-zinc-700"
+                            }`}
+                          >
+                            {system} ({count.toLocaleString()})
+                          </button>
+                        );
+                      })}
                     </div>
-
-                    {/* Criteria — top-level A-E pills; clicking one both
-                        selects it as a filter AND expands its next level
-                        below (number -> sub-clause -> roman numeral, as deep
-                        as that branch goes — mirrors the Threats chart's
-                        category/sub-category drill-down, generalized to
-                        arbitrary depth via renderCriteriaLevel since
-                        criteria nests up to 4 levels vs. threats' 2).
-                        Cmd/ctrl-click for real multi-select — any number of
-                        branches can be drilled into and selected
-                        simultaneously (e.g. B1b(iii) AND C2a(i) together),
-                        each independently expanded via expandedCriteria (a
-                        Set, not a single "last expanded" value). A species
-                        can satisfy multiple codes under the same letter too
-                        (e.g. B1+B2, or B1a and B1b together), so selecting
-                        any code matches species with that code OR a more
-                        specific one beneath it (see parseCriteriaCodes'
-                        startsWith-based matching). */}
-                    {!isNewAssessments && (
-                      <div className="flex flex-col gap-2 bg-zinc-50 dark:bg-zinc-800/50 border border-zinc-200 dark:border-zinc-700 rounded-lg px-3 py-2">
-                        <div className="flex items-center gap-2">
-                          <span className="text-sm font-semibold text-zinc-900 dark:text-zinc-100 shrink-0 w-20">Criteria</span>
-                          {renderCriteriaRow(CRITERIA_CATEGORIES, false)}
-                        </div>
-                        {CRITERIA_CATEGORIES.map(node => (
-                          expandedCriteria.has(node.code) && node.children.length > 0 ? (
-                            <React.Fragment key={node.code}>{renderCriteriaLevel(node.children, 1)}</React.Fragment>
-                          ) : null
-                        ))}
-                      </div>
-                    )}
                   </div>
+
+                  {/* Movement Patterns */}
+                  {!isNewAssessments && (
+                    <div className="flex items-center gap-2 bg-zinc-50 dark:bg-zinc-800/50 border border-zinc-200 dark:border-zinc-700 rounded-lg px-3 py-2">
+                      <span className="text-sm font-semibold text-zinc-900 dark:text-zinc-100 shrink-0 w-20">Movement</span>
+                        <div className="flex flex-wrap gap-1.5">
+                          {(["Full Migrant", "Altitudinal Migrant", "Nomadic", "Not a Migrant", "Unknown"] as const).map(pattern => {
+                            const isSelected = selectedMovementPatterns.has(pattern);
+                            const count = movementPatternCounts[pattern] ?? 0;
+                            if (count === 0) return null;
+                            return (
+                              <button
+                                key={pattern}
+                                onClick={(e) => {
+                                  const isMulti = e.metaKey || e.ctrlKey;
+                                  setSelectedMovementPatterns(prev => {
+                                    if (isMulti) { const next = new Set(prev); if (next.has(pattern)) next.delete(pattern); else next.add(pattern); return next; }
+                                    if (prev.size === 1 && prev.has(pattern)) return new Set();
+                                    return new Set([pattern]);
+                                  });
+                                }}
+                                className={`px-2 py-1 text-xs rounded-full transition-colors cursor-pointer ${
+                                  isSelected
+                                    ? "bg-teal-500 text-white"
+                                    : "bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400 hover:bg-zinc-200 dark:hover:bg-zinc-700"
+                                }`}
+                              >
+                                {pattern} ({count.toLocaleString()})
+                              </button>
+                            );
+                          })}
+                        </div>
+                    </div>
+                  )}
+                </div>
+
+                {/* Trend and Criteria side by side. */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  {/* Trend */}
+                  <div className="flex items-center gap-2 bg-zinc-50 dark:bg-zinc-800/50 border border-zinc-200 dark:border-zinc-700 rounded-lg px-3 py-2">
+                    <span className="text-sm font-semibold text-zinc-900 dark:text-zinc-100 shrink-0 w-20">Trend</span>
+                    <div className="flex flex-wrap gap-1.5">
+                      {(["Increasing", "Stable", "Decreasing", "Unknown"] as const).map(trend => {
+                        const isSelected = selectedPopulationTrends.has(trend);
+                        const count = populationTrendCounts[trend] ?? 0;
+                        return (
+                          <button
+                            key={trend}
+                            onClick={(e) => {
+                              const isMulti = e.metaKey || e.ctrlKey;
+                              setSelectedPopulationTrends(prev => {
+                                if (isMulti) { const next = new Set(prev); if (next.has(trend)) next.delete(trend); else next.add(trend); return next; }
+                                if (prev.size === 1 && prev.has(trend)) return new Set();
+                                return new Set([trend]);
+                              });
+                            }}
+                            className={`px-2 py-1 text-xs rounded-full transition-colors cursor-pointer ${
+                              isSelected
+                                ? "bg-orange-500 text-white"
+                                : "bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400 hover:bg-zinc-200 dark:hover:bg-zinc-700"
+                            }`}
+                          >
+                            {trend === "Increasing" ? "↑" : trend === "Decreasing" ? "↓" : trend === "Stable" ? "→" : "?"} {trend} ({count.toLocaleString()})
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  {/* Criteria — top-level A-E pills; clicking one both
+                      selects it as a filter AND expands its next level
+                      below (number -> sub-clause -> roman numeral, as deep
+                      as that branch goes — mirrors the Threats chart's
+                      category/sub-category drill-down, generalized to
+                      arbitrary depth via renderCriteriaLevel since
+                      criteria nests up to 4 levels vs. threats' 2).
+                      Cmd/ctrl-click for real multi-select — any number of
+                      branches can be drilled into and selected
+                      simultaneously (e.g. B1b(iii) AND C2a(i) together),
+                      each independently expanded via expandedCriteria (a
+                      Set, not a single "last expanded" value). A species
+                      can satisfy multiple codes under the same letter too
+                      (e.g. B1+B2, or B1a and B1b together), so selecting
+                      any code matches species with that code OR a more
+                      specific one beneath it (see parseCriteriaCodes'
+                      startsWith-based matching). */}
+                  {!isNewAssessments && (
+                    <div className="flex flex-col gap-2 bg-zinc-50 dark:bg-zinc-800/50 border border-zinc-200 dark:border-zinc-700 rounded-lg px-3 py-2">
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm font-semibold text-zinc-900 dark:text-zinc-100 shrink-0 w-20">Criteria</span>
+                        {renderCriteriaRow(CRITERIA_CATEGORIES, false)}
+                      </div>
+                      {CRITERIA_CATEGORIES.map(node => (
+                        expandedCriteria.has(node.code) && node.children.length > 0 ? (
+                          <React.Fragment key={node.code}>{renderCriteriaLevel(node.children, 1)}</React.Fragment>
+                        ) : null
+                      ))}
+                    </div>
+                  )}
                 </div>
 
                 {/* Assessors and Reviewers, shown side by side */}
