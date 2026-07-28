@@ -4031,9 +4031,13 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
                       <div className="flex flex-col gap-2 bg-zinc-50 dark:bg-zinc-800/50 border border-zinc-200 dark:border-zinc-700 rounded-lg px-3 py-2">
                         <div className="flex items-center gap-2">
                           <span className="text-sm font-semibold text-zinc-900 dark:text-zinc-100 shrink-0 w-20">Criteria</span>
-                          {renderCriteriaRow(CRITERIA_CATEGORIES, false)}
+                          {speciesLoading && assessedSpecies.length === 0 ? (
+                            <Spinner className="h-4 w-4" />
+                          ) : (
+                            renderCriteriaRow(CRITERIA_CATEGORIES, false)
+                          )}
                         </div>
-                        {CRITERIA_CATEGORIES.map(node => (
+                        {!(speciesLoading && assessedSpecies.length === 0) && CRITERIA_CATEGORIES.map(node => (
                           expandedCriteria.has(node.code) && node.children.length > 0 ? (
                             <React.Fragment key={node.code}>{renderCriteriaLevel(node.children, 1)}</React.Fragment>
                           ) : null
@@ -4045,6 +4049,14 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
 
                 {/* Growth Form (plants/fungi only) */}
                 {(() => {
+                  if (speciesLoading && assessedSpecies.length === 0) {
+                    return (
+                      <div className="flex items-center gap-2 bg-zinc-50 dark:bg-zinc-800/50 border border-zinc-200 dark:border-zinc-700 rounded-lg px-3 py-2">
+                        <span className="text-sm font-semibold text-zinc-900 dark:text-zinc-100 shrink-0 w-20">Growth</span>
+                        <Spinner className="h-4 w-4" />
+                      </div>
+                    );
+                  }
                   // Compute growth form counts cross-filtered (exclude own filter)
                   const gfCounts: Record<string, number> = {};
                   taxaFilteredSpecies.forEach(s => {
@@ -4109,7 +4121,9 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
                   <div className="flex items-center gap-2 bg-zinc-50 dark:bg-zinc-800/50 border border-zinc-200 dark:border-zinc-700 rounded-lg px-3 py-2">
                     <span className="text-sm font-semibold text-zinc-900 dark:text-zinc-100 shrink-0 w-20">Realm</span>
                     <div className="flex flex-wrap gap-1.5">
-                      {(["Terrestrial", "Freshwater", "Marine"] as const).map(system => {
+                      {speciesLoading && assessedSpecies.length === 0 ? (
+                        <Spinner className="h-4 w-4" />
+                      ) : (["Terrestrial", "Freshwater", "Marine"] as const).map(system => {
                         const isSelected = selectedSystems.has(system);
                         const count = realmCounts[system] ?? 0;
                         return (
@@ -4143,7 +4157,9 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
                     <div className="flex items-center gap-2 bg-zinc-50 dark:bg-zinc-800/50 border border-zinc-200 dark:border-zinc-700 rounded-lg px-3 py-2">
                       <span className="text-sm font-semibold text-zinc-900 dark:text-zinc-100 shrink-0 w-20">Movement</span>
                         <div className="flex flex-wrap gap-1.5">
-                          {(["Full Migrant", "Altitudinal Migrant", "Nomadic", "Not a Migrant", "Unknown"] as const).map(pattern => {
+                          {speciesLoading && assessedSpecies.length === 0 ? (
+                            <Spinner className="h-4 w-4" />
+                          ) : (["Full Migrant", "Altitudinal Migrant", "Nomadic", "Not a Migrant", "Unknown"] as const).map(pattern => {
                             const isSelected = selectedMovementPatterns.has(pattern);
                             const count = movementPatternCounts[pattern] ?? 0;
                             if (count === 0) return null;
@@ -4176,7 +4192,9 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
                   <div className="flex items-center gap-2 bg-zinc-50 dark:bg-zinc-800/50 border border-zinc-200 dark:border-zinc-700 rounded-lg px-3 py-2">
                     <span className="text-sm font-semibold text-zinc-900 dark:text-zinc-100 shrink-0 w-20">Trend</span>
                     <div className="flex flex-wrap gap-1.5">
-                      {(["Increasing", "Stable", "Decreasing", "Unknown"] as const).map(trend => {
+                      {speciesLoading && assessedSpecies.length === 0 ? (
+                        <Spinner className="h-4 w-4" />
+                      ) : (["Increasing", "Stable", "Decreasing", "Unknown"] as const).map(trend => {
                         const isSelected = selectedPopulationTrends.has(trend);
                         const count = populationTrendCounts[trend] ?? 0;
                         return (
