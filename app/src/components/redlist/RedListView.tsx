@@ -1081,52 +1081,9 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
     return merged;
   }, [selectedTaxa, selectedSubgroups, cache.entries, isNewAssessments, speciesApiUrl]);
 
-  // Determine taxon for NE fetch: "all" if selected or multi-taxa, otherwise the single taxon
-  const neFetchTaxon = useMemo(() => {
-    if (selectedTaxa.size === 0) return null;
-    if (selectedTaxa.has("all")) return "all";
-    if (selectedTaxa.size === 1) return [...selectedTaxa][0];
-    return "all";
-  }, [selectedTaxa]);
-
-  // NE species lazy loading (only fetched when NE category is selected in Assessed mode —
-  // in new-assessments mode the main path above already fetches NE species). Shares the same
-  // shared-cache URL as the new-assessments-mode fetch for the same taxon, so switching
-  // between "Assessed + NE filter" and New Assessments for one taxon only ever fetches once.
-  useEffect(() => {
-    if (isNewAssessments) return;
-    if (!selectedCategories.has("NE") || neFetchTaxon === null) return;
-    cache.request(speciesApiUrl(neFetchTaxon, "&category=NE"));
-    // cache.request specifically, not the whole cache object — same reasoning
-    // as the prefetch effect above.
-  }, [selectedCategories, neFetchTaxon, isNewAssessments, cache.request, speciesApiUrl]); // eslint-disable-line react-hooks/exhaustive-deps
-
-  const neSpecies = useMemo(() => {
-    if (isNewAssessments || !selectedCategories.has("NE") || neFetchTaxon === null) return [];
-    return cache.entries[speciesApiUrl(neFetchTaxon, "&category=NE")]?.species ?? [];
-  }, [isNewAssessments, selectedCategories, neFetchTaxon, cache.entries, speciesApiUrl]);
-
-  // "All Species" (or any multi-taxon selection, which also resolves neFetchTaxon to
-  // "all") has ~1.8M not-evaluated species — far past querySpecies's NE_CAP, so the
-  // fetch above would return tooLarge with an empty species list. Previously this just
-  // made the pill silently disappear (neCount fell back to 0) while any already-active
-  // "NE" filter stayed selected but matched nothing, showing "0 species" with no
-  // explanation. Block it instead: keep the pill visible but disabled, and drop "NE"
-  // from selectedCategories if a prior taxon-scoped selection is carried into this state.
-  const neBlockedForAll = neFetchTaxon === "all";
-  useEffect(() => {
-    if (!neBlockedForAll) return;
-    setSelectedCategories(prev => {
-      if (!prev.has("NE")) return prev;
-      const next = new Set(prev);
-      next.delete("NE");
-      return next;
-    });
-  }, [neBlockedForAll, setSelectedCategories]);
-
-  // All species = assessed + NE (in new-assessments mode, assessedSpecies already contains NE species)
-  const species = useMemo(() => isNewAssessments ? assessedSpecies : [...assessedSpecies, ...neSpecies], [assessedSpecies, neSpecies, isNewAssessments]);
-  const neCount = neSpecies.length;
+  // assessedSpecies already contains NE species in new-assessments mode (the
+  // main fetch above handles that); in Assessed mode it's assessed-only.
+  const species = assessedSpecies;
 
   // Filter by selected taxa + subgroup only — no other filters applied. This is
   // the "true total" baseline the Country map tooltip shows alongside its fully
@@ -1428,7 +1385,7 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
     // Skip if species is already in bulk-loaded data
     const bulkTaxon = selectedTaxa.size === 1 ? [...selectedTaxa][0] : "all";
     const bulkUrl = speciesApiUrl(bulkTaxon, isNewAssessments ? "&category=NE" : "");
-    const allSpecies = [...(cache.entries[bulkUrl]?.species ?? []), ...neSpecies];
+    const allSpecies = cache.entries[bulkUrl]?.species ?? [];
     if (allSpecies.some(s => s.id === urlSpecies)) {
       setSingleSpeciesPreview(null);
       return;
@@ -1477,11 +1434,10 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
   // Clear preview once the species appears in bulk-loaded data
   useEffect(() => {
     if (!singleSpeciesPreview) return;
-    const allSpecies = [...assessedSpecies, ...neSpecies];
-    if (allSpecies.some(s => s.id === singleSpeciesPreview.id)) {
+    if (assessedSpecies.some(s => s.id === singleSpeciesPreview.id)) {
       setSingleSpeciesPreview(null);
     }
-  }, [assessedSpecies, neSpecies, singleSpeciesPreview]);
+  }, [assessedSpecies, singleSpeciesPreview]);
 
   const [mounted, setMounted] = useState(false);
 
@@ -4199,7 +4155,7 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
                 <span className="text-sm">×</span>
               </button>
             )}
-            {!isNewAssessments && Array.from(selectedCategories).filter(cat => cat !== "NE").map(cat => (
+            {!isNewAssessments && Array.from(selectedCategories).map(cat => (
               <button
                 key={cat}
                 onClick={() => setSelectedCategories(prev => { const next = new Set(prev); next.delete(cat); return next; })}
@@ -4375,26 +4331,29 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
                 <span className="text-sm">×</span>
               </button>
             )}
-            {/* Importance/Season both default to "everything checked" — the
-                chip shows what's been EXCLUDED (unchecked), since that's the
-                meaningful deviation from default; clicking × re-checks it. */}
-            {habitatImportanceActive && HABITAT_IMPORTANCE_OPTIONS.filter(({ value }) => !selectedHabitatImportance.has(value)).map(({ value, short }) => (
+            {/* Importance/Season both default to "everything checked". The chip
+                shows what's actually SELECTED (positive framing) rather than what's
+                excluded — narrowing down to one or two values (e.g. "Major",
+                "Resident") is the more common case, and reads far more clearly than
+                spelling out every other unchecked value ("No Minor", "No Unknown",
+                "No Breeding", ...). Clicking × removes it from the selection. */}
+            {habitatImportanceActive && HABITAT_IMPORTANCE_OPTIONS.filter(({ value }) => selectedHabitatImportance.has(value)).map(({ value, short }) => (
               <button
-                key={`habitat-importance-excl-${value}`}
-                onClick={() => setSelectedHabitatImportance(prev => new Set(prev).add(value))}
+                key={`habitat-importance-${value}`}
+                onClick={() => setSelectedHabitatImportance(prev => { const next = new Set(prev); next.delete(value); return next; })}
                 className="px-3 py-1.5 text-sm font-medium rounded-full bg-teal-100 text-teal-600 dark:bg-teal-900/30 dark:text-teal-400 flex items-center gap-1 hover:opacity-80"
               >
-                No {short} habitat
+                {short} habitat
                 <span className="text-sm">×</span>
               </button>
             ))}
-            {habitatSeasonsActive && HABITAT_SEASON_OPTIONS.filter(({ value }) => !selectedHabitatSeasons.has(value)).map(({ value, short }) => (
+            {habitatSeasonsActive && HABITAT_SEASON_OPTIONS.filter(({ value }) => selectedHabitatSeasons.has(value)).map(({ value, short }) => (
               <button
-                key={`habitat-season-excl-${value}`}
-                onClick={() => setSelectedHabitatSeasons(prev => new Set(prev).add(value))}
+                key={`habitat-season-${value}`}
+                onClick={() => setSelectedHabitatSeasons(prev => { const next = new Set(prev); next.delete(value); return next; })}
                 className="px-3 py-1.5 text-sm font-medium rounded-full bg-teal-100 text-teal-600 dark:bg-teal-900/30 dark:text-teal-400 flex items-center gap-1 hover:opacity-80"
               >
-                No {short}
+                {short}
                 <span className="text-sm">×</span>
               </button>
             ))}
@@ -4464,10 +4423,7 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
             </span>
             {/* Assessed/Not Evaluated — a full view-mode switch (a different
                 dataset entirely), moved here from the old dedicated stat-card
-                row now that there isn't one. Distinct from the "Not
-                Evaluated (N)" filter-chip button just below, which mixes NE
-                species INTO this same reassessments view instead of
-                switching away from it. */}
+                row now that there isn't one. */}
             {onViewModeChange && (
               <div className="flex rounded-lg border border-zinc-200 dark:border-zinc-700 overflow-hidden text-xs shrink-0">
                 <button
@@ -4493,34 +4449,6 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
                   Not Evaluated
                 </button>
               </div>
-            )}
-            {!isNewAssessments && (neCount > 0 || neBlockedForAll) && (
-              <button
-                disabled={neBlockedForAll}
-                onClick={() => {
-                  if (neBlockedForAll) return;
-                  setSelectedCategories(prev => {
-                    const next = new Set(prev);
-                    if (next.has("NE")) {
-                      next.delete("NE");
-                    } else {
-                      next.add("NE");
-                    }
-                    return next;
-                  });
-                }}
-                className={`px-2 md:px-3 py-1.5 rounded-lg text-xs md:text-sm font-medium transition-colors flex items-center gap-1 md:gap-1.5 ${
-                  neBlockedForAll
-                    ? "bg-white text-zinc-400 border border-zinc-200 opacity-60 cursor-not-allowed dark:bg-zinc-800 dark:text-zinc-500 dark:border-zinc-700"
-                    : selectedCategories.has("NE")
-                    ? "bg-zinc-500 text-white"
-                    : "bg-white text-zinc-700 border border-zinc-200 hover:bg-zinc-50 dark:bg-zinc-800 dark:text-zinc-300 dark:border-zinc-700"
-                }`}
-                title={neBlockedForAll ? "Not Evaluated species must be loaded per taxon group — too many to load for All Species at once" : "Show Not Evaluated species from GBIF"}
-              >
-                Not Evaluated
-                {!neBlockedForAll && <span className="text-[10px] opacity-70">({neCount.toLocaleString()})</span>}
-              </button>
             )}
           </div>
         </div>
