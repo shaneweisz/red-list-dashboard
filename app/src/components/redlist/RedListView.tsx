@@ -3044,9 +3044,6 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
           .sort((a, b) => b.count - a.count)
       : [];
     const isDrilled = drillCat !== null && drillSubData.length > 0;
-    const drillSelectedSubLabels = drillCat ? new Set(
-      Array.from(selectedThreats).map(code => drillCat.children.find(c => c.code === code)?.label).filter(Boolean) as string[]
-    ) : new Set<string>();
     // The card content area is a constant height (independent of how many
     // categories are present) so the card never resizes — neither when the
     // filter changes the category count nor when drilling in — which would
@@ -3107,27 +3104,32 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
                     </button>
                   </div>
                   <div className="min-h-0 overflow-y-auto">
-                    <div style={{ height: Math.max(80, drillSubData.length * 18 + 30) }}>
-                      <FilterBarChart
-                        data={drillSubData}
-                        dataKey="code"
-                        selectedItems={drillSelectedSubLabels}
-                        onBarClick={(data: { payload?: { code?: string } }, event: React.MouseEvent) => {
-                          const label = data.payload?.code;
-                          const child = drillCat!.children.find(c => c.label === label);
-                          if (!child) return;
-                          const isMulti = event.metaKey || event.ctrlKey;
-                          setSelectedThreats(prev => {
-                            if (isMulti) { const next = new Set(prev); if (next.has(child.code)) next.delete(child.code); else next.add(child.code); return next; }
-                            if (prev.size === 1 && prev.has(child.code)) return new Set();
-                            return new Set([child.code]);
-                          });
-                        }}
-                        barColor="#a78bfa"
-                        yAxisWidth={170}
-                        rightMargin={80}
-                        yAxisTickMaxLength={24}
-                      />
+                    <div className="flex flex-wrap gap-1.5">
+                      {drillCat!.children.map(child => {
+                        const count = threatCounts[child.code] ?? 0;
+                        if (count === 0) return null;
+                        const isSelected = selectedThreats.has(child.code);
+                        return (
+                          <button
+                            key={child.code}
+                            onClick={(e) => {
+                              const isMulti = e.metaKey || e.ctrlKey;
+                              setSelectedThreats(prev => {
+                                if (isMulti) { const next = new Set(prev); if (next.has(child.code)) next.delete(child.code); else next.add(child.code); return next; }
+                                if (prev.size === 1 && prev.has(child.code)) return new Set();
+                                return new Set([child.code]);
+                              });
+                            }}
+                            className={`px-2 py-1 text-xs rounded-full transition-colors cursor-pointer ${
+                              isSelected
+                                ? "bg-violet-500 text-white"
+                                : "bg-zinc-100 text-zinc-600 hover:bg-zinc-200 dark:bg-zinc-800 dark:text-zinc-400 dark:hover:bg-zinc-700"
+                            }`}
+                          >
+                            {child.label} ({count.toLocaleString()})
+                          </button>
+                        );
+                      })}
                     </div>
                   </div>
                 </div>
@@ -3168,9 +3170,6 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
           .sort((a, b) => b.count - a.count)
       : [];
     const isDrilled = drillCat !== null && drillSubData.length > 0;
-    const drillSelectedSubLabels = drillCat ? new Set(
-      Array.from(selectedHabitat).map(code => drillCat.children.find(c => c.code === code)?.label).filter(Boolean) as string[]
-    ) : new Set<string>();
     const HABITAT_AREA_HEIGHT = 266;
     const chartHeight = Math.max(150, pagedHabitatBarData.length * 18 + 30);
     const loading = speciesLoading && assessedSpecies.length === 0;
@@ -3402,27 +3401,32 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
                     </button>
                   </div>
                   <div className="min-h-0 overflow-y-auto">
-                    <div style={{ height: Math.max(80, drillSubData.length * 18 + 30) }}>
-                      <FilterBarChart
-                        data={drillSubData}
-                        dataKey="code"
-                        selectedItems={drillSelectedSubLabels}
-                        onBarClick={(data: { payload?: { code?: string } }, event: React.MouseEvent) => {
-                          const label = data.payload?.code;
-                          const child = drillCat!.children.find(c => c.label === label);
-                          if (!child) return;
-                          const isMulti = event.metaKey || event.ctrlKey;
-                          setSelectedHabitat(prev => {
-                            if (isMulti) { const next = new Set(prev); if (next.has(child.code)) next.delete(child.code); else next.add(child.code); return next; }
-                            if (prev.size === 1 && prev.has(child.code)) return new Set();
-                            return new Set([child.code]);
-                          });
-                        }}
-                        barColor="#5eead4"
-                        yAxisWidth={170}
-                        rightMargin={80}
-                        yAxisTickMaxLength={24}
-                      />
+                    <div className="flex flex-wrap gap-1.5">
+                      {drillCat!.children.map(child => {
+                        const count = habitatCounts[child.code] ?? 0;
+                        if (count === 0) return null;
+                        const isSelected = selectedHabitat.has(child.code);
+                        return (
+                          <button
+                            key={child.code}
+                            onClick={(e) => {
+                              const isMulti = e.metaKey || e.ctrlKey;
+                              setSelectedHabitat(prev => {
+                                if (isMulti) { const next = new Set(prev); if (next.has(child.code)) next.delete(child.code); else next.add(child.code); return next; }
+                                if (prev.size === 1 && prev.has(child.code)) return new Set();
+                                return new Set([child.code]);
+                              });
+                            }}
+                            className={`px-2 py-1 text-xs rounded-full transition-colors cursor-pointer ${
+                              isSelected
+                                ? "bg-teal-500 text-white"
+                                : "bg-zinc-100 text-zinc-600 hover:bg-zinc-200 dark:bg-zinc-800 dark:text-zinc-400 dark:hover:bg-zinc-700"
+                            }`}
+                          >
+                            {child.label} ({count.toLocaleString()})
+                          </button>
+                        );
+                      })}
                     </div>
                   </div>
                 </div>
@@ -3497,6 +3501,72 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
       ))}
     </React.Fragment>
   );
+
+  // Criteria card (#436): top-level A-E as a bar chart, same interaction as
+  // Threats/Habitat's top-level chart — a bar click both selects the code and
+  // toggles that branch's membership in expandedCriteria. Deliberately NOT
+  // sorted by count (unlike Threats/Habitat) — A-E is a standardized, widely
+  // recognized IUCN ordering, and reshuffling it by count would work against
+  // that familiarity. Deeper levels stay exactly as before: renderCriteriaLevel's
+  // recursive pill rows, unchanged — the issue's "opens pills not nested bars"
+  // ask was already true for Criteria beyond the top level.
+  const criteriaCard = (() => {
+    const criteriaLabelToCode = new Map(CRITERIA_CATEGORIES.map(c => [c.label, c.code]));
+    const criteriaBarData = CRITERIA_CATEGORIES
+      .map(({ code, label }) => ({ code: label, criteriaCode: code, count: criteriaCounts[code] ?? 0, label: (criteriaCounts[code] ?? 0).toLocaleString() }))
+      .filter(d => d.count > 0 || selectedCriteria.has(d.criteriaCode));
+    const selectedCriteriaLabels = new Set(
+      Array.from(selectedCriteria).map(code => CRITERIA_CATEGORIES.find(c => c.code === code)?.label).filter(Boolean) as string[]
+    );
+    const CRITERIA_TOP_HEIGHT = Math.max(90, criteriaBarData.length * 24 + 20);
+    const loading = speciesLoading && assessedSpecies.length === 0;
+    return (
+      <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-3 flex flex-col">
+        <div className="flex items-center justify-between mb-1 min-h-[24px]">
+          <span className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">Criteria</span>
+        </div>
+        {loading ? (
+          <div style={{ height: CRITERIA_TOP_HEIGHT }} className="flex items-center justify-center"><Spinner className="h-4 w-4" /></div>
+        ) : criteriaBarData.length > 0 ? (
+          <>
+            <div style={{ height: CRITERIA_TOP_HEIGHT }}>
+              <FilterBarChart
+                data={criteriaBarData}
+                dataKey="code"
+                selectedItems={selectedCriteriaLabels}
+                onBarClick={(data: { payload?: { code?: string } }, event: React.MouseEvent) => {
+                  const label = data.payload?.code;
+                  const code = label ? criteriaLabelToCode.get(label) : undefined;
+                  if (!code) return;
+                  const isMulti = event.metaKey || event.ctrlKey;
+                  if (isMulti) {
+                    setSelectedCriteria(prev => { const next = new Set(prev); if (next.has(code)) next.delete(code); else next.add(code); return next; });
+                  } else {
+                    setSelectedCriteria(prev => (prev.size === 1 && prev.has(code)) ? new Set() : new Set([code]));
+                  }
+                  const node = CRITERIA_CATEGORIES.find(n => n.code === code);
+                  if (node && node.children.length > 0) {
+                    setExpandedCriteria(prev => { const next = new Set(prev); if (next.has(code)) next.delete(code); else next.add(code); return next; });
+                  }
+                }}
+                barColor="#6366f1"
+                yAxisWidth={100}
+                rightMargin={60}
+                yAxisTickMaxLength={14}
+              />
+            </div>
+            {CRITERIA_CATEGORIES.map(node => (
+              expandedCriteria.has(node.code) && node.children.length > 0 ? (
+                <React.Fragment key={node.code}>{renderCriteriaLevel(node.children, 1)}</React.Fragment>
+              ) : null
+            ))}
+          </>
+        ) : (
+          <div style={{ height: CRITERIA_TOP_HEIGHT }} className="flex items-center justify-center"><span className="text-sm text-zinc-400 dark:text-zinc-500">No criteria data</span></div>
+        )}
+      </div>
+    );
+  })();
 
   return (
     <div className="space-y-1 min-w-0 flex-1 flex flex-col min-h-0">
@@ -4010,40 +4080,22 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
                       </div>
                     )}
 
-                    {/* Criteria — top-level A-E pills; clicking one both
-                        selects it as a filter AND expands its next level
-                        below (number -> sub-clause -> roman numeral, as deep
-                        as that branch goes — mirrors the Threats chart's
-                        category/sub-category drill-down, generalized to
-                        arbitrary depth via renderCriteriaLevel since
-                        criteria nests up to 4 levels vs. threats' 2).
-                        Cmd/ctrl-click for real multi-select — any number of
-                        branches can be drilled into and selected
-                        simultaneously (e.g. B1b(iii) AND C2a(i) together),
-                        each independently expanded via expandedCriteria (a
-                        Set, not a single "last expanded" value). A species
-                        can satisfy multiple codes under the same letter too
-                        (e.g. B1+B2, or B1a and B1b together), so selecting
-                        any code matches species with that code OR a more
-                        specific one beneath it (see parseCriteriaCodes'
-                        startsWith-based matching). */}
-                    {!isNewAssessments && (
-                      <div className="flex flex-col gap-2 bg-zinc-50 dark:bg-zinc-800/50 border border-zinc-200 dark:border-zinc-700 rounded-lg px-3 py-2">
-                        <div className="flex items-center gap-2">
-                          <span className="text-sm font-semibold text-zinc-900 dark:text-zinc-100 shrink-0 w-20">Criteria</span>
-                          {speciesLoading && assessedSpecies.length === 0 ? (
-                            <Spinner className="h-4 w-4" />
-                          ) : (
-                            renderCriteriaRow(CRITERIA_CATEGORIES, false)
-                          )}
-                        </div>
-                        {!(speciesLoading && assessedSpecies.length === 0) && CRITERIA_CATEGORIES.map(node => (
-                          expandedCriteria.has(node.code) && node.children.length > 0 ? (
-                            <React.Fragment key={node.code}>{renderCriteriaLevel(node.children, 1)}</React.Fragment>
-                          ) : null
-                        ))}
-                      </div>
-                    )}
+                    {/* Criteria — top-level A-E bar chart (see criteriaCard);
+                        clicking a bar both selects it as a filter AND expands
+                        its next level below (number -> sub-clause -> roman
+                        numeral, as deep as that branch goes) as pill rows via
+                        renderCriteriaLevel, since criteria nests up to 4
+                        levels vs. Threats/Habitat's 2. Cmd/ctrl-click for real
+                        multi-select — any number of branches can be drilled
+                        into and selected simultaneously (e.g. B1b(iii) AND
+                        C2a(i) together), each independently expanded via
+                        expandedCriteria (a Set, not a single "last expanded"
+                        value). A species can satisfy multiple codes under the
+                        same letter too (e.g. B1+B2, or B1a and B1b together),
+                        so selecting any code matches species with that code
+                        OR a more specific one beneath it (see
+                        parseCriteriaCodes' startsWith-based matching). */}
+                    {!isNewAssessments && criteriaCard}
                   </div>
                 </div>
 
