@@ -24,6 +24,7 @@ const CSV_COLUMNS: { header: string; getValue: (s: RedListSpecies) => string }[]
   { header: "Criteria", getValue: (s) => s.criteria ?? "" },
   { header: "Threat Codes", getValue: (s) => s.threat_codes.join("; ") },
   { header: "Habitat Codes", getValue: (s) => s.habitat_codes.join("; ") },
+  { header: "Assessment Count", getValue: (s) => s.assessment_count?.toString() ?? "" },
 ];
 
 function escapeCsvField(value: string): string {

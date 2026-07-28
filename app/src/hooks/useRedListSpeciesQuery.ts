@@ -39,4 +39,7 @@ export interface RedListSpecies {
   criteria: string | null;
   threat_codes: string[];
   habitat_codes: string[];
+  // Count of distinct assessment years on record (>=2 means reassessed at
+  // least once). null for NE rows, which have no assessment history.
+  assessment_count: number | null;
 }
