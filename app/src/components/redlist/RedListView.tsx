@@ -3957,6 +3957,92 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
 
           {!isNewAssessments && moreFiltersOpen && (
             <>
+                {/* Habitat (left) alongside Criteria stacked above Number of
+                    Assessments (right) — Criteria fills the vertical space
+                    that used to sit empty below the (much shorter) Number of
+                    Assessments chart when it was paired with Habitat alone. */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  {habitatCard}
+                  <div className="flex flex-col gap-3">
+                    {/* Criteria — top-level A-E pills; clicking one both
+                        selects it as a filter AND expands its next level
+                        below (number -> sub-clause -> roman numeral, as deep
+                        as that branch goes — mirrors the Threats chart's
+                        category/sub-category drill-down, generalized to
+                        arbitrary depth via renderCriteriaLevel since
+                        criteria nests up to 4 levels vs. threats' 2).
+                        Cmd/ctrl-click for real multi-select — any number of
+                        branches can be drilled into and selected
+                        simultaneously (e.g. B1b(iii) AND C2a(i) together),
+                        each independently expanded via expandedCriteria (a
+                        Set, not a single "last expanded" value). A species
+                        can satisfy multiple codes under the same letter too
+                        (e.g. B1+B2, or B1a and B1b together), so selecting
+                        any code matches species with that code OR a more
+                        specific one beneath it (see parseCriteriaCodes'
+                        startsWith-based matching). */}
+                    {!isNewAssessments && (
+                      <div className="flex flex-col gap-2 bg-zinc-50 dark:bg-zinc-800/50 border border-zinc-200 dark:border-zinc-700 rounded-lg px-3 py-2">
+                        <div className="flex items-center gap-2">
+                          <span className="text-sm font-semibold text-zinc-900 dark:text-zinc-100 shrink-0 w-20">Criteria</span>
+                          {renderCriteriaRow(CRITERIA_CATEGORIES, false)}
+                        </div>
+                        {CRITERIA_CATEGORIES.map(node => (
+                          expandedCriteria.has(node.code) && node.children.length > 0 ? (
+                            <React.Fragment key={node.code}>{renderCriteriaLevel(node.children, 1)}</React.Fragment>
+                          ) : null
+                        ))}
+                      </div>
+                    )}
+
+                    {/* Number of Assessments (#423 item 1) — how many times a
+                        species has been assessed, with a "Reassessed" shortcut
+                        selecting every bucket >= 2 in one click (flags species
+                        reassessed at least once, per the issue's explicit ask),
+                        same shape as the Outdated shortcut next to Years Since
+                        Assessed. */}
+                    {!isNewAssessments && (
+                      <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-3 flex flex-col">
+                        <div className="flex items-center justify-between mb-1">
+                          <span className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">Number of Assessments</span>
+                          <button
+                            type="button"
+                            onClick={handleReassessedClick}
+                            className={`px-2 py-0.5 text-xs font-semibold rounded transition-colors ${
+                              isReassessedSelected
+                                ? "bg-red-600 text-white shadow-sm"
+                                : "bg-zinc-100 dark:bg-zinc-800 text-zinc-500 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-300"
+                            }`}
+                            aria-pressed={isReassessedSelected}
+                            title="Filter to species assessed 2 or more times (reassessed at least once)"
+                          >
+                            Reassessed
+                          </button>
+                        </div>
+                        <div style={{ height: 150 }} className="flex items-center justify-center">
+                          {speciesLoading && assessedSpecies.length === 0 ? (
+                            <Spinner />
+                          ) : isSingleSpecies && singleSpecies ? (
+                            <span className="text-4xl font-bold text-zinc-900 dark:text-zinc-100">
+                              {assessmentCountBucket(singleSpecies.assessment_count)}
+                            </span>
+                          ) : assessmentCountData.length > 0 ? (
+                            <FilterBarChart
+                              data={assessmentCountData}
+                              dataKey="shortRange"
+                              selectedItems={selectedAssessmentCounts}
+                              onBarClick={handleAssessmentCountClick}
+                              barColor="#8b5cf6"
+                              yAxisWidth={42}
+                              rightMargin={85}
+                            />
+                          ) : null}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
                 {/* Growth Form (plants/fungi only) */}
                 {(() => {
                   // Compute growth form counts cross-filtered (exclude own filter)
@@ -4017,57 +4103,8 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
                   );
                 })()}
 
-                {/* Habitat (left) alongside Number of Assessments (right). */}
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                  {habitatCard}
-                  {/* Number of Assessments (#423 item 1) — how many times a species
-                      has been assessed, with a "Reassessed" shortcut selecting every
-                      bucket >= 2 in one click (flags species reassessed at least
-                      once, per the issue's explicit ask), same shape as the
-                      Outdated shortcut next to Years Since Assessed. */}
-                  {!isNewAssessments && (
-                    <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-3 flex flex-col">
-                      <div className="flex items-center justify-between mb-1">
-                        <span className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">Number of Assessments</span>
-                        <button
-                          type="button"
-                          onClick={handleReassessedClick}
-                          className={`px-2 py-0.5 text-xs font-semibold rounded transition-colors ${
-                            isReassessedSelected
-                              ? "bg-red-600 text-white shadow-sm"
-                              : "bg-zinc-100 dark:bg-zinc-800 text-zinc-500 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-300"
-                          }`}
-                          aria-pressed={isReassessedSelected}
-                          title="Filter to species assessed 2 or more times (reassessed at least once)"
-                        >
-                          Reassessed
-                        </button>
-                      </div>
-                      <div style={{ height: 150 }} className="flex items-center justify-center">
-                        {speciesLoading && assessedSpecies.length === 0 ? (
-                          <Spinner />
-                        ) : isSingleSpecies && singleSpecies ? (
-                          <span className="text-4xl font-bold text-zinc-900 dark:text-zinc-100">
-                            {assessmentCountBucket(singleSpecies.assessment_count)}
-                          </span>
-                        ) : assessmentCountData.length > 0 ? (
-                          <FilterBarChart
-                            data={assessmentCountData}
-                            dataKey="shortRange"
-                            selectedItems={selectedAssessmentCounts}
-                            onBarClick={handleAssessmentCountClick}
-                            barColor="#8b5cf6"
-                            yAxisWidth={42}
-                            rightMargin={85}
-                          />
-                        ) : null}
-                      </div>
-                    </div>
-                  )}
-                </div>
-
-                {/* Realm and Movement side by side. */}
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                {/* Realm, Movement, and Trend as three columns in one row. */}
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                   {/* Realm */}
                   <div className="flex items-center gap-2 bg-zinc-50 dark:bg-zinc-800/50 border border-zinc-200 dark:border-zinc-700 rounded-lg px-3 py-2">
                     <span className="text-sm font-semibold text-zinc-900 dark:text-zinc-100 shrink-0 w-20">Realm</span>
@@ -4134,10 +4171,7 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
                         </div>
                     </div>
                   )}
-                </div>
 
-                {/* Trend and Criteria side by side. */}
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                   {/* Trend */}
                   <div className="flex items-center gap-2 bg-zinc-50 dark:bg-zinc-800/50 border border-zinc-200 dark:border-zinc-700 rounded-lg px-3 py-2">
                     <span className="text-sm font-semibold text-zinc-900 dark:text-zinc-100 shrink-0 w-20">Trend</span>
@@ -4168,37 +4202,6 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
                       })}
                     </div>
                   </div>
-
-                  {/* Criteria — top-level A-E pills; clicking one both
-                      selects it as a filter AND expands its next level
-                      below (number -> sub-clause -> roman numeral, as deep
-                      as that branch goes — mirrors the Threats chart's
-                      category/sub-category drill-down, generalized to
-                      arbitrary depth via renderCriteriaLevel since
-                      criteria nests up to 4 levels vs. threats' 2).
-                      Cmd/ctrl-click for real multi-select — any number of
-                      branches can be drilled into and selected
-                      simultaneously (e.g. B1b(iii) AND C2a(i) together),
-                      each independently expanded via expandedCriteria (a
-                      Set, not a single "last expanded" value). A species
-                      can satisfy multiple codes under the same letter too
-                      (e.g. B1+B2, or B1a and B1b together), so selecting
-                      any code matches species with that code OR a more
-                      specific one beneath it (see parseCriteriaCodes'
-                      startsWith-based matching). */}
-                  {!isNewAssessments && (
-                    <div className="flex flex-col gap-2 bg-zinc-50 dark:bg-zinc-800/50 border border-zinc-200 dark:border-zinc-700 rounded-lg px-3 py-2">
-                      <div className="flex items-center gap-2">
-                        <span className="text-sm font-semibold text-zinc-900 dark:text-zinc-100 shrink-0 w-20">Criteria</span>
-                        {renderCriteriaRow(CRITERIA_CATEGORIES, false)}
-                      </div>
-                      {CRITERIA_CATEGORIES.map(node => (
-                        expandedCriteria.has(node.code) && node.children.length > 0 ? (
-                          <React.Fragment key={node.code}>{renderCriteriaLevel(node.children, 1)}</React.Fragment>
-                        ) : null
-                      ))}
-                    </div>
-                  )}
                 </div>
 
                 {/* Assessors and Reviewers, shown side by side */}
