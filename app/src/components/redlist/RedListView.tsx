@@ -2146,21 +2146,11 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
         try {
           // Build parallel fetch list: iNat image + GBIF match check for species not in CSV
           const fetchPromises: [Promise<Response>, Promise<Response | null>] = [
+            // Proxied through our own API route (not called directly against
+            // iNaturalist) so the edge cache is shared across visitors
+            // instead of every browser re-fetching the same species fresh.
             fetch(
-              // per_page=10 + an exact-name filter below, not per_page=1 — iNat's
-              // q= search is fuzzy/relevance-ranked, not an exact lookup, and
-              // ranks by observation count. A rare species whose binomial shares
-              // an epithet with a much more commonly observed, unrelated taxon
-              // can lose the top spot badly: "Monachus monachus" (the
-              // Mediterranean Monk Seal, ~300 iNat observations) ranks 9th
-              // behind four unrelated birds sharing the epithet "monachus",
-              // one of which (Monk Parakeet, ~60k observations) was silently
-              // used as the photo. per_page=5 (matching the exact-match
-              // pattern already used in api/inat/observations and
-              // api/species/[key]/inat-top-observers) stops the wrong photo
-              // but still misses this specific case; 10 recovers it without
-              // a meaningfully larger payload.
-              `https://api.inaturalist.org/v1/taxa?q=${encodeURIComponent(s.scientific_name)}&rank=species&per_page=10`,
+              `/api/inat/thumbnail?name=${encodeURIComponent(s.scientific_name)}`,
               { signal }
             ),
             // Check GBIF match status for species missing from CSV
@@ -2174,14 +2164,7 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
           let inatDefaultImage: InatDefaultImage | null = null;
           if (inatRes.ok) {
             const inatData = await inatRes.json();
-            const exactMatch = inatData.results?.find((t: { name?: string }) => t.name === s.scientific_name);
-            const defaultPhoto = exactMatch?.default_photo;
-            if (defaultPhoto) {
-              inatDefaultImage = {
-                squareUrl: defaultPhoto.square_url || defaultPhoto.url || null,
-                mediumUrl: defaultPhoto.medium_url || defaultPhoto.url || null,
-              };
-            }
+            inatDefaultImage = inatData.inatDefaultImage || null;
           }
 
           let gbifMatchStatus: GbifMatchStatus | null = null;
