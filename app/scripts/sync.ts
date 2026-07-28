@@ -15,8 +15,8 @@
  *   Phase 11: build-synonym-index   (→ synonym-index.parquet, search)
  *   Phase 12: build-col-taxon-ids   (taxonomy tree + backbone.parquet → src/config/col-taxon-ids.json, committed to git)
  *   Phase 13: build-taxa-summary    (CSVs + CoL artifacts → taxa-summary.json, incl. col counts)
- *   Phase 14: upload-range-maps     (IUCN DB → R2, skips existing)
- *   Phase 15: upload-aoh-maps       (STAR GeoTIFFs → R2, skips existing)
+ *   Phase 14: upload-range-maps     (IUCN DB → R2, skips existing; skipped by --skip-redlist)
+ *   Phase 15: upload-aoh-maps       (STAR GeoTIFFs → R2, skips existing; skipped by --skip-redlist)
  *
  * Prerequisites:
  *   1. DB connectivity to IUCN Postgres — primary is a local restore from
@@ -27,12 +27,16 @@
  * Usage:
  *   npx tsx scripts/sync.ts                     # Full sync, all taxa
  *   npx tsx scripts/sync.ts mammalia aves        # Specific taxa only
- *   npx tsx scripts/sync.ts --skip-redlist       # Skip phase 1 (no DB access needed) —
+ *   npx tsx scripts/sync.ts --skip-redlist       # Skip every DB-dependent phase (1, 14) —
  *                                                # reuses data/redlist/*.csv from the last
- *                                                # fetch. See .github/workflows/weekly-sync.yml,
- *                                                # which runs on a schedule without DB
- *                                                # credentials, refreshing everything phase 1
- *                                                # feeds EXCEPT the Red List data itself.
+ *                                                # fetch, and leaves range maps untouched.
+ *                                                # Phase 15 (AOH maps) is skipped too, since
+ *                                                # it depends on local STAR pipeline output
+ *                                                # that only exists on the same machine. See
+ *                                                # .github/workflows/weekly-sync.yml, which
+ *                                                # runs on a schedule with no DB credentials
+ *                                                # and no STAR data, refreshing everything
+ *                                                # phase 1/14/15 feed EXCEPT those themselves.
  */
 
 import * as fs from "fs";
@@ -65,7 +69,7 @@ async function main() {
   console.log("sync: Full CSV pipeline");
   console.log("=".repeat(60));
   console.log(`Taxa: ${taxaFilter ? taxaFilter.join(", ") : "all"}`);
-  if (skipRedlist) console.log("Phase 1 (fetch-redlist-species): skipped (--skip-redlist)");
+  if (skipRedlist) console.log("Phases 1, 14, 15 (DB/STAR-dependent): skipped (--skip-redlist)");
   console.log();
 
   const startTime = Date.now();
@@ -76,10 +80,11 @@ async function main() {
   try {
     logger.log("sync_start", { taxa: taxaFilter ?? "all", skipRedlist });
 
-    // Phase 1: Red List — the only phase needing IUCN Postgres access. Skippable
-    // for schedule-driven refreshes (e.g. CI, which never has DB credentials)
-    // that only need to pick up new GBIF/CoL data against the existing Red List
-    // snapshot, not a fresh DB pull (that's a separate, manual, ~6-monthly step).
+    // Phase 1: Red List — needs IUCN Postgres access. Skippable for schedule-driven
+    // refreshes (e.g. CI, which never has DB credentials) that only need to pick up
+    // new GBIF/CoL data against the existing Red List snapshot, not a fresh DB pull
+    // (that's a separate, manual, ~6-monthly step). --skip-redlist also skips phases
+    // 14-15 below, which need the same DB access (14) or local-only STAR data (15).
     if (!skipRedlist) {
       console.log("Phase 1: fetch-redlist-species");
       console.log("═".repeat(60));
@@ -152,15 +157,18 @@ async function main() {
     console.log("═".repeat(60));
     await buildTaxaSummary();
 
-    // Phase 14: Upload range maps to R2
-    console.log("\nPhase 14: upload-range-maps");
-    console.log("═".repeat(60));
-    await uploadRangeMaps({ taxa: taxaFilter, logger });
+    // Phases 14-15: uploadRangeMaps needs the same IUCN Postgres access as phase 1;
+    // uploadAohMaps needs local STAR pipeline output that only exists on this machine.
+    // Neither is reachable from CI, so both are skipped alongside phase 1.
+    if (!skipRedlist) {
+      console.log("\nPhase 14: upload-range-maps");
+      console.log("═".repeat(60));
+      await uploadRangeMaps({ taxa: taxaFilter, logger });
 
-    // Phase 15: Upload AOH maps to R2
-    console.log("\nPhase 15: upload-aoh-maps");
-    console.log("═".repeat(60));
-    await uploadAohMaps({ taxa: taxaFilter, logger });
+      console.log("\nPhase 15: upload-aoh-maps");
+      console.log("═".repeat(60));
+      await uploadAohMaps({ taxa: taxaFilter, logger });
+    }
 
     const elapsed = ((Date.now() - startTime) / 1000).toFixed(0);
     const minutes = Math.floor(Number(elapsed) / 60);
