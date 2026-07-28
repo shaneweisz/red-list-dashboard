@@ -68,6 +68,15 @@ export interface RedlistSpecies {
   criteria: string | null; // e.g. "B1ab(ii,iii)+2ab(ii,iii)"
   threat_codes: string[]; // Full threat codes e.g. ["1.1","2.1.2","5.3.3"]
   /**
+   * Habitat entries as `code:season:suitability:major` compact tuples, e.g.
+   * ["1.1:R:S:1", "12.1:B:M:0"] (Forest-Boreal, Resident, Suitable, major
+   * importance; Marine Intertidal-Rocky Shoreline, Breeding season, Marginal,
+   * not major). One tuple per assessment_habitats row — a species can have
+   * the same code twice under different season/suitability combos. See
+   * SEASON_CODES/SUITABILITY_CODES below for the single-letter encoding.
+   */
+  habitat_codes: string[];
+  /**
    * Scientific-name synonyms from the IUCN taxon_synonyms table, after
    * dropping (a) the species's own canonical name and (b) any synonym whose
    * binomial is claimed by more than one current latest taxon (ambiguous
@@ -76,6 +85,30 @@ export interface RedlistSpecies {
    */
   synonyms: RedlistSynonym[];
 }
+
+// Single-letter encoding for habitat_codes' compact tuples (see RedlistSpecies.habitat_codes).
+// "-" covers the rare null/unrecognized value so a tuple always has exactly 4 fields.
+export const SEASON_CODES: Record<string, string> = {
+  "Resident": "R",
+  "Breeding Season": "B",
+  "Non-Breeding Season": "N",
+  "Passage": "P",
+  "Seasonal Occurrence Unknown": "U",
+};
+export const SUITABILITY_CODES: Record<string, string> = {
+  "Suitable": "S",
+  "Marginal": "M",
+  "Unknown": "U",
+};
+// majorImportance is a raw Yes/No/blank field in the source data (not an
+// enumerated lookup like season/suitability) — blank is the single largest
+// bucket (~35% of rows), so it gets its own code ("-") rather than being
+// folded into "No", which would make "exclude minor" wrongly exclude species
+// whose importance was simply never recorded.
+export const MAJOR_IMPORTANCE_CODES: Record<string, string> = {
+  "Yes": "1",
+  "No": "0",
+};
 
 // =============================================================================
 // DATA FETCHING (from IUCN PostgreSQL)
@@ -159,6 +192,7 @@ export async function fetchFromIucnDb(
       possibly_extinct_in_the_wild: row.possibly_extinct_in_the_wild === true,
       criteria: row.criteria || null,
       threat_codes: [],
+      habitat_codes: [],
       synonyms: [],
     });
     assessmentIds.push(assessmentId);
@@ -168,7 +202,7 @@ export async function fetchFromIucnDb(
     const sisIds = species.map((s) => s.sis_taxon_id);
 
     // Batch-fetch countries, systems, growth forms, movement patterns, threats, and synonyms
-    const [countriesResult, systemsResult, growthFormsResult, movementResult, threatsResult, synonymsResult] = await Promise.all([
+    const [countriesResult, systemsResult, growthFormsResult, movementResult, threatsResult, habitatsResult, synonymsResult] = await Promise.all([
       pgClient.query(`
         SELECT a.id as assessment_id, ll.code as country_code
         FROM assessments a
@@ -203,6 +237,15 @@ export async function fetchFromIucnDb(
         FROM assessment_threats at2
         JOIN threat_lookup tl ON tl.id = at2.threat_id
         WHERE at2.assessment_id = ANY($1)
+      `, [assessmentIds]),
+      pgClient.query(`
+        SELECT ah.assessment_id, hl.code,
+               ah.supplementary_fields->>'season' as season,
+               ah.supplementary_fields->>'suitability' as suitability,
+               ah.supplementary_fields->>'majorImportance' as major_importance
+        FROM assessment_habitats ah
+        JOIN habitat_lookup hl ON hl.id = ah.habitat_id
+        WHERE ah.assessment_id = ANY($1)
       `, [assessmentIds]),
       // Synonyms with global ambiguity filtering. The CTEs scan all latest
       // taxa (not just this batch) because ambiguity is a global property:
@@ -298,6 +341,20 @@ export async function fetchFromIucnDb(
       threatsByAssessment.get(aid)!.add(row.code);
     }
 
+    // Habitats — one compact `code:season:suitability:major` tuple per
+    // assessment_habitats row (deduped on the full tuple, not just the code,
+    // since the same habitat code can legitimately appear twice under
+    // different season/suitability combos).
+    const habitatsByAssessment = new Map<number, Set<string>>();
+    for (const row of habitatsResult.rows) {
+      const aid = Number(row.assessment_id);
+      const seasonCode = SEASON_CODES[row.season] ?? "-";
+      const suitabilityCode = SUITABILITY_CODES[row.suitability] ?? "-";
+      const majorFlag = MAJOR_IMPORTANCE_CODES[row.major_importance] ?? "-";
+      if (!habitatsByAssessment.has(aid)) habitatsByAssessment.set(aid, new Set());
+      habitatsByAssessment.get(aid)!.add(`${row.code}:${seasonCode}:${suitabilityCode}:${majorFlag}`);
+    }
+
     // Assign to species
     for (const s of species) {
       const countries = countriesByAssessment.get(s.assessment_id);
@@ -313,6 +370,9 @@ export async function fetchFromIucnDb(
 
       const threats = threatsByAssessment.get(s.assessment_id);
       if (threats) s.threat_codes = Array.from(threats).sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
+
+      const habitats = habitatsByAssessment.get(s.assessment_id);
+      if (habitats) s.habitat_codes = Array.from(habitats).sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
     }
 
     // Synonyms (deduplicated per sis_id, excluding the species's own canonical name).
@@ -507,7 +567,7 @@ const REDLIST_CSV_COLUMNS = [
   "family", "taxon_group_table1a", "assessment_id", "iucn_category", "assessment_date",
   "year_published", "population_trend", "countries", "systems", "growth_forms",
   "movement_pattern", "possibly_extinct", "possibly_extinct_in_the_wild",
-  "criteria", "threat_codes", "synonyms",
+  "criteria", "threat_codes", "habitat_codes", "synonyms",
 ];
 
 /**
@@ -558,6 +618,7 @@ export function writeRedlistCsv(species: RedlistSpecies[], outputPath: string): 
       possibly_extinct_in_the_wild: s.possibly_extinct_in_the_wild ? "true" : "",
       criteria: s.criteria,
       threat_codes: s.threat_codes.join(";"),
+      habitat_codes: s.habitat_codes.join(";"),
       synonyms: encodeSynonyms(s.synonyms),
     }));
 
@@ -587,6 +648,7 @@ export function readRedlistCsv(taxonId: string): RedlistSpecies[] {
     possibly_extinct_in_the_wild: r.possibly_extinct_in_the_wild === "true",
     criteria: r.criteria || null,
     threat_codes: r.threat_codes ? r.threat_codes.split(";").filter(Boolean) : [],
+    habitat_codes: r.habitat_codes ? r.habitat_codes.split(";").filter(Boolean) : [],
     synonyms: decodeSynonyms(r.synonyms),
   }));
 }

@@ -4,6 +4,14 @@ import { useState, useCallback, useEffect, useRef, useMemo } from "react";
 import { canonicalizeTaxonId } from "@/lib/data/taxonomy-constants";
 import { resolveRegions } from "@/lib/regions";
 import { expandTaxaToken, collapseTaxaToTokens, getViewRootForNode, type FilterRank } from "@/lib/taxonomy-utils";
+import { ALL_HABITAT_SEASONS, ALL_HABITAT_IMPORTANCE, ALL_HABITAT_SUITABILITY } from "@/lib/habitat-filter";
+
+// Both habitat checkbox-dropdowns (Importance, Season) default to "everything
+// checked" (nothing excluded) rather than "nothing checked" — see
+// habitat-filter.ts's isRestrictiveSelection for why an empty selection and a
+// full one are treated the same. A set-equality helper lets buildQs omit the
+// param entirely at the default, instead of writing out every value.
+const setEqualsArray = (a: Set<string>, b: string[]): boolean => a.size === b.length && b.every(v => a.has(v));
 
 // --- URL parsing helpers ---
 
@@ -68,7 +76,8 @@ const paramKey = (name: string, suffix: string): string => (suffix ? `${name}${s
 export const OWN_PARAM_NAMES = [
   "view", "layout", "origin", "countries", "region", "taxa", "subgroups",
   "categories", "years", "assessmentYears", "describedYears", "obsRanges",
-  "systems", "trends", "movement", "threats", "criteria", "bd", "endemics", "growthForms",
+  "systems", "trends", "movement", "threats", "criteria", "habitat", "habitatBreadth",
+  "habitatImportance", "habitatSeasons", "habitatSuitability", "bd", "endemics", "growthForms",
   "assessors", "reviewers", "search", "outdated", "minObs", "maxObs",
   "minAssessmentYear", "maxAssessmentYear", "minDescribedYear", "maxDescribedYear",
   "species", "tab", "sort", "dir", "mapview", "mapsort", "mapdir",
@@ -184,6 +193,31 @@ export function parseParams(search: string, suffix: string = "") {
     criteria: p.get(k("criteria"))
       ? new Set(p.get(k("criteria"))!.split(",").filter(Boolean))
       : new Set<string>(),
+    habitat: p.get(k("habitat"))
+      ? new Set(p.get(k("habitat"))!.split(",").filter(Boolean))
+      : new Set<string>(),
+    // Habitat breadth: "specialist" = exactly one known coarse habitat category,
+    // "generalist" = two or more. Any other/missing value means no filter.
+    habitatBreadth: (
+      p.get(k("habitatBreadth")) === "specialist" ? "specialist"
+      : p.get(k("habitatBreadth")) === "generalist" ? "generalist"
+      : null
+    ) as "specialist" | "generalist" | null,
+    // Habitat importance: which importance values (Major/Not major/Unknown) count
+    // as a match, scoped to the selected habitat (or any entry if none selected).
+    // Defaults to all three checked (no filter) — the param is only present in the
+    // URL once something's been unchecked, so its absence means "everything".
+    habitatImportance: p.get(k("habitatImportance")) !== null
+      ? new Set(p.get(k("habitatImportance"))!.split(",").filter(Boolean))
+      : new Set<string>(ALL_HABITAT_IMPORTANCE),
+    // Habitat seasons: same "defaults to all checked" shape as importance above.
+    habitatSeasons: p.get(k("habitatSeasons")) !== null
+      ? new Set(p.get(k("habitatSeasons"))!.split(",").filter(Boolean))
+      : new Set<string>(ALL_HABITAT_SEASONS),
+    // Habitat suitability: same "defaults to all checked" shape as importance above.
+    habitatSuitability: p.get(k("habitatSuitability")) !== null
+      ? new Set(p.get(k("habitatSuitability"))!.split(",").filter(Boolean))
+      : new Set<string>(ALL_HABITAT_SUITABILITY),
     breakdown: parseBreakdownParam(p, k("bd")),
     // Endemics-only: restrict to species occurring in exactly one country.
     endemicsOnly: p.get(k("endemics")) === "1",
@@ -245,6 +279,11 @@ export function buildQs(state: {
   movementPatterns: Set<string>;
   threats: Set<string>;
   criteria: Set<string>;
+  habitat: Set<string>;
+  habitatBreadth: "specialist" | "generalist" | null;
+  habitatImportance: Set<string>;
+  habitatSeasons: Set<string>;
+  habitatSuitability: Set<string>;
   breakdown?: BreakdownParam | null;
   endemicsOnly: boolean;
   growthForms: Set<string>;
@@ -286,6 +325,11 @@ export function buildQs(state: {
   if (state.movementPatterns.size > 0) p.set(k("movement"), [...state.movementPatterns].join(","));
   if (state.threats.size > 0) p.set(k("threats"), [...state.threats].join(","));
   if (state.criteria.size > 0) p.set(k("criteria"), [...state.criteria].join(","));
+  if (state.habitat.size > 0) p.set(k("habitat"), [...state.habitat].join(","));
+  if (state.habitatBreadth) p.set(k("habitatBreadth"), state.habitatBreadth);
+  if (!setEqualsArray(state.habitatImportance, ALL_HABITAT_IMPORTANCE)) p.set(k("habitatImportance"), [...state.habitatImportance].join(","));
+  if (!setEqualsArray(state.habitatSeasons, ALL_HABITAT_SEASONS)) p.set(k("habitatSeasons"), [...state.habitatSeasons].join(","));
+  if (!setEqualsArray(state.habitatSuitability, ALL_HABITAT_SUITABILITY)) p.set(k("habitatSuitability"), [...state.habitatSuitability].join(","));
   if (state.breakdown) {
     let bd = `${state.breakdown.nodeId}:${state.breakdown.rank}:${state.breakdown.name}`;
     if (state.breakdown.onlyIds?.length) bd += `:only:${state.breakdown.onlyIds.join(",")}`;
@@ -667,6 +711,65 @@ export function useFilterParams(paramSuffix: string = "") {
     [syncUrl]
   );
 
+  const setSelectedHabitat = useCallback(
+    (updater: Set<string> | ((prev: Set<string>) => Set<string>)) => {
+      setState(prev => {
+        const nextVal = typeof updater === "function" ? updater(prev.habitat) : updater;
+        const next = { ...prev, habitat: nextVal };
+        queueMicrotask(() => syncUrl(next, false));
+        return next;
+      });
+    },
+    [syncUrl]
+  );
+
+  const setHabitatBreadth = useCallback(
+    (value: "specialist" | "generalist" | null) => {
+      setState(prev => {
+        const next = { ...prev, habitatBreadth: value };
+        queueMicrotask(() => syncUrl(next, false));
+        return next;
+      });
+    },
+    [syncUrl]
+  );
+
+  const setSelectedHabitatImportance = useCallback(
+    (updater: Set<string> | ((prev: Set<string>) => Set<string>)) => {
+      setState(prev => {
+        const nextVal = typeof updater === "function" ? updater(prev.habitatImportance) : updater;
+        const next = { ...prev, habitatImportance: nextVal };
+        queueMicrotask(() => syncUrl(next, false));
+        return next;
+      });
+    },
+    [syncUrl]
+  );
+
+  const setSelectedHabitatSeasons = useCallback(
+    (updater: Set<string> | ((prev: Set<string>) => Set<string>)) => {
+      setState(prev => {
+        const nextVal = typeof updater === "function" ? updater(prev.habitatSeasons) : updater;
+        const next = { ...prev, habitatSeasons: nextVal };
+        queueMicrotask(() => syncUrl(next, false));
+        return next;
+      });
+    },
+    [syncUrl]
+  );
+
+  const setSelectedHabitatSuitability = useCallback(
+    (updater: Set<string> | ((prev: Set<string>) => Set<string>)) => {
+      setState(prev => {
+        const nextVal = typeof updater === "function" ? updater(prev.habitatSuitability) : updater;
+        const next = { ...prev, habitatSuitability: nextVal };
+        queueMicrotask(() => syncUrl(next, false));
+        return next;
+      });
+    },
+    [syncUrl]
+  );
+
   const setSelectedGrowthForms = useCallback(
     (updater: Set<string> | ((prev: Set<string>) => Set<string>)) => {
       setState(prev => {
@@ -843,6 +946,11 @@ export function useFilterParams(paramSuffix: string = "") {
         movementPatterns: new Set<string>(),
         threats: new Set<string>(),
         criteria: new Set<string>(),
+        habitat: new Set<string>(),
+        habitatBreadth: null,
+        habitatImportance: new Set<string>(ALL_HABITAT_IMPORTANCE),
+        habitatSeasons: new Set<string>(ALL_HABITAT_SEASONS),
+        habitatSuitability: new Set<string>(ALL_HABITAT_SUITABILITY),
         breakdown: null,
         endemicsOnly: false,
         growthForms: new Set<string>(),
@@ -877,6 +985,11 @@ export function useFilterParams(paramSuffix: string = "") {
         movementPatterns: new Set<string>(),
         threats: new Set<string>(),
         criteria: new Set<string>(),
+        habitat: new Set<string>(),
+        habitatBreadth: null,
+        habitatImportance: new Set<string>(ALL_HABITAT_IMPORTANCE),
+        habitatSeasons: new Set<string>(ALL_HABITAT_SEASONS),
+        habitatSuitability: new Set<string>(ALL_HABITAT_SUITABILITY),
         breakdown: null,
         endemicsOnly: false,
         growthForms: new Set<string>(),
@@ -911,6 +1024,11 @@ export function useFilterParams(paramSuffix: string = "") {
     selectedMovementPatterns: state.movementPatterns,
     selectedThreats: state.threats,
     selectedCriteria: state.criteria,
+    selectedHabitat: state.habitat,
+    habitatBreadth: state.habitatBreadth,
+    selectedHabitatImportance: state.habitatImportance,
+    selectedHabitatSeasons: state.habitatSeasons,
+    selectedHabitatSuitability: state.habitatSuitability,
     breakdownFilter: state.breakdown,
     endemicsOnly: state.endemicsOnly,
     selectedGrowthForms: state.growthForms,
@@ -944,6 +1062,11 @@ export function useFilterParams(paramSuffix: string = "") {
     setSelectedMovementPatterns,
     setSelectedThreats,
     setSelectedCriteria,
+    setSelectedHabitat,
+    setHabitatBreadth,
+    setSelectedHabitatImportance,
+    setSelectedHabitatSeasons,
+    setSelectedHabitatSuitability,
     setBreakdownFilter,
     setEndemicsOnly,
     setSelectedGrowthForms,

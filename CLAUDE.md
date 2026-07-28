@@ -14,6 +14,10 @@ For any UI-facing change, complete an actual browser drive-through (navigate, in
 
 Start a new git worktree (a dedicated branch checked out to its own directory) for each new, substantial feature or fix, rather than branching in place in the main checkout — this keeps unrelated in-progress work isolated and lets multiple pieces of work proceed in parallel without one clobbering another's uncommitted state. Not worth it for a one-line fix or a quick doc change — use judgment on "substantial."
 
+## Data resyncs: uploading to R2 is safe, merging `latest-sync.txt` is what goes live
+
+`npm run upload-data-to-r2` (`scripts/upload-data-to-r2.ts`) pushes `app/data/` to a timestamped `syncs/<timestamp>/` prefix in the `dashboard-data` R2 bucket and updates the repo-tracked `app/latest-sync.txt` pointer file locally — but production only starts reading the new sync once that `latest-sync.txt` change is committed, pushed, and merged to main (prod's build/deploy pipeline is what actually fetches from R2 via `fetch-data-from-r2.ts`, keyed off whatever `latest-sync.txt` says on main). So it's safe to run the upload from a feature branch/worktree at any point once local data looks right — the upload itself is inert for prod until the `latest-sync.txt` bump lands on main via a normal PR merge. No need to hold off on uploading just because a PR is still in review.
+
 ## PR screenshots: R2, not the repo
 
 Don't commit screenshots to the repo (`docs/pr-screenshots/` or anywhere else) — images committed to git stay in the object history forever, even after being deleted in a later commit, so screenshot-heavy PRs become a permanent, un-reclaimable addition to repo/clone size.

@@ -12,12 +12,13 @@ import EolSummary from "../EolSummary";
 import TaxaIcon from "../TaxaIcon";
 import { ALPHA2_TO_NAME, type CountryStats } from "../WorldMap";
 import { CATEGORY_COLORS, TAXA_BY_ID, THREATENED_CATEGORIES } from "@/config/taxa";
-import { speciesMatchesNode, getNodeDef, getViewRootForNode, findNode, matchesBreakdownName, breakdownDisplayName, primaryFilterRank } from "@/lib/taxonomy-utils";
-import { dynamicNodeDisplayName, isDynamicNodeId, dynamicNodeRankInfo } from "@/lib/dynamic-taxon";
+import { speciesMatchesNode, getNodeDef, getViewRootForNode, findNode, matchesBreakdownName, breakdownDisplayName } from "@/lib/taxonomy-utils";
+import { dynamicNodeDisplayName } from "@/lib/dynamic-taxon";
 import ReviewerChart from "./ReviewerChart";
 import { parseAssessors } from "@/lib/parseAssessors";
 import { iucnRegionCountries, countryToIucnRegion } from "@/lib/regions";
 import { useFilterParams } from "@/hooks/useFilterParams";
+import { parseHabitatEntries, matchesHabitatFilter as matchesHabitatCriteria, coarseKnownCategories, isRestrictiveSelection, ALL_HABITAT_SEASONS, ALL_HABITAT_IMPORTANCE, ALL_HABITAT_SUITABILITY } from "@/lib/habitat-filter";
 import { type RedListSpecies } from "@/hooks/useRedListSpeciesQuery";
 import { useSpeciesCache } from "@/contexts/SpeciesCacheContext";
 import { isOutdated, outdatedCutoffDate } from "@/lib/outdated";
@@ -115,6 +116,66 @@ const THREAT_CATEGORIES: { code: string; label: string; children: { code: string
   ]},
   { code: "12", label: "Other", children: [
     { code: "12.1", label: "Other threat" },
+  ]},
+];
+
+// IUCN habitat classification (18 top-level categories, 126 codes total) — see
+// https://www.iucnredlist.org/resources/habitat-classification-scheme. A handful
+// of codes go a 3rd level deep (e.g. 11.1.1/11.1.2 under 11.1, 9.8.1-9.8.6 under
+// 9.8); those are intentionally folded into their 2nd-level parent rather than
+// given their own drill row, mirroring THREAT_CATEGORIES' 2-level depth — the
+// prefix-based matching (code.startsWith(sel + ".")) still counts a species
+// under e.g. "11.1.1" when "11.1" is selected, it just isn't its own pill.
+const HABITAT_CATEGORIES: { code: string; label: string; children: { code: string; label: string }[] }[] = [
+  { code: "1", label: "Forest", children: [
+    { code: "1.1", label: "Forest - Boreal" }, { code: "1.2", label: "Forest - Subarctic" }, { code: "1.3", label: "Forest - Subantarctic" }, { code: "1.4", label: "Forest - Temperate" }, { code: "1.5", label: "Forest - Subtropical/Tropical Dry" }, { code: "1.6", label: "Forest - Subtropical/Tropical Moist Lowland" }, { code: "1.7", label: "Forest - Subtropical/Tropical Mangrove Vegetation Above High Tide Level" }, { code: "1.8", label: "Forest - Subtropical/Tropical Swamp" }, { code: "1.9", label: "Forest - Subtropical/Tropical Moist Montane" },
+  ]},
+  { code: "2", label: "Savanna", children: [
+    { code: "2.1", label: "Savanna - Dry" }, { code: "2.2", label: "Savanna - Moist" },
+  ]},
+  { code: "3", label: "Shrubland", children: [
+    { code: "3.1", label: "Shrubland - Subarctic" }, { code: "3.2", label: "Shrubland - Subantarctic" }, { code: "3.3", label: "Shrubland - Boreal" }, { code: "3.4", label: "Shrubland - Temperate" }, { code: "3.5", label: "Shrubland - Subtropical/Tropical Dry" }, { code: "3.6", label: "Shrubland - Subtropical/Tropical Moist" }, { code: "3.7", label: "Shrubland - Subtropical/Tropical High Altitude" }, { code: "3.8", label: "Shrubland - Mediterranean-type Shrubby Vegetation" },
+  ]},
+  { code: "4", label: "Grassland", children: [
+    { code: "4.1", label: "Grassland - Tundra" }, { code: "4.2", label: "Grassland - Subarctic" }, { code: "4.3", label: "Grassland - Subantarctic" }, { code: "4.4", label: "Grassland - Temperate" }, { code: "4.5", label: "Grassland - Subtropical/Tropical Dry" }, { code: "4.6", label: "Grassland - Subtropical/Tropical Seasonally Wet/Flooded" }, { code: "4.7", label: "Grassland - Subtropical/Tropical High Altitude" },
+  ]},
+  { code: "5", label: "Wetlands (inland)", children: [
+    { code: "5.1", label: "Wetlands (inland) - Permanent Rivers/Streams/Creeks (includes waterfalls)" }, { code: "5.2", label: "Wetlands (inland) - Seasonal/Intermittent/Irregular Rivers/Streams/Creeks" }, { code: "5.3", label: "Wetlands (inland) - Shrub Dominated Wetlands" }, { code: "5.4", label: "Wetlands (inland) - Bogs, Marshes, Swamps, Fens, Peatlands" }, { code: "5.5", label: "Wetlands (inland) - Permanent Freshwater Lakes (over 8ha)" }, { code: "5.6", label: "Wetlands (inland) - Seasonal/Intermittent Freshwater Lakes (over 8ha)" }, { code: "5.7", label: "Wetlands (inland) - Permanent Freshwater Marshes/Pools (under 8ha)" }, { code: "5.8", label: "Wetlands (inland) - Seasonal/Intermittent Freshwater Marshes/Pools (under 8ha)" }, { code: "5.9", label: "Wetlands (inland) - Freshwater Springs and Oases" }, { code: "5.10", label: "Wetlands (inland) - Tundra Wetlands (incl. pools and temporary waters from snowmelt)" }, { code: "5.11", label: "Wetlands (inland) - Alpine Wetlands (includes temporary waters from snowmelt)" }, { code: "5.12", label: "Wetlands (inland) - Geothermal Wetlands" }, { code: "5.13", label: "Wetlands (inland) - Permanent Inland Deltas" }, { code: "5.14", label: "Wetlands (inland) - Permanent Saline, Brackish or Alkaline Lakes" }, { code: "5.15", label: "Wetlands (inland) - Seasonal/Intermittent Saline, Brackish or Alkaline Lakes and Flats" }, { code: "5.16", label: "Wetlands (inland) - Permanent Saline, Brackish or Alkaline Marshes/Pools" }, { code: "5.17", label: "Wetlands (inland) - Seasonal/Intermittent Saline, Brackish or Alkaline Marshes/Pools" }, { code: "5.18", label: "Wetlands (inland) - Karst and Other Subterranean Hydrological Systems (inland)" },
+  ]},
+  { code: "6", label: "Rocky areas (eg. inland cliffs, mountain peaks)", children: [
+  ]},
+  { code: "7", label: "Caves and Subterranean Habitats (non-aquatic)", children: [
+    { code: "7.1", label: "Caves and Subterranean Habitats (non-aquatic) - Caves" }, { code: "7.2", label: "Caves and Subterranean Habitats (non-aquatic) - Other Subterranean Habitats" },
+  ]},
+  { code: "8", label: "Desert", children: [
+    { code: "8.1", label: "Desert - Hot" }, { code: "8.2", label: "Desert - Temperate" }, { code: "8.3", label: "Desert - Cold" },
+  ]},
+  { code: "9", label: "Marine Neritic", children: [
+    { code: "9.1", label: "Marine Neritic - Pelagic" }, { code: "9.2", label: "Marine Neritic - Subtidal Rock and Rocky Reefs" }, { code: "9.3", label: "Marine Neritic - Subtidal Loose Rock/pebble/gravel" }, { code: "9.4", label: "Marine Neritic - Subtidal Sandy" }, { code: "9.5", label: "Marine Neritic - Subtidal Sandy-Mud" }, { code: "9.6", label: "Marine Neritic - Subtidal Muddy" }, { code: "9.7", label: "Marine Neritic - Macroalgal/Kelp" }, { code: "9.8", label: "Marine Neritic - Coral Reef" }, { code: "9.9", label: "Marine Neritic - Seagrass (Submerged)" }, { code: "9.10", label: "Marine Neritic - Estuaries" },
+  ]},
+  { code: "10", label: "Marine Oceanic", children: [
+    { code: "10.1", label: "Marine Oceanic - Epipelagic (0-200m)" }, { code: "10.2", label: "Marine Oceanic - Mesopelagic (200-1000m)" }, { code: "10.3", label: "Marine Oceanic - Bathypelagic (1000-4000m)" }, { code: "10.4", label: "Marine Oceanic - Abyssopelagic (4000-6000m)" },
+  ]},
+  { code: "11", label: "Marine Deep Benthic", children: [
+    { code: "11.1", label: "Marine Deep Benthic - Continental Slope/Bathyl Zone (200-4,000m)" }, { code: "11.2", label: "Marine Deep Benthic - Abyssal Plain (4,000-6,000m)" }, { code: "11.3", label: "Marine Deep Benthic - Abyssal Mountain/Hills (4,000-6,000m)" }, { code: "11.4", label: "Marine Deep Benthic - Hadal/Deep Sea Trench (>6,000m)" }, { code: "11.5", label: "Marine Deep Benthic - Seamount" }, { code: "11.6", label: "Marine Deep Benthic - Deep Sea Vents (Rifts/Seeps)" },
+  ]},
+  { code: "12", label: "Marine Intertidal", children: [
+    { code: "12.1", label: "Marine Intertidal - Rocky Shoreline" }, { code: "12.2", label: "Marine Intertidal - Sandy Shoreline and/or Beaches, Sand Bars, Spits, Etc" }, { code: "12.3", label: "Marine Intertidal - Shingle and/or Pebble Shoreline and/or Beaches" }, { code: "12.4", label: "Marine Intertidal - Mud Flats and Salt Flats" }, { code: "12.5", label: "Marine Intertidal - Salt Marshes (Emergent Grasses)" }, { code: "12.6", label: "Marine Intertidal - Tidepools" }, { code: "12.7", label: "Marine Intertidal - Mangrove Submerged Roots" },
+  ]},
+  { code: "13", label: "Marine Coastal/Supratidal", children: [
+    { code: "13.1", label: "Marine Coastal/Supratidal - Sea Cliffs and Rocky Offshore Islands" }, { code: "13.2", label: "Marine Coastal/supratidal - Coastal Caves/Karst" }, { code: "13.3", label: "Marine Coastal/Supratidal - Coastal Sand Dunes" }, { code: "13.4", label: "Marine Coastal/Supratidal - Coastal Brackish/Saline Lagoons/Marine Lakes" }, { code: "13.5", label: "Marine Coastal/Supratidal - Coastal Freshwater Lakes" },
+  ]},
+  { code: "14", label: "Artificial/Terrestrial", children: [
+    { code: "14.1", label: "Artificial/Terrestrial - Arable Land" }, { code: "14.2", label: "Artificial/Terrestrial - Pastureland" }, { code: "14.3", label: "Artificial/Terrestrial - Plantations" }, { code: "14.4", label: "Artificial/Terrestrial - Rural Gardens" }, { code: "14.5", label: "Artificial/Terrestrial - Urban Areas" }, { code: "14.6", label: "Artificial/Terrestrial - Subtropical/Tropical Heavily Degraded Former Forest" },
+  ]},
+  { code: "15", label: "Artificial/Aquatic & Marine", children: [
+    { code: "15.1", label: "Artificial/Aquatic - Water Storage Areas (over 8ha)" }, { code: "15.2", label: "Artificial/Aquatic - Ponds (below 8ha)" }, { code: "15.3", label: "Artificial/Aquatic - Aquaculture Ponds" }, { code: "15.4", label: "Artificial/Aquatic - Salt Exploitation Sites" }, { code: "15.5", label: "Artificial/Aquatic - Excavations (open)" }, { code: "15.6", label: "Artificial/Aquatic - Wastewater Treatment Areas" }, { code: "15.7", label: "Artificial/Aquatic - Irrigated Land (includes irrigation channels)" }, { code: "15.8", label: "Artificial/Aquatic - Seasonally Flooded Agricultural Land" }, { code: "15.9", label: "Artificial/Aquatic - Canals and Drainage Channels, Ditches" }, { code: "15.10", label: "Artificial/Aquatic - Karst and Other Subterranean Hydrological Systems (human-made)" }, { code: "15.11", label: "Artificial/Marine - Marine Anthropogenic Structures" }, { code: "15.12", label: "Artificial/Marine - Mariculture Cages" }, { code: "15.13", label: "Artificial/Marine - Mari/Brackishculture Ponds" },
+  ]},
+  { code: "16", label: "Introduced vegetation", children: [
+  ]},
+  { code: "17", label: "Other", children: [
+  ]},
+  { code: "18", label: "Unknown", children: [
   ]},
 ];
 
@@ -270,6 +331,33 @@ function parseCriteriaCodes(criteria: string | null | undefined): string[] {
   }
   return [...codes];
 }
+
+// Season chip options for the Habitat card's season multi-select — full IUCN
+// labels (used for matching and as the button title) paired with a shorter
+// display label so five chips fit in a narrow card.
+const HABITAT_SEASON_OPTIONS: { value: string; short: string }[] = [
+  { value: "Resident", short: "Resident" },
+  { value: "Breeding Season", short: "Breeding" },
+  { value: "Non-Breeding Season", short: "Non-breeding" },
+  { value: "Passage", short: "Passage" },
+  { value: "Seasonal Occurrence Unknown", short: "Unknown" },
+];
+
+// Importance dropdown options — same checkbox-multi-select shape as season,
+// covering all 3 possible parseHabitatEntries().importance values.
+const HABITAT_IMPORTANCE_OPTIONS: { value: string; short: string }[] = [
+  { value: "Major", short: "Major" },
+  { value: "Not major", short: "Minor" },
+  { value: "Unknown", short: "Unknown" },
+];
+
+// Suitability dropdown options — same checkbox-multi-select shape as importance,
+// covering all 3 possible parseHabitatEntries().suitability values.
+const HABITAT_SUITABILITY_OPTIONS: { value: string; short: string }[] = [
+  { value: "Suitable", short: "Suitable" },
+  { value: "Marginal", short: "Marginal" },
+  { value: "Unknown", short: "Unknown" },
+];
 
 interface InatDefaultImage {
   squareUrl: string | null;
@@ -517,6 +605,11 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
     ro.observe(el);
     tableScrollCleanupRef.current = () => ro.disconnect();
   }, []);
+  // Scroll target for the auto-focus effect below — the TaxaSummary table's
+  // wrapper, not a dedicated stat-card row (there isn't one; the tree's own
+  // selected-row + breadcrumb carries that context, and the toolbar's
+  // species count covers the rest).
+  const taxaSummaryScrollRef = useRef<HTMLDivElement>(null);
   // Filters synced with URL search params for shareable links
   const {
     layoutMode, setLayoutMode,
@@ -538,6 +631,11 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
     selectedMovementPatterns, setSelectedMovementPatterns,
     selectedThreats, setSelectedThreats,
     selectedCriteria, setSelectedCriteria,
+    selectedHabitat, setSelectedHabitat,
+    habitatBreadth, setHabitatBreadth,
+    selectedHabitatImportance, setSelectedHabitatImportance,
+    selectedHabitatSeasons, setSelectedHabitatSeasons,
+    selectedHabitatSuitability, setSelectedHabitatSuitability,
     breakdownFilter, setBreakdownFilter,
     endemicsOnly, setEndemicsOnly,
     selectedGrowthForms, setSelectedGrowthForms,
@@ -554,6 +652,31 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
     setSpeciesParam, setTabParam,
     fromPopstateRef,
   } = useFilterParams(paramSuffix);
+
+  // Auto-scroll to the top of the TaxaSummary table whenever the focused
+  // taxon changes (any tree click — top-level taxon, subgroup drill-down, or
+  // navigating both at once). That table's own selected row + breadcrumb is
+  // what carries "which taxon am I looking at" context (see TaxaSummary),
+  // so scrolling it into view puts the tree row, the filters panel, and the
+  // table toolbar all in frame together — the table that got you here stays
+  // just one scroll above. Skips the very first render (a direct/bookmarked
+  // taxon URL shouldn't jump-scroll on load) via isFirstTaxonFocusRef, then
+  // fires on every subsequent identity change, including landing-page →
+  // first taxon.
+  const taxonFocusKey = `${[...selectedTaxa].sort().join(",")}|${[...selectedSubgroups].sort().join(",")}`;
+  const isFirstTaxonFocusRef = useRef(true);
+  useEffect(() => {
+    if (isFirstTaxonFocusRef.current) { isFirstTaxonFocusRef.current = false; return; }
+    taxaSummaryScrollRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }, [taxonFocusKey]);
+
+  // Both habitat checkbox-dropdowns default to "everything checked" (see
+  // useFilterParams.ts) — only a proper subset actually restricts anything,
+  // so "is this filter active" (for badges/gating/chips) checks that, not
+  // just `.size > 0`.
+  const habitatImportanceActive = isRestrictiveSelection(selectedHabitatImportance, ALL_HABITAT_IMPORTANCE);
+  const habitatSeasonsActive = isRestrictiveSelection(selectedHabitatSeasons, ALL_HABITAT_SEASONS);
+  const habitatSuitabilityActive = isRestrictiveSelection(selectedHabitatSuitability, ALL_HABITAT_SUITABILITY);
 
   const cache = useSpeciesCache();
   const speciesApiUrl = useCallback(
@@ -656,6 +779,12 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
     setExpandedThreat(null);
     setSelectedCriteria(new Set());
     setExpandedCriteria(new Set());
+    setSelectedHabitat(new Set());
+    setExpandedHabitat(null);
+    setHabitatBreadth(null);
+    setSelectedHabitatImportance(new Set(ALL_HABITAT_IMPORTANCE));
+    setSelectedHabitatSeasons(new Set(ALL_HABITAT_SEASONS));
+    setSelectedHabitatSuitability(new Set(ALL_HABITAT_SUITABILITY));
     setEndemicsOnly(false);
     setSelectedGrowthForms(new Set());
     setSelectedAssessors(new Set());
@@ -666,7 +795,7 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
     if (viewMode === "new-assessments") {
       setSelectedTaxa(prev => prev.has("all") ? new Set<string>() : prev);
     }
-  }, [viewMode, setSelectedTaxa, setSelectedCategories, setSelectedYearRanges, setSelectedAssessmentYears, setSelectedDescribedYears, setSelectedCountries, setSelectedObsRanges, setSelectedSystems, setSelectedPopulationTrends, setSelectedMovementPatterns, setSelectedThreats, setSelectedCriteria, setEndemicsOnly, setSelectedGrowthForms, setSelectedAssessors, setSelectedReviewers, setSort]);
+  }, [viewMode, setSelectedTaxa, setSelectedCategories, setSelectedYearRanges, setSelectedAssessmentYears, setSelectedDescribedYears, setSelectedCountries, setSelectedObsRanges, setSelectedSystems, setSelectedPopulationTrends, setSelectedMovementPatterns, setSelectedThreats, setSelectedCriteria, setSelectedHabitat, setHabitatBreadth, setSelectedHabitatImportance, setSelectedHabitatSeasons, setSelectedHabitatSuitability, setEndemicsOnly, setSelectedGrowthForms, setSelectedAssessors, setSelectedReviewers, setSort]);
 
   // Taxon toggle handler (used by TaxaSummary)
   // Regular click: select only that taxon (or deselect if already sole selection)
@@ -816,6 +945,60 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
     });
   }, [selectedCriteria]);
 
+  // Habitat drill-down: a single expanded top-level category, like expandedThreat
+  // above (habitat only needs 2 levels — top category, then sub-habitat — so it
+  // doesn't need Criteria's multi-branch Set).
+  const [expandedHabitat, setExpandedHabitat] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!expandedHabitat) return;
+    const stillSelected = Array.from(selectedHabitat).some(
+      c => c === expandedHabitat || c.startsWith(expandedHabitat + ".")
+    );
+    if (!stillSelected) setExpandedHabitat(null);
+  }, [selectedHabitat, expandedHabitat]);
+
+  // Habitat chart pagination — 18 top-level categories is more than
+  // comfortably fits in the card's fixed chart height, so page through them
+  // (max 10/page) rather than scroll. Clamped inline (not reset via effect)
+  // so a shrinking result set after other filters change just lands on the
+  // last valid page instead of an empty one.
+  const [habitatPage, setHabitatPage] = useState(0);
+  const HABITAT_PAGE_SIZE = 10;
+
+  // Breadth/Importance/Season/Suitability dropdown menus in the Habitat card header
+  // (replacing a wall of individual toggle buttons — Breadth is a single-select
+  // Specialist/Generalist choice, Exclude minor a single checkbox, Season a
+  // multi-select list of all 5 IUCN values).
+  const [habitatBreadthMenuOpen, setHabitatBreadthMenuOpen] = useState(false);
+  const [habitatImportanceMenuOpen, setHabitatImportanceMenuOpen] = useState(false);
+  const [habitatSeasonMenuOpen, setHabitatSeasonMenuOpen] = useState(false);
+  const [habitatSuitabilityMenuOpen, setHabitatSuitabilityMenuOpen] = useState(false);
+  const habitatBreadthMenuRef = useRef<HTMLDivElement>(null);
+  const habitatImportanceMenuRef = useRef<HTMLDivElement>(null);
+  const habitatSeasonMenuRef = useRef<HTMLDivElement>(null);
+  const habitatSuitabilityMenuRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!habitatBreadthMenuOpen && !habitatImportanceMenuOpen && !habitatSeasonMenuOpen && !habitatSuitabilityMenuOpen) return;
+    const handler = (e: MouseEvent) => {
+      if (habitatBreadthMenuRef.current && !habitatBreadthMenuRef.current.contains(e.target as Node)) {
+        setHabitatBreadthMenuOpen(false);
+      }
+      if (habitatImportanceMenuRef.current && !habitatImportanceMenuRef.current.contains(e.target as Node)) {
+        setHabitatImportanceMenuOpen(false);
+      }
+      if (habitatSeasonMenuRef.current && !habitatSeasonMenuRef.current.contains(e.target as Node)) {
+        setHabitatSeasonMenuOpen(false);
+      }
+      if (habitatSuitabilityMenuRef.current && !habitatSuitabilityMenuRef.current.contains(e.target as Node)) {
+        setHabitatSuitabilityMenuOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [habitatBreadthMenuOpen, habitatImportanceMenuOpen, habitatSeasonMenuOpen, habitatSuitabilityMenuOpen]);
+
   // Stable callback for debounced search input
   const handleSearch = useCallback((value: string) => {
     setSearchFilter(value);
@@ -914,52 +1097,9 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
     return merged;
   }, [selectedTaxa, selectedSubgroups, cache.entries, isNewAssessments, speciesApiUrl]);
 
-  // Determine taxon for NE fetch: "all" if selected or multi-taxa, otherwise the single taxon
-  const neFetchTaxon = useMemo(() => {
-    if (selectedTaxa.size === 0) return null;
-    if (selectedTaxa.has("all")) return "all";
-    if (selectedTaxa.size === 1) return [...selectedTaxa][0];
-    return "all";
-  }, [selectedTaxa]);
-
-  // NE species lazy loading (only fetched when NE category is selected in Assessed mode —
-  // in new-assessments mode the main path above already fetches NE species). Shares the same
-  // shared-cache URL as the new-assessments-mode fetch for the same taxon, so switching
-  // between "Assessed + NE filter" and New Assessments for one taxon only ever fetches once.
-  useEffect(() => {
-    if (isNewAssessments) return;
-    if (!selectedCategories.has("NE") || neFetchTaxon === null) return;
-    cache.request(speciesApiUrl(neFetchTaxon, "&category=NE"));
-    // cache.request specifically, not the whole cache object — same reasoning
-    // as the prefetch effect above.
-  }, [selectedCategories, neFetchTaxon, isNewAssessments, cache.request, speciesApiUrl]); // eslint-disable-line react-hooks/exhaustive-deps
-
-  const neSpecies = useMemo(() => {
-    if (isNewAssessments || !selectedCategories.has("NE") || neFetchTaxon === null) return [];
-    return cache.entries[speciesApiUrl(neFetchTaxon, "&category=NE")]?.species ?? [];
-  }, [isNewAssessments, selectedCategories, neFetchTaxon, cache.entries, speciesApiUrl]);
-
-  // "All Species" (or any multi-taxon selection, which also resolves neFetchTaxon to
-  // "all") has ~1.8M not-evaluated species — far past querySpecies's NE_CAP, so the
-  // fetch above would return tooLarge with an empty species list. Previously this just
-  // made the pill silently disappear (neCount fell back to 0) while any already-active
-  // "NE" filter stayed selected but matched nothing, showing "0 species" with no
-  // explanation. Block it instead: keep the pill visible but disabled, and drop "NE"
-  // from selectedCategories if a prior taxon-scoped selection is carried into this state.
-  const neBlockedForAll = neFetchTaxon === "all";
-  useEffect(() => {
-    if (!neBlockedForAll) return;
-    setSelectedCategories(prev => {
-      if (!prev.has("NE")) return prev;
-      const next = new Set(prev);
-      next.delete("NE");
-      return next;
-    });
-  }, [neBlockedForAll, setSelectedCategories]);
-
-  // All species = assessed + NE (in new-assessments mode, assessedSpecies already contains NE species)
-  const species = useMemo(() => isNewAssessments ? assessedSpecies : [...assessedSpecies, ...neSpecies], [assessedSpecies, neSpecies, isNewAssessments]);
-  const neCount = neSpecies.length;
+  // assessedSpecies already contains NE species in new-assessments mode (the
+  // main fetch above handles that); in Assessed mode it's assessed-only.
+  const species = assessedSpecies;
 
   // Filter by selected taxa + subgroup only — no other filters applied. This is
   // the "true total" baseline the Country map tooltip shows alongside its fully
@@ -1158,6 +1298,23 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
     return getSpeciesReviewers(s).some(r => { const rl = r.toLowerCase(); return sels.some(x => rl.includes(x)); });
   }, [selectedReviewers, getSpeciesReviewers]);
 
+  // Consolidates all 5 habitat-related filters into one predicate (rather than 5
+  // separate inline checks repeated at every filter site) since major/resident both
+  // need the full parsed entry list, not just codes — cheaper to parse once per
+  // species per call than to re-derive it 2-3x over.
+  // The specialists/exclude-minor/season/suitability logic itself lives in
+  // @/lib/habitat-filter (a pure function, unit tested) — this just binds it to
+  // the component's current filter state.
+  const matchesHabitatFilter = useCallback((s: Species): boolean =>
+    matchesHabitatCriteria(s.habitat_codes, {
+      selectedHabitat,
+      breadth: habitatBreadth,
+      importance: selectedHabitatImportance,
+      seasons: selectedHabitatSeasons,
+      suitability: selectedHabitatSuitability,
+    }),
+  [selectedHabitat, habitatBreadth, selectedHabitatImportance, selectedHabitatSeasons, selectedHabitatSuitability]);
+
   // Species details cache (images, criteria, common names)
   const [speciesDetails, setSpeciesDetails] = useState<Record<number, SpeciesDetails>>({});
   // Lazy assessment-history cache, keyed by sis_taxon_id. The species list no
@@ -1245,7 +1402,7 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
     // Skip if species is already in bulk-loaded data
     const bulkTaxon = selectedTaxa.size === 1 ? [...selectedTaxa][0] : "all";
     const bulkUrl = speciesApiUrl(bulkTaxon, isNewAssessments ? "&category=NE" : "");
-    const allSpecies = [...(cache.entries[bulkUrl]?.species ?? []), ...neSpecies];
+    const allSpecies = cache.entries[bulkUrl]?.species ?? [];
     if (allSpecies.some(s => s.id === urlSpecies)) {
       setSingleSpeciesPreview(null);
       return;
@@ -1285,6 +1442,7 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
         possibly_extinct_in_the_wild: false,
         criteria: null,
         threat_codes: [],
+        habitat_codes: [],
       });
       urlSpeciesHandledRef.current = true;
     }
@@ -1293,11 +1451,10 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
   // Clear preview once the species appears in bulk-loaded data
   useEffect(() => {
     if (!singleSpeciesPreview) return;
-    const allSpecies = [...assessedSpecies, ...neSpecies];
-    if (allSpecies.some(s => s.id === singleSpeciesPreview.id)) {
+    if (assessedSpecies.some(s => s.id === singleSpeciesPreview.id)) {
       setSingleSpeciesPreview(null);
     }
-  }, [assessedSpecies, neSpecies, singleSpeciesPreview]);
+  }, [assessedSpecies, singleSpeciesPreview]);
 
   const [mounted, setMounted] = useState(false);
 
@@ -1420,6 +1577,7 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
       if (endemicsOnly && s.countries.length !== 1) return;
       if (selectedGrowthForms.size > 0 && !s.growth_forms?.some(gf => selectedGrowthForms.has(gf))) return;
       if (!matchesAssessorsFilter(s)) return;
+      if (!matchesHabitatFilter(s)) return;
       if (!matchesReviewersFilter(s)) return;
       counts[s.category] = (counts[s.category] || 0) + 1;
     });
@@ -1433,7 +1591,7 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
       percent: total > 0 ? (((counts[code] || 0) / total) * 100).toFixed(1) : "0",
       label: `${(counts[code] || 0).toLocaleString()} (${total > 0 ? (((counts[code] || 0) / total) * 100).toFixed(1) : 0}%)`,
     }));
-  }, [taxaFilteredSpecies, selectedCountries, selectedYearRanges, selectedObsRanges, selectedSystems, selectedPopulationTrends, selectedMovementPatterns, selectedThreats, selectedCriteria, endemicsOnly, selectedGrowthForms, matchesSearch, matchesAssessorsFilter, matchesReviewersFilter, matchesObsRangeFilter, matchesYearRangeFilter, selectedAssessmentYears, matchesAssessmentYearFilter]);
+  }, [taxaFilteredSpecies, selectedCountries, selectedYearRanges, selectedObsRanges, selectedSystems, selectedPopulationTrends, selectedMovementPatterns, selectedThreats, selectedCriteria, matchesHabitatFilter, endemicsOnly, selectedGrowthForms, matchesSearch, matchesAssessorsFilter, matchesReviewersFilter, matchesObsRangeFilter, matchesYearRangeFilter, selectedAssessmentYears, matchesAssessmentYearFilter]);
 
   // Year chart: apply all filters EXCEPT year range AND outdated (see
   // taxaFilteredSpeciesExceptOutdated above) — buckets align exactly with the
@@ -1463,6 +1621,7 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
       if (endemicsOnly && s.countries.length !== 1) return;
       if (selectedGrowthForms.size > 0 && !s.growth_forms?.some(gf => selectedGrowthForms.has(gf))) return;
       if (!matchesAssessorsFilter(s)) return;
+      if (!matchesHabitatFilter(s)) return;
       if (!matchesReviewersFilter(s)) return;
       const yearsSince = (now - new Date(s.assessment_date).getTime()) / msPerYear;
       if (yearsSince < 1) ranges[0].count++;
@@ -1476,7 +1635,7 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
       ...r,
       label: `${r.count.toLocaleString()} (${total > 0 ? ((r.count / total) * 100).toFixed(1) : 0}%)`,
     }));
-  }, [taxaFilteredSpeciesExceptOutdated, selectedCategories, selectedCountries, selectedObsRanges, selectedSystems, selectedPopulationTrends, selectedMovementPatterns, selectedThreats, selectedCriteria, endemicsOnly, selectedGrowthForms, matchesSearch, matchesAssessorsFilter, matchesReviewersFilter, matchesObsRangeFilter]);
+  }, [taxaFilteredSpeciesExceptOutdated, selectedCategories, selectedCountries, selectedObsRanges, selectedSystems, selectedPopulationTrends, selectedMovementPatterns, selectedThreats, selectedCriteria, matchesHabitatFilter, endemicsOnly, selectedGrowthForms, matchesSearch, matchesAssessorsFilter, matchesReviewersFilter, matchesObsRangeFilter]);
 
   // Assessments-by-year chart: apply all filters EXCEPT the year-based ones
   // (selectedYearRanges, selectedAssessmentYears) AND outdated. The Range bucket
@@ -1502,6 +1661,7 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
       if (endemicsOnly && s.countries.length !== 1) return;
       if (selectedGrowthForms.size > 0 && !s.growth_forms?.some(gf => selectedGrowthForms.has(gf))) return;
       if (!matchesAssessorsFilter(s)) return;
+      if (!matchesHabitatFilter(s)) return;
       if (!matchesReviewersFilter(s)) return;
       const year = String(new Date(s.assessment_date).getFullYear());
       counts[year] = (counts[year] || 0) + 1;
@@ -1515,7 +1675,7 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
         count,
         label: `${count.toLocaleString()} (${total > 0 ? ((count / total) * 100).toFixed(1) : 0}%)`,
       }));
-  }, [taxaFilteredSpeciesExceptOutdated, selectedCategories, selectedCountries, selectedObsRanges, selectedSystems, selectedPopulationTrends, selectedMovementPatterns, selectedThreats, selectedCriteria, endemicsOnly, selectedGrowthForms, matchesSearch, matchesAssessorsFilter, matchesReviewersFilter, matchesObsRangeFilter]);
+  }, [taxaFilteredSpeciesExceptOutdated, selectedCategories, selectedCountries, selectedObsRanges, selectedSystems, selectedPopulationTrends, selectedMovementPatterns, selectedThreats, selectedCriteria, matchesHabitatFilter, endemicsOnly, selectedGrowthForms, matchesSearch, matchesAssessorsFilter, matchesReviewersFilter, matchesObsRangeFilter]);
 
   const yearsTotalPages = Math.max(1, Math.ceil(assessmentYearsByYearData.length / YEARS_PAGE_SIZE));
   const paginatedAssessmentYearsData = useMemo(
@@ -1574,6 +1734,7 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
       if (endemicsOnly && s.countries.length !== 1) return;
       if (selectedGrowthForms.size > 0 && !s.growth_forms?.some(gf => selectedGrowthForms.has(gf))) return;
       if (!matchesAssessorsFilter(s)) return;
+      if (!matchesHabitatFilter(s)) return;
       if (!matchesReviewersFilter(s)) return;
       const obs = s.gbif_occurrence_count ?? 0;
       if (obs === 0) ranges[0].count++;
@@ -1588,7 +1749,7 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
       ...r,
       label: `${r.count.toLocaleString()} (${total > 0 ? ((r.count / total) * 100).toFixed(1) : 0}%)`,
     }));
-  }, [taxaFilteredSpecies, selectedCategories, selectedCountries, selectedYearRanges, selectedSystems, selectedPopulationTrends, selectedMovementPatterns, selectedThreats, selectedCriteria, endemicsOnly, selectedGrowthForms, matchesSearch, matchesAssessorsFilter, matchesReviewersFilter, matchesYearRangeFilter, selectedAssessmentYears, matchesAssessmentYearFilter]);
+  }, [taxaFilteredSpecies, selectedCategories, selectedCountries, selectedYearRanges, selectedSystems, selectedPopulationTrends, selectedMovementPatterns, selectedThreats, selectedCriteria, matchesHabitatFilter, endemicsOnly, selectedGrowthForms, matchesSearch, matchesAssessorsFilter, matchesReviewersFilter, matchesYearRangeFilter, selectedAssessmentYears, matchesAssessmentYearFilter]);
 
   // Year Described chart (NE / new-assessments only): per-bucket counts, cross-filtered
   // by every OTHER active filter (search, country, GBIF obs) but NOT the described-year
@@ -1632,6 +1793,7 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
       if (endemicsOnly && s.countries.length !== 1) return;
       if (selectedGrowthForms.size > 0 && !s.growth_forms?.some(gf => selectedGrowthForms.has(gf))) return;
       if (!matchesAssessorsFilter(s)) return;
+      if (!matchesHabitatFilter(s)) return;
       if (!matchesReviewersFilter(s)) return;
       // Gated on NE the same way the assessment-year filters above are, since NE species have no assessment.
       const outdated = s.category !== "NE" && isOutdated(s.assessment_date, dataAsOf);
@@ -1654,7 +1816,7 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
       ])
     );
     return { countryCounts: counts, uniqueCountries: sorted, countryStatsForMap: statsForMap };
-  }, [taxaFilteredSpecies, selectedCategories, selectedYearRanges, selectedObsRanges, selectedSystems, selectedPopulationTrends, selectedMovementPatterns, selectedThreats, selectedCriteria, endemicsOnly, selectedGrowthForms, matchesSearch, matchesAssessorsFilter, matchesReviewersFilter, matchesObsRangeFilter, matchesYearRangeFilter, selectedAssessmentYears, matchesAssessmentYearFilter, dataAsOf]);
+  }, [taxaFilteredSpecies, selectedCategories, selectedYearRanges, selectedObsRanges, selectedSystems, selectedPopulationTrends, selectedMovementPatterns, selectedThreats, selectedCriteria, matchesHabitatFilter, endemicsOnly, selectedGrowthForms, matchesSearch, matchesAssessorsFilter, matchesReviewersFilter, matchesObsRangeFilter, matchesYearRangeFilter, selectedAssessmentYears, matchesAssessmentYearFilter, dataAsOf]);
 
   // True per-country totals — taxon/subgroup selection only, no other filters —
   // so the Country map tooltip can show "142 of 3,847 total" instead of just
@@ -1696,13 +1858,14 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
       if (endemicsOnly && s.countries.length !== 1) return;
       if (selectedGrowthForms.size > 0 && !s.growth_forms?.some(gf => selectedGrowthForms.has(gf))) return;
       if (!matchesAssessorsFilter(s)) return;
+      if (!matchesHabitatFilter(s)) return;
       if (!matchesReviewersFilter(s)) return;
       for (const sys of s.systems ?? []) {
         if (sys in counts) counts[sys]++;
       }
     });
     return counts;
-  }, [taxaFilteredSpecies, selectedCategories, selectedCountries, selectedYearRanges, selectedObsRanges, selectedPopulationTrends, selectedMovementPatterns, selectedThreats, selectedCriteria, matchesSearch, matchesAssessorsFilter, matchesReviewersFilter, endemicsOnly, matchesObsRangeFilter, matchesYearRangeFilter, selectedGrowthForms, selectedAssessmentYears, matchesAssessmentYearFilter]);
+  }, [taxaFilteredSpecies, selectedCategories, selectedCountries, selectedYearRanges, selectedObsRanges, selectedPopulationTrends, selectedMovementPatterns, selectedThreats, selectedCriteria, matchesHabitatFilter, matchesSearch, matchesAssessorsFilter, matchesReviewersFilter, endemicsOnly, matchesObsRangeFilter, matchesYearRangeFilter, selectedGrowthForms, selectedAssessmentYears, matchesAssessmentYearFilter]);
 
   // Population trend counts: apply all filters EXCEPT population trend
   const populationTrendCounts = useMemo(() => {
@@ -1722,11 +1885,12 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
       if (endemicsOnly && s.countries.length !== 1) return;
       if (selectedGrowthForms.size > 0 && !s.growth_forms?.some(gf => selectedGrowthForms.has(gf))) return;
       if (!matchesAssessorsFilter(s)) return;
+      if (!matchesHabitatFilter(s)) return;
       if (!matchesReviewersFilter(s)) return;
       counts[s.population_trend] = (counts[s.population_trend] || 0) + 1;
     });
     return counts;
-  }, [taxaFilteredSpecies, selectedCategories, selectedCountries, selectedYearRanges, selectedObsRanges, selectedSystems, selectedMovementPatterns, selectedThreats, selectedCriteria, matchesSearch, matchesAssessorsFilter, matchesReviewersFilter, endemicsOnly, matchesObsRangeFilter, matchesYearRangeFilter, selectedGrowthForms, selectedAssessmentYears, matchesAssessmentYearFilter]);
+  }, [taxaFilteredSpecies, selectedCategories, selectedCountries, selectedYearRanges, selectedObsRanges, selectedSystems, selectedMovementPatterns, selectedThreats, selectedCriteria, matchesHabitatFilter, matchesSearch, matchesAssessorsFilter, matchesReviewersFilter, endemicsOnly, matchesObsRangeFilter, matchesYearRangeFilter, selectedGrowthForms, selectedAssessmentYears, matchesAssessmentYearFilter]);
 
   // Movement pattern counts: apply all filters EXCEPT movement pattern
   const movementPatternCounts = useMemo(() => {
@@ -1746,11 +1910,12 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
       if (endemicsOnly && s.countries.length !== 1) return;
       if (selectedGrowthForms.size > 0 && !s.growth_forms?.some(gf => selectedGrowthForms.has(gf))) return;
       if (!matchesAssessorsFilter(s)) return;
+      if (!matchesHabitatFilter(s)) return;
       if (!matchesReviewersFilter(s)) return;
       counts[s.movement_pattern] = (counts[s.movement_pattern] || 0) + 1;
     });
     return counts;
-  }, [taxaFilteredSpecies, selectedCategories, selectedCountries, selectedYearRanges, selectedObsRanges, selectedSystems, selectedPopulationTrends, selectedThreats, selectedCriteria, matchesSearch, matchesAssessorsFilter, matchesReviewersFilter, endemicsOnly, matchesObsRangeFilter, matchesYearRangeFilter, selectedGrowthForms, selectedAssessmentYears, matchesAssessmentYearFilter]);
+  }, [taxaFilteredSpecies, selectedCategories, selectedCountries, selectedYearRanges, selectedObsRanges, selectedSystems, selectedPopulationTrends, selectedThreats, selectedCriteria, matchesHabitatFilter, matchesSearch, matchesAssessorsFilter, matchesReviewersFilter, endemicsOnly, matchesObsRangeFilter, matchesYearRangeFilter, selectedGrowthForms, selectedAssessmentYears, matchesAssessmentYearFilter]);
 
   // Threat counts: apply all filters EXCEPT threats (count species per prefix, deduplicated)
   // Threat counts per code, plus the denominator (`threatTotal`) for percentages:
@@ -1772,6 +1937,7 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
       if (selectedMovementPatterns.size > 0 && (!s.movement_pattern || !selectedMovementPatterns.has(s.movement_pattern))) return;
       if (selectedCriteria.size > 0 && !parseCriteriaCodes(s.criteria).some(code => Array.from(selectedCriteria).some(sel => code === sel || code.startsWith(sel)))) return;
       if (!matchesAssessorsFilter(s)) return;
+      if (!matchesHabitatFilter(s)) return;
       if (!matchesReviewersFilter(s)) return;
       total++;
       if (!s.threat_codes?.length) return;
@@ -1789,7 +1955,7 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
       }
     });
     return { threatCounts: counts, threatTotal: total };
-  }, [taxaFilteredSpecies, selectedCategories, selectedCountries, selectedYearRanges, selectedObsRanges, selectedSystems, selectedPopulationTrends, selectedMovementPatterns, selectedCriteria, matchesSearch, matchesAssessorsFilter, matchesReviewersFilter, matchesObsRangeFilter, matchesYearRangeFilter, selectedAssessmentYears, matchesAssessmentYearFilter]);
+  }, [taxaFilteredSpecies, selectedCategories, selectedCountries, selectedYearRanges, selectedObsRanges, selectedSystems, selectedPopulationTrends, selectedMovementPatterns, selectedCriteria, matchesHabitatFilter, matchesSearch, matchesAssessorsFilter, matchesReviewersFilter, matchesObsRangeFilter, matchesYearRangeFilter, selectedAssessmentYears, matchesAssessmentYearFilter]);
 
   // Criteria counts: apply all filters EXCEPT criteria (count species per code — at every
   // depth: letter, number, sub-clause, roman numeral — deduplicated per species) — mirrors
@@ -1812,6 +1978,7 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
       if (selectedMovementPatterns.size > 0 && (!s.movement_pattern || !selectedMovementPatterns.has(s.movement_pattern))) return;
       if (selectedThreats.size > 0 && !s.threat_codes?.some(tc => Array.from(selectedThreats).some(sel => tc === sel || tc.startsWith(sel + ".")))) return;
       if (!matchesAssessorsFilter(s)) return;
+      if (!matchesHabitatFilter(s)) return;
       if (!matchesReviewersFilter(s)) return;
       const codes = parseCriteriaCodes(s.criteria);
       const letters = new Set(codes.map(c => c[0]));
@@ -1821,7 +1988,65 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
       for (const letter of letters) counts[letter] = (counts[letter] || 0) + 1;
     });
     return counts;
-  }, [taxaFilteredSpecies, selectedCategories, selectedCountries, selectedYearRanges, selectedObsRanges, selectedSystems, selectedPopulationTrends, selectedMovementPatterns, selectedThreats, matchesSearch, matchesAssessorsFilter, matchesReviewersFilter, matchesObsRangeFilter, matchesYearRangeFilter, selectedAssessmentYears, matchesAssessmentYearFilter]);
+  }, [taxaFilteredSpecies, selectedCategories, selectedCountries, selectedYearRanges, selectedObsRanges, selectedSystems, selectedPopulationTrends, selectedMovementPatterns, selectedThreats, matchesHabitatFilter, matchesSearch, matchesAssessorsFilter, matchesReviewersFilter, matchesObsRangeFilter, matchesYearRangeFilter, selectedAssessmentYears, matchesAssessmentYearFilter]);
+
+  // Habitat counts: apply all filters EXCEPT habitat (all 4 dimensions — code
+  // selection, specialists/major/resident toggles — so the drill-down counts and
+  // toggle buttons show what WOULD match if clicked, not what already does).
+  // Distinct codes per species are prefix-counted the same way threatCounts does
+  // (both are "." hierarchical), deduplicated so a species with both "1.1" and
+  // "1.2" only counts once toward top-level "1".
+  const habitatCounts = useMemo(() => {
+    const counts: Record<string, number> = {};
+    taxaFilteredSpecies.forEach(s => {
+      if (!matchesSearch(s)) return;
+      if (selectedCategories.size > 0 && !selectedCategories.has(s.category)) return;
+      if (selectedCountries.size > 0 && !s.countries.some(c => selectedCountries.has(c))) return;
+      if (s.category !== "NE" && selectedYearRanges.size > 0 && !matchesYearRangeFilter(s.assessment_date, selectedYearRanges)) return;
+      if (s.category !== "NE" && selectedAssessmentYears.size > 0 && !matchesAssessmentYearFilter(s.assessment_date, selectedAssessmentYears)) return;
+      if (selectedObsRanges.size > 0 && !matchesObsRangeFilter(s.gbif_occurrence_count, selectedObsRanges)) return;
+      if (selectedSystems.size > 0 && !s.systems?.some(sys => selectedSystems.has(sys))) return;
+      if (selectedPopulationTrends.size > 0 && (!s.population_trend || !selectedPopulationTrends.has(s.population_trend))) return;
+      if (selectedMovementPatterns.size > 0 && (!s.movement_pattern || !selectedMovementPatterns.has(s.movement_pattern))) return;
+      if (selectedThreats.size > 0 && !s.threat_codes?.some(tc => Array.from(selectedThreats).some(sel => tc === sel || tc.startsWith(sel + ".")))) return;
+      if (selectedCriteria.size > 0 && !parseCriteriaCodes(s.criteria).some(code => Array.from(selectedCriteria).some(sel => code === sel || code.startsWith(sel)))) return;
+      if (!matchesAssessorsFilter(s)) return;
+      if (!matchesReviewersFilter(s)) return;
+      // selectedHabitat itself is excluded from this cross-filter (so every bar
+      // stays visible to compare against, even once one is picked) but Breadth/
+      // Importance/Season are refinements, not "the axis being explored" —
+      // they DO narrow these counts, same as any other active filter.
+      const entries = parseHabitatEntries(s.habitat_codes);
+      if (entries.length === 0) return;
+      const codes = Array.from(new Set(entries.map(e => e.code)));
+      if (habitatBreadth) {
+        const known = coarseKnownCategories(codes);
+        if (habitatBreadth === "specialist" && known.size !== 1) return;
+        if (habitatBreadth === "generalist" && known.size < 2) return;
+      }
+      const counted = new Set<string>();
+      for (const code of codes) {
+        const parts = code.split(".");
+        for (let i = 1; i <= parts.length; i++) {
+          const prefix = parts.slice(0, i).join(".");
+          if (counted.has(prefix)) continue;
+          // Importance/Season/Suitability are checked against entries belonging to
+          // THIS bar's category specifically — e.g. with "Not major" unchecked, the
+          // Forest bar only counts species whose Forest entry (not some other
+          // habitat of theirs) is confirmed non-minor.
+          if (habitatImportanceActive || habitatSeasonsActive || habitatSuitabilityActive) {
+            const relevantForPrefix = entries.filter(e => e.code === prefix || e.code.startsWith(prefix + "."));
+            if (habitatImportanceActive && !relevantForPrefix.some(e => selectedHabitatImportance.has(e.importance))) continue;
+            if (habitatSeasonsActive && !relevantForPrefix.some(e => selectedHabitatSeasons.has(e.season))) continue;
+            if (habitatSuitabilityActive && !relevantForPrefix.some(e => selectedHabitatSuitability.has(e.suitability))) continue;
+          }
+          counted.add(prefix);
+          counts[prefix] = (counts[prefix] || 0) + 1;
+        }
+      }
+    });
+    return counts;
+  }, [taxaFilteredSpecies, selectedCategories, selectedCountries, selectedYearRanges, selectedObsRanges, selectedSystems, selectedPopulationTrends, selectedMovementPatterns, selectedThreats, selectedCriteria, matchesSearch, matchesAssessorsFilter, matchesReviewersFilter, matchesObsRangeFilter, matchesYearRangeFilter, selectedAssessmentYears, matchesAssessmentYearFilter, habitatBreadth, selectedHabitatImportance, selectedHabitatSeasons, selectedHabitatSuitability, habitatImportanceActive, habitatSeasonsActive, habitatSuitabilityActive]);
 
   // Handle region filter — select all countries in the chosen region
   const handleRegionFilter = useCallback((region: string) => {
@@ -1847,6 +2072,7 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
       if (selectedMovementPatterns.size > 0 && (!s.movement_pattern || !selectedMovementPatterns.has(s.movement_pattern))) return;
       if (selectedThreats.size > 0 && !s.threat_codes?.some(tc => Array.from(selectedThreats).some(sel => tc === sel || tc.startsWith(sel + ".")))) return;
       if (selectedCriteria.size > 0 && !parseCriteriaCodes(s.criteria).some(code => Array.from(selectedCriteria).some(sel => code === sel || code.startsWith(sel)))) return;
+      if (!matchesHabitatFilter(s)) return;
       if (endemicsOnly && s.countries.length !== 1) return;
       if (selectedGrowthForms.size > 0 && !s.growth_forms?.some(gf => selectedGrowthForms.has(gf))) return;
       if (!matchesReviewersFilter(s)) return;
@@ -1862,7 +2088,7 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
         count,
         label: count.toLocaleString(),
       }));
-  }, [taxaFilteredSpecies, selectedCategories, selectedCountries, selectedYearRanges, selectedObsRanges, selectedSystems, selectedPopulationTrends, selectedMovementPatterns, selectedThreats, selectedCriteria, endemicsOnly, selectedGrowthForms, matchesSearch, matchesReviewersFilter, getSpeciesAssessors, matchesObsRangeFilter, matchesYearRangeFilter, selectedAssessmentYears, matchesAssessmentYearFilter]);
+  }, [taxaFilteredSpecies, selectedCategories, selectedCountries, selectedYearRanges, selectedObsRanges, selectedSystems, selectedPopulationTrends, selectedMovementPatterns, selectedThreats, selectedCriteria, matchesHabitatFilter, endemicsOnly, selectedGrowthForms, matchesSearch, matchesReviewersFilter, getSpeciesAssessors, matchesObsRangeFilter, matchesYearRangeFilter, selectedAssessmentYears, matchesAssessmentYearFilter]);
 
   // Reviewer chart: apply all filters EXCEPT reviewers (include assessors)
   const reviewerChartData = useMemo(() => {
@@ -1882,6 +2108,7 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
       if (endemicsOnly && s.countries.length !== 1) return;
       if (selectedGrowthForms.size > 0 && !s.growth_forms?.some(gf => selectedGrowthForms.has(gf))) return;
       if (!matchesAssessorsFilter(s)) return;
+      if (!matchesHabitatFilter(s)) return;
       const reviewers = getSpeciesReviewers(s);
       for (const r of reviewers) {
         counts[r] = (counts[r] || 0) + 1;
@@ -1894,7 +2121,7 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
         count,
         label: count.toLocaleString(),
       }));
-  }, [taxaFilteredSpecies, selectedCategories, selectedCountries, selectedYearRanges, selectedObsRanges, selectedSystems, selectedPopulationTrends, selectedMovementPatterns, selectedThreats, selectedCriteria, endemicsOnly, selectedGrowthForms, matchesSearch, matchesAssessorsFilter, getSpeciesReviewers, matchesObsRangeFilter, matchesYearRangeFilter, selectedAssessmentYears, matchesAssessmentYearFilter]);
+  }, [taxaFilteredSpecies, selectedCategories, selectedCountries, selectedYearRanges, selectedObsRanges, selectedSystems, selectedPopulationTrends, selectedMovementPatterns, selectedThreats, selectedCriteria, matchesHabitatFilter, endemicsOnly, selectedGrowthForms, matchesSearch, matchesAssessorsFilter, getSpeciesReviewers, matchesObsRangeFilter, matchesYearRangeFilter, selectedAssessmentYears, matchesAssessmentYearFilter]);
 
   // ── Client-side filtering and sorting ──────────────────────────────
   const { filteredSpecies, sortedSpecies } = useMemo(() => {
@@ -1913,6 +2140,7 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
       const matchesMovement = selectedMovementPatterns.size === 0 || (s.movement_pattern != null && selectedMovementPatterns.has(s.movement_pattern));
       const matchesThreat = selectedThreats.size === 0 || s.threat_codes?.some(tc => Array.from(selectedThreats).some(sel => tc === sel || tc.startsWith(sel + ".")));
       const matchesCriteria = selectedCriteria.size === 0 || parseCriteriaCodes(s.criteria).some(code => Array.from(selectedCriteria).some(sel => code === sel || code.startsWith(sel)));
+      const matchesHabitat = matchesHabitatFilter(s);
       const matchesEndemic = !endemicsOnly || s.countries.length === 1;
       const matchesGrowth = selectedGrowthForms.size === 0 || s.growth_forms?.some(gf => selectedGrowthForms.has(gf));
       const matchesSearch =
@@ -1923,7 +2151,7 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
       const matchesReviewer = matchesReviewersFilter(s);
       const pinnedKey = isNewAssessments ? Math.abs(s.id) : s.sis_taxon_id;
       const matchesStarred = !showOnlyStarred || (pinnedKey != null && pinnedSet.has(pinnedKey));
-      return matchesCategory && matchesYear && matchesDescribed && matchesObs && matchesCountry && matchesSystem && matchesTrend && matchesMovement && matchesThreat && matchesCriteria && matchesEndemic && matchesGrowth && matchesSearch && matchesAssessor && matchesReviewer && matchesStarred;
+      return matchesCategory && matchesYear && matchesDescribed && matchesObs && matchesCountry && matchesSystem && matchesTrend && matchesMovement && matchesThreat && matchesCriteria && matchesHabitat && matchesEndemic && matchesGrowth && matchesSearch && matchesAssessor && matchesReviewer && matchesStarred;
     });
 
     const sorted = [...filtered].sort((a, b) => {
@@ -1975,7 +2203,7 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
     });
 
     return { filteredSpecies: filtered, sortedSpecies: sorted };
-  }, [taxaFilteredSpecies, selectedCategories, selectedCountries, selectedSystems, selectedPopulationTrends, selectedMovementPatterns, selectedThreats, selectedCriteria, endemicsOnly, selectedGrowthForms, searchFilter, showOnlyStarred, pinnedSet, pinnedSpecies, sortField, sortDirection, matchesAssessorsFilter, matchesReviewersFilter, isNewAssessments, matchesObsRangeFilter, matchesYearRangeFilter, matchesAssessmentYearFilter, matchesDescribedYearFilter]);
+  }, [taxaFilteredSpecies, selectedCategories, selectedCountries, selectedSystems, selectedPopulationTrends, selectedMovementPatterns, selectedThreats, selectedCriteria, matchesHabitatFilter, endemicsOnly, selectedGrowthForms, searchFilter, showOnlyStarred, pinnedSet, pinnedSpecies, sortField, sortDirection, matchesAssessorsFilter, matchesReviewersFilter, isNewAssessments, matchesObsRangeFilter, matchesYearRangeFilter, matchesAssessmentYearFilter, matchesDescribedYearFilter]);
 
   // Giant aggregates (insects, invertebrates…) are capped at 400k server-side; surface
   // a banner so the list reads as "showing N of M — drill into a sub-group for the rest".
@@ -2469,63 +2697,6 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
   const GBIF_FILTERS = "has_coordinate=true&has_geospatial_issue=false&basis_of_record=HUMAN_OBSERVATION&basis_of_record=MACHINE_OBSERVATION&basis_of_record=OCCURRENCE&basis_of_record=MATERIAL_SAMPLE&basis_of_record=OBSERVATION";
   const isNE = (s: Species) => s.category === "NE";
 
-  // A single selected taxon that isn't a curated tree node — an arbitrary rank
-  // (e.g. ?taxa=felidae) reached via search. TaxaSummary can't label it (it only
-  // knows curated nodes), so the results block shows a thin header instead. The
-  // matched rank is read off the loaded species (all matched class/order/family
-  // = the token; the first row's matching field is that rank).
-  const arbitraryTaxon = useMemo(() => {
-    if (selectedTaxa.size !== 1) return null;
-    const id = [...selectedTaxa][0];
-    if (id === "all" || findNode(id)) return null;
-    const v = id.toLowerCase();
-    let rank: "family" | "order" | "class" | null = null;
-    for (const s of species) {
-      if ((s.family ?? "").toLowerCase() === v) { rank = "family"; break; }
-      if ((s.order_name ?? "").toLowerCase() === v) { rank = "order"; break; }
-      if ((s.class_name ?? "").toLowerCase() === v) { rank = "class"; break; }
-    }
-    return { name: id.charAt(0).toUpperCase() + id.slice(1), rank };
-  }, [selectedTaxa, species]);
-
-  // A single selected sub-group — a dynamic taxonomic-drilldown node (e.g. an
-  // order/family/genus reached via TaxaSummary's own tree) or a static SSC
-  // group/subgroup node — gets the exact same stat-card treatment as
-  // arbitraryTaxon above, even though it's reached through a completely
-  // different mechanism (selectedSubgroups, not a raw ?taxa= search token: see
-  // TaxaSummary.tsx's ancestor-breadcrumb rendering, which keeps its own tree
-  // branch — Mammals → Rodentia → Heteromyidae → ... — visible in the table
-  // above this regardless). A dynamic node has no NODE_INDEX entry (findNode
-  // fails), so it's resolved via dynamicNodeRankInfo/dynamicNodeDisplayName
-  // instead — the same distinction DescribedInfoIcon already draws.
-  const selectedSubgroupTaxon = useMemo(() => {
-    if (selectedSubgroups.size !== 1) return null;
-    const id = [...selectedSubgroups][0];
-    const node = findNode(id);
-    if (node) return { name: node.name, rank: primaryFilterRank(node.filter)?.label ?? null };
-    if (isDynamicNodeId(id)) return { name: dynamicNodeDisplayName(id), rank: dynamicNodeRankInfo(id)?.label ?? null };
-    return null;
-  }, [selectedSubgroups]);
-
-  // A single selected top-level taxon (Mammals, or the "All Species" root
-  // itself) with no sub-group drilled into — the same stat-card treatment as
-  // above, so the card (and the view-mode toggle it now carries — see below)
-  // is reachable at every level, not just once you're already several rows
-  // deep. primaryFilterRank returns null for "All Species" (no positive
-  // dimension in its filter), which is fine — the card falls back to the
-  // generic "Taxon" label for it, same as for a remainder/catch-all node.
-  const selectedTopLevelTaxon = useMemo(() => {
-    if (selectedSubgroups.size !== 0 || selectedTaxa.size !== 1) return null;
-    const node = findNode([...selectedTaxa][0]);
-    if (!node) return null; // arbitraryTaxon handles the non-tree-node case
-    return { name: node.name, rank: primaryFilterRank(node.filter)?.label ?? null };
-  }, [selectedTaxa, selectedSubgroups]);
-
-  // Whichever of the three applies — a selected sub-group takes priority
-  // (most specific), then a selected top-level taxon, then an arbitrary
-  // search-reached rank.
-  const focusedTaxonCard = selectedSubgroupTaxon ?? selectedTopLevelTaxon ?? arbitraryTaxon;
-
   // GBIF occurrence counts aren't filterable per-country/category/etc. — only show
   // that color/list column when no filter narrower than "a whole top-level taxon"
   // is active. Shared by both WorldMap instances (the always-visible Country chart
@@ -2543,6 +2714,11 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
     && selectedMovementPatterns.size === 0
     && selectedThreats.size === 0
     && selectedCriteria.size === 0
+    && selectedHabitat.size === 0
+    && !habitatBreadth
+    && !habitatImportanceActive
+    && !habitatSeasonsActive
+    && !habitatSuitabilityActive
     && selectedGrowthForms.size === 0
     && selectedAssessors.size === 0
     && selectedReviewers.size === 0
@@ -2868,6 +3044,301 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
     );
   })();
 
+  // Habitat card — same bar-chart + 2-level drill-down pattern as threatsCard
+  // above (18 top-level categories is a similar scale to threats' 12, so a bar
+  // chart with counts reads better here than Criteria's small pill set). Three
+  // toggle buttons in the header (mirroring Conservation Status's "Threatened"
+  // button) cover the issue's "specialists"/"major vs minor"/"resident vs"
+  // asks — kept as simple independent booleans rather than a second Set-based
+  // multi-select dimension, since each is a binary refinement, not a category.
+  const habitatCard = (() => {
+    const habitatLabelToCode = new Map(HABITAT_CATEGORIES.map(c => [c.label, c.code]));
+    const habitatBarData = HABITAT_CATEGORIES
+      .map(({ code, label }) => ({ code: label, habitatCode: code, count: habitatCounts[code] ?? 0, label: (habitatCounts[code] ?? 0).toLocaleString() }))
+      .filter(d => d.count > 0)
+      .sort((a, b) => b.count - a.count);
+    const habitatTotalPages = Math.max(1, Math.ceil(habitatBarData.length / HABITAT_PAGE_SIZE));
+    const safeHabitatPage = Math.min(habitatPage, habitatTotalPages - 1);
+    const pagedHabitatBarData = habitatBarData.slice(safeHabitatPage * HABITAT_PAGE_SIZE, (safeHabitatPage + 1) * HABITAT_PAGE_SIZE);
+    const selectedHabitatLabels = new Set(
+      Array.from(selectedHabitat).map(code => HABITAT_CATEGORIES.find(c => c.code === code)?.label).filter(Boolean) as string[]
+    );
+    const drillCat = expandedHabitat ? HABITAT_CATEGORIES.find(c => c.code === expandedHabitat) ?? null : null;
+    const drillSubData = drillCat
+      ? drillCat.children
+          .map(child => ({ code: child.label, habitatCode: child.code, count: habitatCounts[child.code] ?? 0, label: (habitatCounts[child.code] ?? 0).toLocaleString() }))
+          .filter(d => d.count > 0)
+          .sort((a, b) => b.count - a.count)
+      : [];
+    const isDrilled = drillCat !== null && drillSubData.length > 0;
+    const drillSelectedSubLabels = drillCat ? new Set(
+      Array.from(selectedHabitat).map(code => drillCat.children.find(c => c.code === code)?.label).filter(Boolean) as string[]
+    ) : new Set<string>();
+    const HABITAT_AREA_HEIGHT = 266;
+    const chartHeight = Math.max(150, pagedHabitatBarData.length * 18 + 30);
+    const loading = speciesLoading && assessedSpecies.length === 0;
+    const toggleClass = (active: boolean) => `px-2 py-0.5 text-xs font-semibold rounded transition-colors ${
+      active ? "bg-teal-600 text-white shadow-sm" : "bg-zinc-100 dark:bg-zinc-800 text-zinc-500 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-300"
+    }`;
+    return (
+      <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-3 flex flex-col">
+        <div className="flex items-center justify-between mb-1 min-h-[24px] flex-wrap gap-1">
+          <span className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">Habitat</span>
+          <div className="flex items-center flex-wrap gap-1 justify-end">
+            {/* Breadth — single-select Specialist/Generalist dropdown, replacing
+                a plain "Specialists" toggle so the (exactly 1)/(2+) split is
+                explicit rather than only having an on/off specialists switch. */}
+            <div className="relative" ref={habitatBreadthMenuRef}>
+              <button
+                type="button"
+                onClick={() => { setHabitatBreadthMenuOpen(prev => !prev); setHabitatImportanceMenuOpen(false); setHabitatSeasonMenuOpen(false); setHabitatSuitabilityMenuOpen(false); }}
+                className={toggleClass(habitatBreadth !== null)}
+                aria-expanded={habitatBreadthMenuOpen}
+              >
+                {habitatBreadth === "specialist" ? "Specialists" : habitatBreadth === "generalist" ? "Generalists" : "Breadth"} ▾
+              </button>
+              {habitatBreadthMenuOpen && (
+                <div className="absolute right-0 top-full mt-1 z-20 bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-lg shadow-lg py-1 w-60">
+                  {([
+                    { value: null, label: "All species", hint: null },
+                    { value: "specialist" as const, label: "Specialists", hint: "Exactly one known top-level habitat category" },
+                    { value: "generalist" as const, label: "Generalists", hint: "Two or more known top-level habitat categories" },
+                  ]).map(({ value, label, hint }) => (
+                    <label
+                      key={label}
+                      className="flex items-start gap-2 px-3 py-1.5 text-xs text-zinc-700 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-700/50 cursor-pointer"
+                    >
+                      <input
+                        type="radio"
+                        name="habitat-breadth"
+                        checked={habitatBreadth === value}
+                        onChange={() => setHabitatBreadth(value)}
+                        className="mt-0.5 border-zinc-300 dark:border-zinc-600 text-teal-600 focus:ring-teal-500"
+                      />
+                      <span>
+                        {label}
+                        {hint && (
+                          <>
+                            <br />
+                            <span className="text-[10px] text-zinc-400 dark:text-zinc-500">{hint}</span>
+                          </>
+                        )}
+                      </span>
+                    </label>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* Importance — multi-select checkbox list, all checked by default
+                (nothing excluded); unchecking e.g. "Minor" behaves like the old
+                "Exclude minor" toggle but reads less ambiguously as one option
+                among an explicit, fully-visible set (matching Season below). */}
+            <div className="relative" ref={habitatImportanceMenuRef}>
+              <button
+                type="button"
+                onClick={() => { setHabitatImportanceMenuOpen(prev => !prev); setHabitatBreadthMenuOpen(false); setHabitatSeasonMenuOpen(false); setHabitatSuitabilityMenuOpen(false); }}
+                className={toggleClass(habitatImportanceActive)}
+                aria-expanded={habitatImportanceMenuOpen}
+              >
+                Importance{habitatImportanceActive ? ` (${selectedHabitatImportance.size})` : ""} ▾
+              </button>
+              {habitatImportanceMenuOpen && (
+                <div className="absolute right-0 top-full mt-1 z-20 bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-lg shadow-lg py-1 w-48">
+                  {HABITAT_IMPORTANCE_OPTIONS.map(({ value, short }) => (
+                    <label
+                      key={value}
+                      className="flex items-center gap-2 px-3 py-1.5 text-xs text-zinc-700 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-700/50 cursor-pointer"
+                      title={value === "Unknown" ? "Importance not recorded in the IUCN DB" : value}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={selectedHabitatImportance.has(value)}
+                        onChange={() => setSelectedHabitatImportance(prev => {
+                          const next = new Set(prev);
+                          if (next.has(value)) next.delete(value); else next.add(value);
+                          return next;
+                        })}
+                        className="rounded border-zinc-300 dark:border-zinc-600 text-teal-600 focus:ring-teal-500"
+                      />
+                      {short}
+                    </label>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* Season — multi-select checkbox list in a dropdown, all checked by
+                default (nothing excluded), covering all 5 IUCN season values. */}
+            <div className="relative" ref={habitatSeasonMenuRef}>
+              <button
+                type="button"
+                onClick={() => { setHabitatSeasonMenuOpen(prev => !prev); setHabitatBreadthMenuOpen(false); setHabitatImportanceMenuOpen(false); setHabitatSuitabilityMenuOpen(false); }}
+                className={toggleClass(habitatSeasonsActive)}
+                aria-expanded={habitatSeasonMenuOpen}
+              >
+                Season{habitatSeasonsActive ? ` (${selectedHabitatSeasons.size})` : ""} ▾
+              </button>
+              {habitatSeasonMenuOpen && (
+                <div className="absolute right-0 top-full mt-1 z-20 bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-lg shadow-lg py-1 w-48">
+                  {HABITAT_SEASON_OPTIONS.map(({ value, short }) => (
+                    <label
+                      key={value}
+                      className="flex items-center gap-2 px-3 py-1.5 text-xs text-zinc-700 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-700/50 cursor-pointer"
+                      title={value}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={selectedHabitatSeasons.has(value)}
+                        onChange={() => setSelectedHabitatSeasons(prev => {
+                          const next = new Set(prev);
+                          if (next.has(value)) next.delete(value); else next.add(value);
+                          return next;
+                        })}
+                        className="rounded border-zinc-300 dark:border-zinc-600 text-teal-600 focus:ring-teal-500"
+                      />
+                      {short}
+                    </label>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* Suitability — multi-select checkbox list, all checked by default
+                (nothing excluded), covering all 3 IUCN suitability values. */}
+            <div className="relative" ref={habitatSuitabilityMenuRef}>
+              <button
+                type="button"
+                onClick={() => { setHabitatSuitabilityMenuOpen(prev => !prev); setHabitatBreadthMenuOpen(false); setHabitatImportanceMenuOpen(false); setHabitatSeasonMenuOpen(false); }}
+                className={toggleClass(habitatSuitabilityActive)}
+                aria-expanded={habitatSuitabilityMenuOpen}
+              >
+                Suitability{habitatSuitabilityActive ? ` (${selectedHabitatSuitability.size})` : ""} ▾
+              </button>
+              {habitatSuitabilityMenuOpen && (
+                <div className="absolute right-0 top-full mt-1 z-20 bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-lg shadow-lg py-1 w-48">
+                  {HABITAT_SUITABILITY_OPTIONS.map(({ value, short }) => (
+                    <label
+                      key={value}
+                      className="flex items-center gap-2 px-3 py-1.5 text-xs text-zinc-700 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-700/50 cursor-pointer"
+                      title={value === "Unknown" ? "Suitability not recorded in the IUCN DB" : value}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={selectedHabitatSuitability.has(value)}
+                        onChange={() => setSelectedHabitatSuitability(prev => {
+                          const next = new Set(prev);
+                          if (next.has(value)) next.delete(value); else next.add(value);
+                          return next;
+                        })}
+                        className="rounded border-zinc-300 dark:border-zinc-600 text-teal-600 focus:ring-teal-500"
+                      />
+                      {short}
+                    </label>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+        <div style={{ height: HABITAT_AREA_HEIGHT }} className="flex flex-col overflow-hidden">
+          {loading ? (
+            <div className="h-full flex items-center justify-center"><Spinner /></div>
+          ) : habitatBarData.length > 0 ? (
+            <>
+              <div className="flex-1 min-h-0 flex flex-col">
+                <div className="flex-1 min-h-0 overflow-y-auto">
+                  <div style={{ height: chartHeight }}>
+                    <FilterBarChart
+                      data={pagedHabitatBarData}
+                      dataKey="code"
+                      selectedItems={selectedHabitatLabels}
+                      onBarClick={(data: { payload?: { code?: string; habitatCode?: string } }, event: React.MouseEvent) => {
+                        const label = data.payload?.code;
+                        const code = label ? habitatLabelToCode.get(label) : undefined;
+                        if (!code) return;
+                        const isMulti = event.metaKey || event.ctrlKey;
+                        setSelectedHabitat(prev => {
+                          if (isMulti) { const next = new Set(prev); if (next.has(code)) next.delete(code); else next.add(code); return next; }
+                          if (prev.size === 1 && prev.has(code)) return new Set();
+                          return new Set([code]);
+                        });
+                        setExpandedHabitat(prev => prev === code ? null : code);
+                      }}
+                      barColor="#0d9488"
+                      yAxisWidth={155}
+                      rightMargin={80}
+                      yAxisTickMaxLength={22}
+                    />
+                  </div>
+                </div>
+                {habitatTotalPages > 1 && (
+                  <div className="shrink-0 flex items-center justify-between pt-1 text-[10px] text-zinc-400 dark:text-zinc-500">
+                    <button
+                      onClick={() => setHabitatPage(p => Math.max(0, p - 1))}
+                      disabled={safeHabitatPage === 0}
+                      className="px-1.5 py-0.5 rounded hover:bg-zinc-100 dark:hover:bg-zinc-800 disabled:opacity-30 disabled:cursor-not-allowed"
+                    >
+                      Prev
+                    </button>
+                    <span className="tabular-nums">Page {safeHabitatPage + 1} of {habitatTotalPages}</span>
+                    <button
+                      onClick={() => setHabitatPage(p => Math.min(habitatTotalPages - 1, p + 1))}
+                      disabled={safeHabitatPage >= habitatTotalPages - 1}
+                      className="px-1.5 py-0.5 rounded hover:bg-zinc-100 dark:hover:bg-zinc-800 disabled:opacity-30 disabled:cursor-not-allowed"
+                    >
+                      Next
+                    </button>
+                  </div>
+                )}
+              </div>
+              {isDrilled && (
+                <div className="shrink-0 mt-2 pt-2 border-t border-zinc-200 dark:border-zinc-800 flex flex-col" style={{ maxHeight: "50%" }}>
+                  <div className="flex items-center justify-between mb-1">
+                    <span className="text-xs font-medium text-zinc-500 dark:text-zinc-400 truncate">{drillCat!.label}</span>
+                    <button
+                      onClick={() => setExpandedHabitat(null)}
+                      className="shrink-0 text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300 transition-colors"
+                      aria-label="Close sub-habitats"
+                    >
+                      <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+                    </button>
+                  </div>
+                  <div className="min-h-0 overflow-y-auto">
+                    <div style={{ height: Math.max(80, drillSubData.length * 18 + 30) }}>
+                      <FilterBarChart
+                        data={drillSubData}
+                        dataKey="code"
+                        selectedItems={drillSelectedSubLabels}
+                        onBarClick={(data: { payload?: { code?: string } }, event: React.MouseEvent) => {
+                          const label = data.payload?.code;
+                          const child = drillCat!.children.find(c => c.label === label);
+                          if (!child) return;
+                          const isMulti = event.metaKey || event.ctrlKey;
+                          setSelectedHabitat(prev => {
+                            if (isMulti) { const next = new Set(prev); if (next.has(child.code)) next.delete(child.code); else next.add(child.code); return next; }
+                            if (prev.size === 1 && prev.has(child.code)) return new Set();
+                            return new Set([child.code]);
+                          });
+                        }}
+                        barColor="#5eead4"
+                        yAxisWidth={170}
+                        rightMargin={80}
+                        yAxisTickMaxLength={24}
+                      />
+                    </div>
+                  </div>
+                </div>
+              )}
+            </>
+          ) : (
+            <div className="h-full flex items-center justify-center"><span className="text-sm text-zinc-400 dark:text-zinc-500">No habitat data</span></div>
+          )}
+        </div>
+      </div>
+    );
+  })();
+
   // Renders one pill row for a level of the Criteria drill-down (top-level A-E, then
   // number, sub-clause, or roman-numeral rows as the user drills deeper — see
   // CRITERIA_CATEGORIES' doc comment for why the depth varies per branch). A plain
@@ -2931,8 +3402,9 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
   );
 
   return (
-    <div className="space-y-4 min-w-0 flex-1 flex flex-col min-h-0">
+    <div className="space-y-1 min-w-0 flex-1 flex flex-col min-h-0">
       {/* Always show Taxa Summary table */}
+      <div ref={taxaSummaryScrollRef}>
       <TaxaSummary
         onToggleTaxon={handleToggleTaxon}
         selectedTaxa={selectedTaxa}
@@ -2981,6 +3453,7 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
           navigateToTaxonSubgroup(taxonId, subgroupId);
         }}
       />
+      </div>
 
       {/* Error state */}
       {error && (
@@ -3007,77 +3480,6 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
         </div>
       ) : (
       <div className="space-y-3">
-
-          {/* Taxon-focus header — any single selected taxon: a top-level taxon
-              (selectedTopLevelTaxon, e.g. Mammals, or "All Species" itself), a
-              sub-group row drilled into via TaxaSummary's own tree
-              (selectedSubgroupTaxon: dynamic order/family/genus, or a static SSC
-              group), or a non-curated arbitrary rank reached via search
-              (arbitraryTaxon). Two stat cards: the taxon (name + rank) and the
-              Species card. The Species card's number is totalFiltered (live,
-              reacts to pill filters), with a "of Y" qualifier + "matching
-              filters" caption once a filter narrows it below the taxon's own
-              total (taxaFilteredSpeciesBase) — naming it explicitly avoids
-              reading as some other ratio (e.g. assessed-of-described).
-              TaxaSummary's own breadcrumb table above already shows the tree
-              branch that led here (Mammals → Rodentia → Heteromyidae → ...)
-              when applicable — this is purely an additional, more prominent
-              summary, not a replacement for it. */}
-          {focusedTaxonCard && !isSingleSpecies && (
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-3">
-                <div className="text-xs font-medium uppercase tracking-wide text-zinc-500 dark:text-zinc-400">
-                  {focusedTaxonCard.rank ?? "Taxon"}
-                </div>
-                <div className="mt-0.5 text-2xl font-bold text-zinc-900 dark:text-zinc-100">
-                  {focusedTaxonCard.name}
-                </div>
-              </div>
-              <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-3 flex flex-col sm:flex-row sm:items-center justify-between gap-2 sm:gap-3">
-                <div className="min-w-0">
-                  <div className="text-xs font-medium uppercase tracking-wide text-zinc-500 dark:text-zinc-400">
-                    {isNewAssessments ? "Not Evaluated Species" : "Assessed Species"}
-                  </div>
-                  <div className="mt-0.5 text-2xl font-bold text-zinc-900 dark:text-zinc-100">
-                    {speciesLoading && assessedSpecies.length === 0
-                      ? <Spinner className="h-6 w-6" />
-                      : totalFiltered < taxaFilteredSpeciesBase.length ? (
-                        <>
-                          {totalFiltered.toLocaleString()}
-                          <span className="text-base font-normal text-zinc-400 dark:text-zinc-500"> matching filters, of {taxaFilteredSpeciesBase.length.toLocaleString()} total</span>
-                        </>
-                      ) : totalFiltered.toLocaleString()}
-                  </div>
-                </div>
-                {onViewModeChange && (
-                  <div className="flex rounded-lg border border-zinc-200 dark:border-zinc-700 overflow-hidden text-xs shrink-0">
-                    <button
-                      type="button"
-                      onClick={() => onViewModeChange("reassessments")}
-                      className={`px-2 py-1 font-medium transition-colors ${
-                        !isNewAssessments
-                          ? "bg-zinc-800 dark:bg-zinc-100 text-white dark:text-zinc-900"
-                          : "bg-white dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400 hover:bg-zinc-50 dark:hover:bg-zinc-700"
-                      }`}
-                    >
-                      Assessed
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => onViewModeChange("new-assessments")}
-                      className={`px-2 py-1 font-medium transition-colors ${
-                        isNewAssessments
-                          ? "bg-zinc-800 dark:bg-zinc-100 text-white dark:text-zinc-900"
-                          : "bg-white dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400 hover:bg-zinc-50 dark:hover:bg-zinc-700"
-                      }`}
-                    >
-                      Not Evaluated
-                    </button>
-                  </div>
-                )}
-              </div>
-            </div>
-          )}
 
           {/* Single species header — skeleton while loading */}
           {!isSingleSpecies && urlSpecies != null && speciesLoading && (
@@ -3424,34 +3826,40 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
           </div>
           )}
 
-          {/* More Filters — a full-width collapsible card row, consistent with
-              the other cards on the page (hidden for New Assessments) */}
-          {!isNewAssessments && <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl">
-            <button
-              onClick={() => setMoreFiltersOpen(prev => !prev)}
-              className="w-full flex items-center gap-1.5 px-3 md:px-4 py-2.5 text-sm font-medium text-zinc-700 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800 rounded-t-xl transition-colors"
-            >
-              <svg className={`w-3.5 h-3.5 transition-transform ${moreFiltersOpen ? "rotate-90" : ""}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-              </svg>
-              More Filters
-              {(selectedSystems.size + selectedGrowthForms.size + selectedPopulationTrends.size + selectedMovementPatterns.size + selectedThreats.size + selectedCriteria.size + selectedCountries.size + (endemicsOnly ? 1 : 0) > 0) && (
-                <span className="ml-1 px-1.5 py-0.5 text-[10px] rounded-full bg-zinc-200 dark:bg-zinc-700 text-zinc-600 dark:text-zinc-300">
-                  {selectedSystems.size + selectedGrowthForms.size + selectedPopulationTrends.size + selectedMovementPatterns.size + selectedThreats.size + selectedCriteria.size + selectedCountries.size + (endemicsOnly ? 1 : 0)} active
-                </span>
-              )}
-            </button>
-            {moreFiltersOpen && (
-              <div className="px-3 md:px-4 pb-3 md:pb-4 pt-3 md:pt-4 border-t border-zinc-200 dark:border-zinc-800 flex flex-col gap-3">
-                {/* Country map + Threats — moved here from the primary view (Charts row
-                    2) so that row stays focused on Conservation Status / Years Since
-                    Assessed / GBIF Records; these still filter live like
-                    every other control on this page, just tucked a click away. */}
+          {/* Country + Threats are always visible, alongside Charts row 1
+              above — everything past that (Growth Form, Habitat + Realm/
+              Movement/Trend/Criteria, Assessors/Reviewers) lives behind the
+              "More Filters" toggle below. No independently-scrollable panel
+              here anymore — nested scrollbars (the panel's own, inside the
+              page's) read as confusing, so this reverts to plain
+              click-to-expand instead. */}
+          {!isNewAssessments && (
+            <>
+                {/* Country, Threats — paired side by side. */}
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                   {countryMapCard}
                   {threatsCard}
                 </div>
 
+                <button
+                  onClick={() => setMoreFiltersOpen(prev => !prev)}
+                  className="w-full flex items-center gap-1.5 px-3 py-2 text-sm font-medium text-zinc-700 dark:text-zinc-300 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl hover:bg-zinc-50 dark:hover:bg-zinc-800 transition-colors"
+                >
+                  <svg className={`w-3.5 h-3.5 transition-transform ${moreFiltersOpen ? "rotate-90" : ""}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                  </svg>
+                  More Filters
+                  {(selectedGrowthForms.size + selectedHabitat.size + (habitatBreadth ? 1 : 0) + (habitatImportanceActive ? 1 : 0) + (habitatSeasonsActive ? 1 : 0) + (habitatSuitabilityActive ? 1 : 0) + selectedSystems.size + selectedMovementPatterns.size + selectedPopulationTrends.size + selectedCriteria.size + selectedAssessors.size + selectedReviewers.size > 0) && (
+                    <span className="ml-1 px-1.5 py-0.5 text-[10px] rounded-full bg-zinc-200 dark:bg-zinc-700 text-zinc-600 dark:text-zinc-300">
+                      {selectedGrowthForms.size + selectedHabitat.size + (habitatBreadth ? 1 : 0) + (habitatImportanceActive ? 1 : 0) + (habitatSeasonsActive ? 1 : 0) + (habitatSuitabilityActive ? 1 : 0) + selectedSystems.size + selectedMovementPatterns.size + selectedPopulationTrends.size + selectedCriteria.size + selectedAssessors.size + selectedReviewers.size} active
+                    </span>
+                  )}
+                </button>
+            </>
+          )}
+
+          {!isNewAssessments && moreFiltersOpen && (
+            <>
                 {/* Growth Form (plants/fungi only) */}
                 {(() => {
                   // Compute growth form counts cross-filtered (exclude own filter)
@@ -3468,9 +3876,10 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
                     if (selectedPopulationTrends.size > 0 && (!s.population_trend || !selectedPopulationTrends.has(s.population_trend))) return;
                     if (selectedMovementPatterns.size > 0 && (!s.movement_pattern || !selectedMovementPatterns.has(s.movement_pattern))) return;
                     if (selectedThreats.size > 0 && !s.threat_codes?.some(tc => Array.from(selectedThreats).some(sel => tc === sel || tc.startsWith(sel + ".")))) return;
-      if (selectedCriteria.size > 0 && !parseCriteriaCodes(s.criteria).some(code => Array.from(selectedCriteria).some(sel => code === sel || code.startsWith(sel)))) return;
+                    if (selectedCriteria.size > 0 && !parseCriteriaCodes(s.criteria).some(code => Array.from(selectedCriteria).some(sel => code === sel || code.startsWith(sel)))) return;
                     if (endemicsOnly && s.countries.length !== 1) return;
                     if (!matchesAssessorsFilter(s)) return;
+                    if (!matchesHabitatFilter(s)) return;
                     if (!matchesReviewersFilter(s)) return;
                     for (const gf of s.growth_forms) {
                       gfCounts[gf] = (gfCounts[gf] || 0) + 1;
@@ -3510,134 +3919,144 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
                   );
                 })()}
 
-                {/* Realm, Trend, Movement — side by side as three columns rather
-                    than stacked rows, since each is a short, independent filter. */}
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                  {/* Realm */}
-                  <div className="flex items-center gap-2 bg-zinc-50 dark:bg-zinc-800/50 border border-zinc-200 dark:border-zinc-700 rounded-lg px-3 py-2">
-                    <span className="text-sm font-semibold text-zinc-900 dark:text-zinc-100 shrink-0 w-20">Realm</span>
-                    <div className="flex flex-wrap gap-1.5">
-                      {(["Terrestrial", "Freshwater", "Marine"] as const).map(system => {
-                        const isSelected = selectedSystems.has(system);
-                        const count = realmCounts[system] ?? 0;
-                        return (
-                          <button
-                            key={system}
-                            onClick={(e) => {
-                              const isMulti = e.metaKey || e.ctrlKey;
-                              setSelectedSystems(prev => {
-                                if (isMulti) { const next = new Set(prev); if (next.has(system)) next.delete(system); else next.add(system); return next; }
-                                if (prev.size === 1 && prev.has(system)) return new Set();
-                                return new Set([system]);
-                              });
-                            }}
-                            className={`px-2 py-1 text-xs rounded-full transition-colors cursor-pointer ${
-                              isSelected
-                                ? system === "Terrestrial" ? "bg-amber-500 text-white"
-                                : system === "Freshwater" ? "bg-cyan-500 text-white"
-                                : "bg-blue-600 text-white"
-                                : "bg-zinc-100 text-zinc-600 hover:bg-zinc-200 dark:bg-zinc-800 dark:text-zinc-400 dark:hover:bg-zinc-700"
-                            }`}
-                          >
-                            {system} ({count.toLocaleString()})
-                          </button>
-                        );
-                      })}
-                    </div>
-                  </div>
-
-                  {/* Trend */}
-                  <div className="flex items-center gap-2 bg-zinc-50 dark:bg-zinc-800/50 border border-zinc-200 dark:border-zinc-700 rounded-lg px-3 py-2">
-                    <span className="text-sm font-semibold text-zinc-900 dark:text-zinc-100 shrink-0 w-20">Trend</span>
-                    <div className="flex flex-wrap gap-1.5">
-                      {(["Increasing", "Stable", "Decreasing", "Unknown"] as const).map(trend => {
-                        const isSelected = selectedPopulationTrends.has(trend);
-                        const count = populationTrendCounts[trend] ?? 0;
-                        return (
-                          <button
-                            key={trend}
-                            onClick={(e) => {
-                              const isMulti = e.metaKey || e.ctrlKey;
-                              setSelectedPopulationTrends(prev => {
-                                if (isMulti) { const next = new Set(prev); if (next.has(trend)) next.delete(trend); else next.add(trend); return next; }
-                                if (prev.size === 1 && prev.has(trend)) return new Set();
-                                return new Set([trend]);
-                              });
-                            }}
-                            className={`px-2 py-1 text-xs rounded-full transition-colors cursor-pointer ${
-                              isSelected
-                                ? "bg-orange-500 text-white"
-                                : "bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400 hover:bg-zinc-200 dark:hover:bg-zinc-700"
-                            }`}
-                          >
-                            {trend === "Increasing" ? "↑" : trend === "Decreasing" ? "↓" : trend === "Stable" ? "→" : "?"} {trend} ({count.toLocaleString()})
-                          </button>
-                        );
-                      })}
-                    </div>
-                  </div>
-
-                  {/* Movement Patterns */}
-                  {!isNewAssessments && (
+                {/* Habitat (left) alongside Realm, Movement, Trend, Criteria
+                    stacked in the right column — these four are short,
+                    compact controls, so stacking them against the taller
+                    Habitat card balances the row instead of spreading them
+                    across their own rows. */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  {habitatCard}
+                  <div className="flex flex-col gap-3">
+                    {/* Realm */}
                     <div className="flex items-center gap-2 bg-zinc-50 dark:bg-zinc-800/50 border border-zinc-200 dark:border-zinc-700 rounded-lg px-3 py-2">
-                      <span className="text-sm font-semibold text-zinc-900 dark:text-zinc-100 shrink-0 w-20">Movement</span>
-                        <div className="flex flex-wrap gap-1.5">
-                          {(["Full Migrant", "Altitudinal Migrant", "Nomadic", "Not a Migrant", "Unknown"] as const).map(pattern => {
-                            const isSelected = selectedMovementPatterns.has(pattern);
-                            const count = movementPatternCounts[pattern] ?? 0;
-                            if (count === 0) return null;
-                            return (
-                              <button
-                                key={pattern}
-                                onClick={(e) => {
-                                  const isMulti = e.metaKey || e.ctrlKey;
-                                  setSelectedMovementPatterns(prev => {
-                                    if (isMulti) { const next = new Set(prev); if (next.has(pattern)) next.delete(pattern); else next.add(pattern); return next; }
-                                    if (prev.size === 1 && prev.has(pattern)) return new Set();
-                                    return new Set([pattern]);
-                                  });
-                                }}
-                                className={`px-2 py-1 text-xs rounded-full transition-colors cursor-pointer ${
-                                  isSelected
-                                    ? "bg-teal-500 text-white"
-                                    : "bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400 hover:bg-zinc-200 dark:hover:bg-zinc-700"
-                                }`}
-                              >
-                                {pattern} ({count.toLocaleString()})
-                              </button>
-                            );
-                          })}
-                        </div>
+                      <span className="text-sm font-semibold text-zinc-900 dark:text-zinc-100 shrink-0 w-20">Realm</span>
+                      <div className="flex flex-wrap gap-1.5">
+                        {(["Terrestrial", "Freshwater", "Marine"] as const).map(system => {
+                          const isSelected = selectedSystems.has(system);
+                          const count = realmCounts[system] ?? 0;
+                          return (
+                            <button
+                              key={system}
+                              onClick={(e) => {
+                                const isMulti = e.metaKey || e.ctrlKey;
+                                setSelectedSystems(prev => {
+                                  if (isMulti) { const next = new Set(prev); if (next.has(system)) next.delete(system); else next.add(system); return next; }
+                                  if (prev.size === 1 && prev.has(system)) return new Set();
+                                  return new Set([system]);
+                                });
+                              }}
+                              className={`px-2 py-1 text-xs rounded-full transition-colors cursor-pointer ${
+                                isSelected
+                                  ? system === "Terrestrial" ? "bg-amber-500 text-white"
+                                  : system === "Freshwater" ? "bg-cyan-500 text-white"
+                                  : "bg-blue-600 text-white"
+                                  : "bg-zinc-100 text-zinc-600 hover:bg-zinc-200 dark:bg-zinc-800 dark:text-zinc-400 dark:hover:bg-zinc-700"
+                              }`}
+                            >
+                              {system} ({count.toLocaleString()})
+                            </button>
+                          );
+                        })}
+                      </div>
                     </div>
-                  )}
-                </div>
 
-                {/* Criteria — top-level A-E pills; clicking one both selects it as a
-                    filter AND expands its next level below (number -> sub-clause ->
-                    roman numeral, as deep as that branch goes — mirrors the Threats
-                    chart's category/sub-category drill-down, generalized to arbitrary
-                    depth via renderCriteriaLevel since criteria nests up to 4 levels
-                    vs. threats' 2). Cmd/ctrl-click for real multi-select — any number
-                    of branches can be drilled into and selected simultaneously (e.g.
-                    B1b(iii) AND C2a(i) together), each independently expanded via
-                    expandedCriteria (a Set, not a single "last expanded" value). A
-                    species can satisfy multiple codes under the same letter too (e.g.
-                    B1+B2, or B1a and B1b together), so selecting any code matches
-                    species with that code OR a more specific one beneath it (see
-                    parseCriteriaCodes' startsWith-based matching). */}
-                {!isNewAssessments && (
-                  <div className="flex flex-col gap-2 bg-zinc-50 dark:bg-zinc-800/50 border border-zinc-200 dark:border-zinc-700 rounded-lg px-3 py-2">
-                    <div className="flex items-center gap-2">
-                      <span className="text-sm font-semibold text-zinc-900 dark:text-zinc-100 shrink-0 w-20">Criteria</span>
-                      {renderCriteriaRow(CRITERIA_CATEGORIES, false)}
+                    {/* Movement Patterns */}
+                    {!isNewAssessments && (
+                      <div className="flex items-center gap-2 bg-zinc-50 dark:bg-zinc-800/50 border border-zinc-200 dark:border-zinc-700 rounded-lg px-3 py-2">
+                        <span className="text-sm font-semibold text-zinc-900 dark:text-zinc-100 shrink-0 w-20">Movement</span>
+                          <div className="flex flex-wrap gap-1.5">
+                            {(["Full Migrant", "Altitudinal Migrant", "Nomadic", "Not a Migrant", "Unknown"] as const).map(pattern => {
+                              const isSelected = selectedMovementPatterns.has(pattern);
+                              const count = movementPatternCounts[pattern] ?? 0;
+                              if (count === 0) return null;
+                              return (
+                                <button
+                                  key={pattern}
+                                  onClick={(e) => {
+                                    const isMulti = e.metaKey || e.ctrlKey;
+                                    setSelectedMovementPatterns(prev => {
+                                      if (isMulti) { const next = new Set(prev); if (next.has(pattern)) next.delete(pattern); else next.add(pattern); return next; }
+                                      if (prev.size === 1 && prev.has(pattern)) return new Set();
+                                      return new Set([pattern]);
+                                    });
+                                  }}
+                                  className={`px-2 py-1 text-xs rounded-full transition-colors cursor-pointer ${
+                                    isSelected
+                                      ? "bg-teal-500 text-white"
+                                      : "bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400 hover:bg-zinc-200 dark:hover:bg-zinc-700"
+                                  }`}
+                                >
+                                  {pattern} ({count.toLocaleString()})
+                                </button>
+                              );
+                            })}
+                          </div>
+                      </div>
+                    )}
+
+                    {/* Trend */}
+                    <div className="flex items-center gap-2 bg-zinc-50 dark:bg-zinc-800/50 border border-zinc-200 dark:border-zinc-700 rounded-lg px-3 py-2">
+                      <span className="text-sm font-semibold text-zinc-900 dark:text-zinc-100 shrink-0 w-20">Trend</span>
+                      <div className="flex flex-wrap gap-1.5">
+                        {(["Increasing", "Stable", "Decreasing", "Unknown"] as const).map(trend => {
+                          const isSelected = selectedPopulationTrends.has(trend);
+                          const count = populationTrendCounts[trend] ?? 0;
+                          return (
+                            <button
+                              key={trend}
+                              onClick={(e) => {
+                                const isMulti = e.metaKey || e.ctrlKey;
+                                setSelectedPopulationTrends(prev => {
+                                  if (isMulti) { const next = new Set(prev); if (next.has(trend)) next.delete(trend); else next.add(trend); return next; }
+                                  if (prev.size === 1 && prev.has(trend)) return new Set();
+                                  return new Set([trend]);
+                                });
+                              }}
+                              className={`px-2 py-1 text-xs rounded-full transition-colors cursor-pointer ${
+                                isSelected
+                                  ? "bg-orange-500 text-white"
+                                  : "bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400 hover:bg-zinc-200 dark:hover:bg-zinc-700"
+                              }`}
+                            >
+                              {trend === "Increasing" ? "↑" : trend === "Decreasing" ? "↓" : trend === "Stable" ? "→" : "?"} {trend} ({count.toLocaleString()})
+                            </button>
+                          );
+                        })}
+                      </div>
                     </div>
-                    {CRITERIA_CATEGORIES.map(node => (
-                      expandedCriteria.has(node.code) && node.children.length > 0 ? (
-                        <React.Fragment key={node.code}>{renderCriteriaLevel(node.children, 1)}</React.Fragment>
-                      ) : null
-                    ))}
+
+                    {/* Criteria — top-level A-E pills; clicking one both
+                        selects it as a filter AND expands its next level
+                        below (number -> sub-clause -> roman numeral, as deep
+                        as that branch goes — mirrors the Threats chart's
+                        category/sub-category drill-down, generalized to
+                        arbitrary depth via renderCriteriaLevel since
+                        criteria nests up to 4 levels vs. threats' 2).
+                        Cmd/ctrl-click for real multi-select — any number of
+                        branches can be drilled into and selected
+                        simultaneously (e.g. B1b(iii) AND C2a(i) together),
+                        each independently expanded via expandedCriteria (a
+                        Set, not a single "last expanded" value). A species
+                        can satisfy multiple codes under the same letter too
+                        (e.g. B1+B2, or B1a and B1b together), so selecting
+                        any code matches species with that code OR a more
+                        specific one beneath it (see parseCriteriaCodes'
+                        startsWith-based matching). */}
+                    {!isNewAssessments && (
+                      <div className="flex flex-col gap-2 bg-zinc-50 dark:bg-zinc-800/50 border border-zinc-200 dark:border-zinc-700 rounded-lg px-3 py-2">
+                        <div className="flex items-center gap-2">
+                          <span className="text-sm font-semibold text-zinc-900 dark:text-zinc-100 shrink-0 w-20">Criteria</span>
+                          {renderCriteriaRow(CRITERIA_CATEGORIES, false)}
+                        </div>
+                        {CRITERIA_CATEGORIES.map(node => (
+                          expandedCriteria.has(node.code) && node.children.length > 0 ? (
+                            <React.Fragment key={node.code}>{renderCriteriaLevel(node.children, 1)}</React.Fragment>
+                          ) : null
+                        ))}
+                      </div>
+                    )}
                   </div>
-                )}
+                </div>
 
                 {/* Assessors and Reviewers, shown side by side */}
                 {isSingleSpecies && singleSpecies ? (
@@ -3690,9 +4109,8 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
                     />
                   </div>
                 )}
-              </div>
-            )}
-          </div>}
+            </>
+          )}
 
       {/* Species Table */}
       <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl">
@@ -3722,13 +4140,14 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
               </svg>
             </div>
-            {(selectedTaxa.size > 0 || selectedSubgroups.size > 0 || selectedCategories.size > 0 || selectedYearRanges.size > 0 || selectedAssessmentYears.size > 0 || selectedDescribedYears.size > 0 || selectedObsRanges.size > 0 || selectedCountries.size > 0 || selectedSystems.size > 0 || endemicsOnly || selectedGrowthForms.size > 0 || selectedPopulationTrends.size > 0 || selectedMovementPatterns.size > 0 || selectedThreats.size > 0 || selectedCriteria.size > 0 || selectedAssessors.size > 0 || selectedReviewers.size > 0 || showOnlyStarred || exactFilters.outdated || exactFilters.minObs != null || exactFilters.maxObs != null || exactFilters.minAssessmentYear != null || exactFilters.maxAssessmentYear != null || exactFilters.minDescribedYear != null || exactFilters.maxDescribedYear != null) && (
+            {(selectedTaxa.size > 0 || selectedSubgroups.size > 0 || selectedCategories.size > 0 || selectedYearRanges.size > 0 || selectedAssessmentYears.size > 0 || selectedDescribedYears.size > 0 || selectedObsRanges.size > 0 || selectedCountries.size > 0 || selectedSystems.size > 0 || endemicsOnly || selectedGrowthForms.size > 0 || selectedPopulationTrends.size > 0 || selectedMovementPatterns.size > 0 || selectedThreats.size > 0 || selectedCriteria.size > 0 || selectedHabitat.size > 0 || habitatBreadth || habitatImportanceActive || habitatSeasonsActive || habitatSuitabilityActive || selectedAssessors.size > 0 || selectedReviewers.size > 0 || showOnlyStarred || exactFilters.outdated || exactFilters.minObs != null || exactFilters.maxObs != null || exactFilters.minAssessmentYear != null || exactFilters.maxAssessmentYear != null || exactFilters.minDescribedYear != null || exactFilters.maxDescribedYear != null) && (
               <button
                 onClick={() => {
                   clearAllFiltersAndTaxa();
                   setShowOnlyStarred(false);
                   setExpandedThreat(null);
                   setExpandedCriteria(new Set());
+                  setExpandedHabitat(null);
                 }}
                 title="Reset all filters and the selected taxon"
                 className="px-2 md:px-3 py-1.5 rounded-lg text-xs md:text-sm font-medium transition-colors flex items-center gap-1 md:gap-1.5 bg-white text-zinc-700 border border-zinc-200 hover:bg-zinc-50 dark:bg-zinc-800 dark:text-zinc-300 dark:border-zinc-700 shrink-0"
@@ -3788,7 +4207,7 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
                 <span className="text-sm">×</span>
               </button>
             )}
-            {!isNewAssessments && Array.from(selectedCategories).filter(cat => cat !== "NE").map(cat => (
+            {!isNewAssessments && Array.from(selectedCategories).map(cat => (
               <button
                 key={cat}
                 onClick={() => setSelectedCategories(prev => { const next = new Set(prev); next.delete(cat); return next; })}
@@ -3940,6 +4359,66 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
                 </button>
               );
             })}
+            {Array.from(selectedHabitat).map(code => {
+              const cat = HABITAT_CATEGORIES.find(c => c.code === code);
+              const sub = !cat ? HABITAT_CATEGORIES.flatMap(c => c.children).find(c => c.code === code) : null;
+              const label = cat?.label || sub?.label || code;
+              return (
+                <button
+                  key={`habitat-${code}`}
+                  onClick={() => setSelectedHabitat(prev => { const next = new Set(prev); next.delete(code); return next; })}
+                  className="px-3 py-1.5 text-sm font-medium rounded-full bg-teal-100 text-teal-600 dark:bg-teal-900/30 dark:text-teal-400 flex items-center gap-1 hover:opacity-80"
+                >
+                  {label}
+                  <span className="text-sm">×</span>
+                </button>
+              );
+            })}
+            {habitatBreadth && (
+              <button
+                onClick={() => setHabitatBreadth(null)}
+                className="px-3 py-1.5 text-sm font-medium rounded-full bg-teal-100 text-teal-600 dark:bg-teal-900/30 dark:text-teal-400 flex items-center gap-1 hover:opacity-80"
+              >
+                Habitat {habitatBreadth === "specialist" ? "specialists" : "generalists"}
+                <span className="text-sm">×</span>
+              </button>
+            )}
+            {/* Importance/Season both default to "everything checked". The chip
+                shows what's actually SELECTED (positive framing) rather than what's
+                excluded — narrowing down to one or two values (e.g. "Major",
+                "Resident") is the more common case, and reads far more clearly than
+                spelling out every other unchecked value ("No Minor", "No Unknown",
+                "No Breeding", ...). Clicking × removes it from the selection. */}
+            {habitatImportanceActive && HABITAT_IMPORTANCE_OPTIONS.filter(({ value }) => selectedHabitatImportance.has(value)).map(({ value, short }) => (
+              <button
+                key={`habitat-importance-${value}`}
+                onClick={() => setSelectedHabitatImportance(prev => { const next = new Set(prev); next.delete(value); return next; })}
+                className="px-3 py-1.5 text-sm font-medium rounded-full bg-teal-100 text-teal-600 dark:bg-teal-900/30 dark:text-teal-400 flex items-center gap-1 hover:opacity-80"
+              >
+                {short} habitat
+                <span className="text-sm">×</span>
+              </button>
+            ))}
+            {habitatSeasonsActive && HABITAT_SEASON_OPTIONS.filter(({ value }) => selectedHabitatSeasons.has(value)).map(({ value, short }) => (
+              <button
+                key={`habitat-season-${value}`}
+                onClick={() => setSelectedHabitatSeasons(prev => { const next = new Set(prev); next.delete(value); return next; })}
+                className="px-3 py-1.5 text-sm font-medium rounded-full bg-teal-100 text-teal-600 dark:bg-teal-900/30 dark:text-teal-400 flex items-center gap-1 hover:opacity-80"
+              >
+                {short}
+                <span className="text-sm">×</span>
+              </button>
+            ))}
+            {habitatSuitabilityActive && HABITAT_SUITABILITY_OPTIONS.filter(({ value }) => selectedHabitatSuitability.has(value)).map(({ value, short }) => (
+              <button
+                key={`habitat-suitability-${value}`}
+                onClick={() => setSelectedHabitatSuitability(prev => { const next = new Set(prev); next.delete(value); return next; })}
+                className="px-3 py-1.5 text-sm font-medium rounded-full bg-teal-100 text-teal-600 dark:bg-teal-900/30 dark:text-teal-400 flex items-center gap-1 hover:opacity-80"
+              >
+                {short} suitability
+                <span className="text-sm">×</span>
+              </button>
+            ))}
             {Array.from(selectedSystems).map(system => (
               <button
                 key={system}
@@ -4004,33 +4483,34 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
                 <>{totalFiltered.toLocaleString()} species</>
               )}
             </span>
-            {!isNewAssessments && (neCount > 0 || neBlockedForAll) && (
-              <button
-                disabled={neBlockedForAll}
-                onClick={() => {
-                  if (neBlockedForAll) return;
-                  setSelectedCategories(prev => {
-                    const next = new Set(prev);
-                    if (next.has("NE")) {
-                      next.delete("NE");
-                    } else {
-                      next.add("NE");
-                    }
-                    return next;
-                  });
-                }}
-                className={`px-2 md:px-3 py-1.5 rounded-lg text-xs md:text-sm font-medium transition-colors flex items-center gap-1 md:gap-1.5 ${
-                  neBlockedForAll
-                    ? "bg-white text-zinc-400 border border-zinc-200 opacity-60 cursor-not-allowed dark:bg-zinc-800 dark:text-zinc-500 dark:border-zinc-700"
-                    : selectedCategories.has("NE")
-                    ? "bg-zinc-500 text-white"
-                    : "bg-white text-zinc-700 border border-zinc-200 hover:bg-zinc-50 dark:bg-zinc-800 dark:text-zinc-300 dark:border-zinc-700"
-                }`}
-                title={neBlockedForAll ? "Not Evaluated species must be loaded per taxon group — too many to load for All Species at once" : "Show Not Evaluated species from GBIF"}
-              >
-                Not Evaluated
-                {!neBlockedForAll && <span className="text-[10px] opacity-70">({neCount.toLocaleString()})</span>}
-              </button>
+            {/* Assessed/Not Evaluated — a full view-mode switch (a different
+                dataset entirely), moved here from the old dedicated stat-card
+                row now that there isn't one. */}
+            {onViewModeChange && (
+              <div className="flex rounded-lg border border-zinc-200 dark:border-zinc-700 overflow-hidden text-xs shrink-0">
+                <button
+                  type="button"
+                  onClick={() => onViewModeChange("reassessments")}
+                  className={`px-2 py-1 font-medium transition-colors ${
+                    !isNewAssessments
+                      ? "bg-zinc-800 dark:bg-zinc-100 text-white dark:text-zinc-900"
+                      : "bg-white dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400 hover:bg-zinc-50 dark:hover:bg-zinc-700"
+                  }`}
+                >
+                  Assessed
+                </button>
+                <button
+                  type="button"
+                  onClick={() => onViewModeChange("new-assessments")}
+                  className={`px-2 py-1 font-medium transition-colors ${
+                    isNewAssessments
+                      ? "bg-zinc-800 dark:bg-zinc-100 text-white dark:text-zinc-900"
+                      : "bg-white dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400 hover:bg-zinc-50 dark:hover:bg-zinc-700"
+                  }`}
+                >
+                  Not Evaluated
+                </button>
+              </div>
             )}
           </div>
         </div>

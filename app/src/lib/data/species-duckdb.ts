@@ -147,7 +147,7 @@ const ASSESSED_SELECT = `
   assessment_date, year_published, population_trend, countries, class_name, order_name,
   taxon_group, gbif_species_key, gbif_occurrence_count, gbif_observations_after_assessment_year,
   systems, growth_forms, movement_pattern, possibly_extinct, possibly_extinct_in_the_wild,
-  criteria, threat_codes, latest_assessors, latest_reviewers`;
+  criteria, threat_codes, habitat_codes, latest_assessors, latest_reviewers`;
 
 const splitList = (s: unknown): string[] => (typeof s === "string" && s ? s.split(";").filter(Boolean) : []);
 const num = (v: unknown): number | null => (v == null ? null : Number(v));
@@ -193,6 +193,7 @@ export function toSpeciesRow(r: Record<string, unknown>) {
     possibly_extinct_in_the_wild: Boolean(r.possibly_extinct_in_the_wild),
     criteria: r.criteria ?? null,
     threat_codes: splitList(r.threat_codes),
+    habitat_codes: splitList(r.habitat_codes),
   };
 }
 
