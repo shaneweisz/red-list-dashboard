@@ -50,13 +50,14 @@ const nextConfig: NextConfig = {
   // Server Actions (e.g. the GitHub sign-in form in /login) reject any request
   // whose Origin header doesn't match the request's own host, as CSRF
   // protection — by default only the exact same origin is trusted. This app is
-  // served on multiple custom domains (see src/config/brand.ts), and at least
-  // one (red.cst.cam.ac.uk, likely proxied through Cambridge's own campus DNS/
-  // reverse-proxy layer in front of Vercel) was seen 500ing on sign-in because
-  // the origin Next.js saw didn't match what it expected — list every domain
-  // this app answers on explicitly, plus a wildcard for Vercel's own preview
-  // deployments (both URL shapes: the stable git-branch alias and the
-  // per-deployment hash that changes on every push).
+  // served on multiple custom domains (see src/config/brand.ts), and two of them
+  // (red.cst.cam.ac.uk and en.ki) reach Vercel through a Caddy reverse proxy on
+  // a Cambridge VM that rewrites Host to red-list-dashboard.vercel.app, so the
+  // Origin the browser sends never matches the Host Next.js sees and sign-in
+  // 500s without an explicit entry — list every domain this app answers on,
+  // plus a wildcard for Vercel's own preview deployments (both URL shapes: the
+  // stable git-branch alias and the per-deployment hash that changes on every
+  // push). Keep in step with src/config/public-origin.ts.
   experimental: {
     serverActions: {
       allowedOrigins: [
@@ -64,6 +65,7 @@ const nextConfig: NextConfig = {
         "dashoflife.org",
         "red-list-dashboard.vercel.app",
         "red.cst.cam.ac.uk",
+        "en.ki",
         "*-shaneweiszs-projects.vercel.app",
       ],
     },

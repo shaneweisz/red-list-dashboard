@@ -2,21 +2,27 @@
 
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
+import { resolvePublicOrigin } from "@/config/public-origin";
 import { createClient } from "@/lib/supabase/server";
 
-export async function signInWithGitHub() {
+export async function signInWithGitHub(formData: FormData) {
   const supabase = await createClient();
 
-  // Derive the current domain from the Host header (what Vercel's own routing
-  // is built on, present on every request) rather than the browser-sent
-  // Origin header — Origin proved unreliable across this app's several
-  // custom domains (different DNS/proxy paths), occasionally producing a
-  // redirectTo Supabase didn't recognize and silently falling back to the
-  // Site URL instead of completing sign-in.
+  // Where GitHub should send the user back to. This has to be the domain the
+  // browser is actually on: the PKCE code verifier is stored in a cookie set on
+  // that domain, and if the callback lands anywhere else the cookie isn't sent
+  // and the code exchange fails (#416).
+  //
+  // The Host header alone can't tell us — red.cst.cam.ac.uk and en.ki reach
+  // Vercel through a proxy that rewrites Host to red-list-dashboard.vercel.app,
+  // so sign-in from those domains used to bounce the user to the vercel.app
+  // origin and fail there. The form posts the browser's own origin instead;
+  // resolvePublicOrigin validates it and falls back to the headers.
   const headersList = await headers();
-  const host = headersList.get("x-forwarded-host") ?? headersList.get("host");
-  const protocol = headersList.get("x-forwarded-proto") ?? "https";
-  const origin = `${protocol}://${host}`;
+  const origin = resolvePublicOrigin(formData.get("origin"), {
+    host: headersList.get("x-forwarded-host") ?? headersList.get("host"),
+    protocol: headersList.get("x-forwarded-proto") ?? "https",
+  });
 
   const { data, error } = await supabase.auth.signInWithOAuth({
     provider: "github",
