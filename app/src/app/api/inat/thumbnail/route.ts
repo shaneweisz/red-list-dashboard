@@ -19,11 +19,21 @@ export async function GET(request: NextRequest) {
 
   try {
     // iNat's q= search is fuzzy/relevance-ranked (by observation count), not
-    // an exact lookup — per_page=10 + the exact-name filter below guards
-    // against a rare species losing the top spot to a much more commonly
-    // observed, unrelated taxon that happens to share its epithet (e.g.
-    // "Monachus monachus", the Mediterranean Monk Seal, ranks 10th behind
-    // several unrelated birds sharing "monachus").
+    // an exact lookup — per_page=10 + the match filter below guards against
+    // a rare species losing the top spot to a much more commonly observed,
+    // unrelated taxon that happens to share its epithet (e.g. "Monachus
+    // monachus", the Mediterranean Monk Seal, ranks 10th behind several
+    // unrelated birds sharing "monachus").
+    //
+    // Match on t.name OR matched_term, not just t.name: our scientific names
+    // (from the Red List) sometimes use an older/synonym spelling that
+    // differs from iNat's current accepted name — e.g. our "Caracal aurata"
+    // vs. iNat's current "Caracal auratus" (gender-agreement change). iNat's
+    // own synonym-aware search still resolves these and reports the matched
+    // synonym via matched_term, so checking it too recovers legitimate
+    // synonym matches without reopening the Monachus-style false-positive
+    // bug (matched_term for the unrelated "monachus" taxa is their own name,
+    // not the full queried binomial).
     const taxaResp = await fetch(
       `https://api.inaturalist.org/v1/taxa?q=${encodeURIComponent(name)}&rank=species&per_page=10`
     );
@@ -31,8 +41,10 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ inatDefaultImage: null }, { headers: CACHE_1H });
     }
     const taxaData = await taxaResp.json();
-    const exactMatch = (taxaData.results || []).find((t: { name?: string }) => t.name === name);
-    const defaultPhoto = exactMatch?.default_photo;
+    const match = (taxaData.results || []).find(
+      (t: { name?: string; matched_term?: string }) => t.name === name || t.matched_term === name
+    );
+    const defaultPhoto = match?.default_photo;
 
     const inatDefaultImage: InatDefaultImage | null = defaultPhoto
       ? {
