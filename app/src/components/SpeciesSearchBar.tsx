@@ -4,7 +4,7 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import { buildQs, type ViewMode } from "../hooks/useFilterParams";
 import { CATEGORY_COLORS } from "../config/taxa";
 import { findNode, getViewRootForNode } from "../lib/taxonomy-utils";
-import { ALL_HABITAT_SEASONS, ALL_HABITAT_IMPORTANCE } from "../lib/habitat-filter";
+import { ALL_HABITAT_SEASONS, ALL_HABITAT_IMPORTANCE, ALL_HABITAT_SUITABILITY } from "../lib/habitat-filter";
 
 interface SearchResult {
   id: number;
@@ -138,6 +138,7 @@ export function SpeciesSearchBar() {
         habitatBreadth: null,
         habitatImportance: new Set(ALL_HABITAT_IMPORTANCE),
         habitatSeasons: new Set(ALL_HABITAT_SEASONS),
+        habitatSuitability: new Set(ALL_HABITAT_SUITABILITY),
         endemicsOnly: false,
         growthForms: new Set(),
         assessors: new Set(),
@@ -198,6 +199,7 @@ export function SpeciesSearchBar() {
       habitatBreadth: null,
       habitatImportance: new Set(ALL_HABITAT_IMPORTANCE),
       habitatSeasons: new Set(ALL_HABITAT_SEASONS),
+      habitatSuitability: new Set(ALL_HABITAT_SUITABILITY),
       endemicsOnly: false,
       growthForms: new Set(),
       assessors: new Set(),

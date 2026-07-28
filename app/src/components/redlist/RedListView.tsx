@@ -18,7 +18,7 @@ import ReviewerChart from "./ReviewerChart";
 import { parseAssessors } from "@/lib/parseAssessors";
 import { iucnRegionCountries, countryToIucnRegion } from "@/lib/regions";
 import { useFilterParams } from "@/hooks/useFilterParams";
-import { parseHabitatEntries, matchesHabitatFilter as matchesHabitatCriteria, coarseKnownCategories, isRestrictiveSelection, ALL_HABITAT_SEASONS, ALL_HABITAT_IMPORTANCE } from "@/lib/habitat-filter";
+import { parseHabitatEntries, matchesHabitatFilter as matchesHabitatCriteria, coarseKnownCategories, isRestrictiveSelection, ALL_HABITAT_SEASONS, ALL_HABITAT_IMPORTANCE, ALL_HABITAT_SUITABILITY } from "@/lib/habitat-filter";
 import { type RedListSpecies } from "@/hooks/useRedListSpeciesQuery";
 import { useSpeciesCache } from "@/contexts/SpeciesCacheContext";
 import { isOutdated, outdatedCutoffDate } from "@/lib/outdated";
@@ -351,6 +351,14 @@ const HABITAT_IMPORTANCE_OPTIONS: { value: string; short: string }[] = [
   { value: "Unknown", short: "Unknown" },
 ];
 
+// Suitability dropdown options — same checkbox-multi-select shape as importance,
+// covering all 3 possible parseHabitatEntries().suitability values.
+const HABITAT_SUITABILITY_OPTIONS: { value: string; short: string }[] = [
+  { value: "Suitable", short: "Suitable" },
+  { value: "Marginal", short: "Marginal" },
+  { value: "Unknown", short: "Unknown" },
+];
+
 interface InatDefaultImage {
   squareUrl: string | null;
   mediumUrl: string | null;
@@ -627,6 +635,7 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
     habitatBreadth, setHabitatBreadth,
     selectedHabitatImportance, setSelectedHabitatImportance,
     selectedHabitatSeasons, setSelectedHabitatSeasons,
+    selectedHabitatSuitability, setSelectedHabitatSuitability,
     breakdownFilter, setBreakdownFilter,
     endemicsOnly, setEndemicsOnly,
     selectedGrowthForms, setSelectedGrowthForms,
@@ -667,6 +676,7 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
   // just `.size > 0`.
   const habitatImportanceActive = isRestrictiveSelection(selectedHabitatImportance, ALL_HABITAT_IMPORTANCE);
   const habitatSeasonsActive = isRestrictiveSelection(selectedHabitatSeasons, ALL_HABITAT_SEASONS);
+  const habitatSuitabilityActive = isRestrictiveSelection(selectedHabitatSuitability, ALL_HABITAT_SUITABILITY);
 
   const cache = useSpeciesCache();
   const speciesApiUrl = useCallback(
@@ -774,6 +784,7 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
     setHabitatBreadth(null);
     setSelectedHabitatImportance(new Set(ALL_HABITAT_IMPORTANCE));
     setSelectedHabitatSeasons(new Set(ALL_HABITAT_SEASONS));
+    setSelectedHabitatSuitability(new Set(ALL_HABITAT_SUITABILITY));
     setEndemicsOnly(false);
     setSelectedGrowthForms(new Set());
     setSelectedAssessors(new Set());
@@ -784,7 +795,7 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
     if (viewMode === "new-assessments") {
       setSelectedTaxa(prev => prev.has("all") ? new Set<string>() : prev);
     }
-  }, [viewMode, setSelectedTaxa, setSelectedCategories, setSelectedYearRanges, setSelectedAssessmentYears, setSelectedDescribedYears, setSelectedCountries, setSelectedObsRanges, setSelectedSystems, setSelectedPopulationTrends, setSelectedMovementPatterns, setSelectedThreats, setSelectedCriteria, setSelectedHabitat, setHabitatBreadth, setSelectedHabitatImportance, setSelectedHabitatSeasons, setEndemicsOnly, setSelectedGrowthForms, setSelectedAssessors, setSelectedReviewers, setSort]);
+  }, [viewMode, setSelectedTaxa, setSelectedCategories, setSelectedYearRanges, setSelectedAssessmentYears, setSelectedDescribedYears, setSelectedCountries, setSelectedObsRanges, setSelectedSystems, setSelectedPopulationTrends, setSelectedMovementPatterns, setSelectedThreats, setSelectedCriteria, setSelectedHabitat, setHabitatBreadth, setSelectedHabitatImportance, setSelectedHabitatSeasons, setSelectedHabitatSuitability, setEndemicsOnly, setSelectedGrowthForms, setSelectedAssessors, setSelectedReviewers, setSort]);
 
   // Taxon toggle handler (used by TaxaSummary)
   // Regular click: select only that taxon (or deselect if already sole selection)
@@ -955,19 +966,21 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
   const [habitatPage, setHabitatPage] = useState(0);
   const HABITAT_PAGE_SIZE = 10;
 
-  // Breadth/Importance/Season dropdown menus in the Habitat card header
+  // Breadth/Importance/Season/Suitability dropdown menus in the Habitat card header
   // (replacing a wall of individual toggle buttons — Breadth is a single-select
   // Specialist/Generalist choice, Exclude minor a single checkbox, Season a
   // multi-select list of all 5 IUCN values).
   const [habitatBreadthMenuOpen, setHabitatBreadthMenuOpen] = useState(false);
   const [habitatImportanceMenuOpen, setHabitatImportanceMenuOpen] = useState(false);
   const [habitatSeasonMenuOpen, setHabitatSeasonMenuOpen] = useState(false);
+  const [habitatSuitabilityMenuOpen, setHabitatSuitabilityMenuOpen] = useState(false);
   const habitatBreadthMenuRef = useRef<HTMLDivElement>(null);
   const habitatImportanceMenuRef = useRef<HTMLDivElement>(null);
   const habitatSeasonMenuRef = useRef<HTMLDivElement>(null);
+  const habitatSuitabilityMenuRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    if (!habitatBreadthMenuOpen && !habitatImportanceMenuOpen && !habitatSeasonMenuOpen) return;
+    if (!habitatBreadthMenuOpen && !habitatImportanceMenuOpen && !habitatSeasonMenuOpen && !habitatSuitabilityMenuOpen) return;
     const handler = (e: MouseEvent) => {
       if (habitatBreadthMenuRef.current && !habitatBreadthMenuRef.current.contains(e.target as Node)) {
         setHabitatBreadthMenuOpen(false);
@@ -978,10 +991,13 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
       if (habitatSeasonMenuRef.current && !habitatSeasonMenuRef.current.contains(e.target as Node)) {
         setHabitatSeasonMenuOpen(false);
       }
+      if (habitatSuitabilityMenuRef.current && !habitatSuitabilityMenuRef.current.contains(e.target as Node)) {
+        setHabitatSuitabilityMenuOpen(false);
+      }
     };
     document.addEventListener("mousedown", handler);
     return () => document.removeEventListener("mousedown", handler);
-  }, [habitatBreadthMenuOpen, habitatImportanceMenuOpen, habitatSeasonMenuOpen]);
+  }, [habitatBreadthMenuOpen, habitatImportanceMenuOpen, habitatSeasonMenuOpen, habitatSuitabilityMenuOpen]);
 
   // Stable callback for debounced search input
   const handleSearch = useCallback((value: string) => {
@@ -1282,21 +1298,22 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
     return getSpeciesReviewers(s).some(r => { const rl = r.toLowerCase(); return sels.some(x => rl.includes(x)); });
   }, [selectedReviewers, getSpeciesReviewers]);
 
-  // Consolidates all 4 habitat-related filters into one predicate (rather than 4
+  // Consolidates all 5 habitat-related filters into one predicate (rather than 5
   // separate inline checks repeated at every filter site) since major/resident both
   // need the full parsed entry list, not just codes — cheaper to parse once per
   // species per call than to re-derive it 2-3x over.
-  // The specialists/exclude-minor/season logic itself lives in @/lib/habitat-filter
-  // (a pure function, unit tested) — this just binds it to the component's
-  // current filter state.
+  // The specialists/exclude-minor/season/suitability logic itself lives in
+  // @/lib/habitat-filter (a pure function, unit tested) — this just binds it to
+  // the component's current filter state.
   const matchesHabitatFilter = useCallback((s: Species): boolean =>
     matchesHabitatCriteria(s.habitat_codes, {
       selectedHabitat,
       breadth: habitatBreadth,
       importance: selectedHabitatImportance,
       seasons: selectedHabitatSeasons,
+      suitability: selectedHabitatSuitability,
     }),
-  [selectedHabitat, habitatBreadth, selectedHabitatImportance, selectedHabitatSeasons]);
+  [selectedHabitat, habitatBreadth, selectedHabitatImportance, selectedHabitatSeasons, selectedHabitatSuitability]);
 
   // Species details cache (images, criteria, common names)
   const [speciesDetails, setSpeciesDetails] = useState<Record<number, SpeciesDetails>>({});
@@ -2013,14 +2030,15 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
         for (let i = 1; i <= parts.length; i++) {
           const prefix = parts.slice(0, i).join(".");
           if (counted.has(prefix)) continue;
-          // Importance/Season are checked against entries belonging to THIS
-          // bar's category specifically — e.g. with "Not major" unchecked, the
+          // Importance/Season/Suitability are checked against entries belonging to
+          // THIS bar's category specifically — e.g. with "Not major" unchecked, the
           // Forest bar only counts species whose Forest entry (not some other
           // habitat of theirs) is confirmed non-minor.
-          if (habitatImportanceActive || habitatSeasonsActive) {
+          if (habitatImportanceActive || habitatSeasonsActive || habitatSuitabilityActive) {
             const relevantForPrefix = entries.filter(e => e.code === prefix || e.code.startsWith(prefix + "."));
             if (habitatImportanceActive && !relevantForPrefix.some(e => selectedHabitatImportance.has(e.importance))) continue;
             if (habitatSeasonsActive && !relevantForPrefix.some(e => selectedHabitatSeasons.has(e.season))) continue;
+            if (habitatSuitabilityActive && !relevantForPrefix.some(e => selectedHabitatSuitability.has(e.suitability))) continue;
           }
           counted.add(prefix);
           counts[prefix] = (counts[prefix] || 0) + 1;
@@ -2028,7 +2046,7 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
       }
     });
     return counts;
-  }, [taxaFilteredSpecies, selectedCategories, selectedCountries, selectedYearRanges, selectedObsRanges, selectedSystems, selectedPopulationTrends, selectedMovementPatterns, selectedThreats, selectedCriteria, matchesSearch, matchesAssessorsFilter, matchesReviewersFilter, matchesObsRangeFilter, matchesYearRangeFilter, selectedAssessmentYears, matchesAssessmentYearFilter, habitatBreadth, selectedHabitatImportance, selectedHabitatSeasons, habitatImportanceActive, habitatSeasonsActive]);
+  }, [taxaFilteredSpecies, selectedCategories, selectedCountries, selectedYearRanges, selectedObsRanges, selectedSystems, selectedPopulationTrends, selectedMovementPatterns, selectedThreats, selectedCriteria, matchesSearch, matchesAssessorsFilter, matchesReviewersFilter, matchesObsRangeFilter, matchesYearRangeFilter, selectedAssessmentYears, matchesAssessmentYearFilter, habitatBreadth, selectedHabitatImportance, selectedHabitatSeasons, selectedHabitatSuitability, habitatImportanceActive, habitatSeasonsActive, habitatSuitabilityActive]);
 
   // Handle region filter — select all countries in the chosen region
   const handleRegionFilter = useCallback((region: string) => {
@@ -2703,6 +2721,7 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
     && !habitatBreadth
     && !habitatImportanceActive
     && !habitatSeasonsActive
+    && !habitatSuitabilityActive
     && selectedGrowthForms.size === 0
     && selectedAssessors.size === 0
     && selectedReviewers.size === 0
@@ -3075,7 +3094,7 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
             <div className="relative" ref={habitatBreadthMenuRef}>
               <button
                 type="button"
-                onClick={() => { setHabitatBreadthMenuOpen(prev => !prev); setHabitatImportanceMenuOpen(false); setHabitatSeasonMenuOpen(false); }}
+                onClick={() => { setHabitatBreadthMenuOpen(prev => !prev); setHabitatImportanceMenuOpen(false); setHabitatSeasonMenuOpen(false); setHabitatSuitabilityMenuOpen(false); }}
                 className={toggleClass(habitatBreadth !== null)}
                 aria-expanded={habitatBreadthMenuOpen}
               >
@@ -3121,7 +3140,7 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
             <div className="relative" ref={habitatImportanceMenuRef}>
               <button
                 type="button"
-                onClick={() => { setHabitatImportanceMenuOpen(prev => !prev); setHabitatBreadthMenuOpen(false); setHabitatSeasonMenuOpen(false); }}
+                onClick={() => { setHabitatImportanceMenuOpen(prev => !prev); setHabitatBreadthMenuOpen(false); setHabitatSeasonMenuOpen(false); setHabitatSuitabilityMenuOpen(false); }}
                 className={toggleClass(habitatImportanceActive)}
                 aria-expanded={habitatImportanceMenuOpen}
               >
@@ -3157,7 +3176,7 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
             <div className="relative" ref={habitatSeasonMenuRef}>
               <button
                 type="button"
-                onClick={() => { setHabitatSeasonMenuOpen(prev => !prev); setHabitatBreadthMenuOpen(false); setHabitatImportanceMenuOpen(false); }}
+                onClick={() => { setHabitatSeasonMenuOpen(prev => !prev); setHabitatBreadthMenuOpen(false); setHabitatImportanceMenuOpen(false); setHabitatSuitabilityMenuOpen(false); }}
                 className={toggleClass(habitatSeasonsActive)}
                 aria-expanded={habitatSeasonMenuOpen}
               >
@@ -3175,6 +3194,42 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
                         type="checkbox"
                         checked={selectedHabitatSeasons.has(value)}
                         onChange={() => setSelectedHabitatSeasons(prev => {
+                          const next = new Set(prev);
+                          if (next.has(value)) next.delete(value); else next.add(value);
+                          return next;
+                        })}
+                        className="rounded border-zinc-300 dark:border-zinc-600 text-teal-600 focus:ring-teal-500"
+                      />
+                      {short}
+                    </label>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* Suitability — multi-select checkbox list, all checked by default
+                (nothing excluded), covering all 3 IUCN suitability values. */}
+            <div className="relative" ref={habitatSuitabilityMenuRef}>
+              <button
+                type="button"
+                onClick={() => { setHabitatSuitabilityMenuOpen(prev => !prev); setHabitatBreadthMenuOpen(false); setHabitatImportanceMenuOpen(false); setHabitatSeasonMenuOpen(false); }}
+                className={toggleClass(habitatSuitabilityActive)}
+                aria-expanded={habitatSuitabilityMenuOpen}
+              >
+                Suitability{habitatSuitabilityActive ? ` (${selectedHabitatSuitability.size})` : ""} ▾
+              </button>
+              {habitatSuitabilityMenuOpen && (
+                <div className="absolute right-0 top-full mt-1 z-20 bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-lg shadow-lg py-1 w-48">
+                  {HABITAT_SUITABILITY_OPTIONS.map(({ value, short }) => (
+                    <label
+                      key={value}
+                      className="flex items-center gap-2 px-3 py-1.5 text-xs text-zinc-700 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-700/50 cursor-pointer"
+                      title={value === "Unknown" ? "Suitability not recorded in the IUCN DB" : value}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={selectedHabitatSuitability.has(value)}
+                        onChange={() => setSelectedHabitatSuitability(prev => {
                           const next = new Set(prev);
                           if (next.has(value)) next.delete(value); else next.add(value);
                           return next;
@@ -3797,9 +3852,9 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
                   </svg>
                   More Filters
-                  {(selectedGrowthForms.size + selectedHabitat.size + (habitatBreadth ? 1 : 0) + (habitatImportanceActive ? 1 : 0) + (habitatSeasonsActive ? 1 : 0) + selectedSystems.size + selectedMovementPatterns.size + selectedPopulationTrends.size + selectedCriteria.size + selectedAssessors.size + selectedReviewers.size > 0) && (
+                  {(selectedGrowthForms.size + selectedHabitat.size + (habitatBreadth ? 1 : 0) + (habitatImportanceActive ? 1 : 0) + (habitatSeasonsActive ? 1 : 0) + (habitatSuitabilityActive ? 1 : 0) + selectedSystems.size + selectedMovementPatterns.size + selectedPopulationTrends.size + selectedCriteria.size + selectedAssessors.size + selectedReviewers.size > 0) && (
                     <span className="ml-1 px-1.5 py-0.5 text-[10px] rounded-full bg-zinc-200 dark:bg-zinc-700 text-zinc-600 dark:text-zinc-300">
-                      {selectedGrowthForms.size + selectedHabitat.size + (habitatBreadth ? 1 : 0) + (habitatImportanceActive ? 1 : 0) + (habitatSeasonsActive ? 1 : 0) + selectedSystems.size + selectedMovementPatterns.size + selectedPopulationTrends.size + selectedCriteria.size + selectedAssessors.size + selectedReviewers.size} active
+                      {selectedGrowthForms.size + selectedHabitat.size + (habitatBreadth ? 1 : 0) + (habitatImportanceActive ? 1 : 0) + (habitatSeasonsActive ? 1 : 0) + (habitatSuitabilityActive ? 1 : 0) + selectedSystems.size + selectedMovementPatterns.size + selectedPopulationTrends.size + selectedCriteria.size + selectedAssessors.size + selectedReviewers.size} active
                     </span>
                   )}
                 </button>
@@ -4088,7 +4143,7 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
               </svg>
             </div>
-            {(selectedTaxa.size > 0 || selectedSubgroups.size > 0 || selectedCategories.size > 0 || selectedYearRanges.size > 0 || selectedAssessmentYears.size > 0 || selectedDescribedYears.size > 0 || selectedObsRanges.size > 0 || selectedCountries.size > 0 || selectedSystems.size > 0 || endemicsOnly || selectedGrowthForms.size > 0 || selectedPopulationTrends.size > 0 || selectedMovementPatterns.size > 0 || selectedThreats.size > 0 || selectedCriteria.size > 0 || selectedHabitat.size > 0 || habitatBreadth || habitatImportanceActive || habitatSeasonsActive || selectedAssessors.size > 0 || selectedReviewers.size > 0 || showOnlyStarred || exactFilters.outdated || exactFilters.minObs != null || exactFilters.maxObs != null || exactFilters.minAssessmentYear != null || exactFilters.maxAssessmentYear != null || exactFilters.minDescribedYear != null || exactFilters.maxDescribedYear != null) && (
+            {(selectedTaxa.size > 0 || selectedSubgroups.size > 0 || selectedCategories.size > 0 || selectedYearRanges.size > 0 || selectedAssessmentYears.size > 0 || selectedDescribedYears.size > 0 || selectedObsRanges.size > 0 || selectedCountries.size > 0 || selectedSystems.size > 0 || endemicsOnly || selectedGrowthForms.size > 0 || selectedPopulationTrends.size > 0 || selectedMovementPatterns.size > 0 || selectedThreats.size > 0 || selectedCriteria.size > 0 || selectedHabitat.size > 0 || habitatBreadth || habitatImportanceActive || habitatSeasonsActive || habitatSuitabilityActive || selectedAssessors.size > 0 || selectedReviewers.size > 0 || showOnlyStarred || exactFilters.outdated || exactFilters.minObs != null || exactFilters.maxObs != null || exactFilters.minAssessmentYear != null || exactFilters.maxAssessmentYear != null || exactFilters.minDescribedYear != null || exactFilters.maxDescribedYear != null) && (
               <button
                 onClick={() => {
                   clearAllFiltersAndTaxa();
@@ -4354,6 +4409,16 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
                 className="px-3 py-1.5 text-sm font-medium rounded-full bg-teal-100 text-teal-600 dark:bg-teal-900/30 dark:text-teal-400 flex items-center gap-1 hover:opacity-80"
               >
                 {short}
+                <span className="text-sm">×</span>
+              </button>
+            ))}
+            {habitatSuitabilityActive && HABITAT_SUITABILITY_OPTIONS.filter(({ value }) => selectedHabitatSuitability.has(value)).map(({ value, short }) => (
+              <button
+                key={`habitat-suitability-${value}`}
+                onClick={() => setSelectedHabitatSuitability(prev => { const next = new Set(prev); next.delete(value); return next; })}
+                className="px-3 py-1.5 text-sm font-medium rounded-full bg-teal-100 text-teal-600 dark:bg-teal-900/30 dark:text-teal-400 flex items-center gap-1 hover:opacity-80"
+              >
+                {short} suitability
                 <span className="text-sm">×</span>
               </button>
             ))}

@@ -5,6 +5,7 @@ import {
   coarseKnownCategories,
   ALL_HABITAT_SEASONS,
   ALL_HABITAT_IMPORTANCE,
+  ALL_HABITAT_SUITABILITY,
   type HabitatFilterCriteria,
 } from "../habitat-filter";
 
@@ -16,6 +17,7 @@ const noFilter: HabitatFilterCriteria = {
   breadth: null,
   importance: new Set(ALL_HABITAT_IMPORTANCE),
   seasons: new Set(ALL_HABITAT_SEASONS),
+  suitability: new Set(ALL_HABITAT_SUITABILITY),
 };
 
 describe("parseHabitatEntries", () => {
@@ -160,6 +162,29 @@ describe("matchesHabitatFilter — importance", () => {
   });
 });
 
+describe("matchesHabitatFilter — suitability", () => {
+  it("unchecking 'Marginal' keeps species with at least one non-marginal (suitable or unknown) entry", () => {
+    const f = { ...noFilter, suitability: new Set(["Suitable", "Unknown"]) };
+    expect(matchesHabitatFilter(["1.1:R:S:1"], f)).toBe(true); // suitable
+    expect(matchesHabitatFilter(["1.1:R:-:1"], f)).toBe(true); // unrecorded, kept
+    expect(matchesHabitatFilter(["1.1:R:M:1"], f)).toBe(false); // confirmed marginal only
+    expect(matchesHabitatFilter(["1.1:R:M:1", "4.1:R:S:1"], f)).toBe(true); // one suitable elsewhere
+  });
+
+  it("scopes to the selected habitat's own entries, not just any habitat", () => {
+    const f = { ...noFilter, selectedHabitat: new Set(["1"]), suitability: new Set(["Suitable", "Unknown"]) };
+    expect(matchesHabitatFilter(["1.1:R:M:1", "4.1:R:S:1"], f)).toBe(false);
+    expect(matchesHabitatFilter(["1.1:R:S:1", "4.1:R:M:1"], f)).toBe(true);
+    expect(matchesHabitatFilter(["1.1:R:-:1"], f)).toBe(true);
+  });
+
+  it("checking only one value (e.g. just 'Marginal') restricts to that value alone", () => {
+    const f = { ...noFilter, suitability: new Set(["Marginal"]) };
+    expect(matchesHabitatFilter(["1.1:R:M:1"], f)).toBe(true);
+    expect(matchesHabitatFilter(["1.1:R:S:1"], f)).toBe(false);
+  });
+});
+
 describe("matchesHabitatFilter — seasons", () => {
   it("unchecking a season excludes species whose relevant entries are only that season", () => {
     const f = { ...noFilter, seasons: new Set(["Resident", "Breeding Season", "Non-Breeding Season", "Passage"]) }; // Unknown unchecked
@@ -183,14 +208,15 @@ describe("matchesHabitatFilter — seasons", () => {
 });
 
 describe("matchesHabitatFilter — combined filters", () => {
-  it("ANDs selectedHabitat, breadth, importance, and seasons together", () => {
+  it("ANDs selectedHabitat, breadth, importance, seasons, and suitability together", () => {
     const f: HabitatFilterCriteria = {
       selectedHabitat: new Set(["1"]),
       breadth: "specialist",
       importance: new Set(["Major", "Unknown"]),
       seasons: new Set(["Resident"]),
+      suitability: new Set(["Suitable", "Unknown"]),
     };
-    // Passes all four: only Forest, matches selection, major, Resident.
+    // Passes all five: only Forest, matches selection, major, Resident, suitable.
     expect(matchesHabitatFilter(["1.1:R:S:1"], f)).toBe(true);
     // Fails breadth (two coarse categories, not a specialist).
     expect(matchesHabitatFilter(["1.1:R:S:1", "4.1:R:S:1"], f)).toBe(false);
@@ -198,5 +224,7 @@ describe("matchesHabitatFilter — combined filters", () => {
     expect(matchesHabitatFilter(["1.1:R:S:0"], f)).toBe(false);
     // Fails seasons (Forest entry is Breeding, not Resident).
     expect(matchesHabitatFilter(["1.1:B:S:1"], f)).toBe(false);
+    // Fails suitability (Forest entry confirmed marginal, "Marginal" unchecked).
+    expect(matchesHabitatFilter(["1.1:R:M:1"], f)).toBe(false);
   });
 });

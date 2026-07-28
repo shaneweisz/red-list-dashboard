@@ -30,6 +30,7 @@ const HABITAT_IMPORTANCE_LABELS: Record<string, string> = {
  *  the full "nothing excluded" set for each checkbox dropdown's default. */
 export const ALL_HABITAT_SEASONS = ["Resident", "Breeding Season", "Non-Breeding Season", "Passage", "Seasonal Occurrence Unknown"];
 export const ALL_HABITAT_IMPORTANCE = ["Major", "Not major", "Unknown"];
+export const ALL_HABITAT_SUITABILITY = ["Suitable", "Marginal", "Unknown"];
 
 /** The IUCN "Unknown" top-level habitat category — has no subtypes, so a
  *  species recorded only here has no *known* habitat and can't be a
@@ -78,16 +79,19 @@ export interface HabitatFilterCriteria {
   importance: Set<string>;
   /** Which season values to include — defaults to ALL_HABITAT_SEASONS. */
   seasons: Set<string>;
+  /** Which suitability values to include — defaults to ALL_HABITAT_SUITABILITY. */
+  suitability: Set<string>;
 }
 
 export function matchesHabitatFilter(
   habitatCodes: string[] | null | undefined,
   criteria: HabitatFilterCriteria
 ): boolean {
-  const { selectedHabitat, breadth, importance, seasons } = criteria;
+  const { selectedHabitat, breadth, importance, seasons, suitability } = criteria;
   const importanceActive = isRestrictiveSelection(importance, ALL_HABITAT_IMPORTANCE);
   const seasonsActive = isRestrictiveSelection(seasons, ALL_HABITAT_SEASONS);
-  if (selectedHabitat.size === 0 && !breadth && !importanceActive && !seasonsActive) return true;
+  const suitabilityActive = isRestrictiveSelection(suitability, ALL_HABITAT_SUITABILITY);
+  if (selectedHabitat.size === 0 && !breadth && !importanceActive && !seasonsActive && !suitabilityActive) return true;
 
   const entries = parseHabitatEntries(habitatCodes);
   const codes = Array.from(new Set(entries.map(e => e.code)));
@@ -114,6 +118,7 @@ export function matchesHabitatFilter(
 
   if (importanceActive && !relevant.some(e => importance.has(e.importance))) return false;
   if (seasonsActive && !relevant.some(e => seasons.has(e.season))) return false;
+  if (suitabilityActive && !relevant.some(e => suitability.has(e.suitability))) return false;
 
   return true;
 }
