@@ -49,6 +49,10 @@ skills-lock.json
 !.claude/skills/
 !.claude/skills/**
 
+# Supabase CLI local project link/state (project ref, pooler URL, etc.) —
+# distinct from app/supabase/migrations/, which IS committed.
+/supabase/
+
 # Red List docs
 2025-1_RL_Table_1a.pdf
 2025-2_RL_Table1a.pdf
