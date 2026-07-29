@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getTaxonConfig } from "@/config/taxa";
 import { CACHE_1H } from "@/lib/cache-headers";
+import { GBIF_CHECKLIST_KEY } from "@/lib/gbif";
 
 interface CountryStats {
   [countryCode: string]: {
@@ -29,6 +30,7 @@ export async function GET(request: NextRequest) {
   try {
     // Build query params based on taxon configuration
     const occurrenceParams = new URLSearchParams({
+      checklistKey: GBIF_CHECKLIST_KEY,
       facet: "country",
       facetLimit: "300",
       limit: "0",
@@ -64,6 +66,7 @@ export async function GET(request: NextRequest) {
       const classPromises = allClassKeys.map(async (classKey) => {
         const params = new URLSearchParams({
           classKey: classKey.toString(),
+          checklistKey: GBIF_CHECKLIST_KEY,
           facet: "country",
           facetLimit: "300",
           limit: "0",

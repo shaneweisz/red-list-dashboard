@@ -5,6 +5,7 @@ import { createPortal } from "react-dom";
 import dynamic from "next/dynamic";
 import TaxaSummary from "./TaxaSummary";
 import NewLiteratureSinceAssessment from "../LiteratureSearch";
+import { GBIF_CHECKLIST_KEY, gbifOccurrenceParams } from "@/lib/gbif";
 import RedListAssessments from "../RedListAssessments";
 import CitesSummary from "../CitesSummary";
 import WikipediaSummary from "../WikipediaSummary";
@@ -2452,7 +2453,7 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
             ),
             // Check GBIF match status for species missing from CSV
             !s.gbif_species_key
-              ? fetch(`https://api.gbif.org/v1/species/match?name=${encodeURIComponent(s.scientific_name)}`, { signal })
+              ? fetch(`https://api.gbif.org/v1/species/match?checklistKey=${GBIF_CHECKLIST_KEY}&name=${encodeURIComponent(s.scientific_name)}`, { signal })
               : Promise.resolve(null),
           ];
 
@@ -2805,8 +2806,9 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
   // The backbone is frozen (last updated 2023), so the durable fix is to store
   // CoL keys in the pipeline instead — a much larger migration, tracked in #441.
   // Until then this keeps every link working.
-  const GBIF_BACKBONE_CHECKLIST_KEY = "d7dddbf4-2cf0-4f39-9b2a-bb099caae36c";
-  const GBIF_FILTERS = `checklistKey=${GBIF_BACKBONE_CHECKLIST_KEY}&hasCoordinate=true&hasGeospatialIssue=false&basisOfRecord=HUMAN_OBSERVATION&basisOfRecord=MACHINE_OBSERVATION&basisOfRecord=OCCURRENCE&basisOfRecord=MATERIAL_SAMPLE&basisOfRecord=OBSERVATION`;
+  // Built from the shared module so the links and the queries behind the numbers
+  // they sit next to can never name different checklists.
+  const GBIF_FILTERS = gbifOccurrenceParams().toString();
   const isNE = (s: Species) => s.category === "NE";
 
   // GBIF occurrence counts aren't filterable per-country/category/etc. — only show

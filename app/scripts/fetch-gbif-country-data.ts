@@ -29,6 +29,7 @@ import {
   readGbifCsv,
   writeGbifCsv,
 } from "./fetch-gbif-species";
+import { GBIF_CHECKLIST_KEY, INCLUDED_BASIS_OF_RECORD } from "../src/lib/gbif";
 
 // =============================================================================
 // CONFIGURATION
@@ -37,14 +38,6 @@ import {
 const MAX_RETRIES = 5;
 const CONCURRENCY = 20;
 const FACET_LIMIT = 200000;
-
-const INCLUDED_BASIS_OF_RECORD = [
-  "HUMAN_OBSERVATION",
-  "MACHINE_OBSERVATION",
-  "OCCURRENCE",
-  "MATERIAL_SAMPLE",
-  "OBSERVATION",
-];
 
 // GBIF kingdom keys covering all taxa in the dashboard
 const KINGDOM_KEYS = [
@@ -101,6 +94,7 @@ async function gbifGet(params: URLSearchParams): Promise<GbifResponse | null> {
 /** Fetch the list of countries with occurrences for a given kingdom. */
 async function fetchCountriesForKingdom(kingdomKey: number): Promise<string[]> {
   const params = new URLSearchParams({
+    checklistKey: GBIF_CHECKLIST_KEY,
     hasCoordinate: "true",
     hasGeospatialIssue: "false",
     facet: "country",
@@ -132,6 +126,7 @@ async function fetchSpeciesInKingdomCountry(
 
   while (hasMore) {
     const params = new URLSearchParams({
+      checklistKey: GBIF_CHECKLIST_KEY,
       hasCoordinate: "true",
       hasGeospatialIssue: "false",
       facet: "speciesKey",

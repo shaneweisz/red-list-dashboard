@@ -19,6 +19,7 @@ import {
   toTitleCase,
 } from "./utils";
 import { getTaxa, type Taxon, type GbifQuery } from "./taxa";
+import { GBIF_CHECKLIST_KEY, INCLUDED_BASIS_OF_RECORD } from "../src/lib/gbif";
 
 // =============================================================================
 // GBIF TAXA (legacy lookup — used by fetch-gbif-new-counts)
@@ -34,14 +35,6 @@ const FACET_LIMIT = 100000;
 const REQUEST_DELAY = 200; // ms between GBIF requests
 const SPECIES_VALIDATION_BATCH_SIZE = 1000;
 const MAX_RETRIES = 5;
-
-const INCLUDED_BASIS_OF_RECORD = [
-  "HUMAN_OBSERVATION",
-  "MACHINE_OBSERVATION",
-  "OCCURRENCE",
-  "MATERIAL_SAMPLE",
-  "OBSERVATION",
-];
 
 // =============================================================================
 // TYPES
@@ -91,6 +84,7 @@ export async function fetchFacets(
 
   while (hasMore) {
     const params = new URLSearchParams({
+      checklistKey: GBIF_CHECKLIST_KEY,
       hasCoordinate: "true",
       hasGeospatialIssue: "false",
       facet: "speciesKey",

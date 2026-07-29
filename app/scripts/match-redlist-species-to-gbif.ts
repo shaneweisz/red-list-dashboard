@@ -29,6 +29,7 @@ import {
 import { readRedlistCsv } from "./fetch-redlist-species";
 import { readGbifCsv } from "./fetch-gbif-species";
 import { TAXA } from "./taxa";
+import { GBIF_CHECKLIST_KEY } from "../src/lib/gbif";
 
 // =============================================================================
 // CONFIGURATION
@@ -68,7 +69,7 @@ interface GbifMatchResponse {
 export async function matchGbifSpecies(
   name: string
 ): Promise<{ key: number | null; matchType: string }> {
-  const params = new URLSearchParams({ name, strict: "true" });
+  const params = new URLSearchParams({ name, strict: "true", checklistKey: GBIF_CHECKLIST_KEY });
 
   let response: Response | undefined;
   for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
