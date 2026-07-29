@@ -15,12 +15,14 @@ import {
   SyncLogger,
   writeCsv,
   readCsv,
-  DATA_DIR,
   GBIF_DIR,
   delay,
   toTitleCase,
 } from "./utils";
 import { getTaxa, type Taxon, type GbifQuery } from "./taxa";
+
+/** Build-time scratch, outside the published data set. */
+const CACHE_DIR = path.join(__dirname, "..", ".sync-cache");
 import { GBIF_CHECKLIST_KEY, INCLUDED_BASIS_OF_RECORD } from "../src/lib/gbif";
 
 // =============================================================================
@@ -264,11 +266,18 @@ async function resolveSpeciesKey(key: string): Promise<CachedSpecies> {
 }
 
 /**
- * Key → resolution cache, kept beside the data. Facet keys are stable between
- * syncs, so this turns the second and later runs into mostly-local work. Negative
- * results are cached too: a key that is not an accepted species stays that way.
+ * Key → resolution cache. Facet keys are stable between syncs, so this turns the
+ * second and later runs into mostly-local work. Negative results are cached too:
+ * a key that is not an accepted species stays that way.
+ *
+ * Deliberately NOT under data/. Everything in that directory is published to R2,
+ * pulled back down at build time and bundled into every serverless function — and
+ * at 92MB this cache pushed a function past Vercel's 250MB limit and failed the
+ * deploy. It is a build-time artifact of this machine, not data the app serves,
+ * so it lives outside the published set entirely rather than relying on an
+ * exclusion list to remember that.
  */
-const KEY_CACHE_PATH = path.join(DATA_DIR, "gbif-key-cache.json");
+const KEY_CACHE_PATH = path.join(CACHE_DIR, "gbif-key-cache.json");
 
 function loadKeyCache(): Record<string, CachedSpecies> {
   try {
@@ -282,6 +291,7 @@ function loadKeyCache(): Record<string, CachedSpecies> {
 }
 
 function saveKeyCache(cache: Record<string, CachedSpecies>): void {
+  fs.mkdirSync(CACHE_DIR, { recursive: true });
   fs.writeFileSync(KEY_CACHE_PATH, JSON.stringify(cache));
 }
 
