@@ -223,6 +223,34 @@ describe("matchSpeciesList — empty input", () => {
   });
 });
 
+describe("classification context", () => {
+  it("passes the species' classification to the matcher", async () => {
+    // Not decoration. "Agelaius phoeniceus" asked of GBIF with no context comes
+    // back HIGHERRANK/Animalia — 21 million occurrence records, unmatched — and
+    // EXACT once kingdom and class are attached. The context was threaded into
+    // SpeciesInput and then not passed on, so every match ran contextless and the
+    // bird lost all 21M records. Nothing failed; the data was just wrong.
+    const seen: Array<Record<string, unknown> | undefined> = [];
+    const matchFn: MatchFn = async (_name, context) => {
+      seen.push(context as Record<string, unknown> | undefined);
+      return { key: "100", matchType: "EXACT" };
+    };
+    const species: SpeciesInput[] = [
+      {
+        sis_taxon_id: 1,
+        scientific_name: "Agelaius phoeniceus",
+        synonyms: [],
+        context: { kingdom: "Animalia", class_name: "aves", order_name: "passeriformes", family: "icteridae" },
+      },
+    ];
+
+    await matchSpeciesList(species, new Set(["100"]), logger, matchFn, 1);
+
+    expect(seen).toHaveLength(1);
+    expect(seen[0]).toMatchObject({ kingdom: "Animalia", class_name: "aves" });
+  });
+});
+
 describe("shouldFollowSynonym", () => {
   // A synonym can mean two very different things, and only one of them should be
   // followed. Getting this wrong is what put 3.4M records of a common butterfly

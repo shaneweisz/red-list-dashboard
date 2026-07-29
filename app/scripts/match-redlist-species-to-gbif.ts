@@ -360,7 +360,7 @@ export async function matchSpeciesList(
     concurrency,
     async (task): Promise<MatchResult> => {
       try {
-        const { key, matchType } = await matchFn(task.name);
+        const { key, matchType } = await matchFn(task.name, task.species.context);
         progress++;
         if (progress % 1000 === 0) {
           process.stdout.write(`\r  Matched ${progress}/${tasks.length}`);
