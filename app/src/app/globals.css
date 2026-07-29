@@ -45,6 +45,19 @@ th.sticky {
   box-shadow: 2px 0 4px -2px rgba(0, 0, 0, 0.3);
 }
 
+/* FilterBarChart bars are clickable divs wrapping a recharts SVG; recharts'
+   accessibility layer puts tabIndex={0} on that SVG so keyboard users can
+   reach the tooltip, but that also makes every mouse click focus it, and the
+   browser's default focus ring then outlines the whole chart until the user
+   clicks elsewhere. Suppress it on plain click, keep it on keyboard focus. */
+svg.recharts-surface:focus {
+  outline: none;
+}
+svg.recharts-surface:focus-visible {
+  outline: 2px solid #6366f1;
+  outline-offset: -2px;
+}
+
 /* Shape marker icons: strip default leaflet-div-icon styles */
 .shape-marker-icon {
   background: none !important;
