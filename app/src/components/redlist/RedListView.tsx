@@ -3232,7 +3232,7 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
                 }}
                 className={`px-1.5 py-0.5 text-[11px] rounded-full transition-colors cursor-pointer ${
                   isSelected
-                    ? "bg-teal-500 text-white"
+                    ? "bg-teal-600 text-white"
                     : "bg-zinc-100 text-zinc-600 hover:bg-zinc-200 dark:bg-zinc-800 dark:text-zinc-400 dark:hover:bg-zinc-700"
                 }`}
               >
