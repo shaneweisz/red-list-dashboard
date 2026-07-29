@@ -12,11 +12,6 @@ const CSV_COLUMNS: { header: string; getValue: (s: RedListSpecies) => string }[]
   { header: "Population Trend", getValue: (s) => s.population_trend ?? "" },
   { header: "Countries", getValue: (s) => s.countries.join("; ") },
   { header: "GBIF Occurrence Count", getValue: (s) => s.gbif_occurrence_count?.toString() ?? "" },
-  // Derived (total minus after-assessment) to match the "GBIF At Assess." table column
-  { header: "GBIF Observations At Assessment Year", getValue: (s) =>
-    s.gbif_occurrence_count == null || s.gbif_observations_after_assessment_year == null
-      ? ""
-      : Math.max(0, s.gbif_occurrence_count - s.gbif_observations_after_assessment_year).toString() },
   { header: "GBIF Observations After Assessment Year", getValue: (s) => s.gbif_observations_after_assessment_year?.toString() ?? "" },
   { header: "SIS Taxon ID", getValue: (s) => s.sis_taxon_id?.toString() ?? "" },
   { header: "Assessment ID", getValue: (s) => s.assessment_id?.toString() ?? "" },
