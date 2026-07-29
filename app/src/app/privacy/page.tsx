@@ -26,7 +26,8 @@ export default function PrivacyPage() {
           This dashboard is part of a PhD research project at the University of
           Cambridge, which is the data controller. We collect a small amount of{" "}
           <strong>anonymous usage analytics</strong> to understand how the
-          dashboard is used and to improve it.
+          dashboard is used and to improve it, and — only if you choose to sign
+          in — the account details described below.
         </p>
 
         <p>
@@ -40,9 +41,10 @@ export default function PrivacyPage() {
           >
             PostHog
           </a>{" "}
-          (hosted in the EU). This data is not linked to your identity. We do{" "}
-          <strong>not</strong> use analytics cookies or store any identifier on
-          your device, so no cookie banner is needed. We also use{" "}
+          (hosted in the EU). This data is not linked to your identity, even if
+          you are signed in. We do <strong>not</strong> use analytics cookies or
+          store any analytics identifier on your device, so no cookie banner is
+          needed. We also use{" "}
           <a
             href="https://sentry.io"
             target="_blank"
@@ -55,9 +57,40 @@ export default function PrivacyPage() {
         </p>
 
         <p>
+          <strong>If you sign in.</strong> Signing in is optional — everything
+          the dashboard shows by default is public, and you do not need an
+          account to use it. If you do sign in with Google, Microsoft or GitHub,
+          we store the email address, name and profile picture that provider
+          gives us, so the site can show who you are signed in as and manage
+          access to some features. We never receive your password. Accounts are
+          handled by{" "}
+          <a
+            href="https://supabase.com"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="underline hover:text-zinc-800 dark:hover:text-zinc-200"
+          >
+            Supabase
+          </a>{" "}
+          (hosted in the EU), and signing in stores a cookie on your device to
+          keep you signed in.
+          That cookie is strictly necessary for signing in to work, so it does
+          not require a consent banner. To have your account and everything
+          stored with it deleted, email{" "}
+          <a
+            href="mailto:sw984@cam.ac.uk"
+            className="underline hover:text-zinc-800 dark:hover:text-zinc-200"
+          >
+            sw984@cam.ac.uk
+          </a>
+          .
+        </p>
+
+        <p>
           <strong>Why.</strong> We process this data under our legitimate
-          interest in maintaining and improving a public research tool. We do
-          not sell it or use it for advertising.
+          interest in maintaining and improving a public research tool, and — for
+          account details — in offering sign-in at all. We do not sell it or use
+          it for advertising.
         </p>
 
         <p>

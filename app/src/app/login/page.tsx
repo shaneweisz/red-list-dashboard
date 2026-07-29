@@ -3,7 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { SignInForm } from "./SignInForm";
 
 const ERROR_MESSAGES: Record<string, string> = {
-  oauth_init_failed: "Couldn't start the GitHub sign-in flow. Please try again.",
+  oauth_init_failed: "Couldn't start the sign-in flow. Please try again.",
   auth_callback_failed: "Sign-in didn't complete. Please try again.",
 };
 
@@ -28,7 +28,7 @@ export default async function LoginPage({
       <div className="w-full max-w-sm text-center">
         <h1 className="text-2xl font-bold text-zinc-900 dark:text-zinc-100 mb-2">Sign in</h1>
         <p className="text-sm text-zinc-500 dark:text-zinc-400 mb-6">
-          Sign in with your GitHub account to continue.
+          Choose an account to continue.
         </p>
         {error && (
           <p className="text-sm text-red-600 dark:text-red-400 mb-4">
