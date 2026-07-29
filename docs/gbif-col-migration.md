@@ -137,10 +137,22 @@ Each stage is independently reviewable and independently revertable.
 - **E** — drop-rate guards; regression-diff phase; one species one key in `build-parquet`.
 - **F** — sync, verify against every species the review named, open the PR.
 
-## Open decision
+## What P3 costs, measured
 
-P3 means a Red List species that CoL lumps into another species shows **no GBIF
-data**, where today it shows its own (backbone) counts. That is a deliberate
-trade: a blank instead of a wrong number. The alternative is to show the accepted
-species' counts with an explicit "CoL treats this as a synonym of X" note in the
-UI, which is more informative but more work and more surface area.
+Blanking a lumped species is not free, and the size of the bill is worth stating.
+
+Under the backbone, *Pararge xiphioides* — a Canary Islands endemic — displayed
+**3,428,847** occurrence records. Its own key holds **4,738**. The rest belonged
+to *Pararge aegeria*, a widespread European butterfly CoL treats it as a synonym
+of. So the pre-migration number was already wrong, by three orders of magnitude,
+and blanking it removes far more error than information.
+
+But 4,738 records *were* its own, and blanking loses them too. Sampled across
+lumped species the residue is small — 6 records for *Hipparchia neapolitana*, 24
+for *Pieris segonzaci*, 1 for *Cottus jaxartensis*, 0 for *Sus bucculentus* —
+because GBIF attributes most records to the accepted taxon.
+
+Recovering it is possible: the synonym's own key carries exactly those records.
+It is not done here because the counts come from the facet enumeration, which
+emits accepted keys, so a synonym key would need a separate query per lumped
+species. Worth doing if the residue ever looks larger than it does now.

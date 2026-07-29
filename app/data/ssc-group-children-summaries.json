@@ -51,7 +51,7 @@
       "estimatedDescribed": 0,
       "totalAssessed": 2,
       "outdated": 0,
-      "gbifNeSpeciesCount": 1,
+      "gbifNeSpeciesCount": 0,
       "byCategory": {
         "NT": 1,
         "CR": 1
@@ -160,7 +160,7 @@
       "estimatedDescribed": 0,
       "totalAssessed": 80,
       "outdated": 78,
-      "gbifNeSpeciesCount": 1,
+      "gbifNeSpeciesCount": 2,
       "byCategory": {
         "EN": 8,
         "LC": 50,
@@ -216,7 +216,7 @@
       "estimatedDescribed": 0,
       "totalAssessed": 42,
       "outdated": 1,
-      "gbifNeSpeciesCount": 1,
+      "gbifNeSpeciesCount": 0,
       "byCategory": {
         "LC": 25,
         "NT": 4,
@@ -293,8 +293,8 @@
       "name": "Antelope Specialist Group",
       "estimatedDescribed": 0,
       "totalAssessed": 97,
-      "outdated": 78,
-      "gbifNeSpeciesCount": 13,
+      "outdated": 79,
+      "gbifNeSpeciesCount": 79,
       "byCategory": {
         "CR": 3,
         "LC": 50,
@@ -902,8 +902,8 @@
       "name": "Australasian Marsupial and Monotreme Specialist Group",
       "estimatedDescribed": 0,
       "totalAssessed": 266,
-      "outdated": 190,
-      "gbifNeSpeciesCount": 14,
+      "outdated": 191,
+      "gbifNeSpeciesCount": 7,
       "byCategory": {
         "LC": 130,
         "NT": 34,
@@ -1107,8 +1107,8 @@
       "name": "Bat Specialist Group",
       "estimatedDescribed": 0,
       "totalAssessed": 1336,
-      "outdated": 482,
-      "gbifNeSpeciesCount": 99,
+      "outdated": 493,
+      "gbifNeSpeciesCount": 94,
       "byCategory": {
         "VU": 109,
         "EN": 89,
@@ -1769,7 +1769,7 @@
       "estimatedDescribed": 0,
       "totalAssessed": 7,
       "outdated": 7,
-      "gbifNeSpeciesCount": 3,
+      "gbifNeSpeciesCount": 2,
       "byCategory": {
         "VU": 5,
         "LC": 2
@@ -1814,7 +1814,7 @@
       "estimatedDescribed": 0,
       "totalAssessed": 2,
       "outdated": 0,
-      "gbifNeSpeciesCount": 1,
+      "gbifNeSpeciesCount": 0,
       "byCategory": {
         "NT": 2
       },
@@ -1826,8 +1826,8 @@
       "name": "Canid Specialist Group",
       "estimatedDescribed": 0,
       "totalAssessed": 38,
-      "outdated": 28,
-      "gbifNeSpeciesCount": 4,
+      "outdated": 29,
+      "gbifNeSpeciesCount": 3,
       "byCategory": {
         "LC": 25,
         "CR": 1,
@@ -1867,7 +1867,7 @@
       "estimatedDescribed": 0,
       "totalAssessed": 33,
       "outdated": 8,
-      "gbifNeSpeciesCount": 3,
+      "gbifNeSpeciesCount": 22,
       "byCategory": {
         "VU": 8,
         "NT": 9,
@@ -2136,7 +2136,7 @@
       "estimatedDescribed": 0,
       "totalAssessed": 39,
       "outdated": 17,
-      "gbifNeSpeciesCount": 10,
+      "gbifNeSpeciesCount": 11,
       "byCategory": {
         "VU": 14,
         "LC": 15,
@@ -2193,7 +2193,7 @@
       "estimatedDescribed": 0,
       "totalAssessed": 93,
       "outdated": 3,
-      "gbifNeSpeciesCount": 3,
+      "gbifNeSpeciesCount": 2,
       "byCategory": {
         "LC": 49,
         "EN": 12,
@@ -2465,7 +2465,7 @@
       "estimatedDescribed": 0,
       "totalAssessed": 72,
       "outdated": 69,
-      "gbifNeSpeciesCount": 7,
+      "gbifNeSpeciesCount": 5,
       "byCategory": {
         "EN": 13,
         "CR": 2,
@@ -2535,7 +2535,7 @@
       "estimatedDescribed": 0,
       "totalAssessed": 7,
       "outdated": 4,
-      "gbifNeSpeciesCount": 5,
+      "gbifNeSpeciesCount": 2,
       "byCategory": {
         "CR": 1,
         "EN": 2,
@@ -2637,7 +2637,7 @@
       "estimatedDescribed": 0,
       "totalAssessed": 4,
       "outdated": 4,
-      "gbifNeSpeciesCount": 3,
+      "gbifNeSpeciesCount": 1,
       "byCategory": {
         "LC": 2,
         "NT": 2
@@ -2660,7 +2660,7 @@
       "estimatedDescribed": 0,
       "totalAssessed": 96,
       "outdated": 33,
-      "gbifNeSpeciesCount": 7,
+      "gbifNeSpeciesCount": 5,
       "byCategory": {
         "LC": 63,
         "CR": 2,
@@ -2730,8 +2730,8 @@
       "name": "New World Marsupial Specialist Group",
       "estimatedDescribed": 0,
       "totalAssessed": 107,
-      "outdated": 90,
-      "gbifNeSpeciesCount": 16,
+      "outdated": 92,
+      "gbifNeSpeciesCount": 28,
       "byCategory": {
         "LC": 72,
         "DD": 15,
@@ -2968,7 +2968,7 @@
       "estimatedDescribed": 0,
       "totalAssessed": 8,
       "outdated": 0,
-      "gbifNeSpeciesCount": 1,
+      "gbifNeSpeciesCount": 0,
       "byCategory": {
         "EN": 3,
         "CR": 3,
@@ -2992,7 +2992,7 @@
       "estimatedDescribed": 0,
       "totalAssessed": 3,
       "outdated": 2,
-      "gbifNeSpeciesCount": 1,
+      "gbifNeSpeciesCount": 0,
       "byCategory": {
         "EN": 1,
         "LC": 1,
@@ -3067,7 +3067,7 @@
       "estimatedDescribed": 0,
       "totalAssessed": 527,
       "outdated": 217,
-      "gbifNeSpeciesCount": 8,
+      "gbifNeSpeciesCount": 4,
       "byCategory": {
         "LC": 118,
         "EN": 146,
@@ -3186,7 +3186,7 @@
       "estimatedDescribed": 0,
       "totalAssessed": 5,
       "outdated": 4,
-      "gbifNeSpeciesCount": 1,
+      "gbifNeSpeciesCount": 0,
       "byCategory": {
         "VU": 4,
         "EX": 1
@@ -3209,7 +3209,7 @@
       "estimatedDescribed": 0,
       "totalAssessed": 159,
       "outdated": 159,
-      "gbifNeSpeciesCount": 7,
+      "gbifNeSpeciesCount": 8,
       "byCategory": {
         "EN": 10,
         "LC": 109,
@@ -3429,8 +3429,8 @@
       "name": "Small Mammal Specialist Group",
       "estimatedDescribed": 0,
       "totalAssessed": 2933,
-      "outdated": 1101,
-      "gbifNeSpeciesCount": 73,
+      "outdated": 1110,
+      "gbifNeSpeciesCount": 111,
       "byCategory": {
         "CR": 74,
         "LC": 1859,
@@ -4886,7 +4886,7 @@
       "estimatedDescribed": 0,
       "totalAssessed": 3,
       "outdated": 2,
-      "gbifNeSpeciesCount": 19,
+      "gbifNeSpeciesCount": 1,
       "byCategory": {
         "LC": 2,
         "EX": 1
@@ -4958,7 +4958,7 @@
       "estimatedDescribed": 0,
       "totalAssessed": 275,
       "outdated": 120,
-      "gbifNeSpeciesCount": 82,
+      "gbifNeSpeciesCount": 85,
       "byCategory": {
         "EN": 51,
         "LR/nt": 9,
@@ -5299,7 +5299,7 @@
       "estimatedDescribed": 0,
       "totalAssessed": 1653,
       "outdated": 481,
-      "gbifNeSpeciesCount": 51,
+      "gbifNeSpeciesCount": 75,
       "byCategory": {
         "LC": 1056,
         "CR": 76,
@@ -5473,7 +5473,7 @@
       "estimatedDescribed": 0,
       "totalAssessed": 205,
       "outdated": 174,
-      "gbifNeSpeciesCount": 12,
+      "gbifNeSpeciesCount": 21,
       "byCategory": {
         "VU": 25,
         "NT": 37,
@@ -5500,7 +5500,7 @@
       "estimatedDescribed": 0,
       "totalAssessed": 77,
       "outdated": 16,
-      "gbifNeSpeciesCount": 10,
+      "gbifNeSpeciesCount": 12,
       "byCategory": {
         "EN": 10,
         "VU": 2,
@@ -5559,7 +5559,7 @@
       "estimatedDescribed": 0,
       "totalAssessed": 45,
       "outdated": 18,
-      "gbifNeSpeciesCount": 3,
+      "gbifNeSpeciesCount": 2,
       "byCategory": {
         "VU": 11,
         "CR": 8,
@@ -5606,7 +5606,7 @@
       "estimatedDescribed": 0,
       "totalAssessed": 379,
       "outdated": 296,
-      "gbifNeSpeciesCount": 53,
+      "gbifNeSpeciesCount": 54,
       "byCategory": {
         "CR": 22,
         "EN": 48,
@@ -5615,13 +5615,13 @@
         "VU": 20,
         "NT": 34
       },
-      "colDescribed": 431,
-      "colNe": 68,
+      "colDescribed": 437,
+      "colNe": 71,
       "colBreakdown": [
         {
           "name": "anolis",
-          "count": 431,
-          "neCount": 68,
+          "count": 437,
+          "neCount": 71,
           "trueAssessed": 379,
           "noMatchIds": [
             64182,
@@ -5630,14 +5630,11 @@
             64195,
             64214,
             64215,
-            203087,
-            203111,
             203886,
             203890,
             44577638,
             44577835,
             50950350,
-            50950361,
             50956400,
             75099536
           ],
@@ -5685,16 +5682,6 @@
               "detailId": 64206
             },
             {
-              "id": 203087,
-              "name": "Anolis cryptolimifrons",
-              "reason": "no_link"
-            },
-            {
-              "id": 203111,
-              "name": "Anolis osa",
-              "reason": "no_link"
-            },
-            {
               "id": 203886,
               "name": "Anolis maynardi",
               "reason": "no_link"
@@ -5724,11 +5711,6 @@
               "reason": "lumped",
               "detail": "Anolis binotatus",
               "detailId": 44577183
-            },
-            {
-              "id": 50950361,
-              "name": "Anolis nigrolineatus",
-              "reason": "no_link"
             },
             {
               "id": 50956400,
@@ -5762,7 +5744,7 @@
       "estimatedDescribed": 0,
       "totalAssessed": 315,
       "outdated": 236,
-      "gbifNeSpeciesCount": 63,
+      "gbifNeSpeciesCount": 97,
       "byCategory": {
         "LC": 195,
         "CR": 10,
@@ -5771,13 +5753,13 @@
         "VU": 32,
         "DD": 24
       },
-      "colDescribed": 424,
-      "colNe": 111,
+      "colDescribed": 425,
+      "colNe": 112,
       "colBreakdown": [
         {
           "name": "viperidae",
-          "count": 424,
-          "neCount": 111,
+          "count": 425,
+          "neCount": 112,
           "trueAssessed": 315,
           "noMatchIds": [
             23002,
@@ -5982,7 +5964,7 @@
       "estimatedDescribed": 0,
       "totalAssessed": 121,
       "outdated": 95,
-      "gbifNeSpeciesCount": 9,
+      "gbifNeSpeciesCount": 13,
       "byCategory": {
         "VU": 5,
         "DD": 50,
@@ -6320,7 +6302,7 @@
       "estimatedDescribed": 0,
       "totalAssessed": 1775,
       "outdated": 580,
-      "gbifNeSpeciesCount": 239,
+      "gbifNeSpeciesCount": 299,
       "byCategory": {
         "LC": 1042,
         "NT": 108,
@@ -6606,7 +6588,7 @@
       "estimatedDescribed": 0,
       "totalAssessed": 103,
       "outdated": 65,
-      "gbifNeSpeciesCount": 9,
+      "gbifNeSpeciesCount": 8,
       "byCategory": {
         "LC": 64,
         "VU": 10,
@@ -6933,7 +6915,7 @@
       "estimatedDescribed": 0,
       "totalAssessed": 5393,
       "outdated": 3637,
-      "gbifNeSpeciesCount": 554,
+      "gbifNeSpeciesCount": 728,
       "byCategory": {
         "EN": 323,
         "NT": 227,
@@ -6943,13 +6925,13 @@
         "DD": 875,
         "LC": 3578
       },
-      "colDescribed": 6622,
-      "colNe": 1185,
+      "colDescribed": 6626,
+      "colNe": 1186,
       "colBreakdown": [
         {
           "name": "Snake and Lizard Red List Authority",
-          "count": 6622,
-          "neCount": 1185,
+          "count": 6626,
+          "neCount": 1186,
           "trueAssessed": 5393,
           "noMatchIds": [
             9370,
@@ -6994,7 +6976,6 @@
             13292176,
             15155809,
             15157565,
-            15158749,
             15179167,
             17451105,
             44581377,
@@ -7009,7 +6990,6 @@
             56052108,
             56058825,
             56059651,
-            56064369,
             56064748,
             56077250,
             56098897,
@@ -7033,7 +7013,6 @@
             107660605,
             109619258,
             127902161,
-            127903363,
             150205307,
             163632493,
             199519885,
@@ -7316,11 +7295,6 @@
               "detailId": 167502525
             },
             {
-              "id": 15158749,
-              "name": "Chironius laurenti",
-              "reason": "provisional"
-            },
-            {
               "id": 15179167,
               "name": "Hydrodynastes melanogigas",
               "reason": "lumped",
@@ -7415,11 +7389,6 @@
               "reason": "lumped",
               "detail": "Liolaemus sarmientoi",
               "detailId": 56150793
-            },
-            {
-              "id": 56064369,
-              "name": "Liolaemus lopezi",
-              "reason": "no_link"
             },
             {
               "id": 56064748,
@@ -7575,11 +7544,6 @@
               "reason": "lumped",
               "detail": "Sitana ponticeriana",
               "detailId": 127902230
-            },
-            {
-              "id": 127903363,
-              "name": "Oligodon kheriensis",
-              "reason": "no_link"
             },
             {
               "id": 150205307,
@@ -8189,7 +8153,7 @@
       "estimatedDescribed": 0,
       "totalAssessed": 1266,
       "outdated": 79,
-      "gbifNeSpeciesCount": 38,
+      "gbifNeSpeciesCount": 35,
       "byCategory": {
         "LC": 559,
         "VU": 196,
@@ -8336,7 +8300,7 @@
       "estimatedDescribed": 0,
       "totalAssessed": 939,
       "outdated": 734,
-      "gbifNeSpeciesCount": 128,
+      "gbifNeSpeciesCount": 64,
       "byCategory": {
         "EN": 11,
         "DD": 131,
@@ -8920,7 +8884,7 @@
       "estimatedDescribed": 0,
       "totalAssessed": 521,
       "outdated": 336,
-      "gbifNeSpeciesCount": 26,
+      "gbifNeSpeciesCount": 22,
       "byCategory": {
         "LC": 418,
         "EN": 6,
@@ -9069,8 +9033,8 @@
       "name": "Seahorse, Pipefish and Seadragon Specialist Group",
       "estimatedDescribed": 0,
       "totalAssessed": 308,
-      "outdated": 185,
-      "gbifNeSpeciesCount": 16,
+      "outdated": 192,
+      "gbifNeSpeciesCount": 13,
       "byCategory": {
         "DD": 78,
         "EN": 10,
@@ -9198,7 +9162,7 @@
       "estimatedDescribed": 0,
       "totalAssessed": 297,
       "outdated": 26,
-      "gbifNeSpeciesCount": 5,
+      "gbifNeSpeciesCount": 6,
       "byCategory": {
         "VU": 7,
         "CR": 3,
@@ -9289,8 +9253,8 @@
       "name": "Salmonid Specialist Group",
       "estimatedDescribed": 0,
       "totalAssessed": 219,
-      "outdated": 26,
-      "gbifNeSpeciesCount": 29,
+      "outdated": 32,
+      "gbifNeSpeciesCount": 31,
       "byCategory": {
         "EN": 37,
         "EX": 19,
@@ -9526,7 +9490,7 @@
       "estimatedDescribed": 0,
       "totalAssessed": 61,
       "outdated": 0,
-      "gbifNeSpeciesCount": 2,
+      "gbifNeSpeciesCount": 3,
       "byCategory": {
         "NT": 6,
         "LC": 42,
@@ -9580,7 +9544,7 @@
       "estimatedDescribed": 0,
       "totalAssessed": 27,
       "outdated": 0,
-      "gbifNeSpeciesCount": 0,
+      "gbifNeSpeciesCount": 2,
       "byCategory": {
         "VU": 5,
         "EN": 3,
@@ -9648,7 +9612,7 @@
       "estimatedDescribed": 0,
       "totalAssessed": 25717,
       "outdated": 9850,
-      "gbifNeSpeciesCount": 3433,
+      "gbifNeSpeciesCount": 3553,
       "byCategory": {
         "CR": 748,
         "EX": 75,
@@ -9661,12 +9625,12 @@
         "LR/lc": 1,
         "LR/nt": 1
       },
-      "colDescribed": 33301,
+      "colDescribed": 33303,
       "colNe": 7705,
       "colBreakdown": [
         {
           "name": "No / Other SSC Group",
-          "count": 33301,
+          "count": 33303,
           "neCount": 7705,
           "trueAssessed": 25717,
           "noMatchIds": [
@@ -9676,7 +9640,6 @@
             40711,
             44463,
             46863,
-            60452,
             60458,
             60481,
             60492,
@@ -9781,7 +9744,6 @@
             202630,
             15118625,
             15623273,
-            16777231,
             19088255,
             20253300,
             46109145,
@@ -10103,11 +10065,6 @@
               "reason": "lumped",
               "detail": "Atherinomorus endrachtensis",
               "detailId": 159097220
-            },
-            {
-              "id": 60452,
-              "name": "Oreochromis alcalicus",
-              "reason": "provisional"
             },
             {
               "id": 60458,
@@ -10768,11 +10725,6 @@
               "reason": "lumped",
               "detail": "Chelidonichthys lastoviza",
               "detailId": 198751
-            },
-            {
-              "id": 16777231,
-              "name": "Symphurus civitatium",
-              "reason": "provisional"
             },
             {
               "id": 19088255,
@@ -13215,8 +13167,8 @@
       "name": "Mollusc Specialist Group",
       "estimatedDescribed": 0,
       "totalAssessed": 9957,
-      "outdated": 5187,
-      "gbifNeSpeciesCount": 25215,
+      "outdated": 5189,
+      "gbifNeSpeciesCount": 26481,
       "byCategory": {
         "CR": 782,
         "EN": 771,
@@ -13229,8 +13181,8 @@
         "LR/lc": 16,
         "EW": 12
       },
-      "colDescribed": 89608,
-      "colNe": 80142
+      "colDescribed": 89652,
+      "colNe": 80185
     },
     {
       "id": "ssc-spider-scorpion",
@@ -13238,7 +13190,7 @@
       "estimatedDescribed": 0,
       "totalAssessed": 933,
       "outdated": 200,
-      "gbifNeSpeciesCount": 15176,
+      "gbifNeSpeciesCount": 15772,
       "byCategory": {
         "EN": 146,
         "DD": 83,
@@ -13392,7 +13344,7 @@
       "estimatedDescribed": 0,
       "totalAssessed": 1524,
       "outdated": 625,
-      "gbifNeSpeciesCount": 12747,
+      "gbifNeSpeciesCount": 11945,
       "byCategory": {
         "EN": 90,
         "CR": 25,
@@ -13404,8 +13356,8 @@
         "EX": 4,
         "LR/lc": 15
       },
-      "colDescribed": 21619,
-      "colNe": 20314,
+      "colDescribed": 21631,
+      "colNe": 20326,
       "colBreakdown": [
         {
           "name": "papilionidae",
@@ -14383,8 +14335,8 @@
         },
         {
           "name": "lycaenidae",
-          "count": 6036,
-          "neCount": 5603,
+          "count": 6037,
+          "neCount": 5604,
           "trueAssessed": 539,
           "noMatchIds": [
             883,
@@ -15389,8 +15341,8 @@
         },
         {
           "name": "hesperiidae",
-          "count": 3462,
-          "neCount": 3347,
+          "count": 3473,
+          "neCount": 3358,
           "trueAssessed": 129,
           "noMatchIds": [
             39481,
@@ -15557,8 +15509,8 @@
       "name": "Grasshopper Specialist Group",
       "estimatedDescribed": 0,
       "totalAssessed": 1643,
-      "outdated": 1003,
-      "gbifNeSpeciesCount": 9698,
+      "outdated": 1007,
+      "gbifNeSpeciesCount": 10062,
       "byCategory": {
         "VU": 220,
         "EN": 197,
@@ -15570,13 +15522,13 @@
         "LR/cd": 3,
         "NT": 179
       },
-      "colDescribed": 36020,
-      "colNe": 34393,
+      "colDescribed": 36041,
+      "colNe": 34412,
       "colBreakdown": [
         {
           "name": "orthoptera",
-          "count": 29878,
-          "neCount": 28388,
+          "count": 29898,
+          "neCount": 28406,
           "trueAssessed": 1501,
           "noMatchIds": [
             10791,
@@ -15586,8 +15538,6 @@
             15039573,
             15039831,
             16084431,
-            16084510,
-            16084520,
             16084534,
             20656385,
             44710621,
@@ -15645,16 +15595,6 @@
               "id": 16084431,
               "name": "Gomphoceridius brevipennis",
               "reason": "not_in_base"
-            },
-            {
-              "id": 16084510,
-              "name": "Dericorys carthagonovae",
-              "reason": "no_link"
-            },
-            {
-              "id": 16084520,
-              "name": "Italohippus albicornis",
-              "reason": "provisional"
             },
             {
               "id": 16084534,
@@ -15928,8 +15868,8 @@
         },
         {
           "name": "phasmida",
-          "count": 3612,
-          "neCount": 3516,
+          "count": 3613,
+          "neCount": 3517,
           "trueAssessed": 104,
           "noMatchIds": [
             199511,
@@ -16020,7 +15960,7 @@
       "estimatedDescribed": 0,
       "totalAssessed": 682,
       "outdated": 80,
-      "gbifNeSpeciesCount": 6736,
+      "gbifNeSpeciesCount": 6845,
       "byCategory": {
         "VU": 50,
         "CR": 14,
@@ -16863,7 +16803,7 @@
       "estimatedDescribed": 0,
       "totalAssessed": 99,
       "outdated": 9,
-      "gbifNeSpeciesCount": 6291,
+      "gbifNeSpeciesCount": 5975,
       "byCategory": {
         "EX": 7,
         "VU": 12,
@@ -16981,7 +16921,7 @@
       "estimatedDescribed": 0,
       "totalAssessed": 6229,
       "outdated": 3071,
-      "gbifNeSpeciesCount": 125,
+      "gbifNeSpeciesCount": 171,
       "byCategory": {
         "EN": 313,
         "DD": 1829,
@@ -16991,7 +16931,7 @@
         "NT": 236,
         "EX": 1
       },
-      "colDescribed": 6474,
+      "colDescribed": 6494,
       "colNe": 364
     },
     {
@@ -17000,7 +16940,7 @@
       "estimatedDescribed": 0,
       "totalAssessed": 213,
       "outdated": 148,
-      "gbifNeSpeciesCount": 5769,
+      "gbifNeSpeciesCount": 6302,
       "byCategory": {
         "VU": 142,
         "CR": 3,
@@ -17304,7 +17244,7 @@
       "estimatedDescribed": 0,
       "totalAssessed": 2650,
       "outdated": 2558,
-      "gbifNeSpeciesCount": 317,
+      "gbifNeSpeciesCount": 329,
       "byCategory": {
         "CR": 117,
         "DD": 1042,
@@ -21247,7 +21187,7 @@
       "estimatedDescribed": 0,
       "totalAssessed": 303,
       "outdated": 0,
-      "gbifNeSpeciesCount": 2030,
+      "gbifNeSpeciesCount": 2071,
       "byCategory": {
         "LC": 79,
         "NT": 28,
@@ -21256,19 +21196,17 @@
         "CR": 21,
         "DD": 18
       },
-      "colDescribed": 6959,
-      "colNe": 6655,
+      "colDescribed": 6962,
+      "colNe": 6656,
       "colBreakdown": [
         {
           "name": "syrphidae",
-          "count": 6959,
-          "neCount": 6655,
+          "count": 6962,
+          "neCount": 6656,
           "trueAssessed": 303,
           "noMatchIds": [
-            149115163,
             149164225,
             149165032,
-            149165099,
             149165213,
             149165345,
             149167572,
@@ -21281,11 +21219,6 @@
           ],
           "noMatchDetails": [
             {
-              "id": 149115163,
-              "name": "Merodon adriaticus",
-              "reason": "provisional"
-            },
-            {
               "id": 149164225,
               "name": "Cheilosia herculana",
               "reason": "lumped",
@@ -21296,11 +21229,6 @@
               "id": 149165032,
               "name": "Merodon peloponnesius",
               "reason": "not_in_base"
-            },
-            {
-              "id": 149165099,
-              "name": "Merodon nisi",
-              "reason": "provisional"
             },
             {
               "id": 149165213,
@@ -21381,7 +21309,7 @@
       "estimatedDescribed": 0,
       "totalAssessed": 891,
       "outdated": 12,
-      "gbifNeSpeciesCount": 950,
+      "gbifNeSpeciesCount": 757,
       "byCategory": {
         "DD": 125,
         "VU": 56,
@@ -21531,7 +21459,7 @@
       "estimatedDescribed": 0,
       "totalAssessed": 149,
       "outdated": 0,
-      "gbifNeSpeciesCount": 389,
+      "gbifNeSpeciesCount": 396,
       "byCategory": {
         "EN": 12,
         "DD": 70,
@@ -21603,7 +21531,7 @@
       "estimatedDescribed": 0,
       "totalAssessed": 1039,
       "outdated": 616,
-      "gbifNeSpeciesCount": 1575,
+      "gbifNeSpeciesCount": 1558,
       "byCategory": {
         "EN": 42,
         "DD": 322,
@@ -23887,18 +23815,17 @@
         "CR": 5,
         "EN": 8
       },
-      "colDescribed": 1830,
+      "colDescribed": 1831,
       "colNe": 1479,
       "colBreakdown": [
         {
           "name": "holothuroidea",
-          "count": 1830,
+          "count": 1831,
           "neCount": 1479,
           "trueAssessed": 377,
           "noMatchIds": [
             180211,
             180233,
-            180245,
             180274,
             180284,
             180296,
@@ -23938,11 +23865,6 @@
               "reason": "lumped",
               "detail": "Holothuria scabra",
               "detailId": 180257
-            },
-            {
-              "id": 180245,
-              "name": "Holothuria kefersteinii",
-              "reason": "provisional"
             },
             {
               "id": 180274,
@@ -24047,7 +23969,9 @@
             {
               "id": 180490,
               "name": "Holothuria riojai",
-              "reason": "provisional"
+              "reason": "lumped",
+              "detail": "Holothuria kefersteinii",
+              "detailId": 180245
             },
             {
               "id": 180513,
@@ -24131,7 +24055,7 @@
       "estimatedDescribed": 0,
       "totalAssessed": 355,
       "outdated": 6,
-      "gbifNeSpeciesCount": 579,
+      "gbifNeSpeciesCount": 540,
       "byCategory": {
         "VU": 12,
         "EN": 16,
@@ -24600,7 +24524,7 @@
       "estimatedDescribed": 0,
       "totalAssessed": 45,
       "outdated": 0,
-      "gbifNeSpeciesCount": 3520,
+      "gbifNeSpeciesCount": 4016,
       "byCategory": {
         "LC": 6,
         "DD": 35,
@@ -24608,13 +24532,13 @@
         "VU": 1,
         "EN": 1
       },
-      "colDescribed": 9856,
-      "colNe": 9810,
+      "colDescribed": 9861,
+      "colNe": 9815,
       "colBreakdown": [
         {
           "name": "demospongiae",
-          "count": 8193,
-          "neCount": 8151,
+          "count": 8196,
+          "neCount": 8154,
           "trueAssessed": 41,
           "noMatchIds": [],
           "splitDetails": [
@@ -24646,15 +24570,15 @@
         },
         {
           "name": "hexactinellida",
-          "count": 744,
-          "neCount": 742,
+          "count": 745,
+          "neCount": 743,
           "trueAssessed": 2,
           "noMatchIds": []
         },
         {
           "name": "calcarea",
-          "count": 919,
-          "neCount": 917,
+          "count": 920,
+          "neCount": 918,
           "trueAssessed": 2,
           "noMatchIds": []
         }
@@ -24666,7 +24590,7 @@
       "estimatedDescribed": 0,
       "totalAssessed": 3946,
       "outdated": 1307,
-      "gbifNeSpeciesCount": 243723,
+      "gbifNeSpeciesCount": 244551,
       "byCategory": {
         "VU": 449,
         "EN": 447,
@@ -24680,13 +24604,13 @@
         "LR/lc": 2,
         "EW": 1
       },
-      "colDescribed": 1036618,
-      "colNe": 1033122,
+      "colDescribed": 1040602,
+      "colNe": 1037093,
       "colBreakdown": [
         {
           "name": "No / Other SSC Group",
-          "count": 1036618,
-          "neCount": 1033122,
+          "count": 1040602,
+          "neCount": 1037093,
           "trueAssessed": 3946,
           "noMatchIds": [
             862,
@@ -24823,14 +24747,10 @@
             185048,
             195420,
             199503,
-            199515,
-            199520,
-            199525,
             199528,
             199530,
             199532,
             199550,
-            199555,
             201477,
             201488,
             21460622,
@@ -25139,13 +25059,6 @@
             215097636,
             218811000,
             218811052,
-            218811093,
-            218811118,
-            218811133,
-            218811181,
-            218811274,
-            218811303,
-            220058410,
             223760136,
             223760164,
             223760283,
@@ -25999,21 +25912,6 @@
               "reason": "not_in_base"
             },
             {
-              "id": 199515,
-              "name": "Neotermes laticollis",
-              "reason": "not_in_base"
-            },
-            {
-              "id": 199520,
-              "name": "Procryptotermes fryeri",
-              "reason": "not_in_base"
-            },
-            {
-              "id": 199525,
-              "name": "Nasutitermes maheensis",
-              "reason": "not_in_base"
-            },
-            {
               "id": 199528,
               "name": "Theganopteryx liturata",
               "reason": "not_in_base"
@@ -26031,11 +25929,6 @@
             {
               "id": 199550,
               "name": "Theganopteryx grisea",
-              "reason": "not_in_base"
-            },
-            {
-              "id": 199555,
-              "name": "Glyptotermes scotti",
               "reason": "not_in_base"
             },
             {
@@ -27589,41 +27482,6 @@
               "reason": "not_in_base"
             },
             {
-              "id": 218811093,
-              "name": "Rhynchotermes bulbinasus",
-              "reason": "not_in_base"
-            },
-            {
-              "id": 218811118,
-              "name": "Rhynchotermes diphyes",
-              "reason": "not_in_base"
-            },
-            {
-              "id": 218811133,
-              "name": "Rhynchotermes nasutissimus",
-              "reason": "not_in_base"
-            },
-            {
-              "id": 218811181,
-              "name": "Rhynchotermes perarmatus",
-              "reason": "not_in_base"
-            },
-            {
-              "id": 218811274,
-              "name": "Rhynchotermes piauy",
-              "reason": "not_in_base"
-            },
-            {
-              "id": 218811303,
-              "name": "Rhynchotermes armatus",
-              "reason": "not_in_base"
-            },
-            {
-              "id": 220058410,
-              "name": "Synhamitermes colombensis",
-              "reason": "not_in_base"
-            },
-            {
               "id": 223760136,
               "name": "Armadillidium jonicum",
               "reason": "infraspecific",
@@ -28733,8 +28591,8 @@
       "name": "Orchid Specialist Group",
       "estimatedDescribed": 0,
       "totalAssessed": 2443,
-      "outdated": 1085,
-      "gbifNeSpeciesCount": 10348,
+      "outdated": 1097,
+      "gbifNeSpeciesCount": 10403,
       "byCategory": {
         "VU": 315,
         "NT": 134,
@@ -29974,8 +29832,8 @@
       "name": "Bryophyte Specialist Group",
       "estimatedDescribed": 0,
       "totalAssessed": 327,
-      "outdated": 99,
-      "gbifNeSpeciesCount": 7383,
+      "outdated": 103,
+      "gbifNeSpeciesCount": 7414,
       "byCategory": {
         "CR": 48,
         "NT": 35,
@@ -29986,8 +29844,8 @@
         "LR/lc": 3,
         "DD": 37
       },
-      "colDescribed": 19240,
-      "colNe": 18915
+      "colDescribed": 19262,
+      "colNe": 18937
     },
     {
       "id": "ssc-cactus-succulent",
@@ -29995,7 +29853,7 @@
       "estimatedDescribed": 0,
       "totalAssessed": 1502,
       "outdated": 1455,
-      "gbifNeSpeciesCount": 328,
+      "gbifNeSpeciesCount": 349,
       "byCategory": {
         "LC": 861,
         "VU": 148,
@@ -31920,8 +31778,8 @@
       "name": "Palm Specialist Group",
       "estimatedDescribed": 0,
       "totalAssessed": 1330,
-      "outdated": 421,
-      "gbifNeSpeciesCount": 399,
+      "outdated": 435,
+      "gbifNeSpeciesCount": 394,
       "byCategory": {
         "VU": 138,
         "CR": 192,
@@ -32358,7 +32216,7 @@
       "estimatedDescribed": 0,
       "totalAssessed": 505,
       "outdated": 182,
-      "gbifNeSpeciesCount": 326,
+      "gbifNeSpeciesCount": 338,
       "byCategory": {
         "VU": 48,
         "LC": 389,
@@ -32718,8 +32576,8 @@
       "name": "Conifer Specialist Group",
       "estimatedDescribed": 0,
       "totalAssessed": 616,
-      "outdated": 533,
-      "gbifNeSpeciesCount": 55,
+      "outdated": 534,
+      "gbifNeSpeciesCount": 33,
       "byCategory": {
         "LC": 302,
         "EN": 94,
@@ -32939,7 +32797,7 @@
       "estimatedDescribed": 0,
       "totalAssessed": 347,
       "outdated": 0,
-      "gbifNeSpeciesCount": 11,
+      "gbifNeSpeciesCount": 9,
       "byCategory": {
         "EW": 5,
         "CR": 63,
@@ -32994,7 +32852,7 @@
       "estimatedDescribed": 0,
       "totalAssessed": 71,
       "outdated": 70,
-      "gbifNeSpeciesCount": 5,
+      "gbifNeSpeciesCount": 4,
       "byCategory": {
         "LC": 48,
         "EN": 3,
@@ -33257,8 +33115,8 @@
       "name": "No / Other SSC Group",
       "estimatedDescribed": 0,
       "totalAssessed": 71284,
-      "outdated": 15908,
-      "gbifNeSpeciesCount": 138555,
+      "outdated": 15942,
+      "gbifNeSpeciesCount": 138640,
       "byCategory": {
         "LR/cd": 95,
         "VU": 9845,
@@ -33272,13 +33130,13 @@
         "EX": 131,
         "LR/lc": 104
       },
-      "colDescribed": 337251,
-      "colNe": 266894,
+      "colDescribed": 337252,
+      "colNe": 266899,
       "colBreakdown": [
         {
           "name": "No / Other SSC Group",
-          "count": 337251,
-          "neCount": 266894,
+          "count": 337252,
+          "neCount": 266899,
           "trueAssessed": 71284,
           "noMatchIds": [
             30315,
@@ -34414,6 +34272,7 @@
             113237873,
             113756459,
             113756842,
+            114979396,
             115030855,
             115537415,
             115630978,
@@ -34705,8 +34564,10 @@
             143757349,
             144131032,
             144220830,
+            144266782,
             144278450,
             144293639,
+            144303595,
             144314247,
             144322506,
             144665968,
@@ -35048,6 +34909,7 @@
             175805682,
             175806290,
             175806848,
+            176095359,
             176100760,
             176101936,
             176102482,
@@ -42279,9 +42141,7 @@
             {
               "id": 107427615,
               "name": "Lotus arborescens",
-              "reason": "lumped",
-              "detail": "Lotus purpureus",
-              "detailId": 107427748
+              "reason": "not_in_base"
             },
             {
               "id": 109716708,
@@ -42480,6 +42340,11 @@
               "reason": "lumped",
               "detail": "Pterospermum subpeltatum",
               "detailId": 113756859
+            },
+            {
+              "id": 114979396,
+              "name": "Agave dasylirioides",
+              "reason": "not_in_base"
             },
             {
               "id": 115030855,
@@ -44347,6 +44212,11 @@
               "detail": "Endotropis lanceolata"
             },
             {
+              "id": 144266782,
+              "name": "Elizabetha coccinea",
+              "reason": "not_in_base"
+            },
+            {
               "id": 144278450,
               "name": "Senegalia westiana",
               "reason": "lumped",
@@ -44359,6 +44229,11 @@
               "reason": "lumped",
               "detail": "Kosteletzkya pentacarpos",
               "detailId": 161916
+            },
+            {
+              "id": 144303595,
+              "name": "Elizabetha princeps",
+              "reason": "not_in_base"
             },
             {
               "id": 144314247,
@@ -46525,6 +46400,11 @@
               "reason": "infraspecific",
               "detail": "Symplocos macrophylla",
               "detailId": 169844097
+            },
+            {
+              "id": 176095359,
+              "name": "Piptadenia flava",
+              "reason": "not_in_base"
             },
             {
               "id": 176100760,
@@ -57878,6 +57758,12 @@
               "parentCategory": "LC"
             },
             {
+              "colId": "5TQK7",
+              "parentId": 114979396,
+              "parentName": "Agave dasylirioides",
+              "parentCategory": "EN"
+            },
+            {
               "colId": "5TQNM",
               "parentId": 96899948,
               "parentName": "Agave angustifolia",
@@ -65102,6 +64988,12 @@
               "parentCategory": "LC"
             },
             {
+              "colId": "9F276",
+              "parentId": 144266782,
+              "parentName": "Elizabetha coccinea",
+              "parentCategory": "LC"
+            },
+            {
               "colId": "9F9FL",
               "parentId": 184929002,
               "parentName": "Campylotropis pinetorum",
@@ -70741,7 +70633,7 @@
       "estimatedDescribed": 0,
       "totalAssessed": 17,
       "outdated": 1,
-      "gbifNeSpeciesCount": 1445,
+      "gbifNeSpeciesCount": 1407,
       "byCategory": {
         "NT": 4,
         "VU": 4,
@@ -70830,7 +70722,7 @@
       "estimatedDescribed": 0,
       "totalAssessed": 125,
       "outdated": 7,
-      "gbifNeSpeciesCount": 7177,
+      "gbifNeSpeciesCount": 7096,
       "byCategory": {
         "EN": 31,
         "CR": 17,
@@ -71114,7 +71006,7 @@
       "estimatedDescribed": 0,
       "totalAssessed": 1149,
       "outdated": 47,
-      "gbifNeSpeciesCount": 17638,
+      "gbifNeSpeciesCount": 17474,
       "byCategory": {
         "LC": 478,
         "NT": 101,
@@ -72606,7 +72498,7 @@
       "estimatedDescribed": 0,
       "totalAssessed": 5,
       "outdated": 0,
-      "gbifNeSpeciesCount": 2759,
+      "gbifNeSpeciesCount": 2694,
       "byCategory": {
         "VU": 2,
         "CR": 2,
@@ -72723,7 +72615,7 @@
       "estimatedDescribed": 0,
       "totalAssessed": 55,
       "outdated": 1,
-      "gbifNeSpeciesCount": 23790,
+      "gbifNeSpeciesCount": 23169,
       "byCategory": {
         "VU": 8,
         "LC": 7,

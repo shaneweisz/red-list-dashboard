@@ -41,9 +41,22 @@ export async function run(): Promise<void> {
   const inst = await DuckDBInstance.create(":memory:");
   const conn = await inst.connect();
 
-  // GBIF rows keyed by species key (globally unique across group files).
+  // GBIF rows, one per species key.
+  //
+  // A species can be fetched by two groups at once, because IUCN's own group
+  // definitions overlap where CoL has reorganised a lineage: "corals" is defined
+  // to include Alcyonacea, which CoL retired and replaced with the class
+  // Octocorallia, while "other invertebrates" separately names two of the orders
+  // now inside that class. Soft corals therefore arrive from both.
+  //
+  // Left alone that produces two rows per species, and since the unassessed id is
+  // derived from the key, two rows with the same identity — which is what the
+  // uniqueness assertion at the end of this file catches. One row per key is kept,
+  // preferring the more specific group (the one whose file lists fewer species,
+  // i.e. the narrower definition), then the group name, so the choice is stable
+  // across runs rather than depending on file order.
   await conn.run(`
-    CREATE TEMP TABLE gbif_all AS
+    CREATE TEMP TABLE gbif_rows AS
       SELECT
         CAST(gbif_species_key AS VARCHAR)        AS gbif_species_key,
         scientific_name, common_name,
@@ -53,6 +66,20 @@ export async function run(): Promise<void> {
         CAST(count_after_assessment_year AS BIGINT) AS count_after,
         countries
       FROM read_csv_auto('${gbifGlob}', union_by_name=true);
+  `);
+  await conn.run(`
+    CREATE TEMP TABLE group_sizes AS
+      SELECT taxon_group, count(*) AS n FROM gbif_rows GROUP BY 1;
+  `);
+  await conn.run(`
+    CREATE TEMP TABLE gbif_all AS
+      SELECT * EXCLUDE (rn) FROM (
+        SELECT r.*, ROW_NUMBER() OVER (
+                 PARTITION BY r.gbif_species_key
+                 ORDER BY s.n ASC, r.taxon_group ASC
+               ) AS rn
+        FROM gbif_rows r JOIN group_sizes s USING (taxon_group)
+      ) WHERE rn = 1;
   `);
 
   await conn.run(`
@@ -244,8 +271,10 @@ export async function run(): Promise<void> {
   console.log(`Wrote ${unassessedOut}: ${ne.n} unassessed (NE)`);
   const h = (await q(`SELECT count(*) nrows, count(DISTINCT sis_taxon_id) species FROM '${assessmentsOut}'`))[0];
   console.log(`Wrote ${assessmentsOut}: ${h.nrows} assessment events across ${h.species} species`);
-  const dup = (await q(`SELECT count(*) c FROM (SELECT gbif_species_key FROM gbif_all GROUP BY 1 HAVING count(*)>1)`))[0].c;
-  console.log(`  duplicate GBIF keys across group files: ${dup}`);
+  const shared = (await q(
+    `SELECT count(*) c FROM (SELECT gbif_species_key FROM gbif_rows GROUP BY 1 HAVING count(DISTINCT taxon_group) > 1)`
+  ))[0].c;
+  console.log(`  species fetched by more than one group (assigned to the narrower): ${shared}`);
 
   // The unassessed id is a hash, so uniqueness is checked rather than assumed.
   const idDup = (await q(`SELECT count(*) c FROM (SELECT id FROM '${unassessedOut}' GROUP BY 1 HAVING count(*)>1)`))[0].c;

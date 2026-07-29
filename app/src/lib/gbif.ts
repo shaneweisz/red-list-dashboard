@@ -17,9 +17,8 @@
  * will converge eventually, and anything leaving `checklistKey` unset is relying
  * on which side of that convergence it happens to run on.
  *
- * The keys stored in this project's data are still backbone keys, so
- * GBIF_CHECKLIST_KEY points at the backbone. Moving the pipeline to CoL is a
- * separate, larger change — see docs/gbif-col-migration.md.
+ * See docs/gbif-col-migration.md for how the pipeline moved onto CoL and why
+ * GBIF, rather than a local copy of the checklist, is the authority for its keys.
  *
  * @see https://data-blog.gbif.org/post/catalogue-of-life-taxonomic-backbone/
  */
@@ -27,15 +26,20 @@
 /** Catalogue of Life Extended Release — gbif.org's default taxonomy since June 2026. */
 export const COL_XR_CHECKLIST_KEY = "7ddf754f-d193-4cc9-b351-99906754a03b";
 
-/** The legacy GBIF Backbone Taxonomy, frozen at 2023. */
+/** The legacy GBIF Backbone Taxonomy, frozen at 2023. Kept to explain the move. */
 export const GBIF_BACKBONE_CHECKLIST_KEY = "d7dddbf4-2cf0-4f39-9b2a-bb099caae36c";
 
 /**
  * The checklist this project's stored `gbif_species_key` values belong to, and
- * therefore the one every query and link must name. Flipping this constant is
- * not sufficient to migrate — the stored keys have to change with it.
+ * therefore the one every query and link must name.
+ *
+ * Flipping this constant is not by itself a migration — the stored keys have to
+ * change with it, or every query asks one taxonomy about another's keys and gets
+ * an empty result set back. The pipeline now derives its group keys from CoL
+ * (scripts/derive-gbif-taxon-keys.ts) and resolves species keys and names through
+ * GBIF against this checklist, so the keys and this constant move together.
  */
-export const GBIF_CHECKLIST_KEY = GBIF_BACKBONE_CHECKLIST_KEY;
+export const GBIF_CHECKLIST_KEY = COL_XR_CHECKLIST_KEY;
 
 /**
  * Occurrence types this dashboard counts: georeferenced records representing an
