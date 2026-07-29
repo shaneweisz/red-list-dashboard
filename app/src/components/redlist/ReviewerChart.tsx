@@ -81,10 +81,10 @@ export default function AssessorChart({
 
   return (
     <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-3 flex flex-col">
-      <div className="flex items-center justify-between mb-1">
+      <div className="flex items-center gap-2 mb-1.5">
         {showToggle ? (
           /* Toggle between Assessors and Reviewers */
-          <div className="inline-flex rounded-md bg-zinc-100 dark:bg-zinc-800 p-0.5">
+          <div className="inline-flex rounded-md bg-zinc-100 dark:bg-zinc-800 p-0.5 shrink-0">
             <button
               onClick={() => handleViewModeChange("assessors")}
               className={`px-2 py-0.5 text-xs font-semibold rounded transition-colors ${
@@ -107,42 +107,41 @@ export default function AssessorChart({
             </button>
           </div>
         ) : (
-          <span className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">{title}</span>
+          <span className="text-sm font-semibold text-zinc-900 dark:text-zinc-100 shrink-0">{title}</span>
         )}
-        <span className="text-[10px] text-zinc-400 hidden xl:inline">(cmd/ctrl+click to multiselect)</span>
-      </div>
 
-      {/* Search input */}
-      <div className="relative mb-1.5">
-        <input
-          type="text"
-          value={search}
-          onChange={(e) => handleSearchChange(e.target.value)}
-          placeholder={`Search ${activeLabel}...`}
-          className="w-full px-2.5 py-1 pl-7 pr-14 rounded border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-zinc-900 dark:text-zinc-100 placeholder-zinc-400 focus:outline-none focus:ring-1 focus:ring-red-500 text-xs"
-        />
-        <svg
-          className="absolute left-2 top-1/2 -translate-y-1/2 w-3 h-3 text-zinc-400 pointer-events-none"
-          fill="none"
-          stroke="currentColor"
-          viewBox="0 0 24 24"
-        >
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-        </svg>
-        {search && (
-          <div className="absolute right-1.5 top-1/2 -translate-y-1/2 flex items-center gap-1 text-[10px] text-zinc-400">
-            <span>{searchResults.length} result{searchResults.length !== 1 ? "s" : ""}</span>
-            <button
-              onClick={() => handleSearchChange("")}
-              className="p-0.5 rounded hover:bg-zinc-200 dark:hover:bg-zinc-700"
-              title="Clear search"
-            >
-              <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-              </svg>
-            </button>
-          </div>
-        )}
+        {/* Search input, in the header row alongside the toggle */}
+        <div className="relative flex-1 min-w-0">
+          <input
+            type="text"
+            value={search}
+            onChange={(e) => handleSearchChange(e.target.value)}
+            placeholder={`Search ${activeLabel}...`}
+            className="w-full px-2.5 py-1 pl-7 pr-14 rounded border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-zinc-900 dark:text-zinc-100 placeholder-zinc-400 focus:outline-none focus:ring-1 focus:ring-red-500 text-xs"
+          />
+          <svg
+            className="absolute left-2 top-1/2 -translate-y-1/2 w-3 h-3 text-zinc-400 pointer-events-none"
+            fill="none"
+            stroke="currentColor"
+            viewBox="0 0 24 24"
+          >
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+          </svg>
+          {search && (
+            <div className="absolute right-1.5 top-1/2 -translate-y-1/2 flex items-center gap-1 text-[10px] text-zinc-400">
+              <span>{searchResults.length} result{searchResults.length !== 1 ? "s" : ""}</span>
+              <button
+                onClick={() => handleSearchChange("")}
+                className="p-0.5 rounded hover:bg-zinc-200 dark:hover:bg-zinc-700"
+                title="Clear search"
+              >
+                <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+          )}
+        </div>
       </div>
 
       <div style={{ height: 240 }} className="flex items-center justify-center">
