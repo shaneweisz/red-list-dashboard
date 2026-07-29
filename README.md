@@ -107,21 +107,23 @@ npx tsx scripts/sync.ts mammalia aves    # Specific taxa only
 
 **Pipeline phases:**
 1. `fetch-redlist-species` — Red List database → per-taxon CSVs in `data/redlist/`
-2. `fetch-gbif-species` — GBIF API → per-taxon CSVs in `data/gbif/`
-3. `match-redlist-species-to-gbif` — GBIF Match API → `data/mapping.csv`
-4. `fetch-gbif-country-data` — GBIF API → per-species country occurrence counts
-5. `fetch-gbif-new-counts` — GBIF API → updates GBIF CSVs with temporal splits
-6. `build-parquet` — CSVs → `assessed.parquet` / `unassessed.parquet` (the DuckDB read layer; also powers cross-taxa search)
 
-Phases 7–12 build the **Catalogue of Life backbone** (run on a full sync only) — the described-species universe behind the new-assessments view, which surfaces species CoL knows about that IUCN hasn't yet evaluated:
-7. `fetch-col-xr` — CoL eXtended Release ColDP archive → `NameUsage.tsv` + `Reference.tsv` (downloaded to a temp dir, not `data/`)
-8. `fetch-col-checklist` — curated CoL Checklist ColDP archive → a demotion overlay (col_ids the checklist's editorial reconciliation demotes to synonym/infraspecific, correcting XR's over-splitting)
-9. `build-backbone` — `NameUsage.tsv` (minus the checklist's demotions) → `backbone.parquet` (tree + synonyms) + `species/` (accepted-species universe, partitioned; tagged `extinct`/`in_base`)
+Phases 2–4 build the **Catalogue of Life backbone** (run on a full sync only) — the described-species universe behind the new-assessments view, which surfaces species CoL knows about that IUCN hasn't yet evaluated. They run before the GBIF phases because GBIF now organises occurrence records by CoL too, so `fetch-gbif-species` resolves its species keys against `species/` rather than querying the GBIF API per species:
+2. `fetch-col-xr` — CoL eXtended Release ColDP archive → `NameUsage.tsv` + `Reference.tsv` + `VernacularName.tsv` (downloaded to a temp dir, not `data/`)
+3. `fetch-col-checklist` — curated CoL Checklist ColDP archive → a demotion overlay (col_ids the checklist's editorial reconciliation demotes to synonym/infraspecific, correcting XR's over-splitting)
+4. `build-backbone` — `NameUsage.tsv` (minus the checklist's demotions) → `backbone.parquet` (tree + synonyms) + `species/` (accepted-species universe, partitioned; tagged `extinct`/`in_base`) + `vernacular-names.json` / `species-vernaculars.parquet` (common names)
+5. `fetch-gbif-species` — GBIF API (occurrence counts) + `species/` (names, lineage, validity) → per-taxon CSVs in `data/gbif/`
+6. `match-redlist-species-to-gbif` — GBIF Match API → `data/mapping.csv`
+7. `fetch-gbif-country-data` — GBIF API → per-species country occurrence counts
+8. `fetch-gbif-new-counts` — GBIF API → updates GBIF CSVs with temporal splits
+9. `build-parquet` — CSVs → `assessed.parquet` / `unassessed.parquet` (the DuckDB read layer; also powers cross-taxa search)
+
+Phases 10–12 finish the CoL work, and unlike phases 2–4 must follow the GBIF phases because they need the complete parquets from phase 9 (full sync only):
 10. `build-matching` — reconciles IUCN/GBIF species to CoL → `species_link.parquet` (`{sis_taxon_id, gbif_species_key} → col_id`, via accepted-name + CoL/IUCN synonym matching)
 11. `build-synonym-index` — CoL synonyms → their accepted species, so search for an old/synonym name still finds the current one
 12. `build-col-taxon-ids` — resolves every taxon name referenced in `taxonomy-tree.ts`'s filters against `backbone.parquet` → `src/config/col-taxon-ids.json` (each name's CoL taxon id, so the dashboard can link a name straight to its CoL page). Small and derived from committed source, so — unlike the other outputs here — it's **committed to git**, not published to R2. Re-run standalone (`npx tsx scripts/build-col-taxon-ids.ts`) whenever a node's filter changes, without needing a full sync.
 
-Phase 13 runs **last**, after the CoL backbone, since it depends on those artifacts:
+Phase 13 runs **last**, since it depends on the CoL artifacts:
 13. `build-taxa-summary` — aggregates per-taxon CSVs + the CoL backbone (`species/`, `species_link.parquet`) → `data/taxa-summary.json` and `data/table1a-children-summaries.json`/`data/ssc-group-children-summaries.json` (split from a single `node-children-summaries.json` — the old combined name, kept here as a pointer for anyone searching it), including per-group `col_described`/`col_ne` counts
 
 **Publishing a refresh.** `app/data/` lives in a private R2 bucket; the active version is pinned via `app/latest-sync.txt`. To publish a fresh sync:

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { CACHE_5M } from "@/lib/cache-headers";
 import { getQualityFlags } from "@/lib/coordinate-cleaning";
+import { COL_XR_CHECKLIST_KEY } from "@/lib/gbif";
 
 export const dynamic = "force-dynamic";
 
@@ -89,6 +90,7 @@ export async function GET(request: NextRequest) {
   try {
     const baseParams = new URLSearchParams({
       speciesKey,
+      checklistKey: COL_XR_CHECKLIST_KEY,
       hasCoordinate: "true",
       hasGeospatialIssue: "false",
     });
@@ -162,7 +164,7 @@ export async function GET(request: NextRequest) {
       type: "FeatureCollection",
       features,
       metadata: {
-        speciesKey: parseInt(speciesKey),
+        speciesKey,
         count: features.length,
         total: totalCount,
         bbox: features.length > 0 ? [minLon, minLat, maxLon, maxLat] : null,

@@ -7,8 +7,12 @@
  * - apiEndpoint: IUCN API endpoint path (kingdom or class)
  * - estimatedDescribed: Estimated number of described species (hardcoded for now)
  * - estimatedSource: Source/citation for the estimate
- * - gbifKingdomKey: GBIF backbone taxonomy kingdom key
- * - gbifClassKey: GBIF backbone taxonomy class key (for filtering within kingdom)
+ * - gbifTaxonKeys: Catalogue of Life Extended Release taxon keys for this group,
+ *   passed to GBIF as taxonKey (see src/lib/gbif.ts). One entry per taxon that
+ *   makes up the group; GBIF matches taxonKey at any rank, so kingdoms, classes
+ *   and orders all go in the same list — the old rank-specific
+ *   gbifKingdomKey/gbifClassKey(s)/gbifOrderKeys fields existed only because the
+ *   GBIF Backbone required a different parameter per rank.
  * - color: Theme color for UI elements
  */
 
@@ -20,10 +24,7 @@ export interface TaxonConfig {
   estimatedDescribed: number;
   estimatedSource: string;
   estimatedSourceUrl?: string;
-  gbifKingdomKey?: number;
-  gbifClassKey?: number;
-  gbifClassKeys?: number[]; // Multiple class keys for taxa like Reptilia
-  gbifOrderKeys?: number[]; // Multiple order keys for taxa like Fish (no class in GBIF)
+  gbifTaxonKeys?: string[];
   color: string;
   icon?: string;
 }
@@ -55,8 +56,7 @@ export const TAXA: TaxonConfig[] = [
     estimatedDescribed: 6854,
     estimatedSource: IUCN_SOURCE,
     estimatedSourceUrl: IUCN_SOURCE_URL,
-    gbifKingdomKey: 1,
-    gbifClassKey: 359,
+    gbifTaxonKeys: ["6224G"],  // Mammalia
     color: "#f97316", // orange-500
   },
   {
@@ -66,8 +66,7 @@ export const TAXA: TaxonConfig[] = [
     estimatedDescribed: 11185,
     estimatedSource: IUCN_SOURCE,
     estimatedSourceUrl: IUCN_SOURCE_URL,
-    gbifKingdomKey: 1,
-    gbifClassKey: 212,
+    gbifTaxonKeys: ["V2"],  // Aves
     color: "#3b82f6", // blue-500
   },
   {
@@ -77,9 +76,9 @@ export const TAXA: TaxonConfig[] = [
     estimatedDescribed: 12568,
     estimatedSource: IUCN_SOURCE,
     estimatedSourceUrl: IUCN_SOURCE_URL,
-    gbifKingdomKey: 1,
-    // GBIF splits Reptilia into: Squamata, Crocodylia, Testudines
-    gbifClassKeys: [11592253, 11493978, 11418114],
+    // No single Reptilia key: the group is Squamata + Crocodylia + Testudines
+    // (classes in the GBIF backbone, orders under Reptilia in CoL).
+    gbifTaxonKeys: ["45C", "329", "477"],  // Squamata, Crocodylia, Testudines
     color: "#84cc16", // lime-500
   },
   {
@@ -89,8 +88,7 @@ export const TAXA: TaxonConfig[] = [
     estimatedDescribed: 9075,
     estimatedSource: IUCN_SOURCE,
     estimatedSourceUrl: IUCN_SOURCE_URL,
-    gbifKingdomKey: 1,
-    gbifClassKey: 131,
+    gbifTaxonKeys: ["PH"],  // Amphibia
     color: "#14b8a6", // teal-500
   },
   {
@@ -101,10 +99,21 @@ export const TAXA: TaxonConfig[] = [
     estimatedDescribed: 37630,
     estimatedSource: IUCN_SOURCE,
     estimatedSourceUrl: IUCN_SOURCE_URL,
-    gbifKingdomKey: 1,
-    // Combined: ray-finned fish orders + Elasmobranchii (121) + Holocephali (120)
-    gbifOrderKeys: [389,391,427,428,446,494,495,496,497,498,499,537,538,547,548,549,550,587,588,589,590,696,708,742,752,753,772,773,774,781,836,848,857,860,861,888,889,890,898,929,975,976,1067,1153,1313],
-    gbifClassKeys: [121, 120],
+    // Ray-finned fish orders + the cartilaginous/jawless classes. Mirrors
+    // BONY_FISH_ORDER_KEYS in scripts/taxa.ts, which is the verified list.
+    //
+    // The pre-migration list also carried 19 keys that are not fish at all
+    // (Foraminiferida, Tricladida, Dorylaimida, Mermithida, Dimargaritales,
+    // Centrohelida, ...) — forams, flatworms, nematodes and fungi counted into
+    // this group's country statistics. Dropped here; the sync-side list never
+    // had them.
+    gbifTaxonKeys: [
+      "NX", "PJ", "RY", "S8", "T6", "6228Z",  // Amiiformes, Anguilliformes, Atheriniformes, Aulopiformes, Beloniformes, Beryciformes
+      "X2", "YR", "335", "37D", "38T", "PC",  // Characiformes, Clupeiformes, Cyprinodontiformes, Esociformes, Gadiformes, Perciformes
+      "622V4", "3VJ", "6236K", "47D", "46T", "463",  // Pleuronectiformes, Polymixiiformes, Siluriformes, Tetraodontiformes, Syngnathiformes, Stomiiformes
+      "4BY", "46Q", "3LB", "334", "3ZR",  // Zeiformes, Synbranchiformes, Mugiliformes, Cypriniformes, Salmoniformes
+      "LB", "CK",  // Elasmobranchii, Holocephali
+    ],
     color: "#06b6d4", // cyan-500
   },
   {
@@ -115,8 +124,7 @@ export const TAXA: TaxonConfig[] = [
     estimatedDescribed: 1457195, // IUCN invertebrates subtotal
     estimatedSource: IUCN_SOURCE,
     estimatedSourceUrl: IUCN_SOURCE_URL,
-    gbifKingdomKey: 1,
-    gbifClassKeys: [216, 367, 225, 137, 229, 206], // Insecta, Arachnida, Gastropoda, Bivalvia, Malacostraca, Anthozoa
+    gbifTaxonKeys: ["H6", "CCQKT", "7NF3Y", "7NF3C", "MC", "7S"],  // Insecta, Arachnida, Gastropoda, Bivalvia, Malacostraca, Anthozoa
     color: "#78716c", // stone-500
   },
   {
@@ -126,7 +134,7 @@ export const TAXA: TaxonConfig[] = [
     estimatedDescribed: 424003,
     estimatedSource: IUCN_SOURCE,
     estimatedSourceUrl: IUCN_SOURCE_URL,
-    gbifKingdomKey: 6,
+    gbifTaxonKeys: ["P"],  // Plantae
     color: "#22c55e", // green-500
   },
   {
@@ -137,7 +145,7 @@ export const TAXA: TaxonConfig[] = [
     estimatedDescribed: 162752, // IUCN fungi & protists subtotal
     estimatedSource: IUCN_SOURCE,
     estimatedSourceUrl: IUCN_SOURCE_URL,
-    gbifKingdomKey: 5,
+    gbifTaxonKeys: ["F"],  // Fungi
     color: "#d97706", // amber-600
   },
 ];

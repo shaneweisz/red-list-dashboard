@@ -222,9 +222,10 @@ export async function run(
   `);
 
   // vernacular-names.json — lowercased scientific name -> one common name, for
-  // class/order/family/genus ranks only (species already get a common name from
-  // our own Red List/GBIF data — see species-store.ts — so those ranks are
-  // deliberately excluded here to avoid a second, potentially-conflicting source).
+  // class/order/family/genus ranks only. Species are excluded here because they
+  // are keyed by col_id instead, in species-vernaculars.parquet below — this file
+  // is a name-keyed lookup for the taxonomy browser, where higher ranks have no
+  // stable key to hand.
   // A taxon can have several vernacular names (e.g. Anseriformes: "Ducks",
   // "Geese", "Swans", "Waterfowl", "Screamers") — pick one per col:taxonID via
   // ROW_NUMBER, preferring col:preferred=true, else the shortest name (a decent
@@ -271,6 +272,34 @@ export async function run(
     for (const r of rows) vernacularMap[String(r.name_lower)] = String(r.name);
     fs.writeFileSync(vernacularOut, JSON.stringify(vernacularMap, null, 0));
     console.log(`Wrote ${vernacularOut}: ${Object.keys(vernacularMap).length.toLocaleString()} class/order/family/genus common names`);
+
+    // species-vernaculars.parquet — col_id -> common name at species rank.
+    //
+    // Common names for GBIF species used to come from the GBIF species API, one
+    // request per species. That endpoint does not serve COL XR keys and its
+    // replacement returns no vernacular names (see fetch-gbif-species), so they
+    // come from the same CoL vernacular file as the ranks above — the taxonomy
+    // the keys belong to, rather than a second source that could disagree with it.
+    //
+    // Keyed by col_id, not by name: species keys are stable and unambiguous,
+    // whereas a scientific name can be shared by a synonym and its accepted name.
+    // Same two data-quality fixes as above (drop self-referential entries, fix
+    // CoL's inconsistent leading-letter casing).
+    const speciesVernacularOut = path.join(outDir, "species-vernaculars.parquet");
+    await conn.run(`
+      COPY (
+        SELECT v.col_id,
+               upper(substr(v.name, 1, 1)) || substr(v.name, 2) AS vernacular_name
+        FROM vern_best v
+        JOIN nu n ON n.col_id = v.col_id
+        WHERE n.rank = 'species'
+          AND lower(v.name) != lower(n.scientific_name)
+      ) TO '${speciesVernacularOut}' (FORMAT PARQUET, COMPRESSION ZSTD);
+    `);
+    const speciesVernCount = (await (await conn.run(
+      `SELECT count(*) AS n FROM '${speciesVernacularOut}'`
+    )).getRowObjects())[0].n;
+    console.log(`Wrote ${speciesVernacularOut}: ${Number(speciesVernCount).toLocaleString()} species common names`);
   }
 
   // Plausible-publication-year window. Upper bound: next calendar year (tolerates

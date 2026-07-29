@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { CACHE_5M } from "@/lib/cache-headers";
+import { COL_XR_CHECKLIST_KEY } from "@/lib/gbif";
 
 interface InatObservation {
   url: string;
@@ -71,6 +72,7 @@ export async function GET(
     const buildParams = (extraParams: Record<string, string> = {}) => {
       const params = new URLSearchParams({
         taxonKey: speciesKey,
+        checklistKey: COL_XR_CHECKLIST_KEY,
         hasCoordinate: "true",
         hasGeospatialIssue: "false",
         limit: "0",
@@ -120,6 +122,7 @@ export async function GET(
       // Recent iNaturalist observations (up to 10 for preview)
       fetch(`https://api.gbif.org/v1/occurrence/search?${new URLSearchParams({
         taxonKey: speciesKey,
+        checklistKey: COL_XR_CHECKLIST_KEY,
         datasetKey: INAT_DATASET_KEY,
         hasCoordinate: "true",
         limit: "10",

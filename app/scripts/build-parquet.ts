@@ -36,7 +36,7 @@ export async function run(): Promise<void> {
   const assessmentsOut = path.join(DATA_DIR, "assessments.parquet");
   const assessedOut = path.join(DATA_DIR, "assessed.parquet");
   const unassessedOut = path.join(DATA_DIR, "unassessed.parquet");
-  const domesticated = [...EXCLUDED_DOMESTICATED_GBIF_KEYS].join(",");
+  const domesticated = [...EXCLUDED_DOMESTICATED_GBIF_KEYS].map((k) => `'${k}'`).join(",");
 
   const inst = await DuckDBInstance.create(":memory:");
   const conn = await inst.connect();
@@ -45,7 +45,7 @@ export async function run(): Promise<void> {
   await conn.run(`
     CREATE TEMP TABLE gbif_all AS
       SELECT
-        CAST(gbif_species_key AS BIGINT)         AS gbif_species_key,
+        CAST(gbif_species_key AS VARCHAR)        AS gbif_species_key,
         scientific_name, common_name,
         taxon_group_table1a                      AS taxon_group,
         lower(class_name) AS class_name, lower(order_name) AS order_name, lower(family) AS family,
@@ -58,7 +58,7 @@ export async function run(): Promise<void> {
   await conn.run(`
     CREATE TEMP TABLE map AS
       SELECT CAST(sis_taxon_id AS BIGINT) AS sis_taxon_id,
-             CAST(gbif_species_key AS BIGINT) AS gbif_species_key,
+             CAST(gbif_species_key AS VARCHAR) AS gbif_species_key,
              name_source
       FROM read_csv_auto('${mappingCsv}')
       WHERE gbif_species_key IS NOT NULL;
@@ -81,10 +81,12 @@ export async function run(): Promise<void> {
         m.sis_taxon_id,
         sum(g.total_count)  AS gbif_occurrence_count,
         sum(g.count_after)  AS gbif_observations_after_assessment_year,
-        -- representative key: canonical-source preferred, then smallest key
+        -- representative key: canonical-source preferred, then lowest key
         -- (deterministic; for multi-match species this may differ from v1's
-        -- file-order pick, but is an equally-valid GBIF match for the species)
-        arg_min(m.gbif_species_key, (CASE WHEN m.name_source='canonical' THEN 0 ELSE 1 END) * 1000000000 + m.gbif_species_key) AS gbif_species_key
+        -- file-order pick, but is an equally-valid GBIF match for the species).
+        -- Sorts on a concatenated string because CoL keys are alphanumeric —
+        -- the old arithmetic form only worked on the backbone's integer keys.
+        arg_min(m.gbif_species_key, (CASE WHEN m.name_source='canonical' THEN '0' ELSE '1' END) || m.gbif_species_key) AS gbif_species_key
       FROM map m
       JOIN rl ON rl.sis_taxon_id = m.sis_taxon_id
       JOIN gbif_all g ON g.gbif_species_key = m.gbif_species_key AND g.taxon_group = rl.taxon_group
@@ -187,7 +189,15 @@ export async function run(): Promise<void> {
   await conn.run(`
     COPY (
       SELECT
-        -g.gbif_species_key              AS id,
+        -- Synthetic negative id (assessed rows use the positive sis_taxon_id).
+        -- Used to be the negated GBIF key, which CoL's alphanumeric keys can no
+        -- longer provide. Hashed rather than sequential because the dashboard
+        -- persists pinned species by abs(id) in localStorage, so the id has to
+        -- survive a resync that adds or removes species. Masked to 2^53 to stay
+        -- exactly representable once the query layer turns it into a JS number;
+        -- verified collision-free over the full CoL species universe, and the
+        -- assertion below re-checks that on every build.
+        -(hash(g.gbif_species_key) % 9007199254740992)::BIGINT AS id,
         g.scientific_name, g.common_name,
         g.taxon_group, g.class_name, g.order_name, g.family,
         'NE'                             AS iucn_category,
@@ -224,6 +234,11 @@ export async function run(): Promise<void> {
   console.log(`Wrote ${assessmentsOut}: ${h.nrows} assessment events across ${h.species} species`);
   const dup = (await q(`SELECT count(*) c FROM (SELECT gbif_species_key FROM gbif_all GROUP BY 1 HAVING count(*)>1)`))[0].c;
   console.log(`  duplicate GBIF keys across group files: ${dup}`);
+  // The unassessed id is a hash, so uniqueness is checked rather than assumed.
+  const idDup = (await q(`SELECT count(*) c FROM (SELECT id FROM '${unassessedOut}' GROUP BY 1 HAVING count(*)>1)`))[0].c;
+  if (Number(idDup) > 0) {
+    throw new Error(`build-parquet: ${idDup} colliding synthetic ids in ${unassessedOut} — two unassessed species would share a row identity.`);
+  }
 }
 
 const isDirectRun = process.argv[1]?.endsWith("build-parquet.ts") || process.argv[1]?.endsWith("build-parquet.js");

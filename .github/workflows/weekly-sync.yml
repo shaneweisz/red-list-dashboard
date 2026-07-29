@@ -11,10 +11,11 @@ name: Weekly data sync
 # downstream of it.
 #
 # Weekly (not monthly) so the resulting PR lands Sunday night and can be
-# reviewed/merged Monday morning. Note the CoL backbone (phases 7-9) refetches
+# reviewed/merged Monday morning. Note the CoL backbone (phases 2-4) refetches
 # its ~3.4GB ColDP export every run regardless of whether CoL has actually
 # published anything new — CoL releases aren't weekly, so most weeks that step
-# is pure overhead. Worth revisiting (e.g. skip phases 7-9 on some runs) if
+# is pure overhead. Worth revisiting (e.g. skip phases 2-4 on some runs, which
+# stays viable because this job restores data/ from R2 first) if
 # that turns out to be wasteful in practice.
 #
 # Safety notes (this repo is public — see README, IUCN license terms):

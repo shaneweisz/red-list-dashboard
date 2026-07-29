@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { CACHE_1H } from "@/lib/cache-headers";
+import { COL_XR_CHECKLIST_KEY } from "@/lib/gbif";
 
 interface InatContributor {
   login: string;
@@ -22,12 +23,19 @@ export async function GET(
     // provided, otherwise from the GBIF species API keyed by the GBIF taxon key.
     let canonicalName: string | undefined = nameParam || undefined;
     if (!canonicalName) {
-      const gbifResp = await fetch(`https://api.gbif.org/v1/species/${key}`);
+      // v2 match keyed by usageKey: v1/species/{key} only understands the legacy
+      // backbone's integer keys and rejects Catalogue of Life ids outright.
+      const gbifResp = await fetch(
+        `https://api.gbif.org/v2/species/match?${new URLSearchParams({
+          checklistKey: COL_XR_CHECKLIST_KEY,
+          usageKey: key,
+        })}`
+      );
       if (!gbifResp.ok) {
         return NextResponse.json({ observers: [], identifiers: [] }, { headers: CACHE_1H });
       }
       const gbifData = await gbifResp.json();
-      canonicalName = gbifData.canonicalName;
+      canonicalName = gbifData.usage?.canonicalName;
     }
     if (!canonicalName) {
       return NextResponse.json({ observers: [], identifiers: [] }, { headers: CACHE_1H });

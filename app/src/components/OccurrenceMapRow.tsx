@@ -278,7 +278,7 @@ interface RecordTypeBreakdown {
 }
 
 interface OccurrenceMapRowProps {
-  speciesKey: number;
+  speciesKey: string;
   countryCode?: string | null;
   mounted: boolean;
   assessmentYear?: number | null;
@@ -611,7 +611,7 @@ export default function OccurrenceMapRow({
   useEffect(() => {
     setLoadingOccurrences(true);
     const params = new URLSearchParams({
-      speciesKey: speciesKey.toString(),
+      speciesKey,
       limit: sampleSize.toString(),
     });
     if (countryCode) {
@@ -650,7 +650,7 @@ export default function OccurrenceMapRow({
     setLoadingMoreCategory(key);
     const alreadyLoaded = occurrences.filter((o) => classifyOccurrence(o) === key).length;
     const params = new URLSearchParams({
-      speciesKey: speciesKey.toString(),
+      speciesKey,
       basisOfRecord: gbifBasis,
       limit: BASIS_OF_RECORD_LOAD_MORE_BATCH.toString(),
       offset: alreadyLoaded.toString(),
@@ -680,7 +680,7 @@ export default function OccurrenceMapRow({
   const loadMoreOverall = useCallback(() => {
     setLoadingMoreOverall(true);
     const params = new URLSearchParams({
-      speciesKey: speciesKey.toString(),
+      speciesKey,
       limit: OVERALL_LOAD_MORE_BATCH.toString(),
       offset: generalOffset.toString(),
     });
