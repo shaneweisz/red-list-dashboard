@@ -2,16 +2,23 @@
 
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
+import { resolveOAuthProvider } from "@/config/oauth-providers";
 import { resolvePublicOrigin } from "@/config/public-origin";
 import { createClient } from "@/lib/supabase/server";
 
-export async function signInWithGitHub(formData: FormData) {
+export async function signInWithOAuth(formData: FormData) {
+  // Which button was pressed. Untrusted input — see resolveOAuthProvider.
+  const provider = resolveOAuthProvider(formData.get("provider"));
+  if (!provider) {
+    redirect("/login?error=oauth_init_failed");
+  }
+
   const supabase = await createClient();
 
-  // Where GitHub should send the user back to. This has to be the domain the
-  // browser is actually on: the PKCE code verifier is stored in a cookie set on
-  // that domain, and if the callback lands anywhere else the cookie isn't sent
-  // and the code exchange fails (#416).
+  // Where the provider should send the user back to. This has to be the domain
+  // the browser is actually on: the PKCE code verifier is stored in a cookie set
+  // on that domain, and if the callback lands anywhere else the cookie isn't
+  // sent and the code exchange fails (#416).
   //
   // The Host header alone can't tell us — red.cst.cam.ac.uk and en.ki reach
   // Vercel through a proxy that rewrites Host to red-list-dashboard.vercel.app,
@@ -25,9 +32,10 @@ export async function signInWithGitHub(formData: FormData) {
   });
 
   const { data, error } = await supabase.auth.signInWithOAuth({
-    provider: "github",
+    provider: provider.id,
     options: {
       redirectTo: `${origin}/auth/callback`,
+      ...(provider.scopes ? { scopes: provider.scopes } : {}),
     },
   });
 
