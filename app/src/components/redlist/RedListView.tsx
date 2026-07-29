@@ -778,11 +778,11 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
     setSelectedPopulationTrends(new Set());
     setSelectedMovementPatterns(new Set());
     setSelectedThreats(new Set());
-    setExpandedThreat(null);
+    setExpandedThreat(new Set());
     setSelectedCriteria(new Set());
     setExpandedCriteria(new Set());
     setSelectedHabitat(new Set());
-    setExpandedHabitat(null);
+    setExpandedHabitat(new Set());
     setHabitatBreadth(null);
     setSelectedHabitatImportance(new Set(ALL_HABITAT_IMPORTANCE));
     setSelectedHabitatSeasons(new Set(ALL_HABITAT_SEASONS));
@@ -912,19 +912,27 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
 
   const [showOnlyStarred, setShowOnlyStarred] = useState(false);
   const [moreFiltersOpen, setMoreFiltersOpen] = useState(false);
-  const [expandedThreat, setExpandedThreat] = useState<string | null>(null);
+  // Set, not a single string (like expandedCriteria below) — multi-selecting
+  // two top-level threats (cmd-click) should show pills below BOTH, not just
+  // whichever was clicked last.
+  const [expandedThreat, setExpandedThreat] = useState<Set<string>>(new Set());
 
-  // Keep the threats drill-down in sync with the selection. Whenever the expanded
+  // Keep the threats drill-down in sync with the selection. Whenever an expanded
   // top-level category is no longer represented in the selection — because the
   // threats were cleared (Clear all / chip ×), a child was deselected, or the view
-  // was reset — collapse the sub-category pane so no stale nested level lingers.
+  // was reset — collapse that category's pills so no stale level lingers.
+  // Independent per category, mirroring expandedCriteria's effect below.
   useEffect(() => {
-    if (!expandedThreat) return;
-    const stillSelected = Array.from(selectedThreats).some(
-      c => c === expandedThreat || c.startsWith(expandedThreat + ".")
-    );
-    if (!stillSelected) setExpandedThreat(null);
-  }, [selectedThreats, expandedThreat]);
+    setExpandedThreat(prev => {
+      let changed = false;
+      const next = new Set(prev);
+      for (const ec of prev) {
+        const stillSelected = Array.from(selectedThreats).some(c => c === ec || c.startsWith(ec + "."));
+        if (!stillSelected) { next.delete(ec); changed = true; }
+      }
+      return changed ? next : prev;
+    });
+  }, [selectedThreats]);
 
   // Set, not a single string, so multiple branches can be drilled into and stay open
   // at once (e.g. B1b AND C2a both expanded simultaneously) — needed for proper
@@ -947,18 +955,22 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
     });
   }, [selectedCriteria]);
 
-  // Habitat drill-down: a single expanded top-level category, like expandedThreat
-  // above (habitat only needs 2 levels — top category, then sub-habitat — so it
-  // doesn't need Criteria's multi-branch Set).
-  const [expandedHabitat, setExpandedHabitat] = useState<string | null>(null);
+  // Habitat drill-down — Set-based like expandedThreat above, for the same
+  // reason: multi-selecting two top-level habitats should show pills below
+  // both.
+  const [expandedHabitat, setExpandedHabitat] = useState<Set<string>>(new Set());
 
   useEffect(() => {
-    if (!expandedHabitat) return;
-    const stillSelected = Array.from(selectedHabitat).some(
-      c => c === expandedHabitat || c.startsWith(expandedHabitat + ".")
-    );
-    if (!stillSelected) setExpandedHabitat(null);
-  }, [selectedHabitat, expandedHabitat]);
+    setExpandedHabitat(prev => {
+      let changed = false;
+      const next = new Set(prev);
+      for (const ec of prev) {
+        const stillSelected = Array.from(selectedHabitat).some(c => c === ec || c.startsWith(ec + "."));
+        if (!stillSelected) { next.delete(ec); changed = true; }
+      }
+      return changed ? next : prev;
+    });
+  }, [selectedHabitat]);
 
   // Habitat chart pagination — 18 top-level categories is more than
   // comfortably fits in the card's fixed chart height, so page through them
@@ -3075,16 +3087,26 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
       .map(({ code, label }) => ({ code: label, rawCode: code, count: threatCounts[code] ?? 0, label: threatBarLabel(threatCounts[code] ?? 0) }))
       .filter(d => d.count > 0)
       .sort((a, b) => b.count - a.count);
-    // selectedItems needs to use labels too for dimming
+    // selectedItems needs to use labels too for dimming. A category counts as
+    // "selected" for muting purposes if it's directly selected OR any of its
+    // children are (so clicking a pill mutes every OTHER top-level bar, not
+    // just the ones that are themselves literally selected) — otherwise this
+    // set would always end up empty once only a child pill is picked, and no
+    // muting would ever happen.
     const selectedThreatLabels = new Set(
-      Array.from(selectedThreats).map(code => THREAT_CATEGORIES.find(c => c.code === code)?.label).filter(Boolean) as string[]
+      THREAT_CATEGORIES.filter(c =>
+        Array.from(selectedThreats).some(sel => sel === c.code || sel.startsWith(c.code + "."))
+      ).map(c => c.label)
     );
     const loading = speciesLoading && assessedSpecies.length === 0;
+    // Pills' left edge lines up with where the bars themselves start (past the
+    // y-axis label column), not the chart's left edge — yAxisWidth (155) +
+    // FilterBarChart's default leftMargin (5).
     const renderThreatPills = (rawCode: string) => {
       const drillCat = THREAT_CATEGORIES.find(c => c.code === rawCode);
       if (!drillCat) return null;
       return (
-        <div className="flex flex-wrap gap-1 pl-2 pb-1">
+        <div className="flex flex-wrap gap-1 pb-1" style={{ paddingLeft: 160 }}>
           {drillCat.children.map(child => {
             const count = threatCounts[child.code] ?? 0;
             if (count === 0) return null;
@@ -3123,7 +3145,7 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
         ) : threatBarData.length > 0 ? (
           renderInlineDrilldown(
             threatBarData,
-            (rawCode) => expandedThreat === rawCode,
+            (rawCode) => expandedThreat.has(rawCode),
             renderThreatPills,
             {
               dataKey: "code",
@@ -3138,7 +3160,7 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
                   if (prev.size === 1 && prev.has(code)) return new Set();
                   return new Set([code]);
                 });
-                setExpandedThreat(prev => prev === code ? null : code);
+                setExpandedThreat(prev => { const next = new Set(prev); if (next.has(code)) next.delete(code); else next.add(code); return next; });
               },
               barColor: "#8b5cf6",
               yAxisWidth: 155,
@@ -3170,14 +3192,16 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
     const safeHabitatPage = Math.min(habitatPage, habitatTotalPages - 1);
     const pagedHabitatBarData = habitatBarData.slice(safeHabitatPage * HABITAT_PAGE_SIZE, (safeHabitatPage + 1) * HABITAT_PAGE_SIZE);
     const selectedHabitatLabels = new Set(
-      Array.from(selectedHabitat).map(code => HABITAT_CATEGORIES.find(c => c.code === code)?.label).filter(Boolean) as string[]
+      HABITAT_CATEGORIES.filter(c =>
+        Array.from(selectedHabitat).some(sel => sel === c.code || sel.startsWith(c.code + "."))
+      ).map(c => c.label)
     );
     const loading = speciesLoading && assessedSpecies.length === 0;
     const renderHabitatPills = (rawCode: string) => {
       const drillCat = HABITAT_CATEGORIES.find(c => c.code === rawCode);
       if (!drillCat) return null;
       return (
-        <div className="flex flex-wrap gap-1 pl-2 pb-1">
+        <div className="flex flex-wrap gap-1 pb-1" style={{ paddingLeft: 160 }}>
           {drillCat.children.map(child => {
             const count = habitatCounts[child.code] ?? 0;
             if (count === 0) return null;
@@ -3376,7 +3400,7 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
           <>
             {renderInlineDrilldown(
               pagedHabitatBarData,
-              (rawCode) => expandedHabitat === rawCode,
+              (rawCode) => expandedHabitat.has(rawCode),
               renderHabitatPills,
               {
                 dataKey: "code",
@@ -3391,7 +3415,7 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
                     if (prev.size === 1 && prev.has(code)) return new Set();
                     return new Set([code]);
                   });
-                  setExpandedHabitat(prev => prev === code ? null : code);
+                  setExpandedHabitat(prev => { const next = new Set(prev); if (next.has(code)) next.delete(code); else next.add(code); return next; });
                 },
                 barColor: "#0d9488",
                 yAxisWidth: 155,
@@ -3441,7 +3465,11 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
   // value), so drilling into one branch never collapses another branch you
   // already had open.
   const renderCriteriaRow = (nodes: CriteriaNode[], depth: number) => (
-    <div className="flex flex-wrap gap-1" style={{ paddingLeft: depth * 10 }}>
+    // Depth 1's pills align with where the bar chart's bars start
+    // (yAxisWidth 42 + leftMargin 5 = 47), same principle as Threats/Habitat's
+    // top-level pills; deeper levels keep the original 10px-per-level
+    // staircase on top of that base.
+    <div className="flex flex-wrap gap-1" style={{ paddingLeft: 47 + (depth - 1) * 10 }}>
       {nodes.map(node => {
         const isSelected = selectedCriteria.has(node.code);
         const count = criteriaCounts[node.code] ?? 0;
@@ -3497,12 +3525,20 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
   // recursive pill rows, unchanged — the issue's "opens pills not nested bars"
   // ask was already true for Criteria beyond the top level.
   const criteriaCard = (() => {
-    const criteriaLabelToCode = new Map(CRITERIA_CATEGORIES.map(c => [c.label, c.code]));
+    // code === rawCode here (CRITERIA_CATEGORIES' top-level code is already
+    // the bare letter) — bare letters on the axis match Number of
+    // Assessments' bare short labels so the two charts' bar geometry lines up
+    // when they sit side by side; the full description moves to the tooltip
+    // via labelFormatter below instead of living on the axis.
     const criteriaBarData: DrilldownBarDatum[] = CRITERIA_CATEGORIES
-      .map(({ code, label }) => ({ code: label, rawCode: code, count: criteriaCounts[code] ?? 0, label: (criteriaCounts[code] ?? 0).toLocaleString() }))
+      .map(({ code }) => ({ code, rawCode: code, count: criteriaCounts[code] ?? 0, label: (criteriaCounts[code] ?? 0).toLocaleString() }))
       .filter(d => d.count > 0 || selectedCriteria.has(d.rawCode));
-    const selectedCriteriaLabels = new Set(
-      Array.from(selectedCriteria).map(code => CRITERIA_CATEGORIES.find(c => c.code === code)?.label).filter(Boolean) as string[]
+    // A top-level letter counts as "selected" (and so isn't muted) if it OR
+    // any of its selected descendants (e.g. "B1b" under "B") is selected.
+    const selectedCriteriaCodes = new Set(
+      CRITERIA_CATEGORIES.filter(c =>
+        Array.from(selectedCriteria).some(sel => sel === c.code || sel.startsWith(c.code))
+      ).map(c => c.code)
     );
     const loading = speciesLoading && assessedSpecies.length === 0;
     const renderCriteriaPills = (rawCode: string) => {
@@ -3524,10 +3560,9 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
             renderCriteriaPills,
             {
               dataKey: "code",
-              selectedItems: selectedCriteriaLabels,
+              selectedItems: selectedCriteriaCodes,
               onBarClick: (data: { payload?: { code?: string } }, event: React.MouseEvent) => {
-                const label = data.payload?.code;
-                const code = label ? criteriaLabelToCode.get(label) : undefined;
+                const code = data.payload?.code;
                 if (!code) return;
                 const isMulti = event.metaKey || event.ctrlKey;
                 if (isMulti) {
@@ -3541,9 +3576,9 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
                 }
               },
               barColor: "#6366f1",
-              yAxisWidth: 100,
-              rightMargin: 60,
-              yAxisTickMaxLength: 14,
+              yAxisWidth: 42,
+              rightMargin: 85,
+              labelFormatter: (code: string) => CRITERIA_CATEGORIES.find(c => c.code === code)?.label ?? code,
             }
           )
         ) : (
@@ -4333,9 +4368,9 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
                 onClick={() => {
                   clearAllFiltersAndTaxa();
                   setShowOnlyStarred(false);
-                  setExpandedThreat(null);
+                  setExpandedThreat(new Set());
                   setExpandedCriteria(new Set());
-                  setExpandedHabitat(null);
+                  setExpandedHabitat(new Set());
                 }}
                 title="Reset all filters and the selected taxon"
                 className="px-2 md:px-3 py-1.5 rounded-lg text-xs md:text-sm font-medium transition-colors flex items-center gap-1 md:gap-1.5 bg-white text-zinc-700 border border-zinc-200 hover:bg-zinc-50 dark:bg-zinc-800 dark:text-zinc-300 dark:border-zinc-700 shrink-0"
