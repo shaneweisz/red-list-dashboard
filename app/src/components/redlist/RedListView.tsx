@@ -3061,11 +3061,18 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
       }
     }
     if (current.length > 0) segments.push({ bars: current, pillsAfter: null });
+    // Each segment is a separate <FilterBarChart>, so without a shared xAxisMax
+    // every segment auto-scales its bars to its OWN local max count — the
+    // segment after the pills would then stretch its bars to fill the width
+    // even though they represent smaller counts than bars in the segment
+    // before it. Fix the domain to the full dataset's max so bar length stays
+    // comparable across segments, same as it was before the split existed.
+    const globalMax = data.length > 0 ? Math.max(...data.map(d => d.count)) : 0;
     return segments.map((seg, i) => (
       <React.Fragment key={i}>
         {seg.bars.length > 0 && (
           <div style={{ height: Math.max(30, seg.bars.length * 22 + 8) }}>
-            <FilterBarChart data={seg.bars} {...chartProps} />
+            <FilterBarChart data={seg.bars} xAxisMax={globalMax} {...chartProps} />
           </div>
         )}
         {seg.pillsAfter && renderPills(seg.pillsAfter)}
