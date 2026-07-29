@@ -4027,12 +4027,12 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
           )}
 
           {/* Country + Threats are always visible, alongside Charts row 1
-              above — everything past that (Growth Form, Habitat + Realm/
-              Movement/Trend/Criteria, Assessors/Reviewers) lives behind the
-              "More Filters" toggle below. No independently-scrollable panel
-              here anymore — nested scrollbars (the panel's own, inside the
-              page's) read as confusing, so this reverts to plain
-              click-to-expand instead. */}
+              above — everything past that (Criteria/Number of Assessments,
+              Realm/Movement/Trend, Habitat/Assessors-Reviewers, Growth Form)
+              lives behind the "More Filters" toggle below. No
+              independently-scrollable panel here anymore — nested
+              scrollbars (the panel's own, inside the page's) read as
+              confusing, so this reverts to plain click-to-expand instead. */}
           {!isNewAssessments && (
             <>
                 {/* Country, Threats — paired side by side. */}
@@ -4060,6 +4060,75 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
 
           {!isNewAssessments && moreFiltersOpen && (
             <>
+                {/* Criteria alongside Number of Assessments — a row, not a
+                    stack (previously stacked in Habitat's right column; moved
+                    out once Habitat started pairing with Assessors/Reviewers
+                    instead). */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  {/* Criteria — top-level A-E bar chart (see criteriaCard);
+                      clicking a bar both selects it as a filter AND expands
+                      its next level below (number -> sub-clause -> roman
+                      numeral, as deep as that branch goes) as pill rows via
+                      renderCriteriaLevel, since criteria nests up to 4
+                      levels vs. Threats/Habitat's 2. Cmd/ctrl-click for real
+                      multi-select — any number of branches can be drilled
+                      into and selected simultaneously (e.g. B1b(iii) AND
+                      C2a(i) together), each independently expanded via
+                      expandedCriteria (a Set, not a single "last expanded"
+                      value). A species can satisfy multiple codes under the
+                      same letter too (e.g. B1+B2, or B1a and B1b together),
+                      so selecting any code matches species with that code
+                      OR a more specific one beneath it (see
+                      parseCriteriaCodes' startsWith-based matching). */}
+                  {!isNewAssessments && criteriaCard}
+
+                  {/* Number of Assessments (#423 item 1) — how many times a
+                      species has been assessed, with a "Reassessed" shortcut
+                      selecting every bucket >= 2 in one click (flags species
+                      reassessed at least once, per the issue's explicit ask),
+                      same shape as the Outdated shortcut next to Years Since
+                      Assessed. */}
+                  {!isNewAssessments && (
+                    <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-3 flex flex-col">
+                      <div className="flex items-center justify-between mb-1">
+                        <span className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">Number of Assessments</span>
+                        <button
+                          type="button"
+                          onClick={handleReassessedClick}
+                          className={`px-2 py-0.5 text-xs font-semibold rounded transition-colors ${
+                            isReassessedSelected
+                              ? "bg-red-600 text-white shadow-sm"
+                              : "bg-zinc-100 dark:bg-zinc-800 text-zinc-500 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-300"
+                          }`}
+                          aria-pressed={isReassessedSelected}
+                          title="Filter to species assessed 2 or more times (reassessed at least once)"
+                        >
+                          Reassessed
+                        </button>
+                      </div>
+                      <div style={{ height: 200 }} className="flex items-center justify-center">
+                        {speciesLoading && assessedSpecies.length === 0 ? (
+                          <Spinner />
+                        ) : isSingleSpecies && singleSpecies ? (
+                          <span className="text-4xl font-bold text-zinc-900 dark:text-zinc-100">
+                            {assessmentCountBucket(singleSpecies.assessment_count)}
+                          </span>
+                        ) : assessmentCountData.length > 0 ? (
+                          <FilterBarChart
+                            data={assessmentCountData}
+                            dataKey="shortRange"
+                            selectedItems={selectedAssessmentCounts}
+                            onBarClick={handleAssessmentCountClick}
+                            barColor="#8b5cf6"
+                            yAxisWidth={42}
+                            rightMargin={85}
+                          />
+                        ) : null}
+                      </div>
+                    </div>
+                  )}
+                </div>
+
                 {/* Realm, Movement, and Trend as three columns in one row. */}
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                   {/* Realm */}
@@ -4165,75 +4234,6 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
                       })}
                     </div>
                   </div>
-                </div>
-
-                {/* Criteria alongside Number of Assessments — a row, not a
-                    stack (previously stacked in Habitat's right column; moved
-                    out once Habitat started pairing with Assessors/Reviewers
-                    instead). */}
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                  {/* Criteria — top-level A-E bar chart (see criteriaCard);
-                      clicking a bar both selects it as a filter AND expands
-                      its next level below (number -> sub-clause -> roman
-                      numeral, as deep as that branch goes) as pill rows via
-                      renderCriteriaLevel, since criteria nests up to 4
-                      levels vs. Threats/Habitat's 2. Cmd/ctrl-click for real
-                      multi-select — any number of branches can be drilled
-                      into and selected simultaneously (e.g. B1b(iii) AND
-                      C2a(i) together), each independently expanded via
-                      expandedCriteria (a Set, not a single "last expanded"
-                      value). A species can satisfy multiple codes under the
-                      same letter too (e.g. B1+B2, or B1a and B1b together),
-                      so selecting any code matches species with that code
-                      OR a more specific one beneath it (see
-                      parseCriteriaCodes' startsWith-based matching). */}
-                  {!isNewAssessments && criteriaCard}
-
-                  {/* Number of Assessments (#423 item 1) — how many times a
-                      species has been assessed, with a "Reassessed" shortcut
-                      selecting every bucket >= 2 in one click (flags species
-                      reassessed at least once, per the issue's explicit ask),
-                      same shape as the Outdated shortcut next to Years Since
-                      Assessed. */}
-                  {!isNewAssessments && (
-                    <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-3 flex flex-col">
-                      <div className="flex items-center justify-between mb-1">
-                        <span className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">Number of Assessments</span>
-                        <button
-                          type="button"
-                          onClick={handleReassessedClick}
-                          className={`px-2 py-0.5 text-xs font-semibold rounded transition-colors ${
-                            isReassessedSelected
-                              ? "bg-red-600 text-white shadow-sm"
-                              : "bg-zinc-100 dark:bg-zinc-800 text-zinc-500 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-300"
-                          }`}
-                          aria-pressed={isReassessedSelected}
-                          title="Filter to species assessed 2 or more times (reassessed at least once)"
-                        >
-                          Reassessed
-                        </button>
-                      </div>
-                      <div style={{ height: 200 }} className="flex items-center justify-center">
-                        {speciesLoading && assessedSpecies.length === 0 ? (
-                          <Spinner />
-                        ) : isSingleSpecies && singleSpecies ? (
-                          <span className="text-4xl font-bold text-zinc-900 dark:text-zinc-100">
-                            {assessmentCountBucket(singleSpecies.assessment_count)}
-                          </span>
-                        ) : assessmentCountData.length > 0 ? (
-                          <FilterBarChart
-                            data={assessmentCountData}
-                            dataKey="shortRange"
-                            selectedItems={selectedAssessmentCounts}
-                            onBarClick={handleAssessmentCountClick}
-                            barColor="#8b5cf6"
-                            yAxisWidth={42}
-                            rightMargin={85}
-                          />
-                        ) : null}
-                      </div>
-                    </div>
-                  )}
                 </div>
 
                 {/* Habitat alongside Assessors/Reviewers. */}
