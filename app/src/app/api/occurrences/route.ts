@@ -164,7 +164,7 @@ export async function GET(request: NextRequest) {
       type: "FeatureCollection",
       features,
       metadata: {
-        speciesKey: parseInt(speciesKey),
+        speciesKey,
         count: features.length,
         total: totalCount,
         bbox: features.length > 0 ? [minLon, minLat, maxLon, maxLat] : null,
