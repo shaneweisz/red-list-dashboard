@@ -2790,7 +2790,23 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
   }, []);
 
   const currentYear = new Date().getFullYear();
-  const GBIF_FILTERS = "has_coordinate=true&has_geospatial_issue=false&basis_of_record=HUMAN_OBSERVATION&basis_of_record=MACHINE_OBSERVATION&basis_of_record=OCCURRENCE&basis_of_record=MATERIAL_SAMPLE&basis_of_record=OBSERVATION";
+  // GBIF relaunched gbif.org on 18 June 2026 with Catalogue of Life Extended
+  // Release as its default taxonomy. The gbif_species_key values stored here are
+  // keys from the GBIF Backbone, which resolve to nothing under CoL — and GBIF
+  // answers that with an empty result set rather than an error, so these links
+  // silently landed on a search reading "0 records". Naming the backbone
+  // checklist explicitly is GBIF's documented fix:
+  //   https://data-blog.gbif.org/post/catalogue-of-life-taxonomic-backbone/
+  //   "An old occurrence search link without the checklistKey parameter will
+  //    return nothing"
+  // The filter params are camelCase because that is what the new site documents;
+  // the old snake_case spellings now survive only via GBIF's redirect layer.
+  //
+  // The backbone is frozen (last updated 2023), so the durable fix is to store
+  // CoL keys in the pipeline instead — a much larger migration, tracked in #441.
+  // Until then this keeps every link working.
+  const GBIF_BACKBONE_CHECKLIST_KEY = "d7dddbf4-2cf0-4f39-9b2a-bb099caae36c";
+  const GBIF_FILTERS = `checklistKey=${GBIF_BACKBONE_CHECKLIST_KEY}&hasCoordinate=true&hasGeospatialIssue=false&basisOfRecord=HUMAN_OBSERVATION&basisOfRecord=MACHINE_OBSERVATION&basisOfRecord=OCCURRENCE&basisOfRecord=MATERIAL_SAMPLE&basisOfRecord=OBSERVATION`;
   const isNE = (s: Species) => s.category === "NE";
 
   // GBIF occurrence counts aren't filterable per-country/category/etc. — only show
@@ -4976,7 +4992,7 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
                     <td className="px-4 py-3 text-right text-zinc-600 dark:text-zinc-400 text-sm tabular-nums whitespace-nowrap">
                       {details?.gbifOccurrences != null && details?.gbifUrl ? (
                         <a
-                          href={`https://www.gbif.org/occurrence/search?taxon_key=${details.gbifUrl.split('/').pop()}&${GBIF_FILTERS}`}
+                          href={`https://www.gbif.org/occurrence/search?taxonKey=${details.gbifUrl.split('/').pop()}&${GBIF_FILTERS}`}
                           target="_blank"
                           rel="noopener noreferrer"
                           className="text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 underline decoration-dotted hover:decoration-solid"
@@ -4986,7 +5002,7 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
                         </a>
                       ) : s.gbif_occurrence_count != null && s.gbif_species_key ? (
                         <a
-                          href={`https://www.gbif.org/occurrence/search?taxon_key=${s.gbif_species_key}&${GBIF_FILTERS}`}
+                          href={`https://www.gbif.org/occurrence/search?taxonKey=${s.gbif_species_key}&${GBIF_FILTERS}`}
                           target="_blank"
                           rel="noopener noreferrer"
                           className="text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 underline decoration-dotted hover:decoration-solid"
@@ -5013,10 +5029,13 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
                         const newObs = details?.gbifOccurrencesSinceAssessment ?? s.gbif_observations_after_assessment_year;
                         if (newObs == null) return "—";
                         const key = details?.gbifUrl?.split('/').pop() ?? s.gbif_species_key;
-                        if (key && assessmentYear) {
+                        // A species assessed this year has no "since" range to
+                        // link to — year=<next year>,<this year> is a reversed,
+                        // meaningless range — so show the number unlinked.
+                        if (key && assessmentYear && assessmentYear < currentYear) {
                           return (
                             <a
-                              href={`https://www.gbif.org/occurrence/search?taxon_key=${key}&year=${assessmentYear + 1},${currentYear}&${GBIF_FILTERS}`}
+                              href={`https://www.gbif.org/occurrence/search?taxonKey=${key}&year=${assessmentYear + 1},${currentYear}&${GBIF_FILTERS}`}
                               target="_blank"
                               rel="noopener noreferrer"
                               className="text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 underline decoration-dotted hover:decoration-solid"
