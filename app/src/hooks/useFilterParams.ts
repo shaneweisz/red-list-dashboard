@@ -246,11 +246,12 @@ export function parseParams(search: string, suffix: string = "") {
       sortParam === "category" ? "category" :
       sortParam === "year" ? "year" :
       sortParam === "totalGbif" ? "totalGbif" :
+      sortParam === "atAssessGbif" ? "atAssessGbif" :
       sortParam === "newGbif" ? "newGbif" :
       sortParam === "pctNewGbif" ? "pctNewGbif" :
       sortParam === "describedYear" ? "describedYear" :
       null
-    ) as "year" | "category" | "totalGbif" | "newGbif" | "pctNewGbif" | "describedYear" | null,
+    ) as "year" | "category" | "totalGbif" | "atAssessGbif" | "newGbif" | "pctNewGbif" | "describedYear" | null,
     sortDirection: (p.get(k("dir")) === "asc" ? "asc" : "desc") as "asc" | "desc",
     mapViewMode: (p.get(k("mapview")) === "list" ? "list" : "map") as MapViewMode,
     mapSortKey: (
@@ -301,7 +302,7 @@ export function buildQs(state: {
   maxAssessmentYear?: number | null;
   minDescribedYear?: number | null;
   maxDescribedYear?: number | null;
-  sortField: "year" | "category" | "totalGbif" | "newGbif" | "pctNewGbif" | "describedYear" | null;
+  sortField: "year" | "category" | "totalGbif" | "atAssessGbif" | "newGbif" | "pctNewGbif" | "describedYear" | null;
   sortDirection: "asc" | "desc";
   mapViewMode?: MapViewMode;
   mapSortKey?: MapSortKey;
@@ -892,7 +893,7 @@ export function useFilterParams(paramSuffix: string = "") {
   );
 
   const setSort = useCallback(
-    (field: "year" | "category" | "totalGbif" | "newGbif" | "pctNewGbif" | "describedYear" | null, direction: "asc" | "desc") => {
+    (field: "year" | "category" | "totalGbif" | "atAssessGbif" | "newGbif" | "pctNewGbif" | "describedYear" | null, direction: "asc" | "desc") => {
       setState(prev => {
         const next = { ...prev, sortField: field, sortDirection: direction };
         queueMicrotask(() => syncUrl(next, false));

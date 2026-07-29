@@ -555,6 +555,17 @@ function GbifInfoTooltip() {
   );
 }
 
+/**
+ * Records that already existed when the species was assessed: everything GBIF
+ * holds for it, minus what arrived after the assessment year. Clamped at 0 —
+ * the two counts come from the same GBIF snapshot, but a taxonomic re-link
+ * between them could in principle leave the "after" count larger.
+ */
+function gbifAtAssessment(total: number | null | undefined, since: number | null | undefined): number | null {
+  if (total == null || since == null) return null;
+  return Math.max(0, total - since);
+}
+
 interface RedListViewProps {
   viewMode?: "reassessments" | "new-assessments";
   onViewModeChange?: (mode: "reassessments" | "new-assessments") => void;
@@ -2246,6 +2257,10 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
         comparison = (CATEGORY_ORDER[a.category] ?? 99) - (CATEGORY_ORDER[b.category] ?? 99);
       } else if (sortField === "totalGbif") {
         comparison = (a.gbif_occurrence_count ?? -1) - (b.gbif_occurrence_count ?? -1);
+      } else if (sortField === "atAssessGbif") {
+        const atA = gbifAtAssessment(a.gbif_occurrence_count, a.gbif_observations_after_assessment_year);
+        const atB = gbifAtAssessment(b.gbif_occurrence_count, b.gbif_observations_after_assessment_year);
+        comparison = (atA ?? -1) - (atB ?? -1);
       } else if (sortField === "newGbif") {
         comparison = (a.gbif_observations_after_assessment_year ?? -1) - (b.gbif_observations_after_assessment_year ?? -1);
       } else if (sortField === "pctNewGbif") {
@@ -2356,7 +2371,7 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
 
 
   // Handle sort toggle
-  const handleSort = (field: "year" | "category" | "totalGbif" | "newGbif" | "pctNewGbif" | "describedYear") => {
+  const handleSort = (field: "year" | "category" | "totalGbif" | "atAssessGbif" | "newGbif" | "pctNewGbif" | "describedYear") => {
     const currentField = sortField === null ? "year" : sortField;
     if (currentField === field) {
       if (sortDirection === "desc") {
@@ -4780,6 +4795,25 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
                 {!isNewAssessments && (
                 <th
                   className="px-3 md:px-4 py-3 text-right text-xs font-medium text-zinc-500 uppercase tracking-wider min-w-[60px] cursor-pointer hover:text-zinc-700 dark:hover:text-zinc-300 select-none"
+                  onClick={() => handleSort("atAssessGbif")}
+                >
+                  <span className="flex items-center justify-end gap-1">
+                    GBIF At Assess.
+                    <HoverTooltip text="Records that already existed when the species was assessed: GBIF Total minus records added after the assessment year. The linked GBIF search filters to records dated up to the assessment year, so records with no date are counted here but not in that search.">
+                      <svg className="w-3 h-3 text-zinc-400 dark:text-zinc-500 cursor-help" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <circle cx="12" cy="12" r="10" />
+                        <path d="M12 16v-4M12 8h.01" />
+                      </svg>
+                    </HoverTooltip>
+                    {sortField === "atAssessGbif" && (
+                      <span className="text-red-500">{sortDirection === "desc" ? "↓" : "↑"}</span>
+                    )}
+                  </span>
+                </th>
+                )}
+                {!isNewAssessments && (
+                <th
+                  className="px-3 md:px-4 py-3 text-right text-xs font-medium text-zinc-500 uppercase tracking-wider min-w-[60px] cursor-pointer hover:text-zinc-700 dark:hover:text-zinc-300 select-none"
                   onClick={() => handleSort("newGbif")}
                 >
                   <span className="flex items-center justify-end gap-1">
@@ -5004,6 +5038,35 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
                         </HoverTooltip>
                       ) : "—"}
                     </td>
+                    {/* GBIF at assessment */}
+                    {!isNewAssessments && (
+                    <td className="px-4 py-3 text-right text-zinc-600 dark:text-zinc-400 text-sm tabular-nums whitespace-nowrap">
+                      {isNE(s) ? (
+                        <span className="text-zinc-400">N/A</span>
+                      ) : (() => {
+                        const atAssessment = gbifAtAssessment(
+                          details?.gbifOccurrences ?? s.gbif_occurrence_count,
+                          details?.gbifOccurrencesSinceAssessment ?? s.gbif_observations_after_assessment_year,
+                        );
+                        if (atAssessment == null) return "—";
+                        const key = details?.gbifUrl?.split('/').pop() ?? s.gbif_species_key;
+                        if (key && assessmentYear) {
+                          return (
+                            <a
+                              href={`https://www.gbif.org/occurrence/search?taxon_key=${key}&year=1000,${assessmentYear}&${GBIF_FILTERS}`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 underline decoration-dotted hover:decoration-solid"
+                              onClick={(e) => e.stopPropagation()}
+                            >
+                              {atAssessment.toLocaleString()}
+                            </a>
+                          );
+                        }
+                        return atAssessment.toLocaleString();
+                      })()}
+                    </td>
+                    )}
                     {/* New GBIF */}
                     {!isNewAssessments && (
                     <td className="px-4 py-3 text-right text-zinc-600 dark:text-zinc-400 text-sm tabular-nums whitespace-nowrap">
@@ -5045,7 +5108,7 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
                   </tr>
                   {selectedSpeciesKey === speciesKey && (
                     <tr>
-                      <td colSpan={isNewAssessments ? 4 : 8} className="p-0 bg-zinc-50 dark:bg-zinc-800/30" style={{ width: 0 }}>
+                      <td colSpan={isNewAssessments ? 4 : 9} className="p-0 bg-zinc-50 dark:bg-zinc-800/30" style={{ width: 0 }}>
                         <div style={{ width: 'var(--view-width, 100%)', maxWidth: '100%', transform: 'translateX(var(--scroll-left, 0px))' }}>
                           {/* Tab bar */}
                           <div className="flex flex-wrap items-center border-b border-zinc-200 dark:border-zinc-700" onClick={(e) => e.stopPropagation()}>
@@ -5250,7 +5313,7 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
               })}
               {totalFiltered === 0 && !speciesLoading && (
                 <tr>
-                  <td colSpan={isNewAssessments ? 4 : 8} className="px-4 py-8 text-center text-zinc-500">
+                  <td colSpan={isNewAssessments ? 4 : 9} className="px-4 py-8 text-center text-zinc-500">
                     No species found
                   </td>
                 </tr>
