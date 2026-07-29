@@ -41,9 +41,9 @@ const YEAR_BUCKET_CONCURRENCY = 30;
 // HELPERS
 // =============================================================================
 
-function loadAssessmentYears(taxonId: string, taxonGbifKeys: Set<number>): Map<number, number> {
+function loadAssessmentYears(taxonId: string, taxonGbifKeys: Set<string>): Map<string, number> {
   const mapping = readMappingCsv();
-  const speciesAssessmentYear = new Map<number, number>();
+  const speciesAssessmentYear = new Map<string, number>();
   const redlistSpecies = readRedlistCsv(taxonId);
   for (const s of redlistSpecies) {
     const links = mapping.get(s.sis_taxon_id) ?? [];
@@ -68,7 +68,7 @@ function loadAssessmentYears(taxonId: string, taxonGbifKeys: Set<number>): Map<n
 
 export async function fetchCountsSinceAssessment(
   taxon: Taxon,
-  gbifSpeciesMap: Map<number, GbifSpecies>,
+  gbifSpeciesMap: Map<string, GbifSpecies>,
 ): Promise<number> {
   const taxonGbifKeys = new Set(gbifSpeciesMap.keys());
 
@@ -80,13 +80,13 @@ export async function fetchCountsSinceAssessment(
   const uniqueYears = Array.from(new Set(Array.from(speciesAssessmentYear.values()))).sort((a, b) => a - b);
   const yearBuckets = uniqueYears.filter((y) => y + 1 <= CURRENT_YEAR);
 
-  const speciesByYear = new Map<number, Set<number>>();
+  const speciesByYear = new Map<number, Set<string>>();
   speciesAssessmentYear.forEach((year, speciesKey) => {
-    if (!speciesByYear.has(year)) speciesByYear.set(year, new Set());
+    if (!speciesByYear.has(year)) speciesByYear.set(year, new Set<string>());
     speciesByYear.get(year)!.add(speciesKey);
   });
 
-  const sinceAssessmentCounts = new Map<number, number>();
+  const sinceAssessmentCounts = new Map<string, number>();
   speciesAssessmentYear.forEach((_year, speciesKey) => {
     sinceAssessmentCounts.set(speciesKey, 0);
   });
@@ -99,7 +99,7 @@ export async function fetchCountsSinceAssessment(
 
     await mapConcurrent(yearBuckets, YEAR_BUCKET_CONCURRENCY, async (assessmentYear) => {
       const yearRange = `${assessmentYear + 1},${CURRENT_YEAR}`;
-      const results = await fetchFacets(q.keyType, q.keyValue, yearRange);
+      const results = await fetchFacets(q.taxonKey, yearRange);
       const bucketSpecies = speciesByYear.get(assessmentYear);
 
       if (bucketSpecies) {

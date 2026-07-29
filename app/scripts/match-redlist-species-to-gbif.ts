@@ -29,6 +29,7 @@ import {
 import { readRedlistCsv } from "./fetch-redlist-species";
 import { readGbifCsv } from "./fetch-gbif-species";
 import { TAXA } from "./taxa";
+import { COL_XR_CHECKLIST_KEY } from "../src/lib/gbif";
 
 // =============================================================================
 // CONFIGURATION
@@ -45,19 +46,22 @@ export type NameSource = "canonical" | "synonym";
 
 export interface MappingEntry {
   sis_taxon_id: number;
-  gbif_species_key: number | null;
+  gbif_species_key: string | null;
   match_type: string;
   /** Whether the GBIF key was found via the species's canonical name or via a synonym. */
   name_source: NameSource | "";
 }
 
+/**
+ * GBIF v2 match response (COL XR). `usage` is the name that matched; when that
+ * name is a synonym, `acceptedUsage` carries the accepted taxon — and it is the
+ * accepted key we want, because GBIF attributes occurrence records to accepted
+ * taxa (querying a synonym key returns almost nothing).
+ */
 interface GbifMatchResponse {
-  usageKey?: number;
-  acceptedUsageKey?: number;
-  canonicalName?: string;
-  matchType?: string; // EXACT, FUZZY, HIGHERRANK, NONE
-  rank?: string;
-  confidence?: number;
+  usage?: { key?: string; canonicalName?: string; rank?: string; status?: string };
+  acceptedUsage?: { key?: string; canonicalName?: string };
+  diagnostics?: { matchType?: string; confidence?: number }; // EXACT, FUZZY, HIGHERRANK, NONE
   synonym?: boolean;
 }
 
@@ -67,13 +71,17 @@ interface GbifMatchResponse {
 
 export async function matchGbifSpecies(
   name: string
-): Promise<{ key: number | null; matchType: string }> {
-  const params = new URLSearchParams({ name, strict: "true" });
+): Promise<{ key: string | null; matchType: string }> {
+  const params = new URLSearchParams({
+    checklistKey: COL_XR_CHECKLIST_KEY,
+    scientificName: name,
+    strict: "true",
+  });
 
   let response: Response | undefined;
   for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
     try {
-      response = await fetch(`https://api.gbif.org/v1/species/match?${params}`);
+      response = await fetch(`https://api.gbif.org/v2/species/match?${params}`);
     } catch (err) {
       if (attempt < MAX_RETRIES) {
         const wait = Math.pow(2, attempt + 1) * 1000;
@@ -95,16 +103,17 @@ export async function matchGbifSpecies(
 
   const data: GbifMatchResponse = await response.json();
 
-  if (!data.matchType || data.matchType === "NONE" || data.matchType === "HIGHERRANK") {
-    return { key: null, matchType: data.matchType || "NONE" };
+  const matchType = data.diagnostics?.matchType;
+  if (!matchType || matchType === "NONE" || matchType === "HIGHERRANK") {
+    return { key: null, matchType: matchType || "NONE" };
   }
 
-  if (data.rank !== "SPECIES") {
+  if (data.usage?.rank !== "SPECIES") {
     return { key: null, matchType: "WRONG_RANK" };
   }
 
-  const resolvedKey = data.acceptedUsageKey || data.usageKey || null;
-  return { key: resolvedKey, matchType: data.matchType };
+  const resolvedKey = data.acceptedUsage?.key || data.usage?.key || null;
+  return { key: resolvedKey, matchType };
 }
 
 // =============================================================================
@@ -125,7 +134,7 @@ export function writeMappingCsv(entries: MappingEntry[]): void {
 }
 
 export interface MappingLink {
-  gbif_species_key: number | null;
+  gbif_species_key: string | null;
   match_type: string;
   name_source: NameSource | "";
 }
@@ -139,7 +148,7 @@ export function readMappingCsv(): Map<number, MappingLink[]> {
   if (!fs.existsSync(MAPPING_CSV_PATH)) return new Map();
   const entries = readCsv<MappingEntry>(MAPPING_CSV_PATH, (r) => ({
     sis_taxon_id: parseInt(r.sis_taxon_id, 10),
-    gbif_species_key: r.gbif_species_key ? parseInt(r.gbif_species_key, 10) : null,
+    gbif_species_key: r.gbif_species_key || null,
     match_type: r.match_type || "",
     name_source: (r.name_source as NameSource) || "",
   }));
@@ -182,10 +191,10 @@ function loadAllRedlistSpecies(): SpeciesInput[] {
   return allSpecies;
 }
 
-export type MatchFn = (name: string) => Promise<{ key: number | null; matchType: string }>;
+export type MatchFn = (name: string) => Promise<{ key: string | null; matchType: string }>;
 
-function loadAllGbifKeys(): Set<number> {
-  const keys = new Set<number>();
+function loadAllGbifKeys(): Set<string> {
+  const keys = new Set<string>();
   for (const taxon of TAXA) {
     const csvPath = path.join(GBIF_DIR, `${taxon.id}.csv`);
     if (!fs.existsSync(csvPath)) continue;
@@ -235,7 +244,7 @@ interface MatchTask {
 }
 
 interface MatchResult extends MatchTask {
-  key: number | null;
+  key: string | null;
   matchType: string;
 }
 
@@ -245,7 +254,7 @@ interface MatchResult extends MatchTask {
  */
 export async function matchSpeciesList(
   redlistSpecies: SpeciesInput[],
-  gbifKeys: Set<number>,
+  gbifKeys: Set<string>,
   logger: SyncLogger,
   matchFn: MatchFn,
   concurrency: number = MATCH_CONCURRENCY,
@@ -309,9 +318,9 @@ export async function matchSpeciesList(
   const orderedSisIds = redlistSpecies.map((s) => s.sis_taxon_id);
 
   // Track which GBIF key has been claimed by which sis_taxon_id (cross-species DUPLICATE check).
-  const claimedBy = new Map<number, number>();
+  const claimedBy = new Map<string, number>();
   // Per-species set of accepted keys (so synonyms don't double-add the canonical key).
-  const acceptedKeysBySpecies = new Map<number, Set<number>>();
+  const acceptedKeysBySpecies = new Map<number, Set<string>>();
 
   const entries: MappingEntry[] = [];
   let exact = 0, fuzzy = 0, noMatch = 0, noGbifData = 0, alreadyLinked = 0;

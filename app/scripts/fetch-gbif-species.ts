@@ -8,17 +8,21 @@
  *   npx tsx scripts/fetch-gbif-species.ts            # Fetch all taxa
  */
 
+import * as fs from "fs";
 import * as path from "path";
+import { DuckDBInstance } from "@duckdb/node-api";
 import {
   loadEnvFiles,
   SyncLogger,
   writeCsv,
   readCsv,
+  DATA_DIR,
   GBIF_DIR,
   delay,
   toTitleCase,
 } from "./utils";
 import { getTaxa, type Taxon, type GbifQuery } from "./taxa";
+import { COL_XR_CHECKLIST_KEY, INCLUDED_BASIS_OF_RECORD } from "../src/lib/gbif";
 
 // =============================================================================
 // GBIF TAXA (legacy lookup — used by fetch-gbif-new-counts)
@@ -32,29 +36,20 @@ export type { Taxon, GbifQuery };
 
 const FACET_LIMIT = 100000;
 const REQUEST_DELAY = 200; // ms between GBIF requests
-const SPECIES_VALIDATION_BATCH_SIZE = 1000;
 const MAX_RETRIES = 5;
-
-const INCLUDED_BASIS_OF_RECORD = [
-  "HUMAN_OBSERVATION",
-  "MACHINE_OBSERVATION",
-  "OCCURRENCE",
-  "MATERIAL_SAMPLE",
-  "OBSERVATION",
-];
 
 // =============================================================================
 // TYPES
 // =============================================================================
 
 interface SpeciesCount {
-  speciesKey: number;
+  speciesKey: string;
   count: number;
   taxonGroup: string;
 }
 
 interface ValidatedSpecies {
-  key: number;
+  key: string;
   canonicalName: string;
   vernacularName: string;
   className: string;
@@ -63,7 +58,7 @@ interface ValidatedSpecies {
 }
 
 export interface GbifSpecies {
-  gbif_species_key: number;
+  gbif_species_key: string;
   scientific_name: string;
   common_name: string;
   taxon_group_table1a: string;
@@ -80,24 +75,24 @@ export interface GbifSpecies {
 // =============================================================================
 
 export async function fetchFacets(
-  keyType: string,
-  keyValue: number,
+  taxonKey: string,
   yearRange?: string,
   modifiedRange?: string,
-): Promise<Array<{ speciesKey: number; count: number }>> {
-  const allResults: Array<{ speciesKey: number; count: number }> = [];
+): Promise<Array<{ speciesKey: string; count: number }>> {
+  const allResults: Array<{ speciesKey: string; count: number }> = [];
   let offset = 0;
   let hasMore = true;
 
   while (hasMore) {
     const params = new URLSearchParams({
+      checklistKey: COL_XR_CHECKLIST_KEY,
       hasCoordinate: "true",
       hasGeospatialIssue: "false",
       facet: "speciesKey",
       facetLimit: FACET_LIMIT.toString(),
       facetOffset: offset.toString(),
       limit: "0",
-      [keyType]: keyValue.toString(),
+      taxonKey,
     });
 
     if (yearRange) params.set("year", yearRange);
@@ -131,7 +126,7 @@ export async function fetchFacets(
     if (!facet || facet.counts.length === 0) break;
 
     for (const c of facet.counts) {
-      allResults.push({ speciesKey: parseInt(c.name, 10), count: c.count });
+      allResults.push({ speciesKey: c.name, count: c.count });
     }
 
     hasMore = facet.counts.length >= FACET_LIMIT;
@@ -150,7 +145,7 @@ export async function fetchGbifCounts(taxon: Taxon): Promise<SpeciesCount[]> {
   for (let i = 0; i < taxon.gbif.length; i++) {
     const q = taxon.gbif[i];
     process.stdout.write(`\r  Query ${i + 1}/${taxon.gbif.length}`);
-    const results = await fetchFacets(q.keyType, q.keyValue);
+    const results = await fetchFacets(q.taxonKey);
     for (const r of results) {
       allResults.push({ speciesKey: r.speciesKey, count: r.count, taxonGroup: taxon.id });
     }
@@ -159,7 +154,7 @@ export async function fetchGbifCounts(taxon: Taxon): Promise<SpeciesCount[]> {
   console.log("");
 
   // Deduplicate: keep highest count per speciesKey
-  const seen = new Map<number, SpeciesCount>();
+  const seen = new Map<string, SpeciesCount>();
   for (const r of allResults) {
     if (!seen.has(r.speciesKey) || seen.get(r.speciesKey)!.count < r.count) {
       seen.set(r.speciesKey, r);
@@ -169,61 +164,71 @@ export async function fetchGbifCounts(taxon: Taxon): Promise<SpeciesCount[]> {
   return Array.from(seen.values()).sort((a, b) => b.count - a.count);
 }
 
-export async function validateSpeciesKeys(speciesKeys: number[]): Promise<Map<number, ValidatedSpecies>> {
-  const valid = new Map<number, ValidatedSpecies>();
+/**
+ * Resolve facet species keys to accepted species, with lineage and common name.
+ *
+ * These keys are Catalogue of Life Extended Release ids, and CoL XR is exactly
+ * what data/species/ is built from (build-backbone, phase 9) — so this is a
+ * local join, not a network call. It replaces a per-key GBIF lookup that issued
+ * one HTTP request for every species in every taxon (millions per full sync);
+ * the equivalent GBIF endpoint (v1/species/{key}) does not accept COL XR keys
+ * at all, and its v2 replacement returns no vernacular names.
+ *
+ * Presence in data/species/ IS the validity test: build-backbone writes only
+ * accepted species there.
+ */
+export async function validateSpeciesKeys(speciesKeys: string[]): Promise<Map<string, ValidatedSpecies>> {
+  const valid = new Map<string, ValidatedSpecies>();
+  if (speciesKeys.length === 0) return valid;
 
-  for (let i = 0; i < speciesKeys.length; i += SPECIES_VALIDATION_BATCH_SIZE) {
-    const batch = speciesKeys.slice(i, i + SPECIES_VALIDATION_BATCH_SIZE);
-
-    const results = await Promise.all(
-      batch.map(async (key) => {
-        for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
-          try {
-            const res = await fetch(`https://api.gbif.org/v1/species/${key}`, {
-              headers: { "Accept-Language": "en" },
-            });
-            if (res.status === 429 || (res.status >= 500 && res.status < 600)) {
-              if (attempt < MAX_RETRIES) {
-                await delay(Math.pow(2, attempt + 1) * 1000);
-                continue;
-              }
-              return { key, rank: "UNKNOWN", status: "UNKNOWN", canonicalName: "", vernacularName: "", className: "", orderName: "", familyName: "" };
-            }
-            if (!res.ok) return { key, rank: "UNKNOWN", status: "UNKNOWN", canonicalName: "", vernacularName: "", className: "", orderName: "", familyName: "" };
-            const data = await res.json();
-            return {
-              key,
-              rank: data.rank || "UNKNOWN",
-              status: data.taxonomicStatus || "UNKNOWN",
-              canonicalName: data.canonicalName || data.scientificName || "",
-              vernacularName: data.vernacularName || "",
-              className: data.class || "",
-              orderName: data.order || "",
-              familyName: data.family || "",
-            };
-          } catch {
-            if (attempt < MAX_RETRIES) {
-              await delay(Math.pow(2, attempt + 1) * 1000);
-              continue;
-            }
-            return { key, rank: "ERROR", status: "ERROR", canonicalName: "", vernacularName: "", className: "", orderName: "", familyName: "" };
-          }
-        }
-        return { key, rank: "ERROR", status: "ERROR", canonicalName: "", vernacularName: "", className: "", orderName: "", familyName: "" };
-      })
+  const speciesGlob = path.join(DATA_DIR, "species", "**", "*.parquet");
+  const vernacularParquet = path.join(DATA_DIR, "species-vernaculars.parquet");
+  if (!fs.existsSync(path.join(DATA_DIR, "species"))) {
+    throw new Error(
+      `validateSpeciesKeys: ${path.join(DATA_DIR, "species")} not found. It is written by ` +
+      `build-backbone (sync phase 9), which must run before the GBIF phases.`
     );
-
-    for (const info of results) {
-      if (info.rank === "SPECIES" && info.status === "ACCEPTED") {
-        valid.set(info.key, { key: info.key, canonicalName: info.canonicalName, vernacularName: info.vernacularName, className: info.className, orderName: info.orderName, familyName: info.familyName });
-      }
-    }
-
-    const progress = Math.min(i + SPECIES_VALIDATION_BATCH_SIZE, speciesKeys.length);
-    process.stdout.write(`\r  Validated ${progress}/${speciesKeys.length} (${valid.size} valid)`);
+  }
+  const hasVernaculars = fs.existsSync(vernacularParquet);
+  if (!hasVernaculars) {
+    console.warn("  species-vernaculars.parquet not found — common names will be blank for this run.");
   }
 
-  console.log("");
+  const inst = await DuckDBInstance.create(":memory:");
+  const conn = await inst.connect();
+  try {
+    await conn.run(`CREATE TEMP TABLE wanted (col_id VARCHAR);`);
+    const appender = await conn.createAppender("wanted");
+    for (const k of speciesKeys) {
+      appender.appendVarchar(k);
+      appender.endRow();
+    }
+    appender.closeSync();
+
+    const reader = await conn.runAndReadAll(`
+      SELECT s.col_id, s.scientific_name, s.class_name, s.order_name, s.family,
+             ${hasVernaculars ? "v.vernacular_name" : "NULL AS vernacular_name"}
+      FROM wanted w
+      JOIN '${speciesGlob}' s ON s.col_id = w.col_id
+      ${hasVernaculars ? `LEFT JOIN '${vernacularParquet}' v ON v.col_id = s.col_id` : ""}
+    `);
+
+    for (const r of reader.getRowObjects()) {
+      const key = String(r.col_id);
+      valid.set(key, {
+        key,
+        canonicalName: String(r.scientific_name ?? ""),
+        vernacularName: r.vernacular_name ? String(r.vernacular_name) : "",
+        className: String(r.class_name ?? ""),
+        orderName: String(r.order_name ?? ""),
+        familyName: String(r.family ?? ""),
+      });
+    }
+  } finally {
+    conn.closeSync();
+    inst.closeSync();
+  }
+
   return valid;
 }
 
@@ -237,7 +242,7 @@ const GBIF_CSV_COLUMNS = [
   "total_count", "count_after_assessment_year", "countries",
 ];
 
-export function writeGbifCsv(speciesMap: Map<number, GbifSpecies>, outputPath: string): void {
+export function writeGbifCsv(speciesMap: Map<string, GbifSpecies>, outputPath: string): void {
   const rows = Array.from(speciesMap.values())
     .map((s) => ({
       gbif_species_key: s.gbif_species_key,
@@ -255,10 +260,10 @@ export function writeGbifCsv(speciesMap: Map<number, GbifSpecies>, outputPath: s
   writeCsv(rows, GBIF_CSV_COLUMNS, outputPath);
 }
 
-export function readGbifCsv(taxonId: string): Map<number, GbifSpecies> {
+export function readGbifCsv(taxonId: string): Map<string, GbifSpecies> {
   const csvPath = path.join(GBIF_DIR, `${taxonId}.csv`);
   const rows = readCsv<GbifSpecies>(csvPath, (r) => ({
-    gbif_species_key: parseInt(r.gbif_species_key, 10),
+    gbif_species_key: r.gbif_species_key,
     scientific_name: r.scientific_name,
     common_name: r.common_name,
     taxon_group_table1a: r.taxon_group_table1a,
@@ -269,7 +274,7 @@ export function readGbifCsv(taxonId: string): Map<number, GbifSpecies> {
     family: r.family || "",
     countries: r.countries || "",
   }));
-  const map = new Map<number, GbifSpecies>();
+  const map = new Map<string, GbifSpecies>();
   for (const row of rows) map.set(row.gbif_species_key, row);
   return map;
 }
@@ -307,7 +312,7 @@ export async function run(opts: {
     const validSpecies = await validateSpeciesKeys(speciesKeys);
     console.log(`  Valid species: ${validSpecies.size}`);
 
-    const taxonMap = new Map<number, GbifSpecies>();
+    const taxonMap = new Map<string, GbifSpecies>();
     for (const r of rawResults) {
       const info = validSpecies.get(r.speciesKey);
       if (!info) continue;

@@ -29,6 +29,7 @@ import {
   readGbifCsv,
   writeGbifCsv,
 } from "./fetch-gbif-species";
+import { COL_XR_CHECKLIST_KEY } from "../src/lib/gbif";
 
 // =============================================================================
 // CONFIGURATION
@@ -47,11 +48,12 @@ const INCLUDED_BASIS_OF_RECORD = [
 ];
 
 // GBIF kingdom keys covering all taxa in the dashboard
+// COL XR kingdom keys (see taxa.ts).
 const KINGDOM_KEYS = [
-  { key: 1, name: "Animalia" },
-  { key: 6, name: "Plantae" },
-  { key: 5, name: "Fungi" },
-  { key: 4, name: "Chromista" },  // brown algae
+  { key: "N", name: "Animalia" },
+  { key: "P", name: "Plantae" },
+  { key: "F", name: "Fungi" },
+  { key: "C", name: "Chromista" },  // brown algae
 ];
 
 // =============================================================================
@@ -99,14 +101,15 @@ async function gbifGet(params: URLSearchParams): Promise<GbifResponse | null> {
 }
 
 /** Fetch the list of countries with occurrences for a given kingdom. */
-async function fetchCountriesForKingdom(kingdomKey: number): Promise<string[]> {
+async function fetchCountriesForKingdom(kingdomKey: string): Promise<string[]> {
   const params = new URLSearchParams({
     hasCoordinate: "true",
     hasGeospatialIssue: "false",
     facet: "country",
     facetLimit: "300",
     limit: "0",
-    kingdomKey: kingdomKey.toString(),
+    checklistKey: COL_XR_CHECKLIST_KEY,
+    taxonKey: kingdomKey,
   });
   INCLUDED_BASIS_OF_RECORD.forEach((bor) => params.append("basisOfRecord", bor));
 
@@ -123,10 +126,10 @@ async function fetchCountriesForKingdom(kingdomKey: number): Promise<string[]> {
  * Handles pagination via facetOffset for large result sets (e.g., US Animalia has ~170k species).
  */
 async function fetchSpeciesInKingdomCountry(
-  kingdomKey: number,
+  kingdomKey: string,
   country: string,
-): Promise<number[]> {
-  const allSpeciesKeys: number[] = [];
+): Promise<string[]> {
+  const allSpeciesKeys: string[] = [];
   let offset = 0;
   let hasMore = true;
 
@@ -139,7 +142,8 @@ async function fetchSpeciesInKingdomCountry(
       facetOffset: offset.toString(),
       limit: "0",
       country,
-      kingdomKey: kingdomKey.toString(),
+      checklistKey: COL_XR_CHECKLIST_KEY,
+      taxonKey: kingdomKey,
     });
     INCLUDED_BASIS_OF_RECORD.forEach((bor) => params.append("basisOfRecord", bor));
 
@@ -150,7 +154,7 @@ async function fetchSpeciesInKingdomCountry(
     if (!facet || facet.counts.length === 0) break;
 
     for (const c of facet.counts) {
-      allSpeciesKeys.push(parseInt(c.name, 10));
+      allSpeciesKeys.push(c.name);
     }
 
     hasMore = facet.counts.length >= FACET_LIMIT;
@@ -180,8 +184,8 @@ export async function run(opts: {
 
   // ── Step 1: Load all GBIF CSVs and build a global speciesKey → taxon index ──
 
-  const taxonData = new Map<string, Map<number, GbifSpecies>>();
-  const globalSpeciesIndex = new Map<number, string[]>(); // speciesKey → taxonIds
+  const taxonData = new Map<string, Map<string, GbifSpecies>>();
+  const globalSpeciesIndex = new Map<string, string[]>(); // speciesKey → taxonIds
 
   for (const taxon of taxaToSync) {
     const gbifMap = readGbifCsv(taxon.id);
@@ -204,11 +208,11 @@ export async function run(opts: {
   const neededKingdomKeys = new Set(taxaToSync.map((t) => t.kingdomKey));
   const kingdomsToQuery = KINGDOM_KEYS.filter((k) => neededKingdomKeys.has(k.key));
 
-  const speciesCountries = new Map<number, Set<string>>();
+  const speciesCountries = new Map<string, Set<string>>();
   let totalApiCalls = 0;
 
   for (const kingdom of kingdomsToQuery) {
-    console.log(`\n${kingdom.name} (kingdomKey=${kingdom.key}):`);
+    console.log(`\n${kingdom.name} (taxonKey=${kingdom.key}):`);
 
     // Get countries with occurrences for this kingdom
     const countries = await fetchCountriesForKingdom(kingdom.key);
