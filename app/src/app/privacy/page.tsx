@@ -71,8 +71,9 @@ export default function PrivacyPage() {
             className="underline hover:text-zinc-800 dark:hover:text-zinc-200"
           >
             Supabase
-          </a>
-          , and signing in stores a cookie on your device to keep you signed in.
+          </a>{" "}
+          (hosted in the EU), and signing in stores a cookie on your device to
+          keep you signed in.
           That cookie is strictly necessary for signing in to work, so it does
           not require a consent banner. To have your account and everything
           stored with it deleted, email{" "}
