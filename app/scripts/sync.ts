@@ -15,6 +15,7 @@
  *   Phase 11: build-synonym-index   (→ synonym-index.parquet, search)
  *   Phase 12: build-col-taxon-ids   (taxonomy tree + backbone.parquet → src/config/col-taxon-ids.json, committed to git)
  *   Phase 13: build-taxa-summary    (CSVs + CoL artifacts → taxa-summary.json, incl. col counts)
+ *   Phase 13b: check-sync-regressions (diff per-group numbers against the live sync)
  *   Phase 14: upload-range-maps     (IUCN DB → R2, skips existing; skipped by --skip-redlist)
  *   Phase 15: upload-aoh-maps       (STAR GeoTIFFs → R2, skips existing; skipped by --skip-redlist)
  *
@@ -48,6 +49,7 @@ import { run as matchRedlistSpeciesToGbif } from "./match-redlist-species-to-gbi
 import { run as fetchGbifNewCounts } from "./fetch-gbif-new-counts";
 import { run as fetchGbifCountryData } from "./fetch-gbif-country-data";
 import { run as buildTaxaSummary } from "./build-taxa-summary";
+import { run as checkSyncRegressions } from "./check-sync-regressions";
 import { run as buildSpeciesParquet } from "./build-parquet";
 import { run as fetchColXr } from "./fetch-col-xr";
 import { run as fetchColChecklist } from "./fetch-col-checklist";
@@ -156,6 +158,18 @@ async function main() {
     console.log("\nPhase 13: build-taxa-summary");
     console.log("═".repeat(60));
     await buildTaxaSummary();
+
+    // A taxonomy migration moves numbers everywhere, which makes it exactly the
+    // situation where a group quietly collapsing hides in the noise. Reported
+    // rather than fatal — deciding whether a move is the intended one needs a
+    // person — but reported unconditionally, so nobody has to think to look.
+    console.log("\nChecking for per-group regressions against the live sync");
+    console.log("═".repeat(60));
+    try {
+      await checkSyncRegressions();
+    } catch (err) {
+      console.warn(`  regression check skipped: ${err instanceof Error ? err.message : String(err)}`);
+    }
 
     // Phases 14-15: uploadRangeMaps needs the same IUCN Postgres access as phase 1;
     // uploadAohMaps needs local STAR pipeline output that only exists on this machine.

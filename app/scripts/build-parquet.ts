@@ -73,22 +73,37 @@ export async function run(): Promise<void> {
       FROM read_csv_auto('${redlistGlob}', union_by_name=true);
   `);
 
-  // Per-assessment GBIF enrichment: sum occurrence counts across all linked
-  // GBIF rows that exist; representative key prefers a canonical-source match.
+  // Per-assessment GBIF enrichment: one species, one key, one set of counts.
+  //
+  // This used to SUM counts across every linked GBIF row, which quietly turned a
+  // species with more than one link into the union of several taxa. Combined with
+  // a synonym link it is how assessed species came to display totals that were
+  // not theirs — a species' own record count plus a congener's. Whatever the
+  // representative key is, the numbers shown must be that key's numbers, so the
+  // count a user sees and the search the link opens describe the same taxon.
+  //
+  // The representative key prefers a canonical-source match, then the lowest key,
+  // which is deterministic across runs.
   await conn.run(`
-    CREATE TEMP TABLE enrich AS
+    CREATE TEMP TABLE chosen_link AS
       SELECT
         m.sis_taxon_id,
-        sum(g.total_count)  AS gbif_occurrence_count,
-        sum(g.count_after)  AS gbif_observations_after_assessment_year,
-        -- representative key: canonical-source preferred, then smallest key
-        -- (deterministic; for multi-match species this may differ from v1's
-        -- file-order pick, but is an equally-valid GBIF match for the species)
         arg_min(m.gbif_species_key, (CASE WHEN m.name_source='canonical' THEN '0' ELSE '1' END) || m.gbif_species_key) AS gbif_species_key
       FROM map m
       JOIN rl ON rl.sis_taxon_id = m.sis_taxon_id
       JOIN gbif_all g ON g.gbif_species_key = m.gbif_species_key AND g.taxon_group = rl.taxon_group
       GROUP BY m.sis_taxon_id;
+  `);
+  await conn.run(`
+    CREATE TEMP TABLE enrich AS
+      SELECT
+        c.sis_taxon_id,
+        g.total_count  AS gbif_occurrence_count,
+        g.count_after  AS gbif_observations_after_assessment_year,
+        c.gbif_species_key
+      FROM chosen_link c
+      JOIN rl ON rl.sis_taxon_id = c.sis_taxon_id
+      JOIN gbif_all g ON g.gbif_species_key = c.gbif_species_key AND g.taxon_group = rl.taxon_group;
   `);
 
   // History, loaded first so the latest assessors/reviewers can be denormalized
@@ -231,6 +246,25 @@ export async function run(): Promise<void> {
   console.log(`Wrote ${assessmentsOut}: ${h.nrows} assessment events across ${h.species} species`);
   const dup = (await q(`SELECT count(*) c FROM (SELECT gbif_species_key FROM gbif_all GROUP BY 1 HAVING count(*)>1)`))[0].c;
   console.log(`  duplicate GBIF keys across group files: ${dup}`);
+
+  // The unassessed id is a hash, so uniqueness is checked rather than assumed.
+  const idDup = (await q(`SELECT count(*) c FROM (SELECT id FROM '${unassessedOut}' GROUP BY 1 HAVING count(*)>1)`))[0].c;
+  if (Number(idDup) > 0) {
+    throw new Error(`build-parquet: ${idDup} colliding synthetic ids in ${unassessedOut} — two unassessed species would share a row identity.`);
+  }
+
+  // Records since assessment are a subset of the total, so one exceeding the
+  // other is arithmetically impossible and means counts from different taxa have
+  // been mixed. 43 species were in this state after the previous attempt.
+  const impossible = (await q(
+    `SELECT count(*) c FROM '${assessedOut}' WHERE gbif_observations_after_assessment_year > gbif_occurrence_count`
+  ))[0].c;
+  if (Number(impossible) > 0) {
+    throw new Error(
+      `build-parquet: ${impossible} species have more records since assessment than in total. ` +
+      `That cannot happen for a single taxon — counts from different taxa have been combined.`
+    );
+  }
 }
 
 const isDirectRun = process.argv[1]?.endsWith("build-parquet.ts") || process.argv[1]?.endsWith("build-parquet.js");

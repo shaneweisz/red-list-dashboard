@@ -285,6 +285,34 @@ function saveKeyCache(cache: Record<string, CachedSpecies>): void {
   fs.writeFileSync(KEY_CACHE_PATH, JSON.stringify(cache));
 }
 
+/**
+ * Refuse to write a taxon whose keys mostly failed to resolve.
+ *
+ * Not every facet key becomes a species — synonyms, higher taxa and unplaced
+ * names are all expected to drop out, so some loss is normal. What is not normal
+ * is most of a group vanishing, and that is exactly what a key-space mismatch
+ * looks like: in the first attempt at this migration Mantodea went from 1,110
+ * species to 97 and nothing was printed, because the drop had no floor under it.
+ *
+ * The threshold is deliberately loose. It is here to catch a group collapsing,
+ * not to police normal attrition.
+ */
+const MIN_RESOLUTION_RATE = 0.5;
+const RESOLUTION_RATE_FLOOR_SAMPLE = 50;
+
+export function assertResolutionRate(taxonId: string, requested: number, resolved: number): void {
+  // Tiny groups are noisy — a group of four species is not evidence of anything.
+  if (requested < RESOLUTION_RATE_FLOOR_SAMPLE) return;
+  const rate = resolved / requested;
+  if (rate >= MIN_RESOLUTION_RATE) return;
+  throw new Error(
+    `fetch-gbif-species: only ${resolved} of ${requested} keys resolved for "${taxonId}" ` +
+    `(${(rate * 100).toFixed(1)}%, floor ${MIN_RESOLUTION_RATE * 100}%). ` +
+    `That is the signature of a key-space mismatch rather than normal attrition — ` +
+    `writing this file would silently shrink the group.`
+  );
+}
+
 // =============================================================================
 // CSV OUTPUT
 // =============================================================================
@@ -360,10 +388,16 @@ export async function run(opts: {
     const rawResults = await fetchGbifCounts(taxon);
     console.log(`  Raw species: ${rawResults.length}`);
 
-    console.log("  Validating species keys...");
+    console.log("  Resolving species keys...");
     const speciesKeys = rawResults.map((r) => r.speciesKey);
-    const validSpecies = await validateSpeciesKeys(speciesKeys);
+    const validSpecies = await validateSpeciesKeys(speciesKeys, {
+      onProgress: (doneCount, total, cached) =>
+        process.stdout.write(`\r  Resolved ${doneCount}/${total} (${cached} from cache)`),
+    });
+    if (speciesKeys.length > 0) console.log("");
     console.log(`  Valid species: ${validSpecies.size}`);
+
+    assertResolutionRate(taxon.id, speciesKeys.length, validSpecies.size);
 
     const taxonMap = new Map<string, GbifSpecies>();
     for (const r of rawResults) {
