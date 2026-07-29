@@ -4028,11 +4028,11 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
           )}
 
           {/* Country + Threats are always visible, alongside Charts row 1
-              above — everything past that (Assessment Criteria/Number of Assessments,
-              Realm/Movement/Trend, Habitat/Assessors-Reviewers, Growth Form)
-              lives behind the "More Filters" toggle below. No
-              independently-scrollable panel here anymore — nested
-              scrollbars (the panel's own, inside the page's) read as
+              above — everything past that (Growth Form, Assessment
+              Criteria/Number of Assessments, Realm/Movement/Trend,
+              Habitat/Assessors-Reviewers) lives behind the "More Filters"
+              toggle below. No independently-scrollable panel here anymore
+              — nested scrollbars (the panel's own, inside the page's) read as
               confusing, so this reverts to plain click-to-expand instead. */}
           {!isNewAssessments && (
             <>
@@ -4061,6 +4061,74 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
 
           {!isNewAssessments && moreFiltersOpen && (
             <>
+                {/* Growth Form (plants/fungi only) */}
+                {(() => {
+                  if (speciesLoading && assessedSpecies.length === 0) {
+                    return (
+                      <div className="flex items-center gap-2 bg-zinc-50 dark:bg-zinc-800/50 border border-zinc-200 dark:border-zinc-700 rounded-lg px-3 py-2">
+                        <span className="text-sm font-semibold text-zinc-900 dark:text-zinc-100 shrink-0 w-20">Growth</span>
+                        <Spinner className="h-4 w-4" />
+                      </div>
+                    );
+                  }
+                  // Compute growth form counts cross-filtered (exclude own filter)
+                  const gfCounts: Record<string, number> = {};
+                  taxaFilteredSpecies.forEach(s => {
+                    if (!s.growth_forms?.length) return;
+                    if (!matchesSearch(s)) return;
+                    if (selectedCategories.size > 0 && !selectedCategories.has(s.category)) return;
+                    if (selectedCountries.size > 0 && !s.countries.some(c => selectedCountries.has(c))) return;
+                    if (s.category !== "NE" && selectedYearRanges.size > 0 && !matchesYearRangeFilter(s.assessment_date, selectedYearRanges)) return;
+                    if (s.category !== "NE" && selectedAssessmentYears.size > 0 && !matchesAssessmentYearFilter(s.assessment_date, selectedAssessmentYears)) return;
+                    if (selectedObsRanges.size > 0 && !matchesObsRangeFilter(s.gbif_occurrence_count, selectedObsRanges)) return;
+                    if (selectedAssessmentCounts.size > 0 && !matchesAssessmentCountFilter(s.assessment_count, selectedAssessmentCounts)) return;
+                    if (selectedSystems.size > 0 && !s.systems?.some(sys => selectedSystems.has(sys))) return;
+                    if (selectedPopulationTrends.size > 0 && (!s.population_trend || !selectedPopulationTrends.has(s.population_trend))) return;
+                    if (selectedMovementPatterns.size > 0 && (!s.movement_pattern || !selectedMovementPatterns.has(s.movement_pattern))) return;
+                    if (selectedThreats.size > 0 && !s.threat_codes?.some(tc => Array.from(selectedThreats).some(sel => tc === sel || tc.startsWith(sel + ".")))) return;
+                    if (selectedCriteria.size > 0 && !parseCriteriaCodes(s.criteria).some(code => Array.from(selectedCriteria).some(sel => code === sel || code.startsWith(sel)))) return;
+                    if (endemicsOnly && s.countries.length !== 1) return;
+                    if (!matchesAssessorsFilter(s)) return;
+                    if (!matchesHabitatFilter(s)) return;
+                    if (!matchesReviewersFilter(s)) return;
+                    for (const gf of s.growth_forms) {
+                      gfCounts[gf] = (gfCounts[gf] || 0) + 1;
+                    }
+                  });
+                  const sorted = Object.entries(gfCounts).sort((a, b) => b[1] - a[1]);
+                  if (sorted.length === 0) return null;
+                  return (
+                    <div className="flex items-start gap-2 bg-zinc-50 dark:bg-zinc-800/50 border border-zinc-200 dark:border-zinc-700 rounded-lg px-3 py-2">
+                      <span className="text-sm font-semibold text-zinc-900 dark:text-zinc-100 shrink-0 w-20 pt-1">Growth</span>
+                      <div className="flex flex-wrap gap-1.5">
+                        {sorted.map(([gf, count]) => {
+                          const isSelected = selectedGrowthForms.has(gf);
+                          return (
+                            <button
+                              key={gf}
+                              onClick={(e) => {
+                                const isMulti = e.metaKey || e.ctrlKey;
+                                setSelectedGrowthForms(prev => {
+                                  if (isMulti) { const next = new Set(prev); if (next.has(gf)) next.delete(gf); else next.add(gf); return next; }
+                                  if (prev.size === 1 && prev.has(gf)) return new Set();
+                                  return new Set([gf]);
+                                });
+                              }}
+                              className={`px-2 py-1 text-xs rounded-full transition-colors cursor-pointer ${
+                                isSelected
+                                  ? "bg-lime-500 text-white"
+                                  : "bg-zinc-100 text-zinc-600 hover:bg-zinc-200 dark:bg-zinc-800 dark:text-zinc-400 dark:hover:bg-zinc-700"
+                              }`}
+                            >
+                              {gf} ({count.toLocaleString()})
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  );
+                })()}
+
                 {/* Assessment Criteria alongside Number of Assessments — a row, not a
                     stack (previously stacked in Habitat's right column; moved
                     out once Habitat started pairing with Assessors/Reviewers
@@ -4277,74 +4345,6 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
                     />
                   )}
                 </div>
-
-                {/* Growth Form (plants/fungi only) */}
-                {(() => {
-                  if (speciesLoading && assessedSpecies.length === 0) {
-                    return (
-                      <div className="flex items-center gap-2 bg-zinc-50 dark:bg-zinc-800/50 border border-zinc-200 dark:border-zinc-700 rounded-lg px-3 py-2">
-                        <span className="text-sm font-semibold text-zinc-900 dark:text-zinc-100 shrink-0 w-20">Growth</span>
-                        <Spinner className="h-4 w-4" />
-                      </div>
-                    );
-                  }
-                  // Compute growth form counts cross-filtered (exclude own filter)
-                  const gfCounts: Record<string, number> = {};
-                  taxaFilteredSpecies.forEach(s => {
-                    if (!s.growth_forms?.length) return;
-                    if (!matchesSearch(s)) return;
-                    if (selectedCategories.size > 0 && !selectedCategories.has(s.category)) return;
-                    if (selectedCountries.size > 0 && !s.countries.some(c => selectedCountries.has(c))) return;
-                    if (s.category !== "NE" && selectedYearRanges.size > 0 && !matchesYearRangeFilter(s.assessment_date, selectedYearRanges)) return;
-                    if (s.category !== "NE" && selectedAssessmentYears.size > 0 && !matchesAssessmentYearFilter(s.assessment_date, selectedAssessmentYears)) return;
-                    if (selectedObsRanges.size > 0 && !matchesObsRangeFilter(s.gbif_occurrence_count, selectedObsRanges)) return;
-                    if (selectedAssessmentCounts.size > 0 && !matchesAssessmentCountFilter(s.assessment_count, selectedAssessmentCounts)) return;
-                    if (selectedSystems.size > 0 && !s.systems?.some(sys => selectedSystems.has(sys))) return;
-                    if (selectedPopulationTrends.size > 0 && (!s.population_trend || !selectedPopulationTrends.has(s.population_trend))) return;
-                    if (selectedMovementPatterns.size > 0 && (!s.movement_pattern || !selectedMovementPatterns.has(s.movement_pattern))) return;
-                    if (selectedThreats.size > 0 && !s.threat_codes?.some(tc => Array.from(selectedThreats).some(sel => tc === sel || tc.startsWith(sel + ".")))) return;
-                    if (selectedCriteria.size > 0 && !parseCriteriaCodes(s.criteria).some(code => Array.from(selectedCriteria).some(sel => code === sel || code.startsWith(sel)))) return;
-                    if (endemicsOnly && s.countries.length !== 1) return;
-                    if (!matchesAssessorsFilter(s)) return;
-                    if (!matchesHabitatFilter(s)) return;
-                    if (!matchesReviewersFilter(s)) return;
-                    for (const gf of s.growth_forms) {
-                      gfCounts[gf] = (gfCounts[gf] || 0) + 1;
-                    }
-                  });
-                  const sorted = Object.entries(gfCounts).sort((a, b) => b[1] - a[1]);
-                  if (sorted.length === 0) return null;
-                  return (
-                    <div className="flex items-start gap-2 bg-zinc-50 dark:bg-zinc-800/50 border border-zinc-200 dark:border-zinc-700 rounded-lg px-3 py-2">
-                      <span className="text-sm font-semibold text-zinc-900 dark:text-zinc-100 shrink-0 w-20 pt-1">Growth</span>
-                      <div className="flex flex-wrap gap-1.5">
-                        {sorted.map(([gf, count]) => {
-                          const isSelected = selectedGrowthForms.has(gf);
-                          return (
-                            <button
-                              key={gf}
-                              onClick={(e) => {
-                                const isMulti = e.metaKey || e.ctrlKey;
-                                setSelectedGrowthForms(prev => {
-                                  if (isMulti) { const next = new Set(prev); if (next.has(gf)) next.delete(gf); else next.add(gf); return next; }
-                                  if (prev.size === 1 && prev.has(gf)) return new Set();
-                                  return new Set([gf]);
-                                });
-                              }}
-                              className={`px-2 py-1 text-xs rounded-full transition-colors cursor-pointer ${
-                                isSelected
-                                  ? "bg-lime-500 text-white"
-                                  : "bg-zinc-100 text-zinc-600 hover:bg-zinc-200 dark:bg-zinc-800 dark:text-zinc-400 dark:hover:bg-zinc-700"
-                              }`}
-                            >
-                              {gf} ({count.toLocaleString()})
-                            </button>
-                          );
-                        })}
-                      </div>
-                    </div>
-                  );
-                })()}
 
             </>
           )}
