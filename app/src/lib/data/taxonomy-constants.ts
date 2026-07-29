@@ -3,23 +3,33 @@
  * (build time).
  */
 
-/** GBIF species keys for domesticated species excluded from new assessments. */
+/**
+ * GBIF taxon keys for domesticated species excluded from new assessments.
+ *
+ * Catalogue of Life Extended Release keys, migrated from the legacy GBIF
+ * Backbone integers when the pipeline moved to COL XR (see src/lib/gbif.ts).
+ *
+ * One species was lost in that move: the domestic pigeon (backbone 10694102,
+ * "Columba domestica") is not a separate taxon in CoL — it is a synonym of
+ * Columba livia, the wild Rock Dove, which is itself an assessed species we must
+ * keep. There is no COL XR key that excludes the domestic form without also
+ * excluding the wild one, so it is no longer excluded.
+ */
 export const EXCLUDED_DOMESTICATED_GBIF_KEYS = new Set([
-  2441022, // Bos taurus (Cow)
-  2435035, // Felis catus (Cat)
-  2441110, // Ovis aries (Domestic Sheep)
-  2441056, // Capra hircus (Domestic Goat)
-  2440886, // Equus caballus (Horse)
-  7422937, // Bubalus bubalis (Water Buffalo)
-  2440891, // Equus asinus (Donkey)
-  9055455, // Camelus dromedarius (Arabian Camel)
-  2441238, // Camelus bactrianus (Bactrian Camel)
-  5220190, // Lama glama (Llama)
-  7515593, // Vicugna pacos (Alpaca)
-  2441019, // Bos grunniens (Yak)
-  5219702, // Cavia porcellus (Guinea Pig)
-  10694102, // Columba domestica (Domestic Pigeon)
-  2436436, // Homo sapiens (Human)
+  "MLQ5",  // Bos taurus (Cow)
+  "3DXV3", // Felis catus (Cat)
+  "4B9VF", // Ovis aries (Domestic Sheep)
+  "QS68",  // Capra hircus (Domestic Goat)
+  "7TKN2", // Equus caballus (Horse)
+  "NKLN",  // Bubalus bubalis (Water Buffalo)
+  "7TKMV", // Equus asinus (Donkey)
+  "Q9XD",  // Camelus dromedarius (Arabian Camel)
+  "Q9XC",  // Camelus bactrianus (Bactrian Camel)
+  "3RYF2", // Lama glama (Llama)
+  "5BD72", // Vicugna pacos (Alpaca)
+  "MLPW",  // Bos grunniens (Yak)
+  "RY7S",  // Cavia porcellus (Guinea Pig)
+  "6MB3T", // Homo sapiens (Human)
 ]);
 
 /**

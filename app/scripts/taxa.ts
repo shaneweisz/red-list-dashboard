@@ -15,8 +15,14 @@ export interface RedlistQuery {
 }
 
 export interface GbifQuery {
-  keyType: "kingdomKey" | "phylumKey" | "classKey" | "orderKey";
-  keyValue: number;
+  /**
+   * A Catalogue of Life Extended Release taxon key (alphanumeric, e.g. "6224G"
+   * = Mammalia), passed to GBIF as `taxonKey` alongside the COL XR
+   * `checklistKey`. Replaced the legacy GBIF Backbone integer keys (and their
+   * rank-specific classKey/orderKey params) when gbif.org made COL XR its
+   * default taxonomy in June 2026 — the backbone is frozen at 2023.
+   */
+  taxonKey: string;
 }
 
 export interface Taxon {
@@ -31,53 +37,55 @@ export interface Taxon {
 // FISH ORDER KEYS (GBIF)
 // =============================================================================
 
-// Bony fish (Actinopterygii) order keys — GBIF has no working class-level key for
-// ray-finned fishes, so we must query at order level. Shark/ray orders are covered
-// by classKey=121 (Elasmobranchii) and are NOT included here.
-const BONY_FISH_ORDER_KEYS = [
-  494,  // Amiiformes
-  495,  // Anguilliformes
-  496,  // Atheriniformes
-  497,  // Aulopiformes
-  498,  // Beloniformes
-  499,  // Beryciformes
-  537,  // Characiformes
-  538,  // Clupeiformes
-  547,  // Cyprinodontiformes
-  548,  // Esociformes
-  549,  // Gadiformes
-  550,  // Gasterosteiformes
-  587,  // Perciformes
-  588,  // Pleuronectiformes
-  589,  // Polymixiiformes
-  590,  // Scorpaeniformes
-  708,  // Siluriformes
-  772,  // Tetraodontiformes
-  773,  // Syngnathiformes
-  774,  // Stomiiformes
-  888,  // Zeiformes
-  889,  // Synbranchiformes
-  890,  // Stephanoberyciformes
-  1067, // Mugiliformes
-  1068, // Osmeriformes
-  1069, // Osteoglossiformes
-  1103, // Acipenseriformes
-  1104, // Albuliformes
-  1106, // Batrachoidiformes
-  1107, // Cetomimiformes
-  1153, // Cypriniformes
-  1163, // Gobiesociformes
-  1164, // Gonorynchiformes
-  1165, // Gymnotiformes
-  1167, // Lepisosteiformes
-  1305, // Lophiiformes
-  1306, // Myctophiformes
-  1307, // Notacanthiformes
-  1308, // Ophidiiformes
-  1310, // Percopsiformes
-  1311, // Polypteriformes
-  1312, // Saccopharyngiformes
-  1313, // Salmoniformes
+// Bony fish (Actinopterygii) order keys. Kept as an explicit per-order list
+// rather than collapsed into CoL's gigaclass Actinopterygii (8VR36): the list is
+// a verified 1:1 carry-over of the orders the backbone-keyed pipeline queried,
+// so it keeps the "Fishes" row's membership identical across the COL XR move.
+// Shark/ray orders are covered by Elasmobranchii (LB) and are NOT included here.
+const BONY_FISH_ORDER_KEYS: string[] = [
+  "NX",      // Amiiformes
+  "PJ",      // Anguilliformes
+  "RY",      // Atheriniformes
+  "S8",      // Aulopiformes
+  "T6",      // Beloniformes
+  "6228Z",   // Beryciformes
+  "X2",      // Characiformes
+  "YR",      // Clupeiformes
+  "335",     // Cyprinodontiformes
+  "37D",     // Esociformes
+  "38T",     // Gadiformes
+  // dropped: Gasterosteiformes -> suborder Gasterosteoidei, under Perciformes
+  "PC",      // Perciformes
+  "622V4",   // Pleuronectiformes
+  "3VJ",     // Polymixiiformes
+  // dropped: Scorpaeniformes -> suborder Scorpaenoidei, under Perciformes
+  "6236K",   // Siluriformes
+  "47D",     // Tetraodontiformes
+  "46T",     // Syngnathiformes
+  "463",     // Stomiiformes
+  "4BY",     // Zeiformes
+  "46Q",     // Synbranchiformes
+  // dropped: Stephanoberyciformes -> suborder Stephanoberycoidei, under Beryciformes
+  "3LB",     // Mugiliformes
+  "3QF",     // Osmeriformes
+  "3QH",     // Osteoglossiformes
+  "MJ",      // Acipenseriformes
+  "NH",      // Albuliformes
+  "SV",      // Batrachoidiformes
+  // dropped: Cetomimiformes -> family Cetomimidae, under Beryciformes
+  "334",     // Cypriniformes
+  "62246",   // Gobiesociformes
+  "6223X",   // Gonorynchiformes
+  "623BF",   // Gymnotiformes
+  "3FS",     // Lepisosteiformes
+  "3GY",     // Lophiiformes
+  "3LN",     // Myctophiformes
+  "3NQ",     // Notacanthiformes
+  "3PT",     // Ophidiiformes
+  "3SB",     // Percopsiformes
+  "3VN",     // Polypteriformes
+  // dropped: Saccopharyngiformes -> order Anguilliformes, already queried
+  "3ZR",     // Salmoniformes
 ];
 
 // =============================================================================
@@ -101,28 +109,28 @@ const OTHER_INSECT_ORDERS_REDLIST = [
 
 // GBIF orderKeys for insects NOT in the 7 named groups. Termites (Isoptera) are
 // folded into Blattodea in the GBIF backbone and have no separate key.
-const OTHER_INSECT_ORDER_KEYS = [
-  1003,    // Trichoptera
-  800,     // Blattodea (incl. termites/Isoptera)
-  1501,    // Neuroptera
-  787,     // Plecoptera
-  1460,    // Phasmida
-  1225,    // Ephemeroptera
-  788,     // Mantodea
-  7612838, // Psocodea
-  1228,    // Thysanoptera
-  1224,    // Dermaptera
-  1000,    // Mecoptera
-  1451,    // Megaloptera
-  1366,    // Siphonaptera
-  1227,    // Strepsiptera
-  1004,    // Zygentoma
-  786,     // Raphidioptera
-  1187,    // Archaeognatha
-  584,     // Embioptera
-  585,     // Grylloblattodea
-  1226,    // Mantophasmatodea
-  1229,    // Zoraptera
+const OTHER_INSECT_ORDER_KEYS: string[] = [
+  "TR2",     // Trichoptera
+  "KZRLZ",   // Blattodea
+  "3ND",     // Neuroptera
+  "9CHXG",   // Plecoptera
+  "8NKFG",   // Phasmida
+  "372",     // Ephemeroptera
+  "3HS",     // Mantodea
+  "CSYS4",   // Psocodea
+  "622VS",   // Thysanoptera
+  "8MP8D",   // Dermaptera
+  "3J4",     // Mecoptera
+  "3J8",     // Megaloptera
+  "43J",     // Siphonaptera
+  "B8VFN",   // Strepsiptera
+  "4C8",     // Zygentoma
+  "6236X",   // Raphidioptera
+  "B6MTR",   // Archaeognatha
+  "8MP8H",   // Embioptera
+  "6223L",   // Grylloblattodea
+  "8MP8M",   // Mantophasmatodea
+  "8MP8V",   // Zoraptera
 ];
 
 // =============================================================================
@@ -134,36 +142,36 @@ export const TAXA: Taxon[] = [
   {
     id: "mammals", name: "Mammals", kingdomKey: 1,
     redlist: [{ filterColumn: "class_name", filterValues: ["MAMMALIA"] }],
-    gbif: [{ keyType: "classKey", keyValue: 359 }],
+    gbif: [{ taxonKey: "6224G" }],
   },
   {
     id: "birds", name: "Birds", kingdomKey: 1,
     redlist: [{ filterColumn: "class_name", filterValues: ["AVES"] }],
-    gbif: [{ keyType: "classKey", keyValue: 212 }],
+    gbif: [{ taxonKey: "V2" }],
   },
   {
     id: "reptiles", name: "Reptiles", kingdomKey: 1,
     redlist: [{ filterColumn: "class_name", filterValues: ["REPTILIA"] }],
     gbif: [
-      { keyType: "classKey", keyValue: 11592253 },
-      { keyType: "classKey", keyValue: 11493978 },
-      { keyType: "classKey", keyValue: 11418114 },
+      { taxonKey: "45C" },      // Squamata
+      { taxonKey: "329" },      // Crocodylia
+      { taxonKey: "477" },      // Testudines
     ],
   },
   {
     id: "amphibians", name: "Amphibians", kingdomKey: 1,
     redlist: [{ filterColumn: "class_name", filterValues: ["AMPHIBIA"] }],
-    gbif: [{ keyType: "classKey", keyValue: 131 }],
+    gbif: [{ taxonKey: "PH" }],
   },
   {
     id: "fishes", name: "Fishes", kingdomKey: 1,
     redlist: [{ filterColumn: "class_name", filterValues: ["ACTINOPTERYGII", "CHONDRICHTHYES", "MYXINI", "PETROMYZONTI", "SARCOPTERYGII"] }],
     gbif: [
-      ...BONY_FISH_ORDER_KEYS.map((k) => ({ keyType: "orderKey" as const, keyValue: k })),
-      { keyType: "classKey" as const, keyValue: 121 },  // Elasmobranchii (sharks, rays, skates)
-      { keyType: "classKey" as const, keyValue: 120 },  // Holocephali (chimaeras)
-      { keyType: "classKey" as const, keyValue: 119 },  // Myxini (hagfish)
-      { keyType: "orderKey" as const, keyValue: 771 },  // Petromyzontiformes (lampreys)
+      ...BONY_FISH_ORDER_KEYS.map((k) => ({ taxonKey: k })),
+      { taxonKey: "LB" },  // Elasmobranchii (sharks, rays, skates)
+      { taxonKey: "CK" },  // Holocephali (chimaeras)
+      { taxonKey: "6225G" },  // Myxini (hagfish)
+      { taxonKey: "3SP" },  // Petromyzontiformes (lampreys)
     ],
   },
 
@@ -171,42 +179,42 @@ export const TAXA: Taxon[] = [
   {
     id: "beetles", name: "Beetles", kingdomKey: 1,
     redlist: [{ filterColumn: "order_name", filterValues: ["COLEOPTERA"] }],
-    gbif: [{ keyType: "orderKey", keyValue: 1470 }],
+    gbif: [{ taxonKey: "C2L" }],
   },
   {
     id: "butterflies_and_moths", name: "Butterflies & Moths", kingdomKey: 1,
     redlist: [{ filterColumn: "order_name", filterValues: ["LEPIDOPTERA"] }],
-    gbif: [{ keyType: "orderKey", keyValue: 797 }],
+    gbif: [{ taxonKey: "B6L67" }],
   },
   {
     id: "flies_and_mosquitoes", name: "Flies & Mosquitoes", kingdomKey: 1,
     redlist: [{ filterColumn: "order_name", filterValues: ["DIPTERA"] }],
-    gbif: [{ keyType: "orderKey", keyValue: 811 }],
+    gbif: [{ taxonKey: "D2P" }],
   },
   {
     id: "bees_wasps_and_ants", name: "Bees, Wasps & Ants", kingdomKey: 1,
     redlist: [{ filterColumn: "order_name", filterValues: ["HYMENOPTERA"] }],
-    gbif: [{ keyType: "orderKey", keyValue: 1457 }],
+    gbif: [{ taxonKey: "HYM" }],
   },
   {
     id: "true_bugs", name: "True Bugs", kingdomKey: 1,
     redlist: [{ filterColumn: "order_name", filterValues: ["HEMIPTERA"] }],
-    gbif: [{ keyType: "orderKey", keyValue: 809 }],
+    gbif: [{ taxonKey: "BXVWV" }],
   },
   {
     id: "grasshoppers_crickets_locusts", name: "Grasshoppers, Crickets & Locusts", kingdomKey: 1,
     redlist: [{ filterColumn: "order_name", filterValues: ["ORTHOPTERA"] }],
-    gbif: [{ keyType: "orderKey", keyValue: 1458 }],
+    gbif: [{ taxonKey: "CJBKK" }],
   },
   {
     id: "dragonflies_and_damselflies", name: "Dragonflies & Damselflies", kingdomKey: 1,
     redlist: [{ filterColumn: "order_name", filterValues: ["ODONATA"] }],
-    gbif: [{ keyType: "orderKey", keyValue: 789 }],
+    gbif: [{ taxonKey: "B6LCL" }],
   },
   {
     id: "other_insects", name: "Other Insects", kingdomKey: 1,
     redlist: [{ filterColumn: "order_name", filterValues: OTHER_INSECT_ORDERS_REDLIST }],
-    gbif: OTHER_INSECT_ORDER_KEYS.map((k) => ({ keyType: "orderKey" as const, keyValue: k })),
+    gbif: OTHER_INSECT_ORDER_KEYS.map((k) => ({ taxonKey: k })),
   },
 
   // ── Invertebrates: Other ──
@@ -214,8 +222,8 @@ export const TAXA: Taxon[] = [
     id: "molluscs", name: "Molluscs", kingdomKey: 1,
     redlist: [{ filterColumn: "phylum_name", filterValues: ["MOLLUSCA"] }],
     gbif: [
-      { keyType: "classKey", keyValue: 225 },
-      { keyType: "classKey", keyValue: 137 },
+      { taxonKey: "7NF3Y" },    // Gastropoda
+      { taxonKey: "7NF3C" },    // Bivalvia
     ],
   },
   {
@@ -231,27 +239,27 @@ export const TAXA: Taxon[] = [
     // barnacle species (Armatobalanus nefrens, Menesiniella aquila) from every
     // crustaceans fetch.
     redlist: [{ filterColumn: "class_name", filterValues: ["MALACOSTRACA", "MAXILLOPODA", "BRANCHIOPODA", "OSTRACODA", "HEXANAUPLIA", "THEOCOSTRACA"] }],
-    gbif: [{ keyType: "classKey", keyValue: 229 }],
+    gbif: [{ taxonKey: "MC" }],
   },
   {
     id: "arachnids", name: "Arachnids", kingdomKey: 1,
     redlist: [{ filterColumn: "class_name", filterValues: ["ARACHNIDA"] }],
-    gbif: [{ keyType: "classKey", keyValue: 367 }],
+    gbif: [{ taxonKey: "CCQKT" }],
   },
   {
     id: "corals", name: "Corals & Cnidarians", kingdomKey: 1,
     redlist: [{ filterColumn: "order_name", filterValues: ["SCLERACTINIA", "ALCYONACEA", "PENNATULACEA"] }],
-    gbif: [{ keyType: "classKey", keyValue: 206 }],
+    gbif: [{ taxonKey: "7S" }],
   },
   {
     id: "velvet_worms", name: "Velvet Worms", kingdomKey: 1,
     redlist: [{ filterColumn: "class_name", filterValues: ["UDEONYCHOPHORA"] }],
-    gbif: [{ keyType: "classKey", keyValue: 62 }],
+    gbif: [{ taxonKey: "BV844" }],
   },
   {
     id: "horseshoe_crabs", name: "Horseshoe Crabs", kingdomKey: 1,
     redlist: [{ filterColumn: "class_name", filterValues: ["MEROSTOMATA"] }],
-    gbif: [{ keyType: "classKey", keyValue: 351 }],
+    gbif: [{ taxonKey: "B8VF7" }],
   },
   {
     id: "other_invertebrates", name: "Other Invertebrates", kingdomKey: 1,
@@ -267,19 +275,19 @@ export const TAXA: Taxon[] = [
       ] },
     ],
     gbif: [
-      { keyType: "classKey", keyValue: 222 },    // Holothuroidea
-      { keyType: "classKey", keyValue: 255 },    // Clitellata
-      { keyType: "classKey", keyValue: 361 },    // Diplopoda
-      { keyType: "classKey", keyValue: 10713444 }, // Collembola
-      { keyType: "classKey", keyValue: 360 },    // Chilopoda
-      { keyType: "classKey", keyValue: 199 },    // Demospongiae
-      { keyType: "classKey", keyValue: 205 },    // Hydrozoa
-      { keyType: "classKey", keyValue: 214 },    // Asteroidea
-      { keyType: "classKey", keyValue: 308 },    // Calcarea
-      { keyType: "classKey", keyValue: 256 },    // Polychaeta
-      { keyType: "classKey", keyValue: 341 },    // Turbellaria
-      { keyType: "classKey", keyValue: 221 },    // Echinoidea
-      { keyType: "classKey", keyValue: 63 },     // Nemertea
+      { taxonKey: "B8V3W" },    // Holothuroidea
+      { taxonKey: "9H" },    // Clitellata
+      { taxonKey: "7NF3S" },    // Diplopoda
+      { taxonKey: "KZS5W" }, // Collembola
+      { taxonKey: "93" },    // Chilopoda
+      { taxonKey: "84JN8" },    // Demospongiae
+      { taxonKey: "B8V3X" },    // Hydrozoa
+      { taxonKey: "B8V3Q" },    // Asteroidea
+      { taxonKey: "84JMY" },    // Calcarea
+      { taxonKey: "B8TXG" },    // Polychaeta
+      { taxonKey: "BDSSX" },    // Turbellaria
+      { taxonKey: "B8V3V" },    // Echinoidea
+      { taxonKey: "5C" },     // Nemertea
     ],
   },
 
@@ -288,49 +296,49 @@ export const TAXA: Taxon[] = [
     id: "mosses", name: "Mosses", kingdomKey: 6,
     redlist: [{ filterColumn: "phylum_name", filterValues: ["BRYOPHYTA", "ANTHOCEROTOPHYTA", "MARCHANTIOPHYTA"] }],
     gbif: [
-      { keyType: "phylumKey", keyValue: 35 },  // Bryophyta
-      { keyType: "phylumKey", keyValue: 13 },  // Anthocerotophyta
-      { keyType: "phylumKey", keyValue: 9 },   // Marchantiophyta
+      { taxonKey: "BJ5TM" },  // Bryophyta
+      { taxonKey: "9JHQ8" },  // Anthocerotophyta
+      { taxonKey: "9J9G3" },   // Marchantiophyta
     ],
   },
   {
     id: "ferns_and_allies", name: "Ferns and Allies", kingdomKey: 6,
     redlist: [{ filterColumn: "class_name", filterValues: ["LYCOPODIOPSIDA", "ISOETOPSIDA", "EQUISETOPSIDA", "MARATTIOPSIDA", "POLYPODIOPSIDA", "PSILOTOPSIDA"] }],
     gbif: [
-      { keyType: "classKey", keyValue: 245 },     // Lycopodiopsida
-      { keyType: "classKey", keyValue: 7228684 },  // Polypodiopsida
+      { taxonKey: "LYC" },     // Lycopodiopsida
+      { taxonKey: "GV" },  // Polypodiopsida
     ],
   },
   {
     id: "gymnosperms", name: "Gymnosperms", kingdomKey: 6,
     redlist: [{ filterColumn: "class_name", filterValues: ["PINOPSIDA", "CYCADOPSIDA", "GINKGOOPSIDA", "GNETOPSIDA"] }],
     gbif: [
-      { keyType: "classKey", keyValue: 194 },  // Pinopsida
-      { keyType: "classKey", keyValue: 228 },  // Cycadopsida
-      { keyType: "classKey", keyValue: 244 },  // Ginkgoopsida
-      { keyType: "classKey", keyValue: 282 },  // Gnetopsida
+      { taxonKey: "C7ZVJ" },  // Pinopsida
+      { taxonKey: "CGVH9" },  // Cycadopsida
+      { taxonKey: "BT" },  // Ginkgoopsida
+      { taxonKey: "C7CGK" },  // Gnetopsida
     ],
   },
   {
     id: "flowering_plants", name: "Flowering Plants", kingdomKey: 6,
     redlist: [{ filterColumn: "class_name", filterValues: ["MAGNOLIOPSIDA", "LILIOPSIDA"] }],
     gbif: [
-      { keyType: "classKey", keyValue: 220 },  // Magnoliopsida
-      { keyType: "classKey", keyValue: 196 },  // Liliopsida
+      { taxonKey: "MG" },  // Magnoliopsida
+      { taxonKey: "L2L" },  // Liliopsida
     ],
   },
   {
     id: "green_algae", name: "Green Algae", kingdomKey: 6,
     redlist: [{ filterColumn: "phylum_name", filterValues: ["CHLOROPHYTA", "CHAROPHYTA"] }],
     gbif: [
-      { keyType: "phylumKey", keyValue: 36 },      // Chlorophyta
-      { keyType: "phylumKey", keyValue: 7819616 },  // Charophyta
+      { taxonKey: "CGV7L" },      // Chlorophyta
+      { taxonKey: "KZS5S" },  // Charophyta
     ],
   },
   {
     id: "red_algae", name: "Red Algae", kingdomKey: 6,
     redlist: [{ filterColumn: "phylum_name", filterValues: ["RHODOPHYTA"] }],
-    gbif: [{ keyType: "phylumKey", keyValue: 106 }],
+    gbif: [{ taxonKey: "L2MHG" }],
   },
 
   // ── Fungi & Protists ──
@@ -338,14 +346,14 @@ export const TAXA: Taxon[] = [
     id: "mushrooms", name: "Mushrooms, etc.", kingdomKey: 5,
     redlist: [{ filterColumn: "phylum_name", filterValues: ["ASCOMYCOTA", "BASIDIOMYCOTA"] }],
     gbif: [
-      { keyType: "phylumKey", keyValue: 34 },  // Basidiomycota
-      { keyType: "phylumKey", keyValue: 95 },  // Ascomycota
+      { taxonKey: "BM" },  // Basidiomycota
+      { taxonKey: "SM" },  // Ascomycota
     ],
   },
   {
     id: "brown_algae", name: "Brown Algae", kingdomKey: 4,
     redlist: [{ filterColumn: "phylum_name", filterValues: ["HETEROKONTOPHYTA"] }],
-    gbif: [{ keyType: "phylumKey", keyValue: 98 }],
+    gbif: [{ taxonKey: "5H" }],
   },
 ];
 
