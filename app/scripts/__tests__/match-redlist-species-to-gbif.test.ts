@@ -19,7 +19,7 @@ function speciesOf(sis: number, name: string, synonyms: string[] = []): SpeciesI
 }
 
 /** Build a matchFn from a name → result table. */
-function matchFromTable(table: Record<string, { key: string | null; matchType: string }>): MatchFn {
+function matchFromTable(table: Record<string, { key: string | null; matchType: string; viaColSynonym?: boolean }>): MatchFn {
   return async (name: string) => table[name] ?? { key: null, matchType: "NONE" };
 }
 
@@ -172,6 +172,28 @@ describe("matchSpeciesList — duplicate handling", () => {
     // A should NOT have a link to 500 (rejected as duplicate).
     expect(linkedRows.find((r) => r.sis_taxon_id === 1 && r.gbif_species_key === "500"))
       .toBeUndefined();
+  });
+
+  it("a species that owns the accepted name beats one matching through a CoL synonym", async () => {
+    // The real case this comes from: CoL treats Sus bucculentus as a synonym of
+    // Sus scrofa, so both Red List species resolve to Sus scrofa's key. Only one
+    // can hold it. The species whose own name IS the accepted name must win,
+    // regardless of input order — otherwise Sus scrofa loses 1.1M occurrences to
+    // an obscure congener purely because it was listed second.
+    const species = [
+      speciesOf(1, "Sus bucculentus"),
+      speciesOf(2, "Sus scrofa"),
+    ];
+    const matchFn = matchFromTable({
+      "Sus bucculentus": { key: "53HGR", matchType: "EXACT", viaColSynonym: true },
+      "Sus scrofa": { key: "53HGR", matchType: "EXACT" },
+    });
+    const entries = await matchSpeciesList(species, new Set(["53HGR"]), logger, matchFn, 1);
+
+    expect(linked(entries)).toEqual([
+      { sis_taxon_id: 2, gbif_species_key: "53HGR", match_type: "EXACT", name_source: "canonical" },
+    ]);
+    expect(entries.find((e) => e.sis_taxon_id === 1)?.match_type).toBe("DUPLICATE");
   });
 
   it("species with only a duplicate-rejected synonym match emits DUPLICATE diagnostic", async () => {

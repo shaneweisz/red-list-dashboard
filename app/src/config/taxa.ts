@@ -99,20 +99,15 @@ export const TAXA: TaxonConfig[] = [
     estimatedDescribed: 37630,
     estimatedSource: IUCN_SOURCE,
     estimatedSourceUrl: IUCN_SOURCE_URL,
-    // Ray-finned fish orders + the cartilaginous/jawless classes. Mirrors
-    // BONY_FISH_ORDER_KEYS in scripts/taxa.ts, which is the verified list.
-    //
-    // The pre-migration list also carried 19 keys that are not fish at all
-    // (Foraminiferida, Tricladida, Dorylaimida, Mermithida, Dimargaritales,
-    // Centrohelida, ...) — forams, flatworms, nematodes and fungi counted into
-    // this group's country statistics. Dropped here; the sync-side list never
-    // had them.
+    // One key per major fish lineage — see the same entry in scripts/taxa.ts.
+    // The enumerated per-order list this replaces was wrong twice over: it
+    // carried 19 keys that are not fish at all (Foraminiferida, Tricladida,
+    // Dorylaimida, Mermithida, Dimargaritales, Centrohelida, ...), and it could
+    // not see the orders CoL splits out of Perciformes.
     gbifTaxonKeys: [
-      "NX", "PJ", "RY", "S8", "T6", "6228Z",  // Amiiformes, Anguilliformes, Atheriniformes, Aulopiformes, Beloniformes, Beryciformes
-      "X2", "YR", "335", "37D", "38T", "PC",  // Characiformes, Clupeiformes, Cyprinodontiformes, Esociformes, Gadiformes, Perciformes
-      "622V4", "3VJ", "6236K", "47D", "46T", "463",  // Pleuronectiformes, Polymixiiformes, Siluriformes, Tetraodontiformes, Syngnathiformes, Stomiiformes
-      "4BY", "46Q", "3LB", "334", "3ZR",  // Zeiformes, Synbranchiformes, Mugiliformes, Cypriniformes, Salmoniformes
-      "LB", "CK",  // Elasmobranchii, Holocephali
+      "8VR36",  // Actinopterygii (ray-finned fishes)
+      "LB",     // Elasmobranchii
+      "CK",     // Holocephali
     ],
     color: "#06b6d4", // cyan-500
   },

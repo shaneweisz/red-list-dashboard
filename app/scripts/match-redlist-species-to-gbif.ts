@@ -27,6 +27,7 @@ import {
   mapConcurrent,
 } from "./utils";
 import { readRedlistCsv } from "./fetch-redlist-species";
+import { DuckDBInstance } from "@duckdb/node-api";
 import { readGbifCsv } from "./fetch-gbif-species";
 import { TAXA } from "./taxa";
 import { COL_XR_CHECKLIST_KEY } from "../src/lib/gbif";
@@ -71,7 +72,7 @@ interface GbifMatchResponse {
 
 export async function matchGbifSpecies(
   name: string
-): Promise<{ key: string | null; matchType: string }> {
+): Promise<{ key: string | null; matchType: string; viaColSynonym?: boolean }> {
   const params = new URLSearchParams({
     checklistKey: COL_XR_CHECKLIST_KEY,
     scientificName: name,
@@ -113,7 +114,10 @@ export async function matchGbifSpecies(
   }
 
   const resolvedKey = data.acceptedUsage?.key || data.usage?.key || null;
-  return { key: resolvedKey, matchType };
+  // `synonym` means the name we searched is a synonym in CoL and the key we got
+  // back belongs to some other accepted species. Recorded so claim resolution
+  // can prefer the species that owns the name outright — see the tiers below.
+  return { key: resolvedKey, matchType, viaColSynonym: data.synonym === true };
 }
 
 // =============================================================================
@@ -191,7 +195,7 @@ function loadAllRedlistSpecies(): SpeciesInput[] {
   return allSpecies;
 }
 
-export type MatchFn = (name: string) => Promise<{ key: string | null; matchType: string }>;
+export type MatchFn = (name: string) => Promise<{ key: string | null; matchType: string; viaColSynonym?: boolean }>;
 
 function loadAllGbifKeys(): Set<string> {
   const keys = new Set<string>();
@@ -223,18 +227,93 @@ function loadAllGbifKeys(): Set<string> {
  *   2. Process all synonym matches. Same rules, but a synonym claim loses to
  *      a prior canonical claim (so canonical wins ties).
  */
+/**
+ * Resolve Red List names against the local CoL backbone instead of GBIF's match API.
+ *
+ * GBIF's v2 match endpoint is unreliable for exactly the job it looks right for:
+ * asked for "Agelaius phoeniceus" against the COL XR checklist it answers
+ * HIGHERRANK/Animalia, even though that species is in CoL XR (5TQD6, accepted)
+ * and has 21 million occurrence records. The same happened to Icterus galbula
+ * and others — 21M records silently dropped out of the first COL XR sync
+ * because of it.
+ *
+ * backbone.parquet is that same CoL XR release, already downloaded, so names are
+ * resolved from it directly: an exact (case-insensitive) name lookup, preferring
+ * an accepted usage, otherwise following a synonym to its accepted taxon. That
+ * also removes ~176k HTTP requests per sync.
+ *
+ * Only the names actually being matched are loaded, so this stays a small map
+ * rather than the backbone's ~7.9M usages.
+ */
+export async function buildLocalMatcher(names: string[]): Promise<MatchFn> {
+  const backbone = path.join(DATA_DIR, "backbone.parquet");
+  if (!fs.existsSync(backbone)) {
+    throw new Error(`buildLocalMatcher: ${backbone} not found — build-backbone (sync phase 4) must run first.`);
+  }
+
+  const inst = await DuckDBInstance.create(":memory:");
+  const conn = await inst.connect();
+  const resolved = new Map<string, { key: string | null; matchType: string; viaColSynonym?: boolean }>();
+  try {
+    await conn.run(`CREATE TEMP TABLE wanted (name VARCHAR);`);
+    const appender = await conn.createAppender("wanted");
+    for (const n of new Set(names.map((n) => n.toLowerCase()))) {
+      appender.appendVarchar(n);
+      appender.endRow();
+    }
+    appender.closeSync();
+
+    // One row per wanted name: accepted usages first, then synonyms (resolved to
+    // their accepted taxon via parent_id), then lowest col_id so homonyms and
+    // repeated names resolve the same way on every run.
+    const reader = await conn.runAndReadAll(`
+      SELECT name, key, via_synonym FROM (
+        SELECT w.name AS name,
+               CASE WHEN b.status IN ('accepted', 'provisionally accepted') THEN b.col_id ELSE p.col_id END AS key,
+               CASE WHEN b.status IN ('accepted', 'provisionally accepted') THEN false ELSE true END AS via_synonym,
+               ROW_NUMBER() OVER (
+                 PARTITION BY w.name
+                 ORDER BY CASE WHEN b.status IN ('accepted', 'provisionally accepted') THEN 0 ELSE 1 END,
+                          b.col_id
+               ) AS rn
+        FROM wanted w
+        JOIN '${backbone}' b ON lower(b.scientific_name) = w.name AND b.rank = 'species'
+        LEFT JOIN '${backbone}' p ON p.col_id = b.parent_id
+      ) WHERE rn = 1 AND key IS NOT NULL;
+    `);
+
+    for (const r of reader.getRowObjects()) {
+      resolved.set(String(r.name), {
+        key: String(r.key),
+        matchType: "EXACT",
+        viaColSynonym: r.via_synonym === true,
+      });
+    }
+  } finally {
+    conn.closeSync();
+    inst.closeSync();
+  }
+
+  return async (name: string) =>
+    resolved.get(name.toLowerCase()) ?? { key: null, matchType: "NONE" };
+}
+
 export async function matchAllSpecies(
   logger: SyncLogger,
-  matchFn: MatchFn = matchGbifSpecies,
+  matchFn?: MatchFn,
   concurrency: number = MATCH_CONCURRENCY,
 ): Promise<MappingEntry[]> {
   const redlistSpecies = loadAllRedlistSpecies();
   const gbifKeys = loadAllGbifKeys();
 
+  const resolve = matchFn ?? await buildLocalMatcher(
+    redlistSpecies.flatMap((s) => [s.scientific_name, ...s.synonyms])
+  );
+
   console.log(`  ${redlistSpecies.length} Red List species to match`);
   console.log(`  ${gbifKeys.size} GBIF species keys available`);
 
-  return matchSpeciesList(redlistSpecies, gbifKeys, logger, matchFn, concurrency);
+  return matchSpeciesList(redlistSpecies, gbifKeys, logger, resolve, concurrency);
 }
 
 interface MatchTask {
@@ -246,6 +325,8 @@ interface MatchTask {
 interface MatchResult extends MatchTask {
   key: string | null;
   matchType: string;
+  /** The searched name is a CoL synonym; the key belongs to another species. */
+  viaColSynonym?: boolean;
 }
 
 /**
@@ -274,12 +355,12 @@ export async function matchSpeciesList(
     concurrency,
     async (task): Promise<MatchResult> => {
       try {
-        const { key, matchType } = await matchFn(task.name);
+        const { key, matchType, viaColSynonym } = await matchFn(task.name);
         progress++;
         if (progress % 1000 === 0) {
           process.stdout.write(`\r  Matched ${progress}/${tasks.length}`);
         }
-        return { ...task, key, matchType };
+        return { ...task, key, matchType, viaColSynonym };
       } catch (err) {
         logger.log("error", {
           sis_taxon_id: task.species.sis_taxon_id,
@@ -362,21 +443,30 @@ export async function matchSpeciesList(
     return "linked";
   }
 
-  // Pass 1: canonical matches for every species.
-  for (const sisId of orderedSisIds) {
-    const bucket = bySpecies.get(sisId);
-    if (!bucket) continue;
-    for (const r of bucket.canonical) {
-      tryClaim(bucket.species, r);
-    }
-  }
-
-  // Pass 2: synonym matches for every species (so canonical wins ties).
-  for (const sisId of orderedSisIds) {
-    const bucket = bySpecies.get(sisId);
-    if (!bucket) continue;
-    for (const r of bucket.synonym) {
-      tryClaim(bucket.species, r);
+  // Claim order. Two Red List species can resolve to one CoL key, because CoL
+  // synonymises taxa IUCN treats as separate species — and only one of them can
+  // hold the key, since the occurrence counts behind it describe one taxon.
+  //
+  // Whoever claims first wins, so the order decides which species keeps its
+  // data. A species whose own name IS the accepted CoL name outranks one that
+  // only reaches the key through CoL's synonymy: without this, Sus bucculentus
+  // (a CoL synonym of Sus scrofa) took the key and the real Sus scrofa lost
+  // 1.1M occurrences, and Cottus jaxartensis did the same to Cottus gobio.
+  // Within each of those, a match on the species's own name beats one found via
+  // an IUCN-listed synonym, as before.
+  const CLAIM_TIERS: Array<(r: MatchResult) => boolean> = [
+    (r) => !r.viaColSynonym && r.source === "canonical",
+    (r) => !r.viaColSynonym && r.source === "synonym",
+    (r) => r.viaColSynonym === true && r.source === "canonical",
+    (r) => r.viaColSynonym === true && r.source === "synonym",
+  ];
+  for (const inTier of CLAIM_TIERS) {
+    for (const sisId of orderedSisIds) {
+      const bucket = bySpecies.get(sisId);
+      if (!bucket) continue;
+      for (const r of [...bucket.canonical, ...bucket.synonym]) {
+        if (inTier(r)) tryClaim(bucket.species, r);
+      }
     }
   }
 

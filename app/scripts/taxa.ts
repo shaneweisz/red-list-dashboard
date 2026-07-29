@@ -35,61 +35,6 @@ export interface Taxon {
 }
 
 // =============================================================================
-// FISH ORDER KEYS (GBIF)
-// =============================================================================
-
-// Bony fish (Actinopterygii) order keys. Kept as an explicit per-order list
-// rather than collapsed into CoL's gigaclass Actinopterygii (8VR36): the list is
-// a verified 1:1 carry-over of the orders the backbone-keyed pipeline queried,
-// so it keeps the "Fishes" row's membership identical across the COL XR move.
-// Shark/ray orders are covered by Elasmobranchii (LB) and are NOT included here.
-const BONY_FISH_ORDER_KEYS: string[] = [
-  "NX",      // Amiiformes
-  "PJ",      // Anguilliformes
-  "RY",      // Atheriniformes
-  "S8",      // Aulopiformes
-  "T6",      // Beloniformes
-  "6228Z",   // Beryciformes
-  "X2",      // Characiformes
-  "YR",      // Clupeiformes
-  "335",     // Cyprinodontiformes
-  "37D",     // Esociformes
-  "38T",     // Gadiformes
-  // dropped: Gasterosteiformes -> suborder Gasterosteoidei, under Perciformes
-  "PC",      // Perciformes
-  "622V4",   // Pleuronectiformes
-  "3VJ",     // Polymixiiformes
-  // dropped: Scorpaeniformes -> suborder Scorpaenoidei, under Perciformes
-  "6236K",   // Siluriformes
-  "47D",     // Tetraodontiformes
-  "46T",     // Syngnathiformes
-  "463",     // Stomiiformes
-  "4BY",     // Zeiformes
-  "46Q",     // Synbranchiformes
-  // dropped: Stephanoberyciformes -> suborder Stephanoberycoidei, under Beryciformes
-  "3LB",     // Mugiliformes
-  "3QF",     // Osmeriformes
-  "3QH",     // Osteoglossiformes
-  "MJ",      // Acipenseriformes
-  "NH",      // Albuliformes
-  "SV",      // Batrachoidiformes
-  // dropped: Cetomimiformes -> family Cetomimidae, under Beryciformes
-  "334",     // Cypriniformes
-  "62246",   // Gobiesociformes
-  "6223X",   // Gonorynchiformes
-  "623BF",   // Gymnotiformes
-  "3FS",     // Lepisosteiformes
-  "3GY",     // Lophiiformes
-  "3LN",     // Myctophiformes
-  "3NQ",     // Notacanthiformes
-  "3PT",     // Ophidiiformes
-  "3SB",     // Percopsiformes
-  "3VN",     // Polypteriformes
-  // dropped: Saccopharyngiformes -> order Anguilliformes, already queried
-  "3ZR",     // Salmoniformes
-];
-
-// =============================================================================
 // INSECT "OTHER" ORDERS
 // =============================================================================
 
@@ -167,12 +112,20 @@ export const TAXA: Taxon[] = [
   {
     id: "fishes", name: "Fishes", kingdomKey: "N",
     redlist: [{ filterColumn: "class_name", filterValues: ["ACTINOPTERYGII", "CHONDRICHTHYES", "MYXINI", "PETROMYZONTI", "SARCOPTERYGII"] }],
+    // One key per major fish lineage. This used to be an explicit list of ~45
+    // ray-finned fish ORDERS, because the GBIF Backbone had no working
+    // class-level key for them. Catalogue of Life does, and the enumerated list
+    // is actively wrong under it: CoL splits the backbone's sprawling
+    // Perciformes into orders that did not exist before (Carangiformes,
+    // Gobiiformes, ...), so a 1:1 carry-over silently dropped every species
+    // that moved into one — 4,879 fishes lost their occurrence data in the
+    // first COL XR sync, e.g. Trachurus murphyi, now Carangiformes.
     gbif: [
-      ...BONY_FISH_ORDER_KEYS.map((k) => ({ taxonKey: k })),
-      { taxonKey: "LB" },  // Elasmobranchii (sharks, rays, skates)
-      { taxonKey: "CK" },  // Holocephali (chimaeras)
+      { taxonKey: "8VR36" },  // Actinopterygii (ray-finned fishes)
+      { taxonKey: "LB" },     // Elasmobranchii (sharks, rays, skates)
+      { taxonKey: "CK" },     // Holocephali (chimaeras)
       { taxonKey: "6225G" },  // Myxini (hagfish)
-      { taxonKey: "3SP" },  // Petromyzontiformes (lampreys)
+      { taxonKey: "3SP" },    // Petromyzontiformes (lampreys)
     ],
   },
 
