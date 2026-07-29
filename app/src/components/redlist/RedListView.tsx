@@ -968,6 +968,13 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
   const [habitatPage, setHabitatPage] = useState(0);
   const HABITAT_PAGE_SIZE = 10;
 
+  // Assessors/Reviewers chart: one merged, toggleable chart (like an earlier
+  // version of this page had) instead of two permanently side-by-side charts
+  // — halves the vertical space these together take up, at the cost of one
+  // click to see the other list. Local-only UI state, not URL-synced (same as
+  // e.g. habitatPage above) since it's a view toggle, not a filter.
+  const [assessorReviewerMode, setAssessorReviewerMode] = useState<"assessors" | "reviewers">("assessors");
+
   // Breadth/Importance/Season/Suitability dropdown menus in the Habitat card header
   // (replacing a wall of individual toggle buttons — Breadth is a single-select
   // Specialist/Generalist choice, Exclude minor a single checkbox, Season a
@@ -3014,6 +3021,46 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
     </div>
   );
 
+  // Shared by Criteria/Threats/Habitat (#436 follow-up): renders a bar chart
+  // with pills inserted directly below whichever bar(s) are currently
+  // expanded, instead of a separate section below the WHOLE chart. Splits
+  // `data` into segments at each expanded item's position — one FilterBarChart
+  // per segment — with that item's pills sandwiched right after its own
+  // segment. Each segment sizes to its own bar count (no fixed height/scroll);
+  // the card just grows to fit, since drill-down height is now unpredictable
+  // (could land after any bar, not just "below everything"). Criteria can have
+  // multiple simultaneously-expanded top-level letters (Set-based), so this
+  // produces more than 2 segments in that case; Threats/Habitat only ever
+  // have one expanded category, so at most 2.
+  type DrilldownBarDatum = { code: string; rawCode: string; count: number; label: string };
+  function renderInlineDrilldown(
+    data: DrilldownBarDatum[],
+    isExpanded: (rawCode: string) => boolean,
+    renderPills: (rawCode: string) => React.ReactNode,
+    chartProps: Omit<React.ComponentProps<typeof FilterBarChart>, "data">
+  ): React.ReactNode {
+    const segments: { bars: DrilldownBarDatum[]; pillsAfter: string | null }[] = [];
+    let current: DrilldownBarDatum[] = [];
+    for (const item of data) {
+      current.push(item);
+      if (isExpanded(item.rawCode)) {
+        segments.push({ bars: current, pillsAfter: item.rawCode });
+        current = [];
+      }
+    }
+    if (current.length > 0) segments.push({ bars: current, pillsAfter: null });
+    return segments.map((seg, i) => (
+      <React.Fragment key={i}>
+        {seg.bars.length > 0 && (
+          <div style={{ height: Math.max(30, seg.bars.length * 22 + 8) }}>
+            <FilterBarChart data={seg.bars} {...chartProps} />
+          </div>
+        )}
+        {seg.pillsAfter && renderPills(seg.pillsAfter)}
+      </React.Fragment>
+    ));
+  }
+
   // Threats card — reassessments mode only (new-assessments shows Geospatial
   // GBIF Records instead, in Charts row 2). Lives in More Filters, not the
   // primary view — see the More Filters section below.
@@ -3024,121 +3071,84 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
     const threatBarLabel = (count: number) =>
       `${count.toLocaleString()} (${threatTotal > 0 ? Math.round((count / threatTotal) * 100) : 0}%)`;
     // Use label as `code` field so it displays on y-axis, sorted by count desc
-    const threatBarData = THREAT_CATEGORIES
-      .map(({ code, label }) => ({ code: label, threatCode: code, count: threatCounts[code] ?? 0, label: threatBarLabel(threatCounts[code] ?? 0) }))
+    const threatBarData: DrilldownBarDatum[] = THREAT_CATEGORIES
+      .map(({ code, label }) => ({ code: label, rawCode: code, count: threatCounts[code] ?? 0, label: threatBarLabel(threatCounts[code] ?? 0) }))
       .filter(d => d.count > 0)
       .sort((a, b) => b.count - a.count);
     // selectedItems needs to use labels too for dimming
     const selectedThreatLabels = new Set(
       Array.from(selectedThreats).map(code => THREAT_CATEGORIES.find(c => c.code === code)?.label).filter(Boolean) as string[]
     );
-    // Drill-down: when a top-level category is expanded, its sub-categories
-    // appear in a split pane below the main chart (rather than expanding the
-    // card downward) so the card height stays constant — both charts share a
-    // fixed-height area and scroll internally.
-    const drillCat = expandedThreat ? THREAT_CATEGORIES.find(c => c.code === expandedThreat) ?? null : null;
-    const drillSubData = drillCat
-      ? drillCat.children
-          .map(child => ({ code: child.label, threatCode: child.code, count: threatCounts[child.code] ?? 0, label: threatBarLabel(threatCounts[child.code] ?? 0) }))
-          .filter(d => d.count > 0)
-          .sort((a, b) => b.count - a.count)
-      : [];
-    const isDrilled = drillCat !== null && drillSubData.length > 0;
-    // The card content area is a constant height (independent of how many
-    // categories are present) so the card never resizes — neither when the
-    // filter changes the category count nor when drilling in — which would
-    // otherwise bump the country map sharing this grid row. The base chart
-    // keeps its natural per-bar height and scrolls within the fixed area.
-    // 266 = the country map card's 320px height minus this card's header +
-    // padding (~54px), so both cards (and their loading skeletons) match.
-    const THREATS_AREA_HEIGHT = 266;
-    const chartHeight = Math.max(200, threatBarData.length * 18 + 30);
     const loading = speciesLoading && assessedSpecies.length === 0;
+    const renderThreatPills = (rawCode: string) => {
+      const drillCat = THREAT_CATEGORIES.find(c => c.code === rawCode);
+      if (!drillCat) return null;
+      return (
+        <div className="flex flex-wrap gap-1 pl-2 pb-1">
+          {drillCat.children.map(child => {
+            const count = threatCounts[child.code] ?? 0;
+            if (count === 0) return null;
+            const isSelected = selectedThreats.has(child.code);
+            return (
+              <button
+                key={child.code}
+                onClick={(e) => {
+                  const isMulti = e.metaKey || e.ctrlKey;
+                  setSelectedThreats(prev => {
+                    if (isMulti) { const next = new Set(prev); if (next.has(child.code)) next.delete(child.code); else next.add(child.code); return next; }
+                    if (prev.size === 1 && prev.has(child.code)) return new Set();
+                    return new Set([child.code]);
+                  });
+                }}
+                className={`px-1.5 py-0.5 text-[11px] rounded-full transition-colors cursor-pointer ${
+                  isSelected
+                    ? "bg-violet-500 text-white"
+                    : "bg-zinc-100 text-zinc-600 hover:bg-zinc-200 dark:bg-zinc-800 dark:text-zinc-400 dark:hover:bg-zinc-700"
+                }`}
+              >
+                {child.label} ({count.toLocaleString()})
+              </button>
+            );
+          })}
+        </div>
+      );
+    };
     return (
       <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-3 flex flex-col">
         <div className="flex items-center justify-between mb-1 min-h-[24px]">
           <span className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">Threats</span>
         </div>
-        <div style={{ height: THREATS_AREA_HEIGHT }} className="flex flex-col overflow-hidden">
-          {loading ? (
-            <div className="h-full flex items-center justify-center"><Spinner /></div>
-          ) : threatBarData.length > 0 ? (
-            <>
-              {/* Top-level categories — always visible; scrolls if it overflows the shared height */}
-              <div className="flex-1 min-h-0 overflow-y-auto">
-                <div style={{ height: chartHeight }}>
-                  <FilterBarChart
-                    data={threatBarData}
-                    dataKey="code"
-                    selectedItems={selectedThreatLabels}
-                    onBarClick={(data: { payload?: { code?: string; threatCode?: string } }, event: React.MouseEvent) => {
-                      const label = data.payload?.code;
-                      const code = label ? threatLabelToCode.get(label) : undefined;
-                      if (!code) return;
-                      const isMulti = event.metaKey || event.ctrlKey;
-                      setSelectedThreats(prev => {
-                        if (isMulti) { const next = new Set(prev); if (next.has(code)) next.delete(code); else next.add(code); return next; }
-                        if (prev.size === 1 && prev.has(code)) return new Set();
-                        return new Set([code]);
-                      });
-                      setExpandedThreat(prev => prev === code ? null : code);
-                    }}
-                    barColor="#8b5cf6"
-                    yAxisWidth={155}
-                    rightMargin={80}
-                    yAxisTickMaxLength={22}
-                  />
-                </div>
-              </div>
-              {/* Sub-categories of the drilled-into category — shares the fixed height */}
-              {isDrilled && (
-                <div className="shrink-0 mt-2 pt-2 border-t border-zinc-200 dark:border-zinc-800 flex flex-col" style={{ maxHeight: "50%" }}>
-                  <div className="flex items-center justify-between mb-1">
-                    <span className="text-xs font-medium text-zinc-500 dark:text-zinc-400 truncate">{drillCat!.label}</span>
-                    <button
-                      onClick={() => setExpandedThreat(null)}
-                      className="shrink-0 text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300 transition-colors"
-                      aria-label="Close sub-categories"
-                    >
-                      <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
-                    </button>
-                  </div>
-                  <div className="min-h-0 overflow-y-auto">
-                    <div className="flex flex-wrap gap-1.5">
-                      {drillCat!.children.map(child => {
-                        const count = threatCounts[child.code] ?? 0;
-                        if (count === 0) return null;
-                        const isSelected = selectedThreats.has(child.code);
-                        return (
-                          <button
-                            key={child.code}
-                            onClick={(e) => {
-                              const isMulti = e.metaKey || e.ctrlKey;
-                              setSelectedThreats(prev => {
-                                if (isMulti) { const next = new Set(prev); if (next.has(child.code)) next.delete(child.code); else next.add(child.code); return next; }
-                                if (prev.size === 1 && prev.has(child.code)) return new Set();
-                                return new Set([child.code]);
-                              });
-                            }}
-                            className={`px-2 py-1 text-xs rounded-full transition-colors cursor-pointer ${
-                              isSelected
-                                ? "bg-violet-500 text-white"
-                                : "bg-zinc-100 text-zinc-600 hover:bg-zinc-200 dark:bg-zinc-800 dark:text-zinc-400 dark:hover:bg-zinc-700"
-                            }`}
-                          >
-                            {child.label} ({count.toLocaleString()})
-                          </button>
-                        );
-                      })}
-                    </div>
-                  </div>
-                </div>
-              )}
-            </>
-          ) : (
-            <div className="h-full flex items-center justify-center"><span className="text-sm text-zinc-400 dark:text-zinc-500">No threat data</span></div>
-          )}
-        </div>
+        {loading ? (
+          <div style={{ height: 200 }} className="flex items-center justify-center"><Spinner /></div>
+        ) : threatBarData.length > 0 ? (
+          renderInlineDrilldown(
+            threatBarData,
+            (rawCode) => expandedThreat === rawCode,
+            renderThreatPills,
+            {
+              dataKey: "code",
+              selectedItems: selectedThreatLabels,
+              onBarClick: (data: { payload?: { code?: string } }, event: React.MouseEvent) => {
+                const label = data.payload?.code;
+                const code = label ? threatLabelToCode.get(label) : undefined;
+                if (!code) return;
+                const isMulti = event.metaKey || event.ctrlKey;
+                setSelectedThreats(prev => {
+                  if (isMulti) { const next = new Set(prev); if (next.has(code)) next.delete(code); else next.add(code); return next; }
+                  if (prev.size === 1 && prev.has(code)) return new Set();
+                  return new Set([code]);
+                });
+                setExpandedThreat(prev => prev === code ? null : code);
+              },
+              barColor: "#8b5cf6",
+              yAxisWidth: 155,
+              rightMargin: 80,
+              yAxisTickMaxLength: 22,
+            }
+          )
+        ) : (
+          <div style={{ height: 200 }} className="flex items-center justify-center"><span className="text-sm text-zinc-400 dark:text-zinc-500">No threat data</span></div>
+        )}
       </div>
     );
   })();
@@ -3152,8 +3162,8 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
   // multi-select dimension, since each is a binary refinement, not a category.
   const habitatCard = (() => {
     const habitatLabelToCode = new Map(HABITAT_CATEGORIES.map(c => [c.label, c.code]));
-    const habitatBarData = HABITAT_CATEGORIES
-      .map(({ code, label }) => ({ code: label, habitatCode: code, count: habitatCounts[code] ?? 0, label: (habitatCounts[code] ?? 0).toLocaleString() }))
+    const habitatBarData: DrilldownBarDatum[] = HABITAT_CATEGORIES
+      .map(({ code, label }) => ({ code: label, rawCode: code, count: habitatCounts[code] ?? 0, label: (habitatCounts[code] ?? 0).toLocaleString() }))
       .filter(d => d.count > 0)
       .sort((a, b) => b.count - a.count);
     const habitatTotalPages = Math.max(1, Math.ceil(habitatBarData.length / HABITAT_PAGE_SIZE));
@@ -3162,17 +3172,40 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
     const selectedHabitatLabels = new Set(
       Array.from(selectedHabitat).map(code => HABITAT_CATEGORIES.find(c => c.code === code)?.label).filter(Boolean) as string[]
     );
-    const drillCat = expandedHabitat ? HABITAT_CATEGORIES.find(c => c.code === expandedHabitat) ?? null : null;
-    const drillSubData = drillCat
-      ? drillCat.children
-          .map(child => ({ code: child.label, habitatCode: child.code, count: habitatCounts[child.code] ?? 0, label: (habitatCounts[child.code] ?? 0).toLocaleString() }))
-          .filter(d => d.count > 0)
-          .sort((a, b) => b.count - a.count)
-      : [];
-    const isDrilled = drillCat !== null && drillSubData.length > 0;
-    const HABITAT_AREA_HEIGHT = 266;
-    const chartHeight = Math.max(150, pagedHabitatBarData.length * 18 + 30);
     const loading = speciesLoading && assessedSpecies.length === 0;
+    const renderHabitatPills = (rawCode: string) => {
+      const drillCat = HABITAT_CATEGORIES.find(c => c.code === rawCode);
+      if (!drillCat) return null;
+      return (
+        <div className="flex flex-wrap gap-1 pl-2 pb-1">
+          {drillCat.children.map(child => {
+            const count = habitatCounts[child.code] ?? 0;
+            if (count === 0) return null;
+            const isSelected = selectedHabitat.has(child.code);
+            return (
+              <button
+                key={child.code}
+                onClick={(e) => {
+                  const isMulti = e.metaKey || e.ctrlKey;
+                  setSelectedHabitat(prev => {
+                    if (isMulti) { const next = new Set(prev); if (next.has(child.code)) next.delete(child.code); else next.add(child.code); return next; }
+                    if (prev.size === 1 && prev.has(child.code)) return new Set();
+                    return new Set([child.code]);
+                  });
+                }}
+                className={`px-1.5 py-0.5 text-[11px] rounded-full transition-colors cursor-pointer ${
+                  isSelected
+                    ? "bg-teal-500 text-white"
+                    : "bg-zinc-100 text-zinc-600 hover:bg-zinc-200 dark:bg-zinc-800 dark:text-zinc-400 dark:hover:bg-zinc-700"
+                }`}
+              >
+                {child.label} ({count.toLocaleString()})
+              </button>
+            );
+          })}
+        </div>
+      );
+    };
     const toggleClass = (active: boolean) => `px-2 py-0.5 text-xs font-semibold rounded transition-colors ${
       active ? "bg-teal-600 text-white shadow-sm" : "bg-zinc-100 dark:bg-zinc-800 text-zinc-500 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-300"
     }`;
@@ -3337,123 +3370,78 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
             </div>
           </div>
         </div>
-        <div style={{ height: HABITAT_AREA_HEIGHT }} className="flex flex-col overflow-hidden">
-          {loading ? (
-            <div className="h-full flex items-center justify-center"><Spinner /></div>
-          ) : habitatBarData.length > 0 ? (
-            <>
-              <div className="flex-1 min-h-0 flex flex-col">
-                <div className="flex-1 min-h-0 overflow-y-auto">
-                  <div style={{ height: chartHeight }}>
-                    <FilterBarChart
-                      data={pagedHabitatBarData}
-                      dataKey="code"
-                      selectedItems={selectedHabitatLabels}
-                      onBarClick={(data: { payload?: { code?: string; habitatCode?: string } }, event: React.MouseEvent) => {
-                        const label = data.payload?.code;
-                        const code = label ? habitatLabelToCode.get(label) : undefined;
-                        if (!code) return;
-                        const isMulti = event.metaKey || event.ctrlKey;
-                        setSelectedHabitat(prev => {
-                          if (isMulti) { const next = new Set(prev); if (next.has(code)) next.delete(code); else next.add(code); return next; }
-                          if (prev.size === 1 && prev.has(code)) return new Set();
-                          return new Set([code]);
-                        });
-                        setExpandedHabitat(prev => prev === code ? null : code);
-                      }}
-                      barColor="#0d9488"
-                      yAxisWidth={155}
-                      rightMargin={80}
-                      yAxisTickMaxLength={22}
-                    />
-                  </div>
-                </div>
-                {habitatTotalPages > 1 && (
-                  <div className="shrink-0 flex items-center justify-between pt-1 text-[10px] text-zinc-400 dark:text-zinc-500">
-                    <button
-                      onClick={() => setHabitatPage(p => Math.max(0, p - 1))}
-                      disabled={safeHabitatPage === 0}
-                      className="px-1.5 py-0.5 rounded hover:bg-zinc-100 dark:hover:bg-zinc-800 disabled:opacity-30 disabled:cursor-not-allowed"
-                    >
-                      Prev
-                    </button>
-                    <span className="tabular-nums">Page {safeHabitatPage + 1} of {habitatTotalPages}</span>
-                    <button
-                      onClick={() => setHabitatPage(p => Math.min(habitatTotalPages - 1, p + 1))}
-                      disabled={safeHabitatPage >= habitatTotalPages - 1}
-                      className="px-1.5 py-0.5 rounded hover:bg-zinc-100 dark:hover:bg-zinc-800 disabled:opacity-30 disabled:cursor-not-allowed"
-                    >
-                      Next
-                    </button>
-                  </div>
-                )}
+        {loading ? (
+          <div style={{ height: 200 }} className="flex items-center justify-center"><Spinner /></div>
+        ) : habitatBarData.length > 0 ? (
+          <>
+            {renderInlineDrilldown(
+              pagedHabitatBarData,
+              (rawCode) => expandedHabitat === rawCode,
+              renderHabitatPills,
+              {
+                dataKey: "code",
+                selectedItems: selectedHabitatLabels,
+                onBarClick: (data: { payload?: { code?: string } }, event: React.MouseEvent) => {
+                  const label = data.payload?.code;
+                  const code = label ? habitatLabelToCode.get(label) : undefined;
+                  if (!code) return;
+                  const isMulti = event.metaKey || event.ctrlKey;
+                  setSelectedHabitat(prev => {
+                    if (isMulti) { const next = new Set(prev); if (next.has(code)) next.delete(code); else next.add(code); return next; }
+                    if (prev.size === 1 && prev.has(code)) return new Set();
+                    return new Set([code]);
+                  });
+                  setExpandedHabitat(prev => prev === code ? null : code);
+                },
+                barColor: "#0d9488",
+                yAxisWidth: 155,
+                rightMargin: 80,
+                yAxisTickMaxLength: 22,
+              }
+            )}
+            {habitatTotalPages > 1 && (
+              <div className="shrink-0 flex items-center justify-between pt-1 text-[10px] text-zinc-400 dark:text-zinc-500">
+                <button
+                  onClick={() => setHabitatPage(p => Math.max(0, p - 1))}
+                  disabled={safeHabitatPage === 0}
+                  className="px-1.5 py-0.5 rounded hover:bg-zinc-100 dark:hover:bg-zinc-800 disabled:opacity-30 disabled:cursor-not-allowed"
+                >
+                  Prev
+                </button>
+                <span className="tabular-nums">Page {safeHabitatPage + 1} of {habitatTotalPages}</span>
+                <button
+                  onClick={() => setHabitatPage(p => Math.min(habitatTotalPages - 1, p + 1))}
+                  disabled={safeHabitatPage >= habitatTotalPages - 1}
+                  className="px-1.5 py-0.5 rounded hover:bg-zinc-100 dark:hover:bg-zinc-800 disabled:opacity-30 disabled:cursor-not-allowed"
+                >
+                  Next
+                </button>
               </div>
-              {isDrilled && (
-                <div className="shrink-0 mt-2 pt-2 border-t border-zinc-200 dark:border-zinc-800 flex flex-col" style={{ maxHeight: "50%" }}>
-                  <div className="flex items-center justify-between mb-1">
-                    <span className="text-xs font-medium text-zinc-500 dark:text-zinc-400 truncate">{drillCat!.label}</span>
-                    <button
-                      onClick={() => setExpandedHabitat(null)}
-                      className="shrink-0 text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300 transition-colors"
-                      aria-label="Close sub-habitats"
-                    >
-                      <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
-                    </button>
-                  </div>
-                  <div className="min-h-0 overflow-y-auto">
-                    <div className="flex flex-wrap gap-1.5">
-                      {drillCat!.children.map(child => {
-                        const count = habitatCounts[child.code] ?? 0;
-                        if (count === 0) return null;
-                        const isSelected = selectedHabitat.has(child.code);
-                        return (
-                          <button
-                            key={child.code}
-                            onClick={(e) => {
-                              const isMulti = e.metaKey || e.ctrlKey;
-                              setSelectedHabitat(prev => {
-                                if (isMulti) { const next = new Set(prev); if (next.has(child.code)) next.delete(child.code); else next.add(child.code); return next; }
-                                if (prev.size === 1 && prev.has(child.code)) return new Set();
-                                return new Set([child.code]);
-                              });
-                            }}
-                            className={`px-2 py-1 text-xs rounded-full transition-colors cursor-pointer ${
-                              isSelected
-                                ? "bg-teal-500 text-white"
-                                : "bg-zinc-100 text-zinc-600 hover:bg-zinc-200 dark:bg-zinc-800 dark:text-zinc-400 dark:hover:bg-zinc-700"
-                            }`}
-                          >
-                            {child.label} ({count.toLocaleString()})
-                          </button>
-                        );
-                      })}
-                    </div>
-                  </div>
-                </div>
-              )}
-            </>
-          ) : (
-            <div className="h-full flex items-center justify-center"><span className="text-sm text-zinc-400 dark:text-zinc-500">No habitat data</span></div>
-          )}
-        </div>
+            )}
+          </>
+        ) : (
+          <div style={{ height: 200 }} className="flex items-center justify-center"><span className="text-sm text-zinc-400 dark:text-zinc-500">No habitat data</span></div>
+        )}
       </div>
     );
   })();
 
-  // Renders one pill row for a level of the Criteria drill-down (top-level A-E, then
-  // number, sub-clause, or roman-numeral rows as the user drills deeper — see
-  // CRITERIA_CATEGORIES' doc comment for why the depth varies per branch). A plain
-  // click replaces the whole selection with just this code (or clears it, if it was
-  // already the sole selection) — the same single-select convention every other
-  // filter chip in this file uses. Cmd/ctrl-click instead TOGGLES this code in/out of
-  // selectedCriteria without touching the rest, for real multi-select across branches
-  // (e.g. B1b(iii) AND C2a(i) together). Independently, clicking a node with children
-  // toggles ITS OWN membership in expandedCriteria (not a single shared "last expanded"
-  // value), so drilling into one branch never collapses another branch you already
-  // had open — mirrors the Threats chart's category/sub-category drill-down,
-  // generalized to arbitrary depth and to multiple simultaneously-open branches.
-  const renderCriteriaRow = (nodes: CriteriaNode[], indent: boolean) => (
-    <div className={`flex flex-wrap gap-1.5 ${indent ? "pl-0 sm:pl-[88px]" : ""}`}>
+  // Renders one small pill row for a level of the Criteria drill-down (number,
+  // sub-clause, or roman-numeral rows as the user drills deeper below the
+  // top-level A-E bar chart — see CRITERIA_CATEGORIES' doc comment for why the
+  // depth varies per branch). Indents a little more per level so a deep drill
+  // (B -> B1 -> B1b -> B1b(iii)) still reads as a staircase, not a flat list.
+  // A plain click replaces the whole selection with just this code (or clears
+  // it, if it was already the sole selection) — the same single-select
+  // convention every other filter chip in this file uses. Cmd/ctrl-click
+  // instead TOGGLES this code in/out of selectedCriteria without touching the
+  // rest, for real multi-select across branches (e.g. B1b(iii) AND C2a(i)
+  // together). Independently, clicking a node with children toggles ITS OWN
+  // membership in expandedCriteria (not a single shared "last expanded"
+  // value), so drilling into one branch never collapses another branch you
+  // already had open.
+  const renderCriteriaRow = (nodes: CriteriaNode[], depth: number) => (
+    <div className="flex flex-wrap gap-1" style={{ paddingLeft: depth * 10 }}>
       {nodes.map(node => {
         const isSelected = selectedCriteria.has(node.code);
         const count = criteriaCounts[node.code] ?? 0;
@@ -3472,12 +3460,10 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
                 setExpandedCriteria(prev => { const next = new Set(prev); if (next.has(node.code)) next.delete(node.code); else next.add(node.code); return next; });
               }
             }}
-            className={`px-2 py-1 text-xs rounded-full transition-colors cursor-pointer ${
+            className={`px-1.5 py-0.5 text-[11px] rounded-full transition-colors cursor-pointer ${
               isSelected
-                ? indent ? "bg-indigo-300 text-indigo-900 dark:bg-indigo-400 dark:text-indigo-950" : "bg-indigo-500 text-white"
-                : indent
-                  ? "bg-white text-zinc-600 border border-zinc-200 hover:bg-zinc-100 dark:bg-zinc-900 dark:text-zinc-400 dark:border-zinc-700 dark:hover:bg-zinc-800"
-                  : "bg-zinc-100 text-zinc-600 hover:bg-zinc-200 dark:bg-zinc-800 dark:text-zinc-400 dark:hover:bg-zinc-700"
+                ? "bg-indigo-500 text-white"
+                : "bg-zinc-100 text-zinc-600 hover:bg-zinc-200 dark:bg-zinc-800 dark:text-zinc-400 dark:hover:bg-zinc-700"
             }`}
             title={node.label}
           >
@@ -3491,9 +3477,9 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
   // Recursively renders a level and, for every node in it that's currently expanded,
   // that node's children level right after — so any number of branches (at any depth)
   // can be open simultaneously, not just one linear drill path.
-  const renderCriteriaLevel = (nodes: CriteriaNode[], depth = 0): React.ReactNode => (
+  const renderCriteriaLevel = (nodes: CriteriaNode[], depth: number): React.ReactNode => (
     <React.Fragment>
-      {renderCriteriaRow(nodes, depth > 0)}
+      {renderCriteriaRow(nodes, depth)}
       {nodes.map(node => (
         expandedCriteria.has(node.code) && node.children.length > 0 ? (
           <React.Fragment key={`${node.code}-children`}>{renderCriteriaLevel(node.children, depth + 1)}</React.Fragment>
@@ -3512,57 +3498,56 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
   // ask was already true for Criteria beyond the top level.
   const criteriaCard = (() => {
     const criteriaLabelToCode = new Map(CRITERIA_CATEGORIES.map(c => [c.label, c.code]));
-    const criteriaBarData = CRITERIA_CATEGORIES
-      .map(({ code, label }) => ({ code: label, criteriaCode: code, count: criteriaCounts[code] ?? 0, label: (criteriaCounts[code] ?? 0).toLocaleString() }))
-      .filter(d => d.count > 0 || selectedCriteria.has(d.criteriaCode));
+    const criteriaBarData: DrilldownBarDatum[] = CRITERIA_CATEGORIES
+      .map(({ code, label }) => ({ code: label, rawCode: code, count: criteriaCounts[code] ?? 0, label: (criteriaCounts[code] ?? 0).toLocaleString() }))
+      .filter(d => d.count > 0 || selectedCriteria.has(d.rawCode));
     const selectedCriteriaLabels = new Set(
       Array.from(selectedCriteria).map(code => CRITERIA_CATEGORIES.find(c => c.code === code)?.label).filter(Boolean) as string[]
     );
-    const CRITERIA_TOP_HEIGHT = Math.max(90, criteriaBarData.length * 24 + 20);
     const loading = speciesLoading && assessedSpecies.length === 0;
+    const renderCriteriaPills = (rawCode: string) => {
+      const node = CRITERIA_CATEGORIES.find(n => n.code === rawCode);
+      if (!node) return null;
+      return <div className="pb-1">{renderCriteriaLevel(node.children, 1)}</div>;
+    };
     return (
       <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-3 flex flex-col">
         <div className="flex items-center justify-between mb-1 min-h-[24px]">
           <span className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">Criteria</span>
         </div>
         {loading ? (
-          <div style={{ height: CRITERIA_TOP_HEIGHT }} className="flex items-center justify-center"><Spinner className="h-4 w-4" /></div>
+          <div style={{ height: 90 }} className="flex items-center justify-center"><Spinner className="h-4 w-4" /></div>
         ) : criteriaBarData.length > 0 ? (
-          <>
-            <div style={{ height: CRITERIA_TOP_HEIGHT }}>
-              <FilterBarChart
-                data={criteriaBarData}
-                dataKey="code"
-                selectedItems={selectedCriteriaLabels}
-                onBarClick={(data: { payload?: { code?: string } }, event: React.MouseEvent) => {
-                  const label = data.payload?.code;
-                  const code = label ? criteriaLabelToCode.get(label) : undefined;
-                  if (!code) return;
-                  const isMulti = event.metaKey || event.ctrlKey;
-                  if (isMulti) {
-                    setSelectedCriteria(prev => { const next = new Set(prev); if (next.has(code)) next.delete(code); else next.add(code); return next; });
-                  } else {
-                    setSelectedCriteria(prev => (prev.size === 1 && prev.has(code)) ? new Set() : new Set([code]));
-                  }
-                  const node = CRITERIA_CATEGORIES.find(n => n.code === code);
-                  if (node && node.children.length > 0) {
-                    setExpandedCriteria(prev => { const next = new Set(prev); if (next.has(code)) next.delete(code); else next.add(code); return next; });
-                  }
-                }}
-                barColor="#6366f1"
-                yAxisWidth={100}
-                rightMargin={60}
-                yAxisTickMaxLength={14}
-              />
-            </div>
-            {CRITERIA_CATEGORIES.map(node => (
-              expandedCriteria.has(node.code) && node.children.length > 0 ? (
-                <React.Fragment key={node.code}>{renderCriteriaLevel(node.children, 1)}</React.Fragment>
-              ) : null
-            ))}
-          </>
+          renderInlineDrilldown(
+            criteriaBarData,
+            (rawCode) => expandedCriteria.has(rawCode),
+            renderCriteriaPills,
+            {
+              dataKey: "code",
+              selectedItems: selectedCriteriaLabels,
+              onBarClick: (data: { payload?: { code?: string } }, event: React.MouseEvent) => {
+                const label = data.payload?.code;
+                const code = label ? criteriaLabelToCode.get(label) : undefined;
+                if (!code) return;
+                const isMulti = event.metaKey || event.ctrlKey;
+                if (isMulti) {
+                  setSelectedCriteria(prev => { const next = new Set(prev); if (next.has(code)) next.delete(code); else next.add(code); return next; });
+                } else {
+                  setSelectedCriteria(prev => (prev.size === 1 && prev.has(code)) ? new Set() : new Set([code]));
+                }
+                const node = CRITERIA_CATEGORIES.find(n => n.code === code);
+                if (node && node.children.length > 0) {
+                  setExpandedCriteria(prev => { const next = new Set(prev); if (next.has(code)) next.delete(code); else next.add(code); return next; });
+                }
+              },
+              barColor: "#6366f1",
+              yAxisWidth: 100,
+              rightMargin: 60,
+              yAxisTickMaxLength: 14,
+            }
+          )
         ) : (
-          <div style={{ height: CRITERIA_TOP_HEIGHT }} className="flex items-center justify-center"><span className="text-sm text-zinc-400 dark:text-zinc-500">No criteria data</span></div>
+          <div style={{ height: 90 }} className="flex items-center justify-center"><span className="text-sm text-zinc-400 dark:text-zinc-500">No criteria data</span></div>
         )}
       </div>
     );
@@ -4027,146 +4012,6 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
 
           {!isNewAssessments && moreFiltersOpen && (
             <>
-                {/* Habitat (left) alongside Number of Assessments stacked above
-                    Criteria (right) — Number of Assessments' chart is taller
-                    than its original 150px so the combined stack's bottom edge
-                    roughly lines up with Habitat's. */}
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                  {habitatCard}
-                  <div className="flex flex-col gap-3">
-                    {/* Number of Assessments (#423 item 1) — how many times a
-                        species has been assessed, with a "Reassessed" shortcut
-                        selecting every bucket >= 2 in one click (flags species
-                        reassessed at least once, per the issue's explicit ask),
-                        same shape as the Outdated shortcut next to Years Since
-                        Assessed. */}
-                    {!isNewAssessments && (
-                      <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-3 flex flex-col">
-                        <div className="flex items-center justify-between mb-1">
-                          <span className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">Number of Assessments</span>
-                          <button
-                            type="button"
-                            onClick={handleReassessedClick}
-                            className={`px-2 py-0.5 text-xs font-semibold rounded transition-colors ${
-                              isReassessedSelected
-                                ? "bg-red-600 text-white shadow-sm"
-                                : "bg-zinc-100 dark:bg-zinc-800 text-zinc-500 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-300"
-                            }`}
-                            aria-pressed={isReassessedSelected}
-                            title="Filter to species assessed 2 or more times (reassessed at least once)"
-                          >
-                            Reassessed
-                          </button>
-                        </div>
-                        <div style={{ height: 216 }} className="flex items-center justify-center">
-                          {speciesLoading && assessedSpecies.length === 0 ? (
-                            <Spinner />
-                          ) : isSingleSpecies && singleSpecies ? (
-                            <span className="text-4xl font-bold text-zinc-900 dark:text-zinc-100">
-                              {assessmentCountBucket(singleSpecies.assessment_count)}
-                            </span>
-                          ) : assessmentCountData.length > 0 ? (
-                            <FilterBarChart
-                              data={assessmentCountData}
-                              dataKey="shortRange"
-                              selectedItems={selectedAssessmentCounts}
-                              onBarClick={handleAssessmentCountClick}
-                              barColor="#8b5cf6"
-                              yAxisWidth={42}
-                              rightMargin={85}
-                            />
-                          ) : null}
-                        </div>
-                      </div>
-                    )}
-
-                    {/* Criteria — top-level A-E bar chart (see criteriaCard);
-                        clicking a bar both selects it as a filter AND expands
-                        its next level below (number -> sub-clause -> roman
-                        numeral, as deep as that branch goes) as pill rows via
-                        renderCriteriaLevel, since criteria nests up to 4
-                        levels vs. Threats/Habitat's 2. Cmd/ctrl-click for real
-                        multi-select — any number of branches can be drilled
-                        into and selected simultaneously (e.g. B1b(iii) AND
-                        C2a(i) together), each independently expanded via
-                        expandedCriteria (a Set, not a single "last expanded"
-                        value). A species can satisfy multiple codes under the
-                        same letter too (e.g. B1+B2, or B1a and B1b together),
-                        so selecting any code matches species with that code
-                        OR a more specific one beneath it (see
-                        parseCriteriaCodes' startsWith-based matching). */}
-                    {!isNewAssessments && criteriaCard}
-                  </div>
-                </div>
-
-                {/* Growth Form (plants/fungi only) */}
-                {(() => {
-                  if (speciesLoading && assessedSpecies.length === 0) {
-                    return (
-                      <div className="flex items-center gap-2 bg-zinc-50 dark:bg-zinc-800/50 border border-zinc-200 dark:border-zinc-700 rounded-lg px-3 py-2">
-                        <span className="text-sm font-semibold text-zinc-900 dark:text-zinc-100 shrink-0 w-20">Growth</span>
-                        <Spinner className="h-4 w-4" />
-                      </div>
-                    );
-                  }
-                  // Compute growth form counts cross-filtered (exclude own filter)
-                  const gfCounts: Record<string, number> = {};
-                  taxaFilteredSpecies.forEach(s => {
-                    if (!s.growth_forms?.length) return;
-                    if (!matchesSearch(s)) return;
-                    if (selectedCategories.size > 0 && !selectedCategories.has(s.category)) return;
-                    if (selectedCountries.size > 0 && !s.countries.some(c => selectedCountries.has(c))) return;
-                    if (s.category !== "NE" && selectedYearRanges.size > 0 && !matchesYearRangeFilter(s.assessment_date, selectedYearRanges)) return;
-                    if (s.category !== "NE" && selectedAssessmentYears.size > 0 && !matchesAssessmentYearFilter(s.assessment_date, selectedAssessmentYears)) return;
-                    if (selectedObsRanges.size > 0 && !matchesObsRangeFilter(s.gbif_occurrence_count, selectedObsRanges)) return;
-                    if (selectedAssessmentCounts.size > 0 && !matchesAssessmentCountFilter(s.assessment_count, selectedAssessmentCounts)) return;
-                    if (selectedSystems.size > 0 && !s.systems?.some(sys => selectedSystems.has(sys))) return;
-                    if (selectedPopulationTrends.size > 0 && (!s.population_trend || !selectedPopulationTrends.has(s.population_trend))) return;
-                    if (selectedMovementPatterns.size > 0 && (!s.movement_pattern || !selectedMovementPatterns.has(s.movement_pattern))) return;
-                    if (selectedThreats.size > 0 && !s.threat_codes?.some(tc => Array.from(selectedThreats).some(sel => tc === sel || tc.startsWith(sel + ".")))) return;
-                    if (selectedCriteria.size > 0 && !parseCriteriaCodes(s.criteria).some(code => Array.from(selectedCriteria).some(sel => code === sel || code.startsWith(sel)))) return;
-                    if (endemicsOnly && s.countries.length !== 1) return;
-                    if (!matchesAssessorsFilter(s)) return;
-                    if (!matchesHabitatFilter(s)) return;
-                    if (!matchesReviewersFilter(s)) return;
-                    for (const gf of s.growth_forms) {
-                      gfCounts[gf] = (gfCounts[gf] || 0) + 1;
-                    }
-                  });
-                  const sorted = Object.entries(gfCounts).sort((a, b) => b[1] - a[1]);
-                  if (sorted.length === 0) return null;
-                  return (
-                    <div className="flex items-start gap-2 bg-zinc-50 dark:bg-zinc-800/50 border border-zinc-200 dark:border-zinc-700 rounded-lg px-3 py-2">
-                      <span className="text-sm font-semibold text-zinc-900 dark:text-zinc-100 shrink-0 w-20 pt-1">Growth</span>
-                      <div className="flex flex-wrap gap-1.5">
-                        {sorted.map(([gf, count]) => {
-                          const isSelected = selectedGrowthForms.has(gf);
-                          return (
-                            <button
-                              key={gf}
-                              onClick={(e) => {
-                                const isMulti = e.metaKey || e.ctrlKey;
-                                setSelectedGrowthForms(prev => {
-                                  if (isMulti) { const next = new Set(prev); if (next.has(gf)) next.delete(gf); else next.add(gf); return next; }
-                                  if (prev.size === 1 && prev.has(gf)) return new Set();
-                                  return new Set([gf]);
-                                });
-                              }}
-                              className={`px-2 py-1 text-xs rounded-full transition-colors cursor-pointer ${
-                                isSelected
-                                  ? "bg-lime-500 text-white"
-                                  : "bg-zinc-100 text-zinc-600 hover:bg-zinc-200 dark:bg-zinc-800 dark:text-zinc-400 dark:hover:bg-zinc-700"
-                              }`}
-                            >
-                              {gf} ({count.toLocaleString()})
-                            </button>
-                          );
-                        })}
-                      </div>
-                    </div>
-                  );
-                })()}
-
                 {/* Realm, Movement, and Trend as three columns in one row. */}
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                   {/* Realm */}
@@ -4274,57 +4119,184 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
                   </div>
                 </div>
 
-                {/* Assessors and Reviewers, shown side by side */}
-                {isSingleSpecies && singleSpecies ? (
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                    {([
-                      { title: "Assessors", names: singleSpeciesAssessors },
-                      { title: "Reviewers", names: singleSpeciesReviewers },
-                    ] as const).map(({ title, names }) => (
-                      <div key={title} className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-3 flex flex-col">
-                        <div className="flex items-center justify-between mb-1">
-                          <span className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">{title}</span>
-                        </div>
-                        <div className="overflow-y-auto mt-2" style={{ maxHeight: 260 }}>
-                          {names.length > 0 ? (
-                            <div className="flex flex-wrap gap-2">
-                              {names.map((name) => (
-                                <span key={name} className="inline-block px-3 py-1.5 text-sm rounded-lg bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300">{name}</span>
-                              ))}
-                            </div>
-                          ) : (
-                            <span className="text-sm text-zinc-400 dark:text-zinc-500">None listed</span>
-                          )}
-                        </div>
+                {/* Criteria alongside Number of Assessments — a row, not a
+                    stack (previously stacked in Habitat's right column; moved
+                    out once Habitat started pairing with Assessors/Reviewers
+                    instead). */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  {/* Criteria — top-level A-E bar chart (see criteriaCard);
+                      clicking a bar both selects it as a filter AND expands
+                      its next level below (number -> sub-clause -> roman
+                      numeral, as deep as that branch goes) as pill rows via
+                      renderCriteriaLevel, since criteria nests up to 4
+                      levels vs. Threats/Habitat's 2. Cmd/ctrl-click for real
+                      multi-select — any number of branches can be drilled
+                      into and selected simultaneously (e.g. B1b(iii) AND
+                      C2a(i) together), each independently expanded via
+                      expandedCriteria (a Set, not a single "last expanded"
+                      value). A species can satisfy multiple codes under the
+                      same letter too (e.g. B1+B2, or B1a and B1b together),
+                      so selecting any code matches species with that code
+                      OR a more specific one beneath it (see
+                      parseCriteriaCodes' startsWith-based matching). */}
+                  {!isNewAssessments && criteriaCard}
+
+                  {/* Number of Assessments (#423 item 1) — how many times a
+                      species has been assessed, with a "Reassessed" shortcut
+                      selecting every bucket >= 2 in one click (flags species
+                      reassessed at least once, per the issue's explicit ask),
+                      same shape as the Outdated shortcut next to Years Since
+                      Assessed. */}
+                  {!isNewAssessments && (
+                    <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-3 flex flex-col">
+                      <div className="flex items-center justify-between mb-1">
+                        <span className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">Number of Assessments</span>
+                        <button
+                          type="button"
+                          onClick={handleReassessedClick}
+                          className={`px-2 py-0.5 text-xs font-semibold rounded transition-colors ${
+                            isReassessedSelected
+                              ? "bg-red-600 text-white shadow-sm"
+                              : "bg-zinc-100 dark:bg-zinc-800 text-zinc-500 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-300"
+                          }`}
+                          aria-pressed={isReassessedSelected}
+                          title="Filter to species assessed 2 or more times (reassessed at least once)"
+                        >
+                          Reassessed
+                        </button>
                       </div>
-                    ))}
-                  </div>
-                ) : (
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                      <div style={{ height: 200 }} className="flex items-center justify-center">
+                        {speciesLoading && assessedSpecies.length === 0 ? (
+                          <Spinner />
+                        ) : isSingleSpecies && singleSpecies ? (
+                          <span className="text-4xl font-bold text-zinc-900 dark:text-zinc-100">
+                            {assessmentCountBucket(singleSpecies.assessment_count)}
+                          </span>
+                        ) : assessmentCountData.length > 0 ? (
+                          <FilterBarChart
+                            data={assessmentCountData}
+                            dataKey="shortRange"
+                            selectedItems={selectedAssessmentCounts}
+                            onBarClick={handleAssessmentCountClick}
+                            barColor="#8b5cf6"
+                            yAxisWidth={42}
+                            rightMargin={85}
+                          />
+                        ) : null}
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {/* Habitat alongside Assessors/Reviewers. */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  {habitatCard}
+                  {isSingleSpecies && singleSpecies ? (
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      {([
+                        { title: "Assessors", names: singleSpeciesAssessors },
+                        { title: "Reviewers", names: singleSpeciesReviewers },
+                      ] as const).map(({ title, names }) => (
+                        <div key={title} className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-3 flex flex-col">
+                          <div className="flex items-center justify-between mb-1">
+                            <span className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">{title}</span>
+                          </div>
+                          <div className="overflow-y-auto mt-2" style={{ maxHeight: 260 }}>
+                            {names.length > 0 ? (
+                              <div className="flex flex-wrap gap-2">
+                                {names.map((name) => (
+                                  <span key={name} className="inline-block px-3 py-1.5 text-sm rounded-lg bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300">{name}</span>
+                                ))}
+                              </div>
+                            ) : (
+                              <span className="text-sm text-zinc-400 dark:text-zinc-500">None listed</span>
+                            )}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
                     <ReviewerChart
                       allAssessors={assessorChartData}
                       allReviewers={reviewerChartData}
-                      viewMode="assessors"
-                      showToggle={false}
-                      title="Assessors"
-                      selectedItems={selectedAssessors}
-                      onBarClick={makeAssessorClick(setSelectedAssessors)}
-                      onItemToggle={makeAssessorToggle(setSelectedAssessors)}
+                      viewMode={assessorReviewerMode}
+                      onViewModeChange={setAssessorReviewerMode}
+                      selectedItems={assessorReviewerMode === "assessors" ? selectedAssessors : selectedReviewers}
+                      onBarClick={makeAssessorClick(assessorReviewerMode === "assessors" ? setSelectedAssessors : setSelectedReviewers)}
+                      onItemToggle={makeAssessorToggle(assessorReviewerMode === "assessors" ? setSelectedAssessors : setSelectedReviewers)}
                       loading={speciesLoading && assessedSpecies.length === 0}
                     />
-                    <ReviewerChart
-                      allAssessors={assessorChartData}
-                      allReviewers={reviewerChartData}
-                      viewMode="reviewers"
-                      showToggle={false}
-                      title="Reviewers"
-                      selectedItems={selectedReviewers}
-                      onBarClick={makeAssessorClick(setSelectedReviewers)}
-                      onItemToggle={makeAssessorToggle(setSelectedReviewers)}
-                      loading={speciesLoading && assessedSpecies.length === 0}
-                    />
-                  </div>
-                )}
+                  )}
+                </div>
+
+                {/* Growth Form (plants/fungi only) */}
+                {(() => {
+                  if (speciesLoading && assessedSpecies.length === 0) {
+                    return (
+                      <div className="flex items-center gap-2 bg-zinc-50 dark:bg-zinc-800/50 border border-zinc-200 dark:border-zinc-700 rounded-lg px-3 py-2">
+                        <span className="text-sm font-semibold text-zinc-900 dark:text-zinc-100 shrink-0 w-20">Growth</span>
+                        <Spinner className="h-4 w-4" />
+                      </div>
+                    );
+                  }
+                  // Compute growth form counts cross-filtered (exclude own filter)
+                  const gfCounts: Record<string, number> = {};
+                  taxaFilteredSpecies.forEach(s => {
+                    if (!s.growth_forms?.length) return;
+                    if (!matchesSearch(s)) return;
+                    if (selectedCategories.size > 0 && !selectedCategories.has(s.category)) return;
+                    if (selectedCountries.size > 0 && !s.countries.some(c => selectedCountries.has(c))) return;
+                    if (s.category !== "NE" && selectedYearRanges.size > 0 && !matchesYearRangeFilter(s.assessment_date, selectedYearRanges)) return;
+                    if (s.category !== "NE" && selectedAssessmentYears.size > 0 && !matchesAssessmentYearFilter(s.assessment_date, selectedAssessmentYears)) return;
+                    if (selectedObsRanges.size > 0 && !matchesObsRangeFilter(s.gbif_occurrence_count, selectedObsRanges)) return;
+                    if (selectedAssessmentCounts.size > 0 && !matchesAssessmentCountFilter(s.assessment_count, selectedAssessmentCounts)) return;
+                    if (selectedSystems.size > 0 && !s.systems?.some(sys => selectedSystems.has(sys))) return;
+                    if (selectedPopulationTrends.size > 0 && (!s.population_trend || !selectedPopulationTrends.has(s.population_trend))) return;
+                    if (selectedMovementPatterns.size > 0 && (!s.movement_pattern || !selectedMovementPatterns.has(s.movement_pattern))) return;
+                    if (selectedThreats.size > 0 && !s.threat_codes?.some(tc => Array.from(selectedThreats).some(sel => tc === sel || tc.startsWith(sel + ".")))) return;
+                    if (selectedCriteria.size > 0 && !parseCriteriaCodes(s.criteria).some(code => Array.from(selectedCriteria).some(sel => code === sel || code.startsWith(sel)))) return;
+                    if (endemicsOnly && s.countries.length !== 1) return;
+                    if (!matchesAssessorsFilter(s)) return;
+                    if (!matchesHabitatFilter(s)) return;
+                    if (!matchesReviewersFilter(s)) return;
+                    for (const gf of s.growth_forms) {
+                      gfCounts[gf] = (gfCounts[gf] || 0) + 1;
+                    }
+                  });
+                  const sorted = Object.entries(gfCounts).sort((a, b) => b[1] - a[1]);
+                  if (sorted.length === 0) return null;
+                  return (
+                    <div className="flex items-start gap-2 bg-zinc-50 dark:bg-zinc-800/50 border border-zinc-200 dark:border-zinc-700 rounded-lg px-3 py-2">
+                      <span className="text-sm font-semibold text-zinc-900 dark:text-zinc-100 shrink-0 w-20 pt-1">Growth</span>
+                      <div className="flex flex-wrap gap-1.5">
+                        {sorted.map(([gf, count]) => {
+                          const isSelected = selectedGrowthForms.has(gf);
+                          return (
+                            <button
+                              key={gf}
+                              onClick={(e) => {
+                                const isMulti = e.metaKey || e.ctrlKey;
+                                setSelectedGrowthForms(prev => {
+                                  if (isMulti) { const next = new Set(prev); if (next.has(gf)) next.delete(gf); else next.add(gf); return next; }
+                                  if (prev.size === 1 && prev.has(gf)) return new Set();
+                                  return new Set([gf]);
+                                });
+                              }}
+                              className={`px-2 py-1 text-xs rounded-full transition-colors cursor-pointer ${
+                                isSelected
+                                  ? "bg-lime-500 text-white"
+                                  : "bg-zinc-100 text-zinc-600 hover:bg-zinc-200 dark:bg-zinc-800 dark:text-zinc-400 dark:hover:bg-zinc-700"
+                              }`}
+                            >
+                              {gf} ({count.toLocaleString()})
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  );
+                })()}
+
             </>
           )}
 
