@@ -14,8 +14,14 @@ type OAuthProvider = {
   scopes?: string;
 };
 
+// This is the order the buttons appear in, and the first one reads as the
+// recommended one — so it leads with whichever works for the most people.
+// Google has no gate at all. Microsoft is blocked at organisations that disable
+// third-party user consent (Cambridge's tenant does, answering "Approval
+// required"), which is common at universities and NGOs. GitHub is a developer
+// account most of this audience won't have, and the few people already signed
+// in that way know where to look.
 export const OAUTH_PROVIDERS: readonly OAuthProvider[] = [
-  { id: "github", label: "GitHub" },
   { id: "google", label: "Google" },
   // Azure only returns an email claim if the email scope is asked for
   // explicitly, and the rest of the app leans on email throughout — it labels
@@ -23,6 +29,7 @@ export const OAUTH_PROVIDERS: readonly OAuthProvider[] = [
   // account is looked up to grant the admin role in user_roles. A Microsoft
   // user without one would sign in to a half-broken session.
   { id: "azure", label: "Microsoft", scopes: "email" },
+  { id: "github", label: "GitHub" },
 ];
 
 /**
