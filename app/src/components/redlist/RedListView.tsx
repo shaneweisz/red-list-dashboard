@@ -2380,7 +2380,7 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
   useEffect(() => {
     if (urlSpeciesHandledRef.current || selectedSpeciesKey == null || sortedSpecies.length === 0) return;
     const idx = sortedSpecies.findIndex(s => {
-      const key = isNewAssessments ? Math.abs(s.id) : (s.sis_taxon_id ?? s.gbif_species_key ?? s.id);
+      const key = isNewAssessments ? Math.abs(s.id) : (s.sis_taxon_id ?? s.id);
       return key === selectedSpeciesKey;
     });
     if (idx >= 0) {
@@ -4831,14 +4831,14 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
             </thead>
             <tbody className="divide-y divide-zinc-200 dark:divide-zinc-800">
               {paginatedSpecies.map((s) => {
-                const speciesKey = isNewAssessments ? Math.abs(s.id) : (s.sis_taxon_id ?? s.gbif_species_key ?? s.id);
+                const speciesKey = isNewAssessments ? Math.abs(s.id) : (s.sis_taxon_id ?? s.id);
                 const assessmentDateObj = s.assessment_date ? new Date(s.assessment_date) : null;
                 const assessmentYear = assessmentDateObj ? assessmentDateObj.getFullYear() : null;
                 const yearsSinceAssessment = assessmentDateObj
                   ? Math.floor((Date.now() - assessmentDateObj.getTime()) / (365.25 * 24 * 60 * 60 * 1000))
                   : null;
                 const details = speciesDetails[s.id];
-                const gbifSpeciesKey = s.gbif_species_key || (details?.gbifUrl ? parseInt(details.gbifUrl.split('/').pop() || '0') : null);
+                const gbifSpeciesKey = s.gbif_species_key || details?.gbifUrl?.split('/').pop() || null;
                 const isPinned = pinnedSet.has(speciesKey);
                 const isDragging = draggedSpecies === speciesKey;
                 const isDragOver = dragOverSpecies === speciesKey && draggedSpecies !== speciesKey;

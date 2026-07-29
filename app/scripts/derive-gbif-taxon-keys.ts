@@ -31,7 +31,7 @@
 
 import * as fs from "fs";
 import * as path from "path";
-import { TAXA, type Taxon } from "./taxa";
+import { TAXA_DEFINITIONS, type Taxon } from "./taxa";
 import { loadEnvFiles, delay } from "./utils";
 import { COL_XR_CHECKLIST_KEY } from "../src/lib/gbif";
 
@@ -48,12 +48,18 @@ const KINGDOM_NAME: Record<number, string> = {
 };
 
 /**
- * IUCN names Catalogue of Life has retired, each with the key in the same group
- * that absorbs it. Verified individually — an entry here asserts "these species
- * are still fetched, via that key", so it must never be used to paper over a name
- * that is simply missing.
+ * IUCN names Catalogue of Life has retired.
+ *
+ * Every entry was settled by asking where the affected species actually sit in
+ * CoL, not by picking a plausible-looking replacement — the count is how many
+ * assessed species carry the name in the Red List data, and the placement comes
+ * from matching those species. An entry asserts "these species are still
+ * fetched", so it must never be used to wave away a name that is simply missing.
+ *
+ * Two forms: `resolveAs` names a different taxon to resolve instead; `coveredBy`
+ * says another key already in the group contains it.
  */
-const RETIRED_NAMES: Record<string, { coveredBy: string; why: string }> = {
+const RETIRED_NAMES: Record<string, { resolveAs?: string; coveredBy?: string; why: string }> = {
   ISOPTERA: {
     coveredBy: "BLATTODEA",
     why: "CoL folds termites into Blattodea, which this group already lists",
@@ -61,6 +67,22 @@ const RETIRED_NAMES: Record<string, { coveredBy: string; why: string }> = {
   GNETOPSIDA: {
     coveredBy: "PINOPSIDA",
     why: "CoL has no Gnetopsida; its Gnetidae sits inside Pinopsida, already listed",
+  },
+  MAXILLOPODA: {
+    resolveAs: "Copepoda",
+    why: "obsolete class; all 74 assessed species carrying it match to class Copepoda in CoL",
+  },
+  HEXANAUPLIA: {
+    resolveAs: "Copepoda",
+    why: "obsolete class; all 36 assessed species carrying it match to class Copepoda in CoL",
+  },
+  PENICILLARIA: {
+    resolveAs: "Ceriantharia",
+    why: "the one assessed species carrying it (Arachnanthus oligopodus) is order Ceriantharia in CoL",
+  },
+  HETEROKONTOPHYTA: {
+    resolveAs: "Phaeophyceae",
+    why: "IUCN's phylum for brown algae; CoL's equivalent is Ochrophyta, but every assessed species in this group is class Phaeophyceae, which is what the group actually means",
   },
 };
 
@@ -116,7 +138,10 @@ export async function resolveName(
   rank: "kingdom" | "phylum" | "class" | "order",
   kingdom: string,
 ): Promise<DerivedKey> {
-  const name = toTaxonName(iucnName);
+  const retired = RETIRED_NAMES[iucnName];
+  // A retired name is resolved under its CoL replacement, but keeps reporting the
+  // IUCN name it came from so the config stays traceable to the group definition.
+  const name = retired?.resolveAs ?? toTaxonName(iucnName);
   const params = new URLSearchParams({
     checklistKey: COL_XR_CHECKLIST_KEY,
     scientificName: name,
@@ -212,7 +237,7 @@ async function resolveViaSearch(
   }
 }
 
-export async function deriveForTaxon(taxon: Taxon): Promise<DerivedKey[]> {
+export async function deriveForTaxon(taxon: Omit<Taxon, "gbif">): Promise<DerivedKey[]> {
   const kingdom = KINGDOM_NAME[taxon.kingdomKey] ?? "Animalia";
   const out: DerivedKey[] = [];
   for (const query of taxon.redlist) {
@@ -271,7 +296,7 @@ async function run(write: boolean): Promise<void> {
   let unresolved = 0;
   let overlapping = 0;
 
-  for (const taxon of TAXA) {
+  for (const taxon of TAXA_DEFINITIONS) {
     const derived = await deriveForTaxon(taxon);
 
     // A key inside another key in the same group is redundant, and worse than
@@ -279,27 +304,36 @@ async function run(write: boolean): Promise<void> {
     // counted twice. IUCN's classes are often CoL's orders (Isoetopsida is the
     // order Isoetales inside Lycopodiopsida), so this is common, not exceptional.
     const { kept, pruned } = pruneDescendants(derived);
-    config[taxon.id] = kept;
+    // Two IUCN names can resolve to one CoL taxon (Maxillopoda and Hexanauplia are
+    // both Copepoda). Querying it twice would double-count in the year buckets.
+    const seen = new Set<string>();
+    const deduped = kept.filter((k) => {
+      if (!k.taxonKey) return true;
+      if (seen.has(k.taxonKey)) return false;
+      seen.add(k.taxonKey);
+      return true;
+    });
+    config[taxon.id] = deduped;
 
-    const missing = kept.filter((k) => {
+    const missing = deduped.filter((k) => {
       if (k.taxonKey) return false;
       const retired = RETIRED_NAMES[k.redlistName];
       // An exemption only holds if the covering name actually resolved in this group.
-      return !(retired && kept.some((o) => o.redlistName === retired.coveredBy && o.taxonKey));
+      return !(retired?.coveredBy && deduped.some((o) => o.redlistName === retired.coveredBy && o.taxonKey));
     });
-    const overlaps = findOverlaps(kept);
+    const overlaps = findOverlaps(deduped);
     unresolved += missing.length;
     overlapping += overlaps.length;
 
-    const resolved = kept.filter((k) => k.taxonKey).length;
-    console.log(`${taxon.id.padEnd(30)} ${resolved}/${kept.length} resolved`);
+    const resolved = deduped.filter((k) => k.taxonKey).length;
+    console.log(`${taxon.id.padEnd(30)} ${resolved}/${deduped.length} resolved`);
     for (const m of missing) console.log(`   UNRESOLVED  ${m.redlistName} (${m.rank}) — ${m.matchType}`);
-    for (const k of kept.filter((k) => !k.taxonKey && !missing.includes(k))) {
+    for (const k of deduped.filter((k) => !k.taxonKey && !missing.includes(k))) {
       console.log(`   RETIRED     ${k.redlistName} — ${RETIRED_NAMES[k.redlistName].why}`);
     }
     for (const pr of pruned) console.log(`   PRUNED      ${pr.key.matchedName} [${pr.key.taxonKey}] is inside ${pr.insideOf.matchedName}`);
     for (const o of overlaps) console.log(`   OVERLAP     ${o.descendant} is inside ${o.ancestor}`);
-    for (const k of kept.filter((k) => k.taxonKey && k.matchedName?.toLowerCase() !== toTaxonName(k.redlistName).toLowerCase())) {
+    for (const k of deduped.filter((k) => k.taxonKey && k.matchedName?.toLowerCase() !== toTaxonName(k.redlistName).toLowerCase())) {
       console.log(`   RENAMED     ${k.redlistName} → ${k.matchedName} [${k.taxonKey}]`);
     }
   }

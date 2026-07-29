@@ -36,7 +36,7 @@ export async function run(): Promise<void> {
   const assessmentsOut = path.join(DATA_DIR, "assessments.parquet");
   const assessedOut = path.join(DATA_DIR, "assessed.parquet");
   const unassessedOut = path.join(DATA_DIR, "unassessed.parquet");
-  const domesticated = [...EXCLUDED_DOMESTICATED_GBIF_KEYS].join(",");
+  const domesticated = [...EXCLUDED_DOMESTICATED_GBIF_KEYS].map((k) => `'${k}'`).join(",");
 
   const inst = await DuckDBInstance.create(":memory:");
   const conn = await inst.connect();
@@ -45,7 +45,7 @@ export async function run(): Promise<void> {
   await conn.run(`
     CREATE TEMP TABLE gbif_all AS
       SELECT
-        CAST(gbif_species_key AS BIGINT)         AS gbif_species_key,
+        CAST(gbif_species_key AS VARCHAR)        AS gbif_species_key,
         scientific_name, common_name,
         taxon_group_table1a                      AS taxon_group,
         lower(class_name) AS class_name, lower(order_name) AS order_name, lower(family) AS family,
@@ -58,7 +58,7 @@ export async function run(): Promise<void> {
   await conn.run(`
     CREATE TEMP TABLE map AS
       SELECT CAST(sis_taxon_id AS BIGINT) AS sis_taxon_id,
-             CAST(gbif_species_key AS BIGINT) AS gbif_species_key,
+             CAST(gbif_species_key AS VARCHAR) AS gbif_species_key,
              name_source
       FROM read_csv_auto('${mappingCsv}')
       WHERE gbif_species_key IS NOT NULL;
@@ -84,7 +84,7 @@ export async function run(): Promise<void> {
         -- representative key: canonical-source preferred, then smallest key
         -- (deterministic; for multi-match species this may differ from v1's
         -- file-order pick, but is an equally-valid GBIF match for the species)
-        arg_min(m.gbif_species_key, (CASE WHEN m.name_source='canonical' THEN 0 ELSE 1 END) * 1000000000 + m.gbif_species_key) AS gbif_species_key
+        arg_min(m.gbif_species_key, (CASE WHEN m.name_source='canonical' THEN '0' ELSE '1' END) || m.gbif_species_key) AS gbif_species_key
       FROM map m
       JOIN rl ON rl.sis_taxon_id = m.sis_taxon_id
       JOIN gbif_all g ON g.gbif_species_key = m.gbif_species_key AND g.taxon_group = rl.taxon_group
@@ -187,7 +187,14 @@ export async function run(): Promise<void> {
   await conn.run(`
     COPY (
       SELECT
-        -g.gbif_species_key              AS id,
+        -- Synthetic negative id; assessed rows use the positive sis_taxon_id.
+        -- Was the negated GBIF key, which alphanumeric CoL keys cannot provide.
+        -- Hashed rather than sequential because the dashboard persists pinned
+        -- species by abs(id), so the id has to survive a resync that adds or
+        -- removes species; masked to 2^53 so it stays exactly representable once
+        -- the query layer turns it into a JS number. The assertion below rechecks
+        -- uniqueness on every build rather than assuming it.
+        -(hash(g.gbif_species_key) % 9007199254740992)::BIGINT AS id,
         g.scientific_name, g.common_name,
         g.taxon_group, g.class_name, g.order_name, g.family,
         'NE'                             AS iucn_category,

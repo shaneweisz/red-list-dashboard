@@ -495,9 +495,15 @@
     {
       "redlistName": "MAXILLOPODA",
       "rank": "class",
-      "taxonKey": null,
-      "matchedName": "Animalia",
-      "matchType": "HIGHERRANK"
+      "taxonKey": "B8V3R",
+      "matchedName": "Copepoda",
+      "matchType": "EXACT",
+      "ancestors": [
+        "CS5HF",
+        "N",
+        "RT",
+        "KZX8B"
+      ]
     },
     {
       "redlistName": "BRANCHIOPODA",
@@ -524,13 +530,6 @@
         "RT",
         "KZX8B"
       ]
-    },
-    {
-      "redlistName": "HEXANAUPLIA",
-      "rank": "class",
-      "taxonKey": null,
-      "matchedName": "Animalia",
-      "matchType": "HIGHERRANK"
     },
     {
       "redlistName": "THEOCOSTRACA",
@@ -649,9 +648,15 @@
     {
       "redlistName": "PENICILLARIA",
       "rank": "order",
-      "taxonKey": null,
-      "matchedName": "Animalia",
-      "matchType": "HIGHERRANK"
+      "taxonKey": "C6S7F",
+      "matchedName": "Ceriantharia",
+      "matchType": "EXACT",
+      "ancestors": [
+        "CS5HF",
+        "N",
+        "CN2",
+        "7S"
+      ]
     },
     {
       "redlistName": "MALACALCYONCAEA",
@@ -1060,9 +1065,16 @@
     {
       "redlistName": "HETEROKONTOPHYTA",
       "rank": "phylum",
-      "taxonKey": null,
-      "matchedName": "Chromista",
-      "matchType": "HIGHERRANK"
+      "taxonKey": "7NF4S",
+      "matchedName": "Phaeophyceae",
+      "matchType": "EXACT",
+      "ancestors": [
+        "CS5HF",
+        "C",
+        "D3MRQ",
+        "D3MRV",
+        "5H"
+      ]
     }
   ]
 }

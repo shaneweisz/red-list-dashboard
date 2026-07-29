@@ -119,8 +119,8 @@ async function fetchCountriesForKingdom(kingdomKey: number): Promise<string[]> {
 async function fetchSpeciesInKingdomCountry(
   kingdomKey: number,
   country: string,
-): Promise<number[]> {
-  const allSpeciesKeys: number[] = [];
+): Promise<string[]> {
+  const allSpeciesKeys: string[] = [];
   let offset = 0;
   let hasMore = true;
 
@@ -145,7 +145,7 @@ async function fetchSpeciesInKingdomCountry(
     if (!facet || facet.counts.length === 0) break;
 
     for (const c of facet.counts) {
-      allSpeciesKeys.push(parseInt(c.name, 10));
+      allSpeciesKeys.push(c.name);
     }
 
     hasMore = facet.counts.length >= FACET_LIMIT;
@@ -175,8 +175,8 @@ export async function run(opts: {
 
   // ── Step 1: Load all GBIF CSVs and build a global speciesKey → taxon index ──
 
-  const taxonData = new Map<string, Map<number, GbifSpecies>>();
-  const globalSpeciesIndex = new Map<number, string[]>(); // speciesKey → taxonIds
+  const taxonData = new Map<string, Map<string, GbifSpecies>>();
+  const globalSpeciesIndex = new Map<string, string[]>(); // speciesKey → taxonIds
 
   for (const taxon of taxaToSync) {
     const gbifMap = readGbifCsv(taxon.id);
@@ -199,7 +199,7 @@ export async function run(opts: {
   const neededKingdomKeys = new Set(taxaToSync.map((t) => t.kingdomKey));
   const kingdomsToQuery = KINGDOM_KEYS.filter((k) => neededKingdomKeys.has(k.key));
 
-  const speciesCountries = new Map<number, Set<string>>();
+  const speciesCountries = new Map<string, Set<string>>();
   let totalApiCalls = 0;
 
   for (const kingdom of kingdomsToQuery) {

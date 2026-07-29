@@ -1,3 +1,5 @@
+import DERIVED_KEYS from "../src/config/gbif-taxon-keys.json";
+
 /**
  * Unified taxa configuration for Red List and GBIF pipelines.
  *
@@ -14,9 +16,20 @@ export interface RedlistQuery {
   filterValues: string[];
 }
 
+/**
+ * A GBIF taxon key for one of the taxa making up a Table 1a group.
+ *
+ * These are no longer written by hand. They are derived from this file's own
+ * `redlist` definitions by scripts/derive-gbif-taxon-keys.ts and stored in
+ * src/config/gbif-taxon-keys.json, because a hand-maintained parallel list drifts
+ * from the definition it mirrors — corals were defined as three orders while the
+ * GBIF side carried one class key, and stopped covering octocorals the moment CoL
+ * moved them.
+ */
 export interface GbifQuery {
-  keyType: "kingdomKey" | "phylumKey" | "classKey" | "orderKey";
-  keyValue: number;
+  taxonKey: string;
+  /** The IUCN name it came from, so a key in a query can be traced back. */
+  fromName: string;
 }
 
 export interface Taxon {
@@ -24,73 +37,23 @@ export interface Taxon {
   name: string;
   kingdomKey: number; // GBIF kingdom: 1=Animalia, 4=Chromista, 5=Fungi, 6=Plantae
   redlist: RedlistQuery[];
+  /** Derived — see GbifQuery. Populated from the generated config at load time. */
   gbif: GbifQuery[];
 }
-
-// =============================================================================
-// FISH ORDER KEYS (GBIF)
-// =============================================================================
-
-// Bony fish (Actinopterygii) order keys — GBIF has no working class-level key for
-// ray-finned fishes, so we must query at order level. Shark/ray orders are covered
-// by classKey=121 (Elasmobranchii) and are NOT included here.
-const BONY_FISH_ORDER_KEYS = [
-  494,  // Amiiformes
-  495,  // Anguilliformes
-  496,  // Atheriniformes
-  497,  // Aulopiformes
-  498,  // Beloniformes
-  499,  // Beryciformes
-  537,  // Characiformes
-  538,  // Clupeiformes
-  547,  // Cyprinodontiformes
-  548,  // Esociformes
-  549,  // Gadiformes
-  550,  // Gasterosteiformes
-  587,  // Perciformes
-  588,  // Pleuronectiformes
-  589,  // Polymixiiformes
-  590,  // Scorpaeniformes
-  708,  // Siluriformes
-  772,  // Tetraodontiformes
-  773,  // Syngnathiformes
-  774,  // Stomiiformes
-  888,  // Zeiformes
-  889,  // Synbranchiformes
-  890,  // Stephanoberyciformes
-  1067, // Mugiliformes
-  1068, // Osmeriformes
-  1069, // Osteoglossiformes
-  1103, // Acipenseriformes
-  1104, // Albuliformes
-  1106, // Batrachoidiformes
-  1107, // Cetomimiformes
-  1153, // Cypriniformes
-  1163, // Gobiesociformes
-  1164, // Gonorynchiformes
-  1165, // Gymnotiformes
-  1167, // Lepisosteiformes
-  1305, // Lophiiformes
-  1306, // Myctophiformes
-  1307, // Notacanthiformes
-  1308, // Ophidiiformes
-  1310, // Percopsiformes
-  1311, // Polypteriformes
-  1312, // Saccopharyngiformes
-  1313, // Salmoniformes
-];
 
 // =============================================================================
 // INSECT "OTHER" ORDERS
 // =============================================================================
 
 // The Table 1a "Insects" row is split into 7 named order-groups (Beetles,
-// Butterflies & Moths, etc.) plus an "Other Insects" catch-all. Because both
-// the Red List SQL and the GBIF query schemas are include-only (no NOT-IN), the
-// catch-all is defined by positive enumeration of every remaining order —
-// mirroring BONY_FISH_ORDER_KEYS above. Keep these lists in sync when new insect
-// orders appear in the source data; the build-taxa-summary lossless-split check
-// (sum of the 8 groups == old single insecta total) will flag any drift.
+// Butterflies & Moths, etc.) plus an "Other Insects" catch-all. Because the Red
+// List SQL is include-only (no NOT-IN), the catch-all is defined by positive
+// enumeration of every remaining order. Add new insect orders here as they
+// appear in the source data; the build-taxa-summary lossless-split check (sum of
+// the 8 groups == old single insecta total) will flag any drift.
+//
+// The GBIF keys for these orders are derived from this list rather than
+// maintained beside it — see GbifQuery.
 
 // Red List order_name values for insects NOT in the 7 named groups.
 const OTHER_INSECT_ORDERS_REDLIST = [
@@ -99,124 +62,76 @@ const OTHER_INSECT_ORDERS_REDLIST = [
   "ARCHAEOGNATHA", "SIPHONAPTERA", "THYSANOPTERA", "MEGALOPTERA",
 ];
 
-// GBIF orderKeys for insects NOT in the 7 named groups. Termites (Isoptera) are
-// folded into Blattodea in the GBIF backbone and have no separate key.
-const OTHER_INSECT_ORDER_KEYS = [
-  1003,    // Trichoptera
-  800,     // Blattodea (incl. termites/Isoptera)
-  1501,    // Neuroptera
-  787,     // Plecoptera
-  1460,    // Phasmida
-  1225,    // Ephemeroptera
-  788,     // Mantodea
-  7612838, // Psocodea
-  1228,    // Thysanoptera
-  1224,    // Dermaptera
-  1000,    // Mecoptera
-  1451,    // Megaloptera
-  1366,    // Siphonaptera
-  1227,    // Strepsiptera
-  1004,    // Zygentoma
-  786,     // Raphidioptera
-  1187,    // Archaeognatha
-  584,     // Embioptera
-  585,     // Grylloblattodea
-  1226,    // Mantophasmatodea
-  1229,    // Zoraptera
-];
-
 // =============================================================================
 // TAXA
 // =============================================================================
 
-export const TAXA: Taxon[] = [
+/**
+ * The group definitions, before GBIF keys are attached. Exported for
+ * derive-gbif-taxon-keys, which generates those keys from exactly this and so
+ * cannot depend on them already existing.
+ */
+export const TAXA_DEFINITIONS: Array<Omit<Taxon, "gbif">> = [
   // ── Vertebrates ──
   {
     id: "mammals", name: "Mammals", kingdomKey: 1,
     redlist: [{ filterColumn: "class_name", filterValues: ["MAMMALIA"] }],
-    gbif: [{ keyType: "classKey", keyValue: 359 }],
   },
   {
     id: "birds", name: "Birds", kingdomKey: 1,
     redlist: [{ filterColumn: "class_name", filterValues: ["AVES"] }],
-    gbif: [{ keyType: "classKey", keyValue: 212 }],
   },
   {
     id: "reptiles", name: "Reptiles", kingdomKey: 1,
     redlist: [{ filterColumn: "class_name", filterValues: ["REPTILIA"] }],
-    gbif: [
-      { keyType: "classKey", keyValue: 11592253 },
-      { keyType: "classKey", keyValue: 11493978 },
-      { keyType: "classKey", keyValue: 11418114 },
-    ],
   },
   {
     id: "amphibians", name: "Amphibians", kingdomKey: 1,
     redlist: [{ filterColumn: "class_name", filterValues: ["AMPHIBIA"] }],
-    gbif: [{ keyType: "classKey", keyValue: 131 }],
   },
   {
     id: "fishes", name: "Fishes", kingdomKey: 1,
     redlist: [{ filterColumn: "class_name", filterValues: ["ACTINOPTERYGII", "CHONDRICHTHYES", "MYXINI", "PETROMYZONTI", "SARCOPTERYGII"] }],
-    gbif: [
-      ...BONY_FISH_ORDER_KEYS.map((k) => ({ keyType: "orderKey" as const, keyValue: k })),
-      { keyType: "classKey" as const, keyValue: 121 },  // Elasmobranchii (sharks, rays, skates)
-      { keyType: "classKey" as const, keyValue: 120 },  // Holocephali (chimaeras)
-      { keyType: "classKey" as const, keyValue: 119 },  // Myxini (hagfish)
-      { keyType: "orderKey" as const, keyValue: 771 },  // Petromyzontiformes (lampreys)
-    ],
   },
 
   // ── Invertebrates: Insects (Table 1a "Insects" row, split by order) ──
   {
     id: "beetles", name: "Beetles", kingdomKey: 1,
     redlist: [{ filterColumn: "order_name", filterValues: ["COLEOPTERA"] }],
-    gbif: [{ keyType: "orderKey", keyValue: 1470 }],
   },
   {
     id: "butterflies_and_moths", name: "Butterflies & Moths", kingdomKey: 1,
     redlist: [{ filterColumn: "order_name", filterValues: ["LEPIDOPTERA"] }],
-    gbif: [{ keyType: "orderKey", keyValue: 797 }],
   },
   {
     id: "flies_and_mosquitoes", name: "Flies & Mosquitoes", kingdomKey: 1,
     redlist: [{ filterColumn: "order_name", filterValues: ["DIPTERA"] }],
-    gbif: [{ keyType: "orderKey", keyValue: 811 }],
   },
   {
     id: "bees_wasps_and_ants", name: "Bees, Wasps & Ants", kingdomKey: 1,
     redlist: [{ filterColumn: "order_name", filterValues: ["HYMENOPTERA"] }],
-    gbif: [{ keyType: "orderKey", keyValue: 1457 }],
   },
   {
     id: "true_bugs", name: "True Bugs", kingdomKey: 1,
     redlist: [{ filterColumn: "order_name", filterValues: ["HEMIPTERA"] }],
-    gbif: [{ keyType: "orderKey", keyValue: 809 }],
   },
   {
     id: "grasshoppers_crickets_locusts", name: "Grasshoppers, Crickets & Locusts", kingdomKey: 1,
     redlist: [{ filterColumn: "order_name", filterValues: ["ORTHOPTERA"] }],
-    gbif: [{ keyType: "orderKey", keyValue: 1458 }],
   },
   {
     id: "dragonflies_and_damselflies", name: "Dragonflies & Damselflies", kingdomKey: 1,
     redlist: [{ filterColumn: "order_name", filterValues: ["ODONATA"] }],
-    gbif: [{ keyType: "orderKey", keyValue: 789 }],
   },
   {
     id: "other_insects", name: "Other Insects", kingdomKey: 1,
     redlist: [{ filterColumn: "order_name", filterValues: OTHER_INSECT_ORDERS_REDLIST }],
-    gbif: OTHER_INSECT_ORDER_KEYS.map((k) => ({ keyType: "orderKey" as const, keyValue: k })),
   },
 
   // ── Invertebrates: Other ──
   {
     id: "molluscs", name: "Molluscs", kingdomKey: 1,
     redlist: [{ filterColumn: "phylum_name", filterValues: ["MOLLUSCA"] }],
-    gbif: [
-      { keyType: "classKey", keyValue: 225 },
-      { keyType: "classKey", keyValue: 137 },
-    ],
   },
   {
     id: "crustaceans", name: "Crustaceans", kingdomKey: 1,
@@ -231,27 +146,22 @@ export const TAXA: Taxon[] = [
     // barnacle species (Armatobalanus nefrens, Menesiniella aquila) from every
     // crustaceans fetch.
     redlist: [{ filterColumn: "class_name", filterValues: ["MALACOSTRACA", "MAXILLOPODA", "BRANCHIOPODA", "OSTRACODA", "HEXANAUPLIA", "THEOCOSTRACA"] }],
-    gbif: [{ keyType: "classKey", keyValue: 229 }],
   },
   {
     id: "arachnids", name: "Arachnids", kingdomKey: 1,
     redlist: [{ filterColumn: "class_name", filterValues: ["ARACHNIDA"] }],
-    gbif: [{ keyType: "classKey", keyValue: 367 }],
   },
   {
     id: "corals", name: "Corals & Cnidarians", kingdomKey: 1,
     redlist: [{ filterColumn: "order_name", filterValues: ["SCLERACTINIA", "ALCYONACEA", "PENNATULACEA"] }],
-    gbif: [{ keyType: "classKey", keyValue: 206 }],
   },
   {
     id: "velvet_worms", name: "Velvet Worms", kingdomKey: 1,
     redlist: [{ filterColumn: "class_name", filterValues: ["UDEONYCHOPHORA"] }],
-    gbif: [{ keyType: "classKey", keyValue: 62 }],
   },
   {
     id: "horseshoe_crabs", name: "Horseshoe Crabs", kingdomKey: 1,
     redlist: [{ filterColumn: "class_name", filterValues: ["MEROSTOMATA"] }],
-    gbif: [{ keyType: "classKey", keyValue: 351 }],
   },
   {
     id: "other_invertebrates", name: "Other Invertebrates", kingdomKey: 1,
@@ -266,86 +176,42 @@ export const TAXA: Taxon[] = [
         "ASTEROIDEA", "CALCAREA", "POLYCHAETA", "TURBELLARIA", "ECHINOIDEA",
       ] },
     ],
-    gbif: [
-      { keyType: "classKey", keyValue: 222 },    // Holothuroidea
-      { keyType: "classKey", keyValue: 255 },    // Clitellata
-      { keyType: "classKey", keyValue: 361 },    // Diplopoda
-      { keyType: "classKey", keyValue: 10713444 }, // Collembola
-      { keyType: "classKey", keyValue: 360 },    // Chilopoda
-      { keyType: "classKey", keyValue: 199 },    // Demospongiae
-      { keyType: "classKey", keyValue: 205 },    // Hydrozoa
-      { keyType: "classKey", keyValue: 214 },    // Asteroidea
-      { keyType: "classKey", keyValue: 308 },    // Calcarea
-      { keyType: "classKey", keyValue: 256 },    // Polychaeta
-      { keyType: "classKey", keyValue: 341 },    // Turbellaria
-      { keyType: "classKey", keyValue: 221 },    // Echinoidea
-      { keyType: "classKey", keyValue: 63 },     // Nemertea
-    ],
   },
 
   // ── Plants ──
   {
     id: "mosses", name: "Mosses", kingdomKey: 6,
     redlist: [{ filterColumn: "phylum_name", filterValues: ["BRYOPHYTA", "ANTHOCEROTOPHYTA", "MARCHANTIOPHYTA"] }],
-    gbif: [
-      { keyType: "phylumKey", keyValue: 35 },  // Bryophyta
-      { keyType: "phylumKey", keyValue: 13 },  // Anthocerotophyta
-      { keyType: "phylumKey", keyValue: 9 },   // Marchantiophyta
-    ],
   },
   {
     id: "ferns_and_allies", name: "Ferns and Allies", kingdomKey: 6,
     redlist: [{ filterColumn: "class_name", filterValues: ["LYCOPODIOPSIDA", "ISOETOPSIDA", "EQUISETOPSIDA", "MARATTIOPSIDA", "POLYPODIOPSIDA", "PSILOTOPSIDA"] }],
-    gbif: [
-      { keyType: "classKey", keyValue: 245 },     // Lycopodiopsida
-      { keyType: "classKey", keyValue: 7228684 },  // Polypodiopsida
-    ],
   },
   {
     id: "gymnosperms", name: "Gymnosperms", kingdomKey: 6,
     redlist: [{ filterColumn: "class_name", filterValues: ["PINOPSIDA", "CYCADOPSIDA", "GINKGOOPSIDA", "GNETOPSIDA"] }],
-    gbif: [
-      { keyType: "classKey", keyValue: 194 },  // Pinopsida
-      { keyType: "classKey", keyValue: 228 },  // Cycadopsida
-      { keyType: "classKey", keyValue: 244 },  // Ginkgoopsida
-      { keyType: "classKey", keyValue: 282 },  // Gnetopsida
-    ],
   },
   {
     id: "flowering_plants", name: "Flowering Plants", kingdomKey: 6,
     redlist: [{ filterColumn: "class_name", filterValues: ["MAGNOLIOPSIDA", "LILIOPSIDA"] }],
-    gbif: [
-      { keyType: "classKey", keyValue: 220 },  // Magnoliopsida
-      { keyType: "classKey", keyValue: 196 },  // Liliopsida
-    ],
   },
   {
     id: "green_algae", name: "Green Algae", kingdomKey: 6,
     redlist: [{ filterColumn: "phylum_name", filterValues: ["CHLOROPHYTA", "CHAROPHYTA"] }],
-    gbif: [
-      { keyType: "phylumKey", keyValue: 36 },      // Chlorophyta
-      { keyType: "phylumKey", keyValue: 7819616 },  // Charophyta
-    ],
   },
   {
     id: "red_algae", name: "Red Algae", kingdomKey: 6,
     redlist: [{ filterColumn: "phylum_name", filterValues: ["RHODOPHYTA"] }],
-    gbif: [{ keyType: "phylumKey", keyValue: 106 }],
   },
 
   // ── Fungi & Protists ──
   {
     id: "mushrooms", name: "Mushrooms, etc.", kingdomKey: 5,
     redlist: [{ filterColumn: "phylum_name", filterValues: ["ASCOMYCOTA", "BASIDIOMYCOTA"] }],
-    gbif: [
-      { keyType: "phylumKey", keyValue: 34 },  // Basidiomycota
-      { keyType: "phylumKey", keyValue: 95 },  // Ascomycota
-    ],
   },
   {
     id: "brown_algae", name: "Brown Algae", kingdomKey: 4,
     redlist: [{ filterColumn: "phylum_name", filterValues: ["HETEROKONTOPHYTA"] }],
-    gbif: [{ keyType: "phylumKey", keyValue: 98 }],
   },
 ];
 
@@ -353,15 +219,45 @@ export const TAXA: Taxon[] = [
 // HELPERS
 // =============================================================================
 
+export const TAXA: Taxon[] = TAXA_DEFINITIONS.map(withGbifKeys);
+
 const TAXA_BY_ID = new Map(TAXA.map((t) => [t.id, t]));
 
 export function getTaxon(id: string): Taxon {
   const taxon = TAXA_BY_ID.get(id);
   if (!taxon) throw new Error(`Unknown taxon: ${id}. Available: ${TAXA.map((t) => t.id).join(", ")}`);
+  assertHasGbifKeys(taxon);
   return taxon;
 }
 
+/**
+ * A group with no GBIF keys fetches nothing and reports zero — the silent
+ * failure this migration exists to stop. Checked when a group is handed out
+ * rather than at import, so derive-gbif-taxon-keys can still run to generate the
+ * keys that are missing.
+ */
+function assertHasGbifKeys(taxon: Taxon): void {
+  if (taxon.gbif.length === 0) {
+    throw new Error(
+      `taxa: no GBIF keys for "${taxon.id}". Run scripts/derive-gbif-taxon-keys.ts --write; ` +
+      `a group with no keys fetches nothing and silently reports zero.`
+    );
+  }
+}
+
+/** Attach the derived GBIF keys to each group. */
+function withGbifKeys(taxon: Omit<Taxon, "gbif">): Taxon {
+  const derived = (DERIVED_KEYS as Record<string, Array<{ redlistName: string; taxonKey: string | null }>>)[taxon.id] ?? [];
+  const gbif = derived
+    .filter((d) => d.taxonKey)
+    .map((d) => ({ taxonKey: d.taxonKey as string, fromName: d.redlistName }));
+  return { ...taxon, gbif };
+}
+
 export function getTaxa(ids?: string[]): Taxon[] {
-  if (!ids) return TAXA;
+  if (!ids) {
+    TAXA.forEach(assertHasGbifKeys);
+    return TAXA;
+  }
   return ids.map(getTaxon);
 }

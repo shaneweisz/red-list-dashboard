@@ -46,20 +46,80 @@ export type NameSource = "canonical" | "synonym";
 
 export interface MappingEntry {
   sis_taxon_id: number;
-  gbif_species_key: number | null;
+  gbif_species_key: string | null;
   match_type: string;
   /** Whether the GBIF key was found via the species's canonical name or via a synonym. */
   name_source: NameSource | "";
 }
 
+/**
+ * GBIF v2 match response. `usage` is the name that matched; when that name is a
+ * synonym, `acceptedUsage` carries the taxon CoL considers current.
+ */
 interface GbifMatchResponse {
-  usageKey?: number;
-  acceptedUsageKey?: number;
-  canonicalName?: string;
-  matchType?: string; // EXACT, FUZZY, HIGHERRANK, NONE
-  rank?: string;
-  confidence?: number;
+  usage?: { key?: string; canonicalName?: string; rank?: string; status?: string };
+  acceptedUsage?: { key?: string; canonicalName?: string; rank?: string };
+  diagnostics?: { matchType?: string; confidence?: number };
   synonym?: boolean;
+}
+
+/** Classification GBIF uses to disambiguate a name. Comes from the Red List row. */
+export interface MatchContext {
+  kingdom?: string | null;
+  class_name?: string | null;
+  order_name?: string | null;
+  family?: string | null;
+}
+
+export interface MatchOutcome {
+  key: string | null;
+  matchType: string;
+  /** Set when CoL folds this name into a different species — see shouldFollowSynonym. */
+  lumpedInto?: string;
+}
+
+/**
+ * Distance between two specific epithets, used to tell a nomenclatural change
+ * from a taxonomic one.
+ */
+function epithetDistance(a: string, b: string): number {
+  const ea = (a.split(" ")[1] ?? "").toLowerCase();
+  const eb = (b.split(" ")[1] ?? "").toLowerCase();
+  if (ea === eb) return 0;
+  const d: number[][] = Array.from({ length: ea.length + 1 }, (_, i) =>
+    Array.from({ length: eb.length + 1 }, (_, j) => (i === 0 ? j : j === 0 ? i : 0))
+  );
+  for (let i = 1; i <= ea.length; i++) {
+    for (let j = 1; j <= eb.length; j++) {
+      d[i][j] = Math.min(d[i - 1][j] + 1, d[i][j - 1] + 1, d[i - 1][j - 1] + (ea[i - 1] === eb[j - 1] ? 0 : 1));
+    }
+  }
+  return d[ea.length][eb.length];
+}
+
+/**
+ * Whether a synonym resolution should be followed to the accepted taxon.
+ *
+ * Two very different things arrive as "synonym". A NOMENCLATURAL change is the
+ * same organism under a different name — a genus move (Aquarana catesbeianus →
+ * Lithobates catesbeianus), a gender agreement, an orthographic correction (Pica
+ * nutalli → Pica nutallii). Following those is right: the records are this
+ * species'.
+ *
+ * A TAXONOMIC change is CoL deciding two things the Red List assesses separately
+ * are one species — Pieris segonzaci into Pieris napi, Sus bucculentus into Sus
+ * scrofa. Following those puts a common species' records under a threatened one:
+ * it is how a VU Moroccan endemic came to display 2.9M records of a widespread
+ * European butterfly. On a conservation dashboard a blank beats a wrong number,
+ * so those are not followed.
+ *
+ * The epithet separates them. Orthographic variants differ by a letter or two;
+ * distinct species do not.
+ */
+const MAX_ORTHOGRAPHIC_DISTANCE = 2;
+
+export function shouldFollowSynonym(fromName: string, toName: string): boolean {
+  return epithetDistance(fromName, toName) <= MAX_ORTHOGRAPHIC_DISTANCE;
 }
 
 // =============================================================================
@@ -67,25 +127,32 @@ interface GbifMatchResponse {
 // =============================================================================
 
 export async function matchGbifSpecies(
-  name: string
-): Promise<{ key: number | null; matchType: string }> {
-  const params = new URLSearchParams({ name, strict: "true", checklistKey: GBIF_CHECKLIST_KEY });
+  name: string,
+  context: MatchContext = {},
+): Promise<MatchOutcome> {
+  // Classification context is not optional in practice. Asked for "Agelaius
+  // phoeniceus" with nothing else, GBIF answers HIGHERRANK/Animalia — a species
+  // with 21 million occurrence records, unmatched. Adding kingdom and class turns
+  // the same request into an EXACT match. The Red List row carries all of it.
+  const params = new URLSearchParams({ checklistKey: GBIF_CHECKLIST_KEY, scientificName: name });
+  if (context.kingdom) params.set("kingdom", context.kingdom);
+  if (context.class_name) params.set("class", context.class_name);
+  if (context.order_name) params.set("order", context.order_name);
+  if (context.family) params.set("family", context.family);
 
   let response: Response | undefined;
   for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
     try {
-      response = await fetch(`https://api.gbif.org/v1/species/match?${params}`);
+      response = await fetch(`https://api.gbif.org/v2/species/match?${params}`);
     } catch (err) {
       if (attempt < MAX_RETRIES) {
-        const wait = Math.pow(2, attempt + 1) * 1000;
-        await delay(wait);
+        await delay(Math.pow(2, attempt + 1) * 1000);
         continue;
       }
       throw err;
     }
     if (response.status === 429 || (response.status >= 500 && response.status < 600)) {
-      const wait = Math.pow(2, attempt + 1) * 1000;
-      await delay(wait);
+      await delay(Math.pow(2, attempt + 1) * 1000);
       continue;
     }
     break;
@@ -95,22 +162,33 @@ export async function matchGbifSpecies(
   }
 
   const data: GbifMatchResponse = await response.json();
+  const matchType = data.diagnostics?.matchType;
 
-  if (!data.matchType || data.matchType === "NONE" || data.matchType === "HIGHERRANK") {
-    return { key: null, matchType: data.matchType || "NONE" };
+  if (!matchType || matchType === "NONE" || matchType === "HIGHERRANK") {
+    return { key: null, matchType: matchType || "NONE" };
   }
-
-  if (data.rank !== "SPECIES") {
+  if (data.usage?.rank !== "SPECIES") {
     return { key: null, matchType: "WRONG_RANK" };
   }
 
-  const resolvedKey = data.acceptedUsageKey || data.usageKey || null;
-  return { key: resolvedKey, matchType: data.matchType };
-}
+  // An ambiguous synonym points at several accepted taxa and CoL does not say
+  // which; a misapplied name points at the taxon the name was wrongly used for.
+  // Following either attributes records to a taxon CoL explicitly declines to
+  // link the name to.
+  const status = (data.usage.status ?? "").toUpperCase();
+  if (status.includes("AMBIGUOUS") || status.includes("MISAPPLIED")) {
+    return { key: null, matchType: `UNUSABLE_${status}` };
+  }
 
-// =============================================================================
-// MAPPING CSV
-// =============================================================================
+  const accepted = data.acceptedUsage;
+  if (data.synonym && accepted?.canonicalName && data.usage.canonicalName) {
+    if (!shouldFollowSynonym(data.usage.canonicalName, accepted.canonicalName)) {
+      return { key: null, matchType: "LUMPED", lumpedInto: accepted.canonicalName };
+    }
+  }
+
+  return { key: accepted?.key || data.usage.key || null, matchType };
+}
 
 const MAPPING_CSV_PATH = path.join(DATA_DIR, "mapping.csv");
 const MAPPING_CSV_COLUMNS = ["sis_taxon_id", "gbif_species_key", "match_type", "name_source"];
@@ -126,7 +204,7 @@ export function writeMappingCsv(entries: MappingEntry[]): void {
 }
 
 export interface MappingLink {
-  gbif_species_key: number | null;
+  gbif_species_key: string | null;
   match_type: string;
   name_source: NameSource | "";
 }
@@ -140,7 +218,7 @@ export function readMappingCsv(): Map<number, MappingLink[]> {
   if (!fs.existsSync(MAPPING_CSV_PATH)) return new Map();
   const entries = readCsv<MappingEntry>(MAPPING_CSV_PATH, (r) => ({
     sis_taxon_id: parseInt(r.sis_taxon_id, 10),
-    gbif_species_key: r.gbif_species_key ? parseInt(r.gbif_species_key, 10) : null,
+    gbif_species_key: r.gbif_species_key || null,
     match_type: r.match_type || "",
     name_source: (r.name_source as NameSource) || "",
   }));
@@ -165,6 +243,8 @@ export interface SpeciesInput {
   scientific_name: string;
   /** Bare binomials only — status is dropped here since we treat all kept synonyms equally for matching. */
   synonyms: string[];
+  /** Passed to GBIF so it can disambiguate the name. */
+  context?: MatchContext;
 }
 
 function loadAllRedlistSpecies(): SpeciesInput[] {
@@ -177,16 +257,30 @@ function loadAllRedlistSpecies(): SpeciesInput[] {
         sis_taxon_id: s.sis_taxon_id,
         scientific_name: s.scientific_name,
         synonyms: s.synonyms.map((syn) => syn.name),
+        context: {
+          kingdom: KINGDOM_NAME[taxon.kingdomKey],
+          class_name: s.class_name,
+          order_name: s.order_name,
+          family: s.family,
+        },
       });
     }
   }
   return allSpecies;
 }
 
-export type MatchFn = (name: string) => Promise<{ key: number | null; matchType: string }>;
+export type MatchFn = (name: string, context?: MatchContext) => Promise<MatchOutcome>;
 
-function loadAllGbifKeys(): Set<number> {
-  const keys = new Set<number>();
+/** GBIF kingdom names by the kingdomKey each Table 1a group carries. */
+const KINGDOM_NAME: Record<number, string> = {
+  1: "Animalia",
+  4: "Chromista",
+  5: "Fungi",
+  6: "Plantae",
+};
+
+function loadAllGbifKeys(): Set<string> {
+  const keys = new Set<string>();
   for (const taxon of TAXA) {
     const csvPath = path.join(GBIF_DIR, `${taxon.id}.csv`);
     if (!fs.existsSync(csvPath)) continue;
@@ -236,7 +330,7 @@ interface MatchTask {
 }
 
 interface MatchResult extends MatchTask {
-  key: number | null;
+  key: string | null;
   matchType: string;
 }
 
@@ -246,7 +340,7 @@ interface MatchResult extends MatchTask {
  */
 export async function matchSpeciesList(
   redlistSpecies: SpeciesInput[],
-  gbifKeys: Set<number>,
+  gbifKeys: Set<string>,
   logger: SyncLogger,
   matchFn: MatchFn,
   concurrency: number = MATCH_CONCURRENCY,
@@ -310,9 +404,9 @@ export async function matchSpeciesList(
   const orderedSisIds = redlistSpecies.map((s) => s.sis_taxon_id);
 
   // Track which GBIF key has been claimed by which sis_taxon_id (cross-species DUPLICATE check).
-  const claimedBy = new Map<number, number>();
+  const claimedBy = new Map<string, number>();
   // Per-species set of accepted keys (so synonyms don't double-add the canonical key).
-  const acceptedKeysBySpecies = new Map<number, Set<number>>();
+  const acceptedKeysBySpecies = new Map<number, Set<string>>();
 
   const entries: MappingEntry[] = [];
   let exact = 0, fuzzy = 0, noMatch = 0, noGbifData = 0, alreadyLinked = 0;
