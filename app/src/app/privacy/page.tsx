@@ -61,9 +61,9 @@ export default function PrivacyPage() {
           the dashboard shows by default is public, and you do not need an
           account to use it. If you do sign in with Google, Microsoft or GitHub,
           we store the email address, name and profile picture that provider
-          gives us, so the site can show who you are signed in as and, for a
-          small number of accounts, unlock additional map layers. We never
-          receive your password. Accounts are handled by{" "}
+          gives us, so the site can show who you are signed in as and manage
+          access to some features. We never receive your password. Accounts are
+          handled by{" "}
           <a
             href="https://supabase.com"
             target="_blank"
