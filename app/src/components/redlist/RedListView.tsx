@@ -1256,13 +1256,11 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
     return false;
   }, [selectedObsRanges]);
 
-  // Bucket a species' REASSESSMENT count (total assessments minus the first,
-  // original one) into a chart-bar label. 4+ collapses the long tail (a
-  // handful of species have 8-9 historical assessments, i.e. 7-8
-  // reassessments) into one bar.
+  // Bucket a species' assessment_count into a chart-bar label. 5+ collapses the
+  // long tail (a handful of species have 8-9 historical assessments) into one bar.
   const assessmentCountBucket = useCallback((count: number | null | undefined): string => {
-    const reassessments = (count ?? 1) - 1;
-    return reassessments >= 4 ? "4+" : String(reassessments);
+    const n = count ?? 1;
+    return n >= 5 ? "5+" : String(n);
   }, []);
 
   // Helper to check if species matches the number-of-assessments filter (#423 item 1)
@@ -1791,19 +1789,19 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
     }));
   }, [taxaFilteredSpecies, selectedCategories, selectedCountries, selectedYearRanges, selectedSystems, selectedPopulationTrends, selectedMovementPatterns, selectedThreats, selectedCriteria, matchesHabitatFilter, endemicsOnly, selectedGrowthForms, matchesSearch, matchesAssessorsFilter, matchesReviewersFilter, matchesYearRangeFilter, selectedAssessmentYears, matchesAssessmentYearFilter]);
 
-  // Number of Reassessments chart (#423 item 1): apply all filters EXCEPT the
-  // reassessment-count selection itself. NE species have no assessment history
+  // Number of Assessments chart (#423 item 1): apply all filters EXCEPT the
+  // assessment-count selection itself. NE species have no assessment history
   // (assessment_count is null) so they're excluded, same as other
   // assessment-only charts.
   const assessmentCountData = useMemo(() => {
     const buckets = [
-      { range: "0", shortRange: "0", count: 0 },
       { range: "1", shortRange: "1", count: 0 },
       { range: "2", shortRange: "2", count: 0 },
       { range: "3", shortRange: "3", count: 0 },
-      { range: "4+", shortRange: "4+", count: 0 },
+      { range: "4", shortRange: "4", count: 0 },
+      { range: "5+", shortRange: "5+", count: 0 },
     ];
-    const byBucket: Record<string, number> = { "0": 0, "1": 1, "2": 2, "3": 3, "4+": 4 };
+    const byBucket: Record<string, number> = { "1": 0, "2": 1, "3": 2, "4": 3, "5+": 4 };
     taxaFilteredSpecies.forEach(s => {
       if (s.category === "NE") return;
       if (!matchesSearch(s)) return;
@@ -2733,7 +2731,7 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
     });
   };
 
-  // Handle Number of Reassessments bar click
+  // Handle Number of Assessments bar click
   const handleAssessmentCountClick = (data: { payload?: { range?: string } }, event: React.MouseEvent) => {
     const range = data.payload?.range;
     if (!range) return;
@@ -2751,13 +2749,14 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
     });
   };
 
-  // "1+" shortcut (#423 item 1): one click selects every bucket except "0",
-  // flagging species that have been reassessed at least once. Toggling off
-  // clears the selection entirely, mirroring the Outdated shortcut.
-  const ONE_PLUS_BUCKETS = ["1", "2", "3", "4+"];
-  const isOnePlusSelected = ONE_PLUS_BUCKETS.every(b => selectedAssessmentCounts.has(b)) && selectedAssessmentCounts.size === ONE_PLUS_BUCKETS.length;
-  const handleOnePlusClick = () => {
-    setSelectedAssessmentCounts(isOnePlusSelected ? new Set() : new Set(ONE_PLUS_BUCKETS));
+  // "Reassessed" shortcut (#423 item 1): one click selects every bucket >= 2,
+  // flagging species that have been reassessed at least once (1+ reassessment
+  // = 2+ total assessments). Toggling off clears the selection entirely,
+  // mirroring the Outdated shortcut.
+  const REASSESSED_BUCKETS = ["2", "3", "4", "5+"];
+  const isReassessedSelected = REASSESSED_BUCKETS.every(b => selectedAssessmentCounts.has(b)) && selectedAssessmentCounts.size === REASSESSED_BUCKETS.length;
+  const handleReassessedClick = () => {
+    setSelectedAssessmentCounts(isReassessedSelected ? new Set() : new Set(REASSESSED_BUCKETS));
   };
 
   // Handle Year Described bucket bar click
@@ -3053,7 +3052,7 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
     renderPills: (rawCode: string) => React.ReactNode,
     chartProps: Omit<React.ComponentProps<typeof FilterBarChart>, "data">,
     // Per-row pixel height. Default (22) is Threats/Habitat's original sizing;
-    // Criteria passes 32 to match Number of Reassessments' bar thickness, since
+    // Criteria passes 32 to match Number of Assessments' bar thickness, since
     // that chart sits fixed at 170px for its always-5 buckets (170/5 = 34px
     // slot, minus FilterBarChart's internal 5px top/bottom margins = 32px).
     rowHeight = 22
@@ -4029,7 +4028,7 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
           )}
 
           {/* Country + Threats are always visible, alongside Charts row 1
-              above — everything past that (Assessment Criteria/Number of Reassessments,
+              above — everything past that (Assessment Criteria/Number of Assessments,
               Realm/Movement/Trend, Habitat/Assessors-Reviewers, Growth Form)
               lives behind the "More Filters" toggle below. No
               independently-scrollable panel here anymore — nested
@@ -4062,7 +4061,7 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
 
           {!isNewAssessments && moreFiltersOpen && (
             <>
-                {/* Assessment Criteria alongside Number of Reassessments — a row, not a
+                {/* Assessment Criteria alongside Number of Assessments — a row, not a
                     stack (previously stacked in Habitat's right column; moved
                     out once Habitat started pairing with Assessors/Reviewers
                     instead). */}
@@ -4084,29 +4083,28 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
                       parseCriteriaCodes' startsWith-based matching). */}
                   {!isNewAssessments && criteriaCard}
 
-                  {/* Number of Reassessments (#423 item 1) — how many times a
-                      species has been reassessed beyond its original
-                      assessment (assessment_count - 1), with a "1+" shortcut
-                      selecting every bucket except "0" in one click (flags
-                      species reassessed at least once, per the issue's
-                      explicit ask), same shape as the Outdated shortcut next
-                      to Years Since Assessed. */}
+                  {/* Number of Assessments (#423 item 1) — how many times a
+                      species has been assessed, with a "Reassessed" shortcut
+                      selecting every bucket >= 2 in one click (1+ reassessment
+                      = 2+ total assessments, per the issue's explicit ask),
+                      same shape as the Outdated shortcut next to Years Since
+                      Assessed. */}
                   {!isNewAssessments && (
                     <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-3 flex flex-col">
                       <div className="flex items-center justify-between mb-1">
-                        <span className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">Number of Reassessments</span>
+                        <span className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">Number of Assessments</span>
                         <button
                           type="button"
-                          onClick={handleOnePlusClick}
+                          onClick={handleReassessedClick}
                           className={`px-2 py-0.5 text-xs font-semibold rounded transition-colors ${
-                            isOnePlusSelected
+                            isReassessedSelected
                               ? "bg-red-600 text-white shadow-sm"
                               : "bg-zinc-100 dark:bg-zinc-800 text-zinc-500 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-300"
                           }`}
-                          aria-pressed={isOnePlusSelected}
-                          title="Filter to species reassessed 1 or more times"
+                          aria-pressed={isReassessedSelected}
+                          title="Filter to species assessed 2 or more times (reassessed at least once)"
                         >
-                          1+
+                          Reassessed
                         </button>
                       </div>
                       <div style={{ height: 170 }} className="flex items-center justify-center">
