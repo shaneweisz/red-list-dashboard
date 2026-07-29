@@ -1257,12 +1257,12 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
   }, [selectedObsRanges]);
 
   // Bucket a species' REASSESSMENT count (total assessments minus the first,
-  // original one) into a chart-bar label. 5+ collapses the long tail (a
+  // original one) into a chart-bar label. 4+ collapses the long tail (a
   // handful of species have 8-9 historical assessments, i.e. 7-8
   // reassessments) into one bar.
   const assessmentCountBucket = useCallback((count: number | null | undefined): string => {
     const reassessments = (count ?? 1) - 1;
-    return reassessments >= 5 ? "5+" : String(reassessments);
+    return reassessments >= 4 ? "4+" : String(reassessments);
   }, []);
 
   // Helper to check if species matches the number-of-assessments filter (#423 item 1)
@@ -1801,10 +1801,9 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
       { range: "1", shortRange: "1", count: 0 },
       { range: "2", shortRange: "2", count: 0 },
       { range: "3", shortRange: "3", count: 0 },
-      { range: "4", shortRange: "4", count: 0 },
-      { range: "5+", shortRange: "5+", count: 0 },
+      { range: "4+", shortRange: "4+", count: 0 },
     ];
-    const byBucket: Record<string, number> = { "0": 0, "1": 1, "2": 2, "3": 3, "4": 4, "5+": 5 };
+    const byBucket: Record<string, number> = { "0": 0, "1": 1, "2": 2, "3": 3, "4+": 4 };
     taxaFilteredSpecies.forEach(s => {
       if (s.category === "NE") return;
       if (!matchesSearch(s)) return;
@@ -2755,7 +2754,7 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
   // "1+" shortcut (#423 item 1): one click selects every bucket except "0",
   // flagging species that have been reassessed at least once. Toggling off
   // clears the selection entirely, mirroring the Outdated shortcut.
-  const ONE_PLUS_BUCKETS = ["1", "2", "3", "4", "5+"];
+  const ONE_PLUS_BUCKETS = ["1", "2", "3", "4+"];
   const isOnePlusSelected = ONE_PLUS_BUCKETS.every(b => selectedAssessmentCounts.has(b)) && selectedAssessmentCounts.size === ONE_PLUS_BUCKETS.length;
   const handleOnePlusClick = () => {
     setSelectedAssessmentCounts(isOnePlusSelected ? new Set() : new Set(ONE_PLUS_BUCKETS));
@@ -3054,9 +3053,9 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
     renderPills: (rawCode: string) => React.ReactNode,
     chartProps: Omit<React.ComponentProps<typeof FilterBarChart>, "data">,
     // Per-row pixel height. Default (22) is Threats/Habitat's original sizing;
-    // Criteria passes 38 to match Number of Reassessments' bar thickness, since
-    // that chart sits fixed at 200px for its always-5 buckets (200/5 = 40px
-    // slot, minus FilterBarChart's internal 5px top/bottom margins = 38px).
+    // Criteria passes 32 to match Number of Reassessments' bar thickness, since
+    // that chart sits fixed at 170px for its always-5 buckets (170/5 = 34px
+    // slot, minus FilterBarChart's internal 5px top/bottom margins = 32px).
     rowHeight = 22
   ): React.ReactNode {
     const segments: { bars: DrilldownBarDatum[]; pillsAfter: string | null }[] = [];
@@ -3595,7 +3594,7 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
               rightMargin: 85,
               labelFormatter: (code: string) => CRITERIA_CATEGORIES.find(c => c.code === code)?.label ?? code,
             },
-            38
+            32
           )
         ) : (
           <div style={{ height: 90 }} className="flex items-center justify-center"><span className="text-sm text-zinc-400 dark:text-zinc-500">No criteria data</span></div>
@@ -4110,7 +4109,7 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
                           1+
                         </button>
                       </div>
-                      <div style={{ height: 240 }} className="flex items-center justify-center">
+                      <div style={{ height: 170 }} className="flex items-center justify-center">
                         {speciesLoading && assessedSpecies.length === 0 ? (
                           <Spinner />
                         ) : isSingleSpecies && singleSpecies ? (

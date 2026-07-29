@@ -49,13 +49,16 @@ th.sticky {
    accessibility layer puts tabIndex={0} on that SVG so keyboard users can
    reach the tooltip, but that also makes every mouse click focus it, and the
    browser's default focus ring then outlines the whole chart until the user
-   clicks elsewhere. Suppress it on plain click, keep it on keyboard focus. */
-svg.recharts-surface:focus {
-  outline: none;
-}
-svg.recharts-surface:focus-visible {
-  outline: 2px solid #6366f1;
-  outline-offset: -2px;
+   clicks elsewhere. Unconditional (not just :focus-visible) and !important,
+   since browsers vary on when they treat a click as "focus-visible" for an
+   SVG with a manually-set tabIndex -- Safari in particular still drew the
+   ring on a plain mouse click even with a :focus-visible-scoped rule.
+   -webkit-tap-highlight-color covers the separate translucent tap-highlight
+   box mobile Safari draws on touch, which outline:none does not touch. */
+svg.recharts-surface,
+svg.recharts-surface * {
+  outline: none !important;
+  -webkit-tap-highlight-color: transparent;
 }
 
 /* Shape marker icons: strip default leaflet-div-icon styles */
