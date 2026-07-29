@@ -3049,7 +3049,12 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
     data: DrilldownBarDatum[],
     isExpanded: (rawCode: string) => boolean,
     renderPills: (rawCode: string) => React.ReactNode,
-    chartProps: Omit<React.ComponentProps<typeof FilterBarChart>, "data">
+    chartProps: Omit<React.ComponentProps<typeof FilterBarChart>, "data">,
+    // Per-row pixel height. Default (22) is Threats/Habitat's original sizing;
+    // Criteria passes 38 to match Number of Assessments' bar thickness, since
+    // that chart sits fixed at 200px for its always-5 buckets (200/5 = 40px
+    // slot, minus FilterBarChart's internal 5px top/bottom margins = 38px).
+    rowHeight = 22
   ): React.ReactNode {
     const segments: { bars: DrilldownBarDatum[]; pillsAfter: string | null }[] = [];
     let current: DrilldownBarDatum[] = [];
@@ -3071,7 +3076,7 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
     return segments.map((seg, i) => (
       <React.Fragment key={i}>
         {seg.bars.length > 0 && (
-          <div style={{ height: Math.max(30, seg.bars.length * 22 + 8) }}>
+          <div style={{ height: Math.max(30, seg.bars.length * rowHeight + 8) }}>
             <FilterBarChart data={seg.bars} xAxisMax={globalMax} {...chartProps} />
           </div>
         )}
@@ -3586,7 +3591,8 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
               yAxisWidth: 42,
               rightMargin: 85,
               labelFormatter: (code: string) => CRITERIA_CATEGORIES.find(c => c.code === code)?.label ?? code,
-            }
+            },
+            38
           )
         ) : (
           <div style={{ height: 90 }} className="flex items-center justify-center"><span className="text-sm text-zinc-400 dark:text-zinc-500">No criteria data</span></div>
