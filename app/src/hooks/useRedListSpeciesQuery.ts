@@ -22,7 +22,7 @@ export interface RedListSpecies {
   // CoL species description year — populated for Not Evaluated (NE) rows only;
   // null for assessed species and for NE names with no datable CoL source.
   described_year: number | null;
-  gbif_species_key: number | null;
+  gbif_species_key: string | null;
   gbif_occurrence_count: number | null;
   gbif_observations_after_assessment_year: number | null;
   // Latest assessment's assessors/reviewers, inline in the species list (drives

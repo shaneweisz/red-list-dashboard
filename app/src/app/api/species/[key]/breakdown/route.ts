@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { CACHE_5M } from "@/lib/cache-headers";
+import { GBIF_CHECKLIST_KEY } from "@/lib/gbif";
 
 interface InatObservation {
   url: string;
@@ -71,6 +72,7 @@ export async function GET(
     const buildParams = (extraParams: Record<string, string> = {}) => {
       const params = new URLSearchParams({
         taxonKey: speciesKey,
+        checklistKey: GBIF_CHECKLIST_KEY,
         hasCoordinate: "true",
         hasGeospatialIssue: "false",
         limit: "0",

@@ -1,0 +1,1080 @@
+{
+  "mammals": [
+    {
+      "redlistName": "MAMMALIA",
+      "rank": "class",
+      "taxonKey": "6224G",
+      "matchedName": "Mammalia",
+      "matchType": "EXACT",
+      "ancestors": [
+        "CS5HF",
+        "N",
+        "CH2",
+        "8V4V3",
+        "8V4V5",
+        "8VVWB",
+        "9CK8W"
+      ]
+    }
+  ],
+  "birds": [
+    {
+      "redlistName": "AVES",
+      "rank": "class",
+      "taxonKey": "V2",
+      "matchedName": "Aves",
+      "matchType": "EXACT",
+      "ancestors": [
+        "CS5HF",
+        "N",
+        "CH2",
+        "8V4V3",
+        "8V4V5",
+        "8VVWB",
+        "9CK8W"
+      ]
+    }
+  ],
+  "reptiles": [
+    {
+      "redlistName": "REPTILIA",
+      "rank": "class",
+      "taxonKey": "RP",
+      "matchedName": "Reptilia",
+      "matchType": "EXACT",
+      "ancestors": [
+        "CS5HF",
+        "N",
+        "CH2",
+        "8V4V3",
+        "8V4V5",
+        "8VVWB",
+        "9CK8W"
+      ]
+    }
+  ],
+  "amphibians": [
+    {
+      "redlistName": "AMPHIBIA",
+      "rank": "class",
+      "taxonKey": "PH",
+      "matchedName": "Amphibia",
+      "matchType": "SEARCH",
+      "ancestors": [
+        "CS5HF",
+        "N",
+        "CH2",
+        "8V4V3",
+        "8V4V5",
+        "8VVWB",
+        "9CK8W"
+      ]
+    }
+  ],
+  "fishes": [
+    {
+      "redlistName": "ACTINOPTERYGII",
+      "rank": "class",
+      "taxonKey": "8VR36",
+      "matchedName": "Actinopterygii",
+      "matchType": "EXACT",
+      "ancestors": [
+        "CS5HF",
+        "N",
+        "CH2",
+        "8V4V3",
+        "8V4V5",
+        "8VVWB"
+      ]
+    },
+    {
+      "redlistName": "CHONDRICHTHYES",
+      "rank": "class",
+      "taxonKey": "8X6G5",
+      "matchedName": "Chondrichthyes",
+      "matchType": "EXACT",
+      "ancestors": [
+        "CS5HF",
+        "N",
+        "CH2",
+        "8V4V3",
+        "8V4V5"
+      ]
+    },
+    {
+      "redlistName": "MYXINI",
+      "rank": "class",
+      "taxonKey": "6225G",
+      "matchedName": "Myxini",
+      "matchType": "EXACT",
+      "ancestors": [
+        "CS5HF",
+        "N",
+        "CH2",
+        "8V4V3",
+        "KTXJW",
+        "8VQW5"
+      ]
+    },
+    {
+      "redlistName": "PETROMYZONTI",
+      "rank": "class",
+      "taxonKey": "8VJWX",
+      "matchedName": "Petromyzonti",
+      "matchType": "EXACT",
+      "ancestors": [
+        "CS5HF",
+        "N",
+        "CH2",
+        "8V4V3",
+        "KTXJW",
+        "8VQW5"
+      ]
+    },
+    {
+      "redlistName": "SARCOPTERYGII",
+      "rank": "class",
+      "taxonKey": "8VSMX",
+      "matchedName": "Sarcopterygii",
+      "matchType": "EXACT",
+      "ancestors": [
+        "CS5HF",
+        "N",
+        "CH2",
+        "8V4V3",
+        "8V4V5",
+        "8VVWB"
+      ]
+    }
+  ],
+  "beetles": [
+    {
+      "redlistName": "COLEOPTERA",
+      "rank": "order",
+      "taxonKey": "C2L",
+      "matchedName": "Coleoptera",
+      "matchType": "EXACT",
+      "ancestors": [
+        "CS5HF",
+        "N",
+        "RT",
+        "L2655",
+        "H6"
+      ]
+    }
+  ],
+  "butterflies_and_moths": [
+    {
+      "redlistName": "LEPIDOPTERA",
+      "rank": "order",
+      "taxonKey": "B6L67",
+      "matchedName": "Lepidoptera",
+      "matchType": "EXACT",
+      "ancestors": [
+        "CS5HF",
+        "N",
+        "RT",
+        "L2655",
+        "H6"
+      ]
+    }
+  ],
+  "flies_and_mosquitoes": [
+    {
+      "redlistName": "DIPTERA",
+      "rank": "order",
+      "taxonKey": "D2P",
+      "matchedName": "Diptera",
+      "matchType": "EXACT",
+      "ancestors": [
+        "CS5HF",
+        "N",
+        "RT",
+        "L2655",
+        "H6"
+      ]
+    }
+  ],
+  "bees_wasps_and_ants": [
+    {
+      "redlistName": "HYMENOPTERA",
+      "rank": "order",
+      "taxonKey": "HYM",
+      "matchedName": "Hymenoptera",
+      "matchType": "EXACT",
+      "ancestors": [
+        "CS5HF",
+        "N",
+        "RT",
+        "L2655",
+        "H6"
+      ]
+    }
+  ],
+  "true_bugs": [
+    {
+      "redlistName": "HEMIPTERA",
+      "rank": "order",
+      "taxonKey": "BXVWV",
+      "matchedName": "Hemiptera",
+      "matchType": "EXACT",
+      "ancestors": [
+        "CS5HF",
+        "N",
+        "RT",
+        "L2655",
+        "H6"
+      ]
+    }
+  ],
+  "grasshoppers_crickets_locusts": [
+    {
+      "redlistName": "ORTHOPTERA",
+      "rank": "order",
+      "taxonKey": "CJBKK",
+      "matchedName": "Orthoptera",
+      "matchType": "EXACT",
+      "ancestors": [
+        "CS5HF",
+        "N",
+        "RT",
+        "L2655",
+        "H6"
+      ]
+    }
+  ],
+  "dragonflies_and_damselflies": [
+    {
+      "redlistName": "ODONATA",
+      "rank": "order",
+      "taxonKey": "B6LCL",
+      "matchedName": "Odonata",
+      "matchType": "EXACT",
+      "ancestors": [
+        "CS5HF",
+        "N",
+        "RT",
+        "L2655",
+        "H6"
+      ]
+    }
+  ],
+  "other_insects": [
+    {
+      "redlistName": "PHASMIDA",
+      "rank": "order",
+      "taxonKey": "8NKFG",
+      "matchedName": "Phasmida",
+      "matchType": "EXACT",
+      "ancestors": [
+        "CS5HF",
+        "N",
+        "RT",
+        "L2655",
+        "H6"
+      ]
+    },
+    {
+      "redlistName": "TRICHOPTERA",
+      "rank": "order",
+      "taxonKey": "TR2",
+      "matchedName": "Trichoptera",
+      "matchType": "EXACT",
+      "ancestors": [
+        "CS5HF",
+        "N",
+        "RT",
+        "L2655",
+        "H6"
+      ]
+    },
+    {
+      "redlistName": "MANTODEA",
+      "rank": "order",
+      "taxonKey": "3HS",
+      "matchedName": "Mantodea",
+      "matchType": "HIGHERRANK",
+      "ancestors": [
+        "CS5HF",
+        "N",
+        "RT",
+        "L2655",
+        "H6"
+      ]
+    },
+    {
+      "redlistName": "PLECOPTERA",
+      "rank": "order",
+      "taxonKey": "9CHXG",
+      "matchedName": "Plecoptera",
+      "matchType": "SEARCH",
+      "ancestors": [
+        "CS5HF",
+        "N",
+        "RT",
+        "L2655",
+        "H6"
+      ]
+    },
+    {
+      "redlistName": "BLATTODEA",
+      "rank": "order",
+      "taxonKey": "KZRLZ",
+      "matchedName": "Blattodea",
+      "matchType": "EXACT",
+      "ancestors": [
+        "CS5HF",
+        "N",
+        "RT",
+        "L2655",
+        "H6"
+      ]
+    },
+    {
+      "redlistName": "ISOPTERA",
+      "rank": "order",
+      "taxonKey": null,
+      "matchedName": "Insecta",
+      "matchType": "HIGHERRANK"
+    },
+    {
+      "redlistName": "EPHEMEROPTERA",
+      "rank": "order",
+      "taxonKey": "372",
+      "matchedName": "Ephemeroptera",
+      "matchType": "EXACT",
+      "ancestors": [
+        "CS5HF",
+        "N",
+        "RT",
+        "L2655",
+        "H6"
+      ]
+    },
+    {
+      "redlistName": "DERMAPTERA",
+      "rank": "order",
+      "taxonKey": "8MP8D",
+      "matchedName": "Dermaptera",
+      "matchType": "EXACT",
+      "ancestors": [
+        "CS5HF",
+        "N",
+        "RT",
+        "L2655",
+        "H6"
+      ]
+    },
+    {
+      "redlistName": "GRYLLOBLATTODEA",
+      "rank": "order",
+      "taxonKey": "6223L",
+      "matchedName": "Grylloblattodea",
+      "matchType": "EXACT",
+      "ancestors": [
+        "CS5HF",
+        "N",
+        "RT",
+        "L2655",
+        "H6",
+        "V9XS7"
+      ]
+    },
+    {
+      "redlistName": "PSOCODEA",
+      "rank": "order",
+      "taxonKey": "CSYS4",
+      "matchedName": "Psocodea",
+      "matchType": "EXACT",
+      "ancestors": [
+        "CS5HF",
+        "N",
+        "RT",
+        "L2655",
+        "H6"
+      ]
+    },
+    {
+      "redlistName": "NEUROPTERA",
+      "rank": "order",
+      "taxonKey": "3ND",
+      "matchedName": "Neuroptera",
+      "matchType": "EXACT",
+      "ancestors": [
+        "CS5HF",
+        "N",
+        "RT",
+        "L2655",
+        "H6"
+      ]
+    },
+    {
+      "redlistName": "ARCHAEOGNATHA",
+      "rank": "order",
+      "taxonKey": "B6MTR",
+      "matchedName": "Archaeognatha",
+      "matchType": "EXACT",
+      "ancestors": [
+        "CS5HF",
+        "N",
+        "RT",
+        "L2655",
+        "H6"
+      ]
+    },
+    {
+      "redlistName": "SIPHONAPTERA",
+      "rank": "order",
+      "taxonKey": "43J",
+      "matchedName": "Siphonaptera",
+      "matchType": "EXACT",
+      "ancestors": [
+        "CS5HF",
+        "N",
+        "RT",
+        "L2655",
+        "H6"
+      ]
+    },
+    {
+      "redlistName": "THYSANOPTERA",
+      "rank": "order",
+      "taxonKey": "622VS",
+      "matchedName": "Thysanoptera",
+      "matchType": "EXACT",
+      "ancestors": [
+        "CS5HF",
+        "N",
+        "RT",
+        "L2655",
+        "H6"
+      ]
+    },
+    {
+      "redlistName": "MEGALOPTERA",
+      "rank": "order",
+      "taxonKey": "3J8",
+      "matchedName": "Megaloptera",
+      "matchType": "EXACT",
+      "ancestors": [
+        "CS5HF",
+        "N",
+        "RT",
+        "L2655",
+        "H6"
+      ]
+    }
+  ],
+  "molluscs": [
+    {
+      "redlistName": "MOLLUSCA",
+      "rank": "phylum",
+      "taxonKey": "M2L",
+      "matchedName": "Mollusca",
+      "matchType": "EXACT",
+      "ancestors": [
+        "CS5HF",
+        "N"
+      ]
+    }
+  ],
+  "crustaceans": [
+    {
+      "redlistName": "MALACOSTRACA",
+      "rank": "class",
+      "taxonKey": "MC",
+      "matchedName": "Malacostraca",
+      "matchType": "EXACT",
+      "ancestors": [
+        "CS5HF",
+        "N",
+        "RT",
+        "KZX8B"
+      ]
+    },
+    {
+      "redlistName": "MAXILLOPODA",
+      "rank": "class",
+      "taxonKey": "B8V3R",
+      "matchedName": "Copepoda",
+      "matchType": "EXACT",
+      "ancestors": [
+        "CS5HF",
+        "N",
+        "RT",
+        "KZX8B"
+      ]
+    },
+    {
+      "redlistName": "BRANCHIOPODA",
+      "rank": "class",
+      "taxonKey": "8H",
+      "matchedName": "Branchiopoda",
+      "matchType": "EXACT",
+      "ancestors": [
+        "CS5HF",
+        "N",
+        "RT",
+        "KZX8B"
+      ]
+    },
+    {
+      "redlistName": "OSTRACODA",
+      "rank": "class",
+      "taxonKey": "B8TXJ",
+      "matchedName": "Ostracoda",
+      "matchType": "EXACT",
+      "ancestors": [
+        "CS5HF",
+        "N",
+        "RT",
+        "KZX8B"
+      ]
+    },
+    {
+      "redlistName": "THEOCOSTRACA",
+      "rank": "class",
+      "taxonKey": "7NF5R",
+      "matchedName": "Thecostraca",
+      "matchType": "VARIANT",
+      "ancestors": [
+        "CS5HF",
+        "N",
+        "RT",
+        "KZX8B"
+      ]
+    }
+  ],
+  "arachnids": [
+    {
+      "redlistName": "ARACHNIDA",
+      "rank": "class",
+      "taxonKey": "CCQKT",
+      "matchedName": "Arachnida",
+      "matchType": "EXACT",
+      "ancestors": [
+        "CS5HF",
+        "N",
+        "RT",
+        "KZWYC"
+      ]
+    }
+  ],
+  "corals": [
+    {
+      "redlistName": "SCLERACTINIA",
+      "rank": "order",
+      "taxonKey": "B8V7V",
+      "matchedName": "Scleractinia",
+      "matchType": "EXACT",
+      "ancestors": [
+        "CS5HF",
+        "N",
+        "CN2",
+        "7S",
+        "7NF5D"
+      ]
+    },
+    {
+      "redlistName": "ALCYONACEA",
+      "rank": "order",
+      "taxonKey": "C7W46",
+      "matchedName": "Octocorallia",
+      "matchType": "EXACT",
+      "ancestors": [
+        "CS5HF",
+        "N",
+        "CN2"
+      ]
+    }
+  ],
+  "velvet_worms": [
+    {
+      "redlistName": "UDEONYCHOPHORA",
+      "rank": "class",
+      "taxonKey": "BV844",
+      "matchedName": "Onychophora",
+      "matchType": "EXACT",
+      "ancestors": [
+        "CS5HF",
+        "N"
+      ]
+    }
+  ],
+  "horseshoe_crabs": [
+    {
+      "redlistName": "MEROSTOMATA",
+      "rank": "class",
+      "taxonKey": "B8VF7",
+      "matchedName": "Merostomata",
+      "matchType": "EXACT",
+      "ancestors": [
+        "CS5HF",
+        "N",
+        "RT",
+        "KZWYC"
+      ]
+    }
+  ],
+  "other_invertebrates": [
+    {
+      "redlistName": "ACTINIARIA",
+      "rank": "order",
+      "taxonKey": "B8TX9",
+      "matchedName": "Actiniaria",
+      "matchType": "EXACT",
+      "ancestors": [
+        "CS5HF",
+        "N",
+        "CN2",
+        "7S",
+        "7NF5D"
+      ]
+    },
+    {
+      "redlistName": "ZOANTHARIA",
+      "rank": "order",
+      "taxonKey": "B8V7Z",
+      "matchedName": "Zoantharia",
+      "matchType": "EXACT",
+      "ancestors": [
+        "CS5HF",
+        "N",
+        "CN2",
+        "7S",
+        "7NF5D"
+      ]
+    },
+    {
+      "redlistName": "PENICILLARIA",
+      "rank": "order",
+      "taxonKey": "C6S7F",
+      "matchedName": "Ceriantharia",
+      "matchType": "EXACT",
+      "ancestors": [
+        "CS5HF",
+        "N",
+        "CN2",
+        "7S"
+      ]
+    },
+    {
+      "redlistName": "MALACALCYONCAEA",
+      "rank": "order",
+      "taxonKey": "B6NHR",
+      "matchedName": "Malacalcyonacea",
+      "matchType": "VARIANT",
+      "ancestors": [
+        "CS5HF",
+        "N",
+        "CN2",
+        "C7W46"
+      ]
+    },
+    {
+      "redlistName": "SCLERALCYONACEA",
+      "rank": "order",
+      "taxonKey": "B6NHS",
+      "matchedName": "Scleralcyonacea",
+      "matchType": "EXACT",
+      "ancestors": [
+        "CS5HF",
+        "N",
+        "CN2",
+        "C7W46"
+      ]
+    },
+    {
+      "redlistName": "HOLOTHUROIDEA",
+      "rank": "class",
+      "taxonKey": "B8V3W",
+      "matchedName": "Holothuroidea",
+      "matchType": "EXACT",
+      "ancestors": [
+        "CS5HF",
+        "N",
+        "CHN",
+        "7NF2T"
+      ]
+    },
+    {
+      "redlistName": "CLITELLATA",
+      "rank": "class",
+      "taxonKey": "9H",
+      "matchedName": "Clitellata",
+      "matchType": "EXACT",
+      "ancestors": [
+        "CS5HF",
+        "N",
+        "NN"
+      ]
+    },
+    {
+      "redlistName": "DIPLOPODA",
+      "rank": "class",
+      "taxonKey": "7NF3S",
+      "matchedName": "Diplopoda",
+      "matchType": "EXACT",
+      "ancestors": [
+        "CS5HF",
+        "N",
+        "RT",
+        "L2G4H"
+      ]
+    },
+    {
+      "redlistName": "COLLEMBOLA",
+      "rank": "class",
+      "taxonKey": "KZS5W",
+      "matchedName": "Collembola",
+      "matchType": "SEARCH",
+      "ancestors": [
+        "CS5HF",
+        "N",
+        "RT",
+        "L2655"
+      ]
+    },
+    {
+      "redlistName": "CHILOPODA",
+      "rank": "class",
+      "taxonKey": "93",
+      "matchedName": "Chilopoda",
+      "matchType": "EXACT",
+      "ancestors": [
+        "CS5HF",
+        "N",
+        "RT",
+        "L2G4H"
+      ]
+    },
+    {
+      "redlistName": "DEMOSPONGIAE",
+      "rank": "class",
+      "taxonKey": "84JN8",
+      "matchedName": "Demospongiae",
+      "matchType": "EXACT",
+      "ancestors": [
+        "CS5HF",
+        "N",
+        "B8TXQ"
+      ]
+    },
+    {
+      "redlistName": "HEXACTINELLIDA",
+      "rank": "class",
+      "taxonKey": "84JNH",
+      "matchedName": "Hexactinellida",
+      "matchType": "EXACT",
+      "ancestors": [
+        "CS5HF",
+        "N",
+        "B8TXQ"
+      ]
+    },
+    {
+      "redlistName": "HYDROZOA",
+      "rank": "class",
+      "taxonKey": "B8V3X",
+      "matchedName": "Hydrozoa",
+      "matchType": "EXACT",
+      "ancestors": [
+        "CS5HF",
+        "N",
+        "CN2"
+      ]
+    },
+    {
+      "redlistName": "NEMERTEA",
+      "rank": "class",
+      "taxonKey": "5C",
+      "matchedName": "Nemertea",
+      "matchType": "EXACT",
+      "ancestors": [
+        "CS5HF",
+        "N"
+      ]
+    },
+    {
+      "redlistName": "ASTEROIDEA",
+      "rank": "class",
+      "taxonKey": "B8V3Q",
+      "matchedName": "Asteroidea",
+      "matchType": "EXACT",
+      "ancestors": [
+        "CS5HF",
+        "N",
+        "CHN",
+        "7NF2N"
+      ]
+    },
+    {
+      "redlistName": "CALCAREA",
+      "rank": "class",
+      "taxonKey": "84JMY",
+      "matchedName": "Calcarea",
+      "matchType": "EXACT",
+      "ancestors": [
+        "CS5HF",
+        "N",
+        "B8TXQ"
+      ]
+    },
+    {
+      "redlistName": "POLYCHAETA",
+      "rank": "class",
+      "taxonKey": "B8TXG",
+      "matchedName": "Polychaeta",
+      "matchType": "SEARCH",
+      "ancestors": [
+        "CS5HF",
+        "N",
+        "NN"
+      ]
+    },
+    {
+      "redlistName": "TURBELLARIA",
+      "rank": "class",
+      "taxonKey": "BDSSX",
+      "matchedName": "Turbellaria",
+      "matchType": "EXACT",
+      "ancestors": [
+        "CS5HF",
+        "N",
+        "7NF2H"
+      ]
+    },
+    {
+      "redlistName": "ECHINOIDEA",
+      "rank": "class",
+      "taxonKey": "B8V3V",
+      "matchedName": "Echinoidea",
+      "matchType": "EXACT",
+      "ancestors": [
+        "CS5HF",
+        "N",
+        "CHN",
+        "7NF2T"
+      ]
+    }
+  ],
+  "mosses": [
+    {
+      "redlistName": "BRYOPHYTA",
+      "rank": "phylum",
+      "taxonKey": "BJ5TM",
+      "matchedName": "Bryophyta",
+      "matchType": "EXACT",
+      "ancestors": [
+        "CS5HF",
+        "P",
+        "9THX2"
+      ]
+    },
+    {
+      "redlistName": "ANTHOCEROTOPHYTA",
+      "rank": "phylum",
+      "taxonKey": "9JHQ8",
+      "matchedName": "Anthocerotophyta",
+      "matchType": "EXACT",
+      "ancestors": [
+        "CS5HF",
+        "P",
+        "9THX2"
+      ]
+    },
+    {
+      "redlistName": "MARCHANTIOPHYTA",
+      "rank": "phylum",
+      "taxonKey": "9J9G3",
+      "matchedName": "Marchantiophyta",
+      "matchType": "EXACT",
+      "ancestors": [
+        "CS5HF",
+        "P",
+        "9THX2"
+      ]
+    }
+  ],
+  "ferns_and_allies": [
+    {
+      "redlistName": "LYCOPODIOPSIDA",
+      "rank": "class",
+      "taxonKey": "LYC",
+      "matchedName": "Lycopodiopsida",
+      "matchType": "EXACT",
+      "ancestors": [
+        "CS5HF",
+        "P",
+        "CMQ8S",
+        "TP"
+      ]
+    },
+    {
+      "redlistName": "POLYPODIOPSIDA",
+      "rank": "class",
+      "taxonKey": "GV",
+      "matchedName": "Polypodiopsida",
+      "matchType": "EXACT",
+      "ancestors": [
+        "CS5HF",
+        "P",
+        "CMQ8S",
+        "TP"
+      ]
+    }
+  ],
+  "gymnosperms": [
+    {
+      "redlistName": "PINOPSIDA",
+      "rank": "class",
+      "taxonKey": "C7ZVJ",
+      "matchedName": "Pinopsida",
+      "matchType": "EXACT",
+      "ancestors": [
+        "CS5HF",
+        "P",
+        "CMQ8S",
+        "TP"
+      ]
+    },
+    {
+      "redlistName": "CYCADOPSIDA",
+      "rank": "class",
+      "taxonKey": "CGVH9",
+      "matchedName": "Cycadopsida",
+      "matchType": "EXACT",
+      "ancestors": [
+        "CS5HF",
+        "P",
+        "CMQ8S",
+        "TP"
+      ]
+    },
+    {
+      "redlistName": "GINKGOOPSIDA",
+      "rank": "class",
+      "taxonKey": "BT",
+      "matchedName": "Ginkgoopsida",
+      "matchType": "EXACT",
+      "ancestors": [
+        "CS5HF",
+        "P",
+        "CMQ8S",
+        "TP"
+      ]
+    },
+    {
+      "redlistName": "GNETOPSIDA",
+      "rank": "class",
+      "taxonKey": null,
+      "matchedName": "Plantae",
+      "matchType": "HIGHERRANK"
+    }
+  ],
+  "flowering_plants": [
+    {
+      "redlistName": "MAGNOLIOPSIDA",
+      "rank": "class",
+      "taxonKey": "MG",
+      "matchedName": "Magnoliopsida",
+      "matchType": "EXACT",
+      "ancestors": [
+        "CS5HF",
+        "P",
+        "CMQ8S",
+        "TP"
+      ]
+    },
+    {
+      "redlistName": "LILIOPSIDA",
+      "rank": "class",
+      "taxonKey": "L2L",
+      "matchedName": "Liliopsida",
+      "matchType": "EXACT",
+      "ancestors": [
+        "CS5HF",
+        "P",
+        "CMQ8S",
+        "TP"
+      ]
+    }
+  ],
+  "green_algae": [
+    {
+      "redlistName": "CHLOROPHYTA",
+      "rank": "phylum",
+      "taxonKey": "CGV7L",
+      "matchedName": "Chlorophyta",
+      "matchType": "EXACT",
+      "ancestors": [
+        "CS5HF",
+        "P"
+      ]
+    },
+    {
+      "redlistName": "CHAROPHYTA",
+      "rank": "phylum",
+      "taxonKey": "KZS5S",
+      "matchedName": "Charophyta",
+      "matchType": "EXACT",
+      "ancestors": [
+        "CS5HF",
+        "P"
+      ]
+    }
+  ],
+  "red_algae": [
+    {
+      "redlistName": "RHODOPHYTA",
+      "rank": "phylum",
+      "taxonKey": "L2MHG",
+      "matchedName": "Rhodophyta",
+      "matchType": "EXACT",
+      "ancestors": [
+        "CS5HF",
+        "P"
+      ]
+    }
+  ],
+  "mushrooms": [
+    {
+      "redlistName": "ASCOMYCOTA",
+      "rank": "phylum",
+      "taxonKey": "SM",
+      "matchedName": "Ascomycota",
+      "matchType": "EXACT",
+      "ancestors": [
+        "CS5HF",
+        "F"
+      ]
+    },
+    {
+      "redlistName": "BASIDIOMYCOTA",
+      "rank": "phylum",
+      "taxonKey": "BM",
+      "matchedName": "Basidiomycota",
+      "matchType": "EXACT",
+      "ancestors": [
+        "CS5HF",
+        "F"
+      ]
+    }
+  ],
+  "brown_algae": [
+    {
+      "redlistName": "HETEROKONTOPHYTA",
+      "rank": "phylum",
+      "taxonKey": "7NF4S",
+      "matchedName": "Phaeophyceae",
+      "matchType": "EXACT",
+      "ancestors": [
+        "CS5HF",
+        "C",
+        "D3MRQ",
+        "D3MRV",
+        "5H"
+      ]
+    }
+  ]
+}
