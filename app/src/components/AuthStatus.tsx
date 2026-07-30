@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import Link from "next/link";
 import { signOut } from "@/lib/auth/actions";
 
 type Me = { email: string | null; avatarUrl: string | null };
@@ -52,8 +51,30 @@ export function AuthStatus() {
 
   if (!me?.email) {
     return (
-      <Link
+      // Sign in, remembering where the user was. Everything the dashboard shows
+      // — filters, view mode, drill-down — is encoded in the query string, so
+      // handing /login the current path+search is what lets the callback put
+      // the user back exactly where they were instead of on the home page.
+      //
+      // Read in the click handler rather than baked into `href` at render time
+      // because the dashboard rewrites its own URL with bare
+      // history.pushState (hooks/useFilterParams.ts) — no Next.js navigation,
+      // so no re-render and nothing for usePathname/useSearchParams to observe.
+      // An href computed at render would go stale on the first filter change,
+      // which is precisely the state this exists to preserve.
+      //
+      // The href itself stays a plain "/login", so cmd/middle-click, "copy link
+      // address" and a JavaScript-less browser all still reach a working
+      // sign-in page — they just fall back to landing on "/" afterwards.
+      <a
         href="/login"
+        onClick={(e) => {
+          // Leave modified clicks (open in new tab/window, download) alone.
+          if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey || e.button !== 0) return;
+          e.preventDefault();
+          const from = window.location.pathname + window.location.search;
+          window.location.href = `/login?next=${encodeURIComponent(from)}`;
+        }}
         className="flex items-center justify-center w-8 h-8 rounded-full ring-1 ring-zinc-200 dark:ring-zinc-700 text-zinc-500 dark:text-zinc-400 hover:ring-zinc-300 dark:hover:ring-zinc-600 hover:text-zinc-700 dark:hover:text-zinc-200 transition-colors"
         aria-label="Sign in"
         title="Sign in"
@@ -66,7 +87,7 @@ export function AuthStatus() {
             d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"
           />
         </svg>
-      </Link>
+      </a>
     );
   }
 

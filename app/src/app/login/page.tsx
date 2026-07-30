@@ -1,4 +1,5 @@
 import { redirect } from "next/navigation";
+import { safeRedirectPath } from "@/config/public-origin";
 import { createClient } from "@/lib/supabase/server";
 import { SignInForm } from "./SignInForm";
 
@@ -10,18 +11,25 @@ const ERROR_MESSAGES: Record<string, string> = {
 export default async function LoginPage({
   searchParams,
 }: {
-  searchParams: Promise<{ error?: string }>;
+  searchParams: Promise<{ error?: string; next?: string }>;
 }) {
   const supabase = await createClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();
 
-  if (user) {
-    redirect("/");
-  }
+  // `next` is the page the user was on when they clicked sign in, captured by
+  // the header link (components/AuthStatus.tsx) because the dashboard's whole
+  // filter/view state lives in the query string and would otherwise be lost.
+  // Anyone can put anything in it, so it is only ever handled via
+  // safeRedirectPath — here, and again in the server action and the callback.
+  const { error, next } = await searchParams;
 
-  const { error } = await searchParams;
+  // Already signed in (e.g. /login opened in a second tab): honour `next` too,
+  // rather than dumping them on the home page.
+  if (user) {
+    redirect(safeRedirectPath(next));
+  }
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-zinc-50 dark:bg-zinc-950 px-4">
@@ -35,7 +43,7 @@ export default async function LoginPage({
             {ERROR_MESSAGES[error] ?? "Something went wrong. Please try again."}
           </p>
         )}
-        <SignInForm />
+        <SignInForm next={next} />
       </div>
     </div>
   );
