@@ -25,7 +25,7 @@
 import * as fs from "fs";
 import * as path from "path";
 import { DuckDBInstance } from "@duckdb/node-api";
-import { loadEnvFiles, DATA_DIR, REDLIST_DIR, GBIF_DIR } from "./utils";
+import { loadEnvFiles, DATA_DIR, REDLIST_DIR, GBIF_DIR, CSV_QUOTING } from "./utils";
 import { EXCLUDED_DOMESTICATED_GBIF_KEYS } from "../src/lib/data/taxonomy-constants";
 
 export async function run(): Promise<void> {
@@ -36,32 +36,102 @@ export async function run(): Promise<void> {
   const assessmentsOut = path.join(DATA_DIR, "assessments.parquet");
   const assessedOut = path.join(DATA_DIR, "assessed.parquet");
   const unassessedOut = path.join(DATA_DIR, "unassessed.parquet");
-  const domesticated = [...EXCLUDED_DOMESTICATED_GBIF_KEYS].join(",");
+  const domesticated = [...EXCLUDED_DOMESTICATED_GBIF_KEYS].map((k) => `'${k}'`).join(",");
 
   const inst = await DuckDBInstance.create(":memory:");
   const conn = await inst.connect();
 
-  // GBIF rows keyed by species key (globally unique across group files).
+  // GBIF rows, one per species key.
+  //
+  // A species can be fetched by two groups at once, because IUCN's own group
+  // definitions overlap where CoL has reorganised a lineage: "corals" is defined
+  // to include Alcyonacea, which CoL retired and replaced with the class
+  // Octocorallia, while "other invertebrates" separately names two of the orders
+  // now inside that class. Soft corals therefore arrive from both.
+  //
+  // Left alone that produces two rows per species, and since the unassessed id is
+  // derived from the key, two rows with the same identity — which is what the
+  // uniqueness assertion at the end of this file catches. One row per key is kept,
+  // preferring the more specific group (the one whose file lists fewer species,
+  // i.e. the narrower definition), then the group name, so the choice is stable
+  // across runs rather than depending on file order.
   await conn.run(`
-    CREATE TEMP TABLE gbif_all AS
+    CREATE TEMP TABLE gbif_rows AS
       SELECT
-        CAST(gbif_species_key AS BIGINT)         AS gbif_species_key,
+        CAST(gbif_species_key AS VARCHAR)        AS gbif_species_key,
         scientific_name, common_name,
         taxon_group_table1a                      AS taxon_group,
         lower(class_name) AS class_name, lower(order_name) AS order_name, lower(family) AS family,
         CAST(total_count AS BIGINT)              AS total_count,
         CAST(count_after_assessment_year AS BIGINT) AS count_after,
         countries
-      FROM read_csv_auto('${gbifGlob}', union_by_name=true);
+      FROM read_csv_auto('${gbifGlob}', union_by_name=true, ${CSV_QUOTING});
   `);
 
+  // Species whose key the facet enumeration cannot emit — synonyms kept after a
+  // lump was refused, and taxa CoL ranks below species. Counted directly by
+  // fetch-lumped-own-counts into its own file, and folded in here. The facet rows
+  // win on conflict: where both have an opinion, the enumeration is the better
+  // source.
+  const lumpedCsv = path.join(DATA_DIR, "lumped-own-counts.csv");
+  if (fs.existsSync(lumpedCsv)) {
+    const countRows = async () =>
+      Number((await conn.runAndReadAll(`SELECT count(*) c FROM gbif_rows`)).getRowObjects()[0].c);
+    const before = await countRows();
+    await conn.run(`
+      INSERT INTO gbif_rows
+        SELECT
+          CAST(l.gbif_species_key AS VARCHAR),
+          l.scientific_name, '' AS common_name,
+          l.taxon_group_table1a,
+          lower(l.class_name), lower(l.order_name), lower(l.family),
+          CAST(l.total_count AS BIGINT),
+          CAST(l.count_after_assessment_year AS BIGINT),
+          '' AS countries
+        FROM read_csv_auto('${lumpedCsv}', ${CSV_QUOTING}) l
+        WHERE l.gbif_species_key NOT IN (SELECT gbif_species_key FROM gbif_rows);
+    `);
+    // Rows actually inserted, not rows in the file — the WHERE clause drops any
+    // key the facets already emitted, so reporting the file's length would
+    // overstate what this contributed.
+    const added = (await countRows()) - before;
+    console.log(`  directly-counted species folded in: ${added.toLocaleString()}`);
+  }
+  await conn.run(`
+    CREATE TEMP TABLE group_sizes AS
+      SELECT taxon_group, count(*) AS n FROM gbif_rows GROUP BY 1;
+  `);
+  await conn.run(`
+    CREATE TEMP TABLE gbif_all AS
+      SELECT * EXCLUDE (rn) FROM (
+        SELECT r.*, ROW_NUMBER() OVER (
+                 PARTITION BY r.gbif_species_key
+                 ORDER BY s.n ASC, r.taxon_group ASC
+               ) AS rn
+        FROM gbif_rows r JOIN group_sizes s USING (taxon_group)
+      ) WHERE rn = 1;
+  `);
+
+  // A species' key comes from mapping.csv, except for the ones CoL lumps: their
+  // row there has an empty gbif_species_key by design (the resolution to another
+  // species was refused), and the key they actually own is recorded by
+  // fetch-lumped-own-counts. Both sources feed this table.
+  //
+  // Only the lumped file, never mapping.csv's unfetched_key column. That column
+  // also holds keys reached through a Red List synonym, which CoL assigns to a
+  // *different* species — attributing those is precisely the harm this migration
+  // exists to stop. The lumped file has already applied that filter.
   await conn.run(`
     CREATE TEMP TABLE map AS
       SELECT CAST(sis_taxon_id AS BIGINT) AS sis_taxon_id,
-             CAST(gbif_species_key AS BIGINT) AS gbif_species_key,
+             CAST(gbif_species_key AS VARCHAR) AS gbif_species_key,
              name_source
-      FROM read_csv_auto('${mappingCsv}')
-      WHERE gbif_species_key IS NOT NULL;
+      FROM read_csv_auto('${mappingCsv}', ${CSV_QUOTING})
+      WHERE gbif_species_key IS NOT NULL
+      ${fs.existsSync(lumpedCsv) ? `
+      UNION
+      SELECT CAST(sis_taxon_id AS BIGINT), CAST(gbif_species_key AS VARCHAR), 'canonical'
+      FROM read_csv_auto('${lumpedCsv}', ${CSV_QUOTING})` : ""};
   `);
 
   // sis_taxon_id → its Red List group (one per species). Used to restrict GBIF
@@ -70,25 +140,83 @@ export async function run(): Promise<void> {
   await conn.run(`
     CREATE TEMP TABLE rl AS
       SELECT DISTINCT CAST(sis_taxon_id AS BIGINT) AS sis_taxon_id, taxon_group_table1a AS taxon_group
-      FROM read_csv_auto('${redlistGlob}', union_by_name=true);
+      FROM read_csv_auto('${redlistGlob}', union_by_name=true, ${CSV_QUOTING});
   `);
 
-  // Per-assessment GBIF enrichment: sum occurrence counts across all linked
-  // GBIF rows that exist; representative key prefers a canonical-source match.
+  // Per-assessment GBIF enrichment: one species, one key, one set of counts.
+  //
+  // Joined on the key alone. It used to also require the GBIF row to sit in the
+  // species' own Table 1a group, which was a reasonable guard while keys could
+  // repeat across group files — but gbif_all now holds one row per key, so the
+  // condition only has the power to reject. It did: IUCN files one octocoral
+  // under "other invertebrates" while its key lands in the corals file, and that
+  // species lost its occurrence data for no better reason than which group
+  // fetched it first.
+  //
+  // This used to SUM counts across every linked GBIF row, which quietly turned a
+  // species with more than one link into the union of several taxa. Combined with
+  // a synonym link it is how assessed species came to display totals that were
+  // not theirs — a species' own record count plus a congener's. Whatever the
+  // representative key is, the numbers shown must be that key's numbers, so the
+  // count a user sees and the search the link opens describe the same taxon.
+  //
+  // The representative key prefers a canonical-source match, then the lowest key,
+  // which is deterministic across runs.
+  //
+  // With one exception, because Catalogue of Life sometimes carries the same
+  // organism as two *accepted* usages under different genera, and GBIF's index
+  // then splits its records between them. The Red List uses the older genus, so
+  // preferring the canonical match picks the emptier of the two: Hylatomus
+  // pileatus (Linnaeus, 1758) held 156 records while Dryocopus pileatus
+  // (Linnaeus, 1758) — the same bird, same authorship — held 5,371,684.
+  //
+  // Authorship is what makes this safe to act on, exactly as it does for
+  // synonyms: identical authorship means one organism under two names, so
+  // preferring the fuller key cannot pull in another species' records. Where
+  // authorship differs the names are genuinely different taxa and canonical
+  // still wins — that is the rule protecting Acacia koaia from Acacia koa, and
+  // it applies to 139 of the 297 split pairs. Only the 142 with matching
+  // authorship take the record count into account.
+  const normAuthor = (col: string) =>
+    `lower(regexp_replace(regexp_replace(coalesce(${col}, ''), '[()\\[\\].,;]', '', 'g'), '\\s+', ' ', 'g'))`;
+  await conn.run(`
+    CREATE TEMP TABLE link_ranked AS
+      SELECT m.sis_taxon_id, m.gbif_species_key, m.name_source, g.total_count,
+             ${normAuthor("b.authorship")} AS author
+      FROM map m
+      JOIN gbif_all g ON g.gbif_species_key = m.gbif_species_key
+      LEFT JOIN '${path.join(DATA_DIR, "backbone.parquet")}' b ON b.col_id = m.gbif_species_key;
+  `);
+  await conn.run(`
+    CREATE TEMP TABLE chosen_link AS
+      WITH canon AS (
+        SELECT sis_taxon_id, min(author) FILTER (name_source='canonical') AS canon_author
+        FROM link_ranked GROUP BY 1
+      )
+      SELECT
+        r.sis_taxon_id,
+        arg_min(
+          r.gbif_species_key,
+          -- same organism as the canonical name: rank by records, fullest first
+          CASE WHEN r.author <> '' AND r.author = c.canon_author
+               THEN '0' || lpad((999999999999 - coalesce(r.total_count, 0))::VARCHAR, 12, '0')
+               -- otherwise the original rule, unchanged
+               WHEN r.name_source = 'canonical' THEN '1'
+               ELSE '2' END || r.gbif_species_key
+        ) AS gbif_species_key
+      FROM link_ranked r
+      JOIN canon c USING (sis_taxon_id)
+      GROUP BY r.sis_taxon_id;
+  `);
   await conn.run(`
     CREATE TEMP TABLE enrich AS
       SELECT
-        m.sis_taxon_id,
-        sum(g.total_count)  AS gbif_occurrence_count,
-        sum(g.count_after)  AS gbif_observations_after_assessment_year,
-        -- representative key: canonical-source preferred, then smallest key
-        -- (deterministic; for multi-match species this may differ from v1's
-        -- file-order pick, but is an equally-valid GBIF match for the species)
-        arg_min(m.gbif_species_key, (CASE WHEN m.name_source='canonical' THEN 0 ELSE 1 END) * 1000000000 + m.gbif_species_key) AS gbif_species_key
-      FROM map m
-      JOIN rl ON rl.sis_taxon_id = m.sis_taxon_id
-      JOIN gbif_all g ON g.gbif_species_key = m.gbif_species_key AND g.taxon_group = rl.taxon_group
-      GROUP BY m.sis_taxon_id;
+        c.sis_taxon_id,
+        g.total_count  AS gbif_occurrence_count,
+        g.count_after  AS gbif_observations_after_assessment_year,
+        c.gbif_species_key
+      FROM chosen_link c
+      JOIN gbif_all g ON g.gbif_species_key = c.gbif_species_key;
   `);
 
   // History, loaded first so the latest assessors/reviewers can be denormalized
@@ -174,7 +302,7 @@ export async function run(): Promise<void> {
         r.threat_codes, r.habitat_codes,
         la.latest_assessors, la.latest_reviewers,
         coalesce(ac.assessment_count, 1)  AS assessment_count
-      FROM read_csv_auto('${redlistGlob}', union_by_name=true) r
+      FROM read_csv_auto('${redlistGlob}', union_by_name=true, ${CSV_QUOTING}) r
       LEFT JOIN enrich e ON e.sis_taxon_id = r.sis_taxon_id
       LEFT JOIN latest_assess la ON la.sis_taxon_id = r.sis_taxon_id
       LEFT JOIN assess_count ac ON ac.sis_taxon_id = r.sis_taxon_id
@@ -182,19 +310,48 @@ export async function run(): Promise<void> {
     ) TO '${assessedOut}' (FORMAT PARQUET, COMPRESSION ZSTD);
   `);
 
+  // Common names for unassessed species.
+  //
+  // GBIF's v2 match returns no vernacular field, so these come from Catalogue of
+  // Life's own vernacular file (build-backbone). Without it every one of the
+  // ~669k GBIF species rows carries an empty common name, and the ~88.5k that
+  // have one stop being findable by it — which is what happened, unnoticed,
+  // because nothing measured name coverage.
+  //
+  // Written by a later phase, so on a first-ever sync it is simply absent and the
+  // names fill in on the next run. Reported either way; never silently skipped.
+  const vernacularParquet = path.join(DATA_DIR, "species-vernaculars.parquet");
+  if (fs.existsSync(vernacularParquet)) {
+    await conn.run(`CREATE TEMP TABLE species_vernaculars AS SELECT * FROM '${vernacularParquet}';`);
+    const vn = (await conn.runAndReadAll(`SELECT count(*) c FROM species_vernaculars`)).getRowObjects()[0].c;
+    console.log(`  species common names available: ${Number(vn).toLocaleString()}`);
+  } else {
+    await conn.run(`CREATE TEMP TABLE species_vernaculars (col_id VARCHAR, vernacular_name VARCHAR);`);
+    console.warn(`  ${vernacularParquet} not found — unassessed species will have no common names this run.`);
+  }
+
   // Unassessed (GBIF species with no IUCN assessment) — cold, huge under CoL,
   // lean schema (no assessment-only columns).
   await conn.run(`
     COPY (
       SELECT
-        -g.gbif_species_key              AS id,
-        g.scientific_name, g.common_name,
+        -- Synthetic negative id; assessed rows use the positive sis_taxon_id.
+        -- Was the negated GBIF key, which alphanumeric CoL keys cannot provide.
+        -- Hashed rather than sequential because the dashboard persists pinned
+        -- species by abs(id), so the id has to survive a resync that adds or
+        -- removes species; masked to 2^53 so it stays exactly representable once
+        -- the query layer turns it into a JS number. The assertion below rechecks
+        -- uniqueness on every build rather than assuming it.
+        -(hash(g.gbif_species_key) % 9007199254740992)::BIGINT AS id,
+        g.scientific_name,
+        coalesce(nullif(g.common_name, ''), v.vernacular_name, '') AS common_name,
         g.taxon_group, g.class_name, g.order_name, g.family,
         'NE'                             AS iucn_category,
         g.countries,
         g.gbif_species_key,
         g.total_count                    AS gbif_occurrence_count
       FROM gbif_all g
+      LEFT JOIN species_vernaculars v ON v.col_id = g.gbif_species_key
       WHERE g.gbif_species_key NOT IN (SELECT DISTINCT gbif_species_key FROM map)
         AND g.gbif_species_key NOT IN (${domesticated})
       ORDER BY class_name, order_name, family, scientific_name
@@ -222,8 +379,42 @@ export async function run(): Promise<void> {
   console.log(`Wrote ${unassessedOut}: ${ne.n} unassessed (NE)`);
   const h = (await q(`SELECT count(*) nrows, count(DISTINCT sis_taxon_id) species FROM '${assessmentsOut}'`))[0];
   console.log(`Wrote ${assessmentsOut}: ${h.nrows} assessment events across ${h.species} species`);
-  const dup = (await q(`SELECT count(*) c FROM (SELECT gbif_species_key FROM gbif_all GROUP BY 1 HAVING count(*)>1)`))[0].c;
-  console.log(`  duplicate GBIF keys across group files: ${dup}`);
+  const shared = (await q(
+    `SELECT count(*) c FROM (SELECT gbif_species_key FROM gbif_rows GROUP BY 1 HAVING count(DISTINCT taxon_group) > 1)`
+  ))[0].c;
+  console.log(`  species fetched by more than one group (assigned to the narrower): ${shared}`);
+
+  // The unassessed id is a hash, so uniqueness is checked rather than assumed.
+  const idDup = (await q(`SELECT count(*) c FROM (SELECT id FROM '${unassessedOut}' GROUP BY 1 HAVING count(*)>1)`))[0].c;
+  if (Number(idDup) > 0) {
+    throw new Error(`build-parquet: ${idDup} colliding synthetic ids in ${unassessedOut} — two unassessed species would share a row identity.`);
+  }
+
+  // Records since assessment are a subset of the total, so one exceeding the other
+  // is arithmetically impossible for a single taxon and means counts from
+  // different taxa have been combined — 43 species were in that state after the
+  // previous attempt, from querying a taxon and its own parent.
+  //
+  // A handful of cases are expected regardless, and are not that: GBIF's
+  // speciesKey facet returns approximate counts on very large queries, so a total
+  // taken from a whole-order facet can come back slightly under a count taken
+  // from a small year-bucketed one. Uroxys rugatus reads 2 against a true 28 for
+  // exactly this reason. The threshold separates that noise from a systematic
+  // fault; the count is always reported.
+  const IMPOSSIBLE_TOLERANCE = 20;
+  const impossible = Number((await q(
+    `SELECT count(*) c FROM '${assessedOut}' WHERE gbif_observations_after_assessment_year > gbif_occurrence_count`
+  ))[0].c);
+  if (impossible > 0) {
+    console.log(`  species with since-assessment above total (facet approximation): ${impossible}`);
+  }
+  if (impossible > IMPOSSIBLE_TOLERANCE) {
+    throw new Error(
+      `build-parquet: ${impossible} species have more records since assessment than in total, ` +
+      `above the ${IMPOSSIBLE_TOLERANCE} expected from facet approximation. That many means counts ` +
+      `from different taxa are being combined.`
+    );
+  }
 }
 
 const isDirectRun = process.argv[1]?.endsWith("build-parquet.ts") || process.argv[1]?.endsWith("build-parquet.js");
