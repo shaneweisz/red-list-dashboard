@@ -105,6 +105,25 @@ async function main(): Promise<void> {
   const localPaths = walkFiles(DATA_DIR).filter(
     (p) => !EXCLUDE_FROM_SYNC.has(path.relative(DATA_DIR, p).split(path.sep).join("/"))
   );
+
+  // Anything here is pulled down at build time and bundled into every serverless
+  // function, where Vercel caps a function at 250MB uncompressed. A 92MB key
+  // cache that had no business being published is what taught us that, by failing
+  // a deploy after the build had already succeeded. Large files are legitimate
+  // (backbone.parquet is one), so this reports rather than blocks — but it
+  // reports, so a new one is noticed here instead of three steps later.
+  const LARGE_FILE_MB = 50;
+  const large = localPaths
+    .map((p) => ({ p, mb: fs.statSync(p).size / 1024 / 1024 }))
+    .filter((f) => f.mb >= LARGE_FILE_MB)
+    .sort((a, b) => b.mb - a.mb);
+  if (large.length > 0) {
+    console.log(`Large files in this sync (bundled into every serverless function, 250MB cap):`);
+    for (const f of large) {
+      console.log(`  ${f.mb.toFixed(1).padStart(7)} MB  ${path.relative(DATA_DIR, f.p)}`);
+    }
+    console.log(`  total ${large.reduce((n, f) => n + f.mb, 0).toFixed(1)} MB\n`);
+  }
   if (localPaths.length === 0) {
     throw new Error(`No files found under ${DATA_DIR}`);
   }
