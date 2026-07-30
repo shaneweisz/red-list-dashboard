@@ -63,8 +63,14 @@ const noOriginOnServer = () => "";
  * Filled in after hydration (window doesn't exist during SSR). If JavaScript
  * never runs, the field stays empty and the server falls back to the request
  * headers, which is what every Vercel-served domain used before this.
+ *
+ * `next` rides along the same way, but comes from this page's own `?next=`
+ * rather than from `window`: by the time the form is on screen the browser is
+ * on /login, so its current URL is no longer the page worth returning to. The
+ * header's sign-in link is what captured that, one navigation earlier
+ * (components/AuthStatus.tsx).
  */
-export function SignInForm() {
+export function SignInForm({ next }: { next?: string }) {
   const origin = useSyncExternalStore(NEVER_CHANGES, readOrigin, noOriginOnServer);
 
   return (
@@ -72,6 +78,7 @@ export function SignInForm() {
     // name/value is what tells the action which provider to start.
     <form action={signInWithOAuth} className="flex flex-col gap-3">
       <input type="hidden" name="origin" value={origin} />
+      <input type="hidden" name="next" value={next ?? ""} />
       {OAUTH_PROVIDERS.map(({ id, label }) => (
         <button
           key={id}

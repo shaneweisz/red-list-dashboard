@@ -3,7 +3,7 @@
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { resolveOAuthProvider } from "@/config/oauth-providers";
-import { resolvePublicOrigin } from "@/config/public-origin";
+import { authCallbackUrl, resolvePublicOrigin } from "@/config/public-origin";
 import { createClient } from "@/lib/supabase/server";
 
 export async function signInWithOAuth(formData: FormData) {
@@ -31,10 +31,15 @@ export async function signInWithOAuth(formData: FormData) {
     protocol: headersList.get("x-forwarded-proto") ?? "https",
   });
 
+  // ...and where to put the user down afterwards. The dashboard keeps its whole
+  // filter/view state in the query string, so returning everyone to "/" quietly
+  // threw that state away — sign in from a filtered view and you lost the view
+  // (reported by Anil Madhavapeddy). The form posts the page the user was on
+  // before they were sent to /login; authCallbackUrl sanitises and encodes it.
   const { data, error } = await supabase.auth.signInWithOAuth({
     provider: provider.id,
     options: {
-      redirectTo: `${origin}/auth/callback`,
+      redirectTo: authCallbackUrl(origin, formData.get("next")),
       ...(provider.scopes ? { scopes: provider.scopes } : {}),
     },
   });
