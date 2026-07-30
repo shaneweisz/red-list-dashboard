@@ -12,6 +12,7 @@ import {
   type SpeciesInput,
   type MatchFn,
   type MappingEntry,
+  shouldFollowSynonym,
 } from "../match-redlist-species-to-gbif";
 
 function speciesOf(sis: number, name: string, synonyms: string[] = []): SpeciesInput {
@@ -19,7 +20,7 @@ function speciesOf(sis: number, name: string, synonyms: string[] = []): SpeciesI
 }
 
 /** Build a matchFn from a name → result table. */
-function matchFromTable(table: Record<string, { key: number | null; matchType: string }>): MatchFn {
+function matchFromTable(table: Record<string, { key: string | null; matchType: string; lumpedInto?: string }>): MatchFn {
   return async (name: string) => table[name] ?? { key: null, matchType: "NONE" };
 }
 
@@ -36,12 +37,12 @@ describe("matchSpeciesList — basic canonical matching", () => {
   it("canonical-only match produces one linked row (regression)", async () => {
     const species = [speciesOf(1, "Aquarana catesbeianus")];
     const matchFn = matchFromTable({
-      "Aquarana catesbeianus": { key: 100, matchType: "EXACT" },
+      "Aquarana catesbeianus": { key: "100", matchType: "EXACT" },
     });
-    const entries = await matchSpeciesList(species, new Set([100]), logger, matchFn, 1);
+    const entries = await matchSpeciesList(species, new Set(["100"]), logger, matchFn, 1);
 
     expect(linked(entries)).toEqual([
-      { sis_taxon_id: 1, gbif_species_key: 100, match_type: "EXACT", name_source: "canonical" },
+      { sis_taxon_id: 1, gbif_species_key: "100", match_type: "EXACT", name_source: "canonical" },
     ]);
     expect(diagnostics(entries)).toEqual([]);
   });
@@ -49,21 +50,33 @@ describe("matchSpeciesList — basic canonical matching", () => {
   it("canonical match with no GBIF data emits NO_GBIF_DATA diagnostic", async () => {
     const species = [speciesOf(1, "Aquarana catesbeianus")];
     const matchFn = matchFromTable({
-      "Aquarana catesbeianus": { key: 999, matchType: "EXACT" },
+      "Aquarana catesbeianus": { key: "999", matchType: "EXACT" },
     });
     // 999 not in available GBIF keys
-    const entries = await matchSpeciesList(species, new Set([100]), logger, matchFn, 1);
+    const entries = await matchSpeciesList(species, new Set(["100"]), logger, matchFn, 1);
 
+    // Not linked — gbif_species_key stays null, because that field means "this
+    // species has GBIF data" and it does not.
     expect(linked(entries)).toEqual([]);
+    // But the key that resolved is kept in its own column. The facet enumeration
+    // only emits species-rank accepted usages, so a perfectly real subspecies key
+    // lands here; recording it lets those counts be fetched directly instead of
+    // the species silently showing nothing.
     expect(diagnostics(entries)).toEqual([
-      { sis_taxon_id: 1, gbif_species_key: null, match_type: "NO_GBIF_DATA", name_source: "" },
+      {
+        sis_taxon_id: 1,
+        gbif_species_key: null,
+        match_type: "NO_GBIF_DATA",
+        name_source: "",
+        unfetched_key: "999",
+      },
     ]);
   });
 
   it("species with no match anywhere emits a NONE diagnostic", async () => {
     const species = [speciesOf(1, "Imaginarius nonexistens")];
     const matchFn = matchFromTable({});
-    const entries = await matchSpeciesList(species, new Set([100]), logger, matchFn, 1);
+    const entries = await matchSpeciesList(species, new Set(["100"]), logger, matchFn, 1);
 
     expect(linked(entries)).toEqual([]);
     expect(diagnostics(entries)).toEqual([
@@ -78,14 +91,14 @@ describe("matchSpeciesList — synonyms", () => {
     // resolve to distinct GBIF keys; both should be linked.
     const species = [speciesOf(1, "Aquarana catesbeianus", ["Lithobates catesbeianus"])];
     const matchFn = matchFromTable({
-      "Aquarana catesbeianus": { key: 100, matchType: "EXACT" },
-      "Lithobates catesbeianus": { key: 200, matchType: "EXACT" },
+      "Aquarana catesbeianus": { key: "100", matchType: "EXACT" },
+      "Lithobates catesbeianus": { key: "200", matchType: "EXACT" },
     });
-    const entries = await matchSpeciesList(species, new Set([100, 200]), logger, matchFn, 1);
+    const entries = await matchSpeciesList(species, new Set(["100", "200"]), logger, matchFn, 1);
 
     expect(linked(entries)).toEqual([
-      { sis_taxon_id: 1, gbif_species_key: 100, match_type: "EXACT", name_source: "canonical" },
-      { sis_taxon_id: 1, gbif_species_key: 200, match_type: "EXACT", name_source: "synonym" },
+      { sis_taxon_id: 1, gbif_species_key: "100", match_type: "EXACT", name_source: "canonical" },
+      { sis_taxon_id: 1, gbif_species_key: "200", match_type: "EXACT", name_source: "synonym" },
     ]);
     expect(diagnostics(entries)).toEqual([]);
   });
@@ -93,13 +106,13 @@ describe("matchSpeciesList — synonyms", () => {
   it("synonym resolving to the same key as canonical does not duplicate", async () => {
     const species = [speciesOf(1, "Aquarana catesbeianus", ["Lithobates catesbeianus"])];
     const matchFn = matchFromTable({
-      "Aquarana catesbeianus": { key: 100, matchType: "EXACT" },
-      "Lithobates catesbeianus": { key: 100, matchType: "FUZZY" },
+      "Aquarana catesbeianus": { key: "100", matchType: "EXACT" },
+      "Lithobates catesbeianus": { key: "100", matchType: "FUZZY" },
     });
-    const entries = await matchSpeciesList(species, new Set([100]), logger, matchFn, 1);
+    const entries = await matchSpeciesList(species, new Set(["100"]), logger, matchFn, 1);
 
     expect(linked(entries)).toEqual([
-      { sis_taxon_id: 1, gbif_species_key: 100, match_type: "EXACT", name_source: "canonical" },
+      { sis_taxon_id: 1, gbif_species_key: "100", match_type: "EXACT", name_source: "canonical" },
     ]);
   });
 
@@ -108,16 +121,16 @@ describe("matchSpeciesList — synonyms", () => {
       speciesOf(1, "Modernus name", ["Old name one", "Old name two"]),
     ];
     const matchFn = matchFromTable({
-      "Modernus name": { key: 1, matchType: "EXACT" },
-      "Old name one": { key: 2, matchType: "EXACT" },
-      "Old name two": { key: 3, matchType: "EXACT" },
+      "Modernus name": { key: "1", matchType: "EXACT" },
+      "Old name one": { key: "2", matchType: "EXACT" },
+      "Old name two": { key: "3", matchType: "EXACT" },
     });
-    const entries = await matchSpeciesList(species, new Set([1, 2, 3]), logger, matchFn, 1);
+    const entries = await matchSpeciesList(species, new Set(["1", "2", "3"]), logger, matchFn, 1);
 
     expect(linked(entries)).toEqual([
-      { sis_taxon_id: 1, gbif_species_key: 1, match_type: "EXACT", name_source: "canonical" },
-      { sis_taxon_id: 1, gbif_species_key: 2, match_type: "EXACT", name_source: "synonym" },
-      { sis_taxon_id: 1, gbif_species_key: 3, match_type: "EXACT", name_source: "synonym" },
+      { sis_taxon_id: 1, gbif_species_key: "1", match_type: "EXACT", name_source: "canonical" },
+      { sis_taxon_id: 1, gbif_species_key: "2", match_type: "EXACT", name_source: "synonym" },
+      { sis_taxon_id: 1, gbif_species_key: "3", match_type: "EXACT", name_source: "synonym" },
     ]);
   });
 });
@@ -131,15 +144,15 @@ describe("matchSpeciesList — duplicate handling", () => {
       speciesOf(2, "Species B canonical", ["Species A canonical"]),
     ];
     const matchFn = matchFromTable({
-      "Species A canonical": { key: 500, matchType: "EXACT" },
-      "Species B canonical": { key: 600, matchType: "EXACT" },
+      "Species A canonical": { key: "500", matchType: "EXACT" },
+      "Species B canonical": { key: "600", matchType: "EXACT" },
     });
-    const entries = await matchSpeciesList(species, new Set([500, 600]), logger, matchFn, 1);
+    const entries = await matchSpeciesList(species, new Set(["500", "600"]), logger, matchFn, 1);
 
     const linkedRows = linked(entries);
     expect(linkedRows).toEqual([
-      { sis_taxon_id: 1, gbif_species_key: 500, match_type: "EXACT", name_source: "canonical" },
-      { sis_taxon_id: 2, gbif_species_key: 600, match_type: "EXACT", name_source: "canonical" },
+      { sis_taxon_id: 1, gbif_species_key: "500", match_type: "EXACT", name_source: "canonical" },
+      { sis_taxon_id: 2, gbif_species_key: "600", match_type: "EXACT", name_source: "canonical" },
     ]);
     // Species 2 still gets a linked row for its canonical, so no diagnostic for it.
     expect(diagnostics(entries)).toEqual([]);
@@ -155,22 +168,22 @@ describe("matchSpeciesList — duplicate handling", () => {
       speciesOf(2, "Shared name"),
     ];
     const matchFn = matchFromTable({
-      "A canonical": { key: 100, matchType: "EXACT" },
-      "Shared name": { key: 500, matchType: "EXACT" },
+      "A canonical": { key: "100", matchType: "EXACT" },
+      "Shared name": { key: "500", matchType: "EXACT" },
     });
-    const entries = await matchSpeciesList(species, new Set([100, 500]), logger, matchFn, 1);
+    const entries = await matchSpeciesList(species, new Set(["100", "500"]), logger, matchFn, 1);
 
     const linkedRows = linked(entries);
     // A keeps its canonical key (100); B keeps key 500 from canonical.
     // A's synonym claim on 500 is rejected because B (canonical) already has it.
     expect(linkedRows).toContainEqual(
-      { sis_taxon_id: 1, gbif_species_key: 100, match_type: "EXACT", name_source: "canonical" },
+      { sis_taxon_id: 1, gbif_species_key: "100", match_type: "EXACT", name_source: "canonical" },
     );
     expect(linkedRows).toContainEqual(
-      { sis_taxon_id: 2, gbif_species_key: 500, match_type: "EXACT", name_source: "canonical" },
+      { sis_taxon_id: 2, gbif_species_key: "500", match_type: "EXACT", name_source: "canonical" },
     );
     // A should NOT have a link to 500 (rejected as duplicate).
-    expect(linkedRows.find((r) => r.sis_taxon_id === 1 && r.gbif_species_key === 500))
+    expect(linkedRows.find((r) => r.sis_taxon_id === 1 && r.gbif_species_key === "500"))
       .toBeUndefined();
   });
 
@@ -182,14 +195,14 @@ describe("matchSpeciesList — duplicate handling", () => {
       speciesOf(2, "B canonical", ["Shared name"]),
     ];
     const matchFn = matchFromTable({
-      "A canonical": { key: 500, matchType: "EXACT" },
-      "Shared name": { key: 500, matchType: "EXACT" },
+      "A canonical": { key: "500", matchType: "EXACT" },
+      "Shared name": { key: "500", matchType: "EXACT" },
       // "B canonical" has no entry → resolves to NONE
     });
-    const entries = await matchSpeciesList(species, new Set([500]), logger, matchFn, 1);
+    const entries = await matchSpeciesList(species, new Set(["500"]), logger, matchFn, 1);
 
     expect(linked(entries)).toEqual([
-      { sis_taxon_id: 1, gbif_species_key: 500, match_type: "EXACT", name_source: "canonical" },
+      { sis_taxon_id: 1, gbif_species_key: "500", match_type: "EXACT", name_source: "canonical" },
     ]);
     expect(diagnostics(entries)).toEqual([
       { sis_taxon_id: 2, gbif_species_key: null, match_type: "DUPLICATE", name_source: "" },
@@ -204,12 +217,12 @@ describe("matchSpeciesList — defensive deduping", () => {
     // must still dedupe — only one mapping row, sourced as canonical.
     const species = [speciesOf(1, "Aquarana catesbeianus", ["Aquarana catesbeianus"])];
     const matchFn = matchFromTable({
-      "Aquarana catesbeianus": { key: 100, matchType: "EXACT" },
+      "Aquarana catesbeianus": { key: "100", matchType: "EXACT" },
     });
-    const entries = await matchSpeciesList(species, new Set([100]), logger, matchFn, 1);
+    const entries = await matchSpeciesList(species, new Set(["100"]), logger, matchFn, 1);
 
     expect(linked(entries)).toEqual([
-      { sis_taxon_id: 1, gbif_species_key: 100, match_type: "EXACT", name_source: "canonical" },
+      { sis_taxon_id: 1, gbif_species_key: "100", match_type: "EXACT", name_source: "canonical" },
     ]);
     expect(diagnostics(entries)).toEqual([]);
   });
@@ -217,7 +230,76 @@ describe("matchSpeciesList — defensive deduping", () => {
 
 describe("matchSpeciesList — empty input", () => {
   it("returns empty array for empty species list", async () => {
-    const entries = await matchSpeciesList([], new Set([100]), logger, matchFromTable({}), 1);
+    const entries = await matchSpeciesList([], new Set(["100"]), logger, matchFromTable({}), 1);
     expect(entries).toEqual([]);
   });
 });
+
+describe("classification context", () => {
+  it("passes the species' classification to the matcher", async () => {
+    // Not decoration. "Agelaius phoeniceus" asked of GBIF with no context comes
+    // back HIGHERRANK/Animalia — 21 million occurrence records, unmatched — and
+    // EXACT once kingdom and class are attached. The context was threaded into
+    // SpeciesInput and then not passed on, so every match ran contextless and the
+    // bird lost all 21M records. Nothing failed; the data was just wrong.
+    const seen: Array<Record<string, unknown> | undefined> = [];
+    const matchFn: MatchFn = async (_name, context) => {
+      seen.push(context as Record<string, unknown> | undefined);
+      return { key: "100", matchType: "EXACT" };
+    };
+    const species: SpeciesInput[] = [
+      {
+        sis_taxon_id: 1,
+        scientific_name: "Agelaius phoeniceus",
+        synonyms: [],
+        context: { kingdom: "Animalia", class_name: "aves", order_name: "passeriformes", family: "icteridae" },
+      },
+    ];
+
+    await matchSpeciesList(species, new Set(["100"]), logger, matchFn, 1);
+
+    expect(seen).toHaveLength(1);
+    expect(seen[0]).toMatchObject({ kingdom: "Animalia", class_name: "aves" });
+  });
+});
+
+describe("shouldFollowSynonym", () => {
+  // A synonym can mean two very different things, and only one should be followed.
+  // Getting it wrong is what put 3.4M records of a common butterfly under a
+  // threatened Madeiran endemic in an earlier attempt at this migration.
+  //
+  // Authorship decides it by definition: a name that keeps its original author
+  // and year is the same name reworded; a lump under a different author is
+  // somebody else's species. Every pair below is real, taken from GBIF.
+  it("follows nomenclatural changes — same organism, same authorship", () => {
+    // orthographic correction
+    expect(shouldFollowSynonym("Pica nutalli", "Pica nutallii", "(Audubon, 1837)", "(Audubon, 1837)")).toBe(true);
+    // demotion to subspecies of a relative
+    expect(shouldFollowSynonym("Fringilla polatzeki", "Fringilla teydea polatzeki", "Hartert, 1905", "Hartert, 1905")).toBe(true);
+    // genus move: convention brackets the original author afterwards, so the
+    // brackets must not count as a difference
+    expect(shouldFollowSynonym("Aquarana catesbeianus", "Lithobates catesbeianus", "Shaw, 1802", "(Shaw, 1802)")).toBe(true);
+  });
+
+  it("refuses taxonomic lumping — a different author means a different species", () => {
+    expect(shouldFollowSynonym("Pieris segonzaci", "Pieris napi", "Le Cerf, 1923", "(Linnaeus, 1758)")).toBe(false);
+    expect(shouldFollowSynonym("Sus bucculentus", "Sus scrofa", "Heude, 1892", "Linnaeus, 1758")).toBe(false);
+    expect(shouldFollowSynonym("Malus sieversii", "Malus domestica", "(Ledeb.) M.Roem.", "(Suckow) Borkh.")).toBe(false);
+  });
+
+  it("separates near-identical epithets that an edit distance could not", () => {
+    // Acacia koaia (VU, Hawaiian endemic) and Acacia koa (LC) are three
+    // characters apart. A distance threshold handed the endemic the common
+    // tree's 2,180 records; the authors settle it with nothing to tune.
+    expect(shouldFollowSynonym("Acacia koaia", "Acacia koa", "Hillebr.", "A.Gray")).toBe(false);
+  });
+
+  it("falls back to the terminal epithet when authorship is missing", () => {
+    // Nothing else to go on, so same-organism-renamed is accepted and anything
+    // further apart is refused — erring toward showing no data over wrong data.
+    expect(shouldFollowSynonym("Fringilla polatzeki", "Fringilla teydea polatzeki")).toBe(true);
+    expect(shouldFollowSynonym("Pieris segonzaci", "Pieris napi")).toBe(false);
+    expect(shouldFollowSynonym("Morimus asper", "Morimus asper funereus")).toBe(false);
+  });
+});
+
