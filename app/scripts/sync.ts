@@ -202,13 +202,29 @@ async function main() {
     // situation where a group quietly collapsing hides in the noise. Reported
     // rather than fatal — deciding whether a move is the intended one needs a
     // person — but reported unconditionally, so nobody has to think to look.
+    let regressionCheckError: Error | undefined;
     console.log("\nChecking for per-group regressions against the live sync");
     console.log("═".repeat(60));
-    // Deliberately not wrapped in a try/catch that downgrades failure to a
-    // warning. This ran that way once and spent every sync printing "skipped"
-    // because it could not reach its baseline — a check that cannot run must be
-    // loud, or it reads as a pass and the whole point is lost.
-    await checkSyncRegressions();
+    // Loud, but not fatal to the phases after it.
+    //
+    // Two failure modes pull in opposite directions. This ran once inside a
+    // try/catch that downgraded failure to a warning, and spent every sync
+    // printing "skipped" because it could not reach its baseline — a check that
+    // cannot run must not read as a pass. But letting it throw kills the run at
+    // phase 13b, after several hours of API calls, and takes phases 14-15 with
+    // it. The baseline needs `origin/main`, which a shallow CI checkout may not
+    // have fetched, so that is a real scenario rather than a hypothetical.
+    //
+    // So a failure here is recorded and re-raised once the remaining phases have
+    // run: the sync still exits non-zero and says why, having finished its work.
+    try {
+      await checkSyncRegressions();
+    } catch (err) {
+      regressionCheckError = err instanceof Error ? err : new Error(String(err));
+      console.error("\n*** REGRESSION CHECK FAILED TO RUN ***");
+      console.error(`    ${regressionCheckError.message}`);
+      console.error("    The sync continues, and will exit non-zero. This is NOT a pass.");
+    }
 
     // Phases 14-15: uploadRangeMaps needs the same IUCN Postgres access as phase 1;
     // uploadAohMaps needs local STAR pipeline output that only exists on this machine.
@@ -235,6 +251,15 @@ async function main() {
     console.log("Next steps:");
     console.log("  npm run diff-data-vs-r2     # see what changed vs the live R2 sync");
     console.log("  npm run upload-data-to-r2   # publish this sync to R2");
+
+    // Deferred from phase 13b so the phases after it still ran. The data on disk
+    // is complete and usable; what is missing is the assurance that it does not
+    // quietly differ from what production serves, and that is not something to
+    // let a zero exit code imply.
+    if (regressionCheckError) {
+      console.error("\nThe regression check never ran, so this sync is UNVERIFIED against the live data.");
+      throw regressionCheckError;
+    }
   } finally {
     // Drop the temp ColDP TSVs (XR ~3.4GB + curated checklist) so they're never swept
     // into the R2 upload.

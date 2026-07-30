@@ -6,6 +6,8 @@ import { GBIF_CHECKLIST_KEY } from "@/lib/gbif";
 export const dynamic = "force-dynamic";
 
 const GBIF_PAGE_LIMIT = 300; // GBIF API max per request
+const GBIF_MAX_RETRIES = 4;
+const GBIF_BACKOFF_MS = 300;
 
 type GbifRecord = {
   key: number;
@@ -46,14 +48,30 @@ async function fetchPaginated(
     params.set("limit", pageSize.toString());
     params.set("offset", offset.toString());
 
-    const response = await fetch(
-      `https://api.gbif.org/v1/occurrence/search?${params}`,
-      { cache: "no-store" }
-    );
-
-    if (!response.ok) {
-      throw new Error(`GBIF API error: ${response.statusText}`);
+    // Retried, because this pages in a tight loop and GBIF throttles the burst.
+    // Reproduced on every run of the browser check: the map for a species with
+    // 130,322 records 500s while the same requests issued sequentially by hand
+    // all return 200. Naming a non-default checklistKey appears to make each
+    // request more expensive for GBIF to answer, so this got easier to trigger
+    // after the Catalogue of Life migration.
+    //
+    // The status goes in the message because response.statusText is empty over
+    // HTTP/2, which is what Node's fetch negotiates — the original error read
+    // "GBIF API error: " with nothing after it, and hid the 429 for two rounds
+    // of debugging.
+    let response: Response | undefined;
+    for (let attempt = 0; attempt <= GBIF_MAX_RETRIES; attempt++) {
+      response = await fetch(`https://api.gbif.org/v1/occurrence/search?${params}`, {
+        cache: "no-store",
+      });
+      if (response.ok) break;
+      const retryable = response.status === 429 || response.status >= 500;
+      if (!retryable || attempt === GBIF_MAX_RETRIES) {
+        throw new Error(`GBIF API error: HTTP ${response.status} ${response.statusText}`.trim());
+      }
+      await new Promise((r) => setTimeout(r, 2 ** attempt * GBIF_BACKOFF_MS));
     }
+    if (!response?.ok) throw new Error("GBIF API error: exhausted retries");
 
     const data = await response.json();
     totalCount = data.count;

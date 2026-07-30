@@ -277,6 +277,16 @@ export function pruneDescendants(keys: DerivedKey[]): { kept: DerivedKey[]; prun
   return { kept, pruned };
 }
 
+/**
+ * Post-condition on pruneDescendants, not an independent search.
+ *
+ * It runs on the already-pruned list and looks for exactly what pruning removes,
+ * so in a working build it always returns empty — which is the point. It is here
+ * to fail if pruneDescendants ever stops doing its job, not to find overlaps the
+ * pruner missed. Do not read a clean run of this as evidence that overlaps were
+ * searched for and none existed; the cross-group pass below is what actually
+ * finds them, and it found two.
+ */
 export function findOverlaps(keys: DerivedKey[]): Array<{ ancestor: string; descendant: string }> {
   const overlaps: Array<{ ancestor: string; descendant: string }> = [];
   for (const a of keys) {
@@ -371,13 +381,29 @@ async function run(write: boolean): Promise<void> {
   // in. For corals this is also what the Red List data says: 25 of the 26 assessed
   // octocorals are filed under corals.
   for (const c of crossGroup) console.log(`   CROSS-GROUP  ${c} — descendant dropped`);
+  //
+  // Collected first, then applied once. Assigning inside the loop reassigned
+  // config[groupB] from the pre-loop `entries` snapshot every time, so each outer
+  // iteration discarded the previous one's filtering and only the last groupA
+  // survived — the script printed "descendant dropped" for corals/Octocorallia
+  // containing other_invertebrates' Malacalcyonacea and Scleralcyonacea, and then
+  // wrote a config that still contained both. A guard that reports a fix it did
+  // not apply is worse than no guard.
+  const drop = new Map<string, Set<string>>();
   for (const [groupA, keysA] of entries) {
     for (const [groupB, keysB] of entries) {
       if (groupA === groupB) continue;
-      config[groupB] = keysB.filter(
-        (b) => !b.taxonKey || !keysA.some((a) => a.taxonKey && b.ancestors?.includes(a.taxonKey))
-      );
+      for (const b of keysB) {
+        if (!b.taxonKey) continue;
+        if (keysA.some((a) => a.taxonKey && b.ancestors?.includes(a.taxonKey))) {
+          if (!drop.has(groupB)) drop.set(groupB, new Set());
+          drop.get(groupB)!.add(b.taxonKey);
+        }
+      }
     }
+  }
+  for (const [group, keys] of drop) {
+    config[group] = config[group].filter((k) => !k.taxonKey || !keys.has(k.taxonKey));
   }
 
   console.log(`\n${unresolved} unresolved, ${overlapping} overlapping, ${crossGroup.length} cross-group`);

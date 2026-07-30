@@ -154,6 +154,34 @@ function normaliseAuthorship(authorship: string | undefined): string {
  * The epithet comparison survives only as a fallback for records with no
  * authorship on one side, where there is nothing else to go on.
  */
+/**
+ * Scientific names the Red List assesses in their own right.
+ *
+ * Consulted when deciding whether to follow a CoL synonym resolution. Authorship
+ * alone is not sufficient: two species described by the same author in the same
+ * work keep identical authorship when CoL later folds one into the other, so the
+ * lump sails through the authorship test. Verified on the shipped data — 54
+ * assessed species ended up displaying a *different assessed species'* records,
+ * 22 of them CR/EN/VU/EX, e.g. Actinodaphne latifolia (CR) showing Actinodaphne
+ * nitida's, and Pleurobema furvum (CR) showing Pleurobema rubellum's.
+ *
+ * When both names are assessed, the Red List treats them as two species, so one
+ * key cannot serve both: the loser is rejected as DUPLICATE and ends up with no
+ * data at all, making Red List CSV row order decide which of the pair keeps the
+ * records. Refusing the follow gives each its own usage instead.
+ */
+let assessedNames: Set<string> = new Set();
+
+export function setAssessedNames(names: Iterable<string>): void {
+  assessedNames = new Set([...names].map((n) => n.trim().toLowerCase()));
+}
+
+/** Exported for tests. */
+export function isSeparatelyAssessed(candidate: string, ownName: string): boolean {
+  const c = candidate.trim().toLowerCase();
+  return c !== ownName.trim().toLowerCase() && assessedNames.has(c);
+}
+
 export function shouldFollowSynonym(
   fromName: string,
   toName: string,
@@ -241,7 +269,14 @@ export async function matchGbifSpecies(
 
   const accepted = data.acceptedUsage;
   const landedOn = accepted?.canonicalName ?? data.usage.canonicalName;
-  if (landedOn && !shouldFollowSynonym(speciesName, landedOn, data.usage.authorship, accepted?.authorship)) {
+  const wouldFollow =
+    landedOn !== undefined &&
+    shouldFollowSynonym(speciesName, landedOn, data.usage.authorship, accepted?.authorship) &&
+    // ...unless CoL is folding this species into another species the Red List
+    // assesses separately, which is a taxonomic opinion we cannot act on without
+    // one Red List entry swallowing another's records.
+    !isSeparatelyAssessed(landedOn, speciesName);
+  if (landedOn && !wouldFollow) {
     // Refusing the lump does not have to mean refusing everything. The name we
     // searched has a usage of its own, and GBIF holds the records identified
     // under that name against it — a small number, but the species' own.
@@ -260,8 +295,14 @@ export async function matchGbifSpecies(
     // Catapodium marinum's key and 19,901 records of a widespread European grass.
     // Handing that over as "its own records" is the exact defect this policy
     // exists to prevent, so an unrecognisable usage yields no key at all.
+    // Compared on the NAME, not on authorship. Passing data.usage.authorship as
+    // both sides made this `a === a` — always true whenever authorship was
+    // present, so it only ever fired when GBIF returned none. The check exists to
+    // confirm the usage GBIF returned really is this species' own name, and the
+    // name is what has to answer that.
     const ownUsage = data.usage.canonicalName
-      ? shouldFollowSynonym(speciesName, data.usage.canonicalName, data.usage.authorship, data.usage.authorship)
+      ? terminalEpithet(data.usage.canonicalName) === terminalEpithet(speciesName) &&
+        !isSeparatelyAssessed(data.usage.canonicalName, speciesName)
       : false;
     return {
       key: ownUsage ? data.usage.key ?? null : null,
@@ -411,6 +452,7 @@ export async function matchAllSpecies(
 ): Promise<MappingEntry[]> {
   const redlistSpecies = loadAllRedlistSpecies();
   const gbifKeys = loadAllGbifKeys();
+  setAssessedNames(redlistSpecies.map((s) => s.scientific_name));
 
   console.log(`  ${redlistSpecies.length} Red List species to match`);
   console.log(`  ${gbifKeys.size} GBIF species keys available`);

@@ -156,6 +156,19 @@ export async function fetchGbifCounts(taxon: Taxon): Promise<SpeciesCount[]> {
     const q = taxon.gbif[i];
     process.stdout.write(`\r  Query ${i + 1}/${taxon.gbif.length}`);
     const results = await fetchFacets(q.taxonKey);
+    // Checked per query, not only on the pooled result. A group can name up to
+    // 51 root keys, so one of them going dead after a CoL renumber takes a whole
+    // sub-clade with it while the group's total stays large and its resolution
+    // rate stays healthy — no threshold notices. That is exactly how the coral
+    // gap got through the first attempt at this migration.
+    if (results.length === 0) {
+      throw new Error(
+        `fetch-gbif-species: ${taxon.id} root key ${q.taxonKey} ` +
+        `returned no species at all. Either the key no longer exists in the ` +
+        `Catalogue of Life release GBIF indexes, or the group definition is wrong — ` +
+        `rerun derive-gbif-taxon-keys.`
+      );
+    }
     for (const r of results) {
       allResults.push({ speciesKey: r.speciesKey, count: r.count, taxonGroup: taxon.id });
     }

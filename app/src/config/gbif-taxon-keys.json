@@ -659,32 +659,6 @@
       ]
     },
     {
-      "redlistName": "MALACALCYONCAEA",
-      "rank": "order",
-      "taxonKey": "B6NHR",
-      "matchedName": "Malacalcyonacea",
-      "matchType": "VARIANT",
-      "ancestors": [
-        "CS5HF",
-        "N",
-        "CN2",
-        "C7W46"
-      ]
-    },
-    {
-      "redlistName": "SCLERALCYONACEA",
-      "rank": "order",
-      "taxonKey": "B6NHS",
-      "matchedName": "Scleralcyonacea",
-      "matchType": "EXACT",
-      "ancestors": [
-        "CS5HF",
-        "N",
-        "CN2",
-        "C7W46"
-      ]
-    },
-    {
       "redlistName": "HOLOTHUROIDEA",
       "rank": "class",
       "taxonKey": "B8V3W",

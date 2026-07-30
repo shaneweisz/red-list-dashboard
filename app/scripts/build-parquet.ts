@@ -318,8 +318,10 @@ export async function run(): Promise<void> {
   // have one stop being findable by it — which is what happened, unnoticed,
   // because nothing measured name coverage.
   //
-  // Written by a later phase, so on a first-ever sync it is simply absent and the
-  // names fill in on the next run. Reported either way; never silently skipped.
+  // Written by build-backbone, which this migration moved to phase 4, ahead of
+  // this phase at 9 — so in a normal sync it is present. The empty-table fallback
+  // is kept for partial runs of build-parquet on a machine that has never built a
+  // backbone, where an absent file should mean "no common names", not a crash.
   const vernacularParquet = path.join(DATA_DIR, "species-vernaculars.parquet");
   if (fs.existsSync(vernacularParquet)) {
     await conn.run(`CREATE TEMP TABLE species_vernaculars AS SELECT * FROM '${vernacularParquet}';`);
