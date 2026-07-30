@@ -1,5 +1,26 @@
 import { describe, expect, it } from "vitest";
-import { OAUTH_PROVIDERS, resolveOAuthProvider } from "../oauth-providers";
+import {
+  OAUTH_PROVIDERS,
+  VISIBLE_OAUTH_PROVIDERS,
+  resolveOAuthProvider,
+} from "../oauth-providers";
+
+describe("VISIBLE_OAUTH_PROVIDERS", () => {
+  it("leaves hidden providers off the sign-in page", () => {
+    expect(VISIBLE_OAUTH_PROVIDERS.map((p) => p.id)).not.toContain("azure");
+    expect(VISIBLE_OAUTH_PROVIDERS.every((p) => !p.hidden)).toBe(true);
+  });
+
+  it("still offers the providers that aren't hidden", () => {
+    expect(VISIBLE_OAUTH_PROVIDERS.map((p) => p.id)).toEqual(["google", "github"]);
+  });
+
+  it("is a subset of the full list, not a separate one", () => {
+    for (const provider of VISIBLE_OAUTH_PROVIDERS) {
+      expect(OAUTH_PROVIDERS).toContain(provider);
+    }
+  });
+});
 
 describe("resolveOAuthProvider", () => {
   it("accepts each provider the sign-in page offers", () => {
@@ -23,5 +44,12 @@ describe("resolveOAuthProvider", () => {
 
   it("asks Microsoft for the email scope, since it withholds email otherwise", () => {
     expect(resolveOAuthProvider("azure")?.scopes).toBe("email");
+  });
+
+  it("still resolves a hidden provider, so hiding a button can't break a sign-in in flight", () => {
+    // azure has no button as of 2026-07-30, but a form post already on its way
+    // — or anyone re-submitting a cached page — must still complete rather than
+    // fall through to the "unsupported provider" path.
+    expect(resolveOAuthProvider("azure")?.id).toBe("azure");
   });
 });

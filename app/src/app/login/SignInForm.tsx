@@ -1,12 +1,13 @@
 "use client";
 
 import { useSyncExternalStore } from "react";
-import { OAUTH_PROVIDERS } from "@/config/oauth-providers";
+import { VISIBLE_OAUTH_PROVIDERS } from "@/config/oauth-providers";
 import { signInWithOAuth } from "@/lib/auth/actions";
 
 // Each provider's own mark, drawn in its brand colours (GitHub's is
 // monochrome by design, so it follows the button's text colour and works in
-// both themes).
+// both themes). Keyed by provider id and kept for every provider in
+// OAUTH_PROVIDERS, including hidden ones, so unhiding is a one-flag change.
 const PROVIDER_ICONS: Record<string, React.ReactNode> = {
   github: (
     <svg className="w-5 h-5" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
@@ -79,7 +80,7 @@ export function SignInForm({ next }: { next?: string }) {
     <form action={signInWithOAuth} className="flex flex-col gap-3">
       <input type="hidden" name="origin" value={origin} />
       <input type="hidden" name="next" value={next ?? ""} />
-      {OAUTH_PROVIDERS.map(({ id, label }) => (
+      {VISIBLE_OAUTH_PROVIDERS.map(({ id, label }) => (
         <button
           key={id}
           type="submit"
@@ -87,8 +88,8 @@ export function SignInForm({ next }: { next?: string }) {
           value={id}
           className="relative w-full flex items-center justify-center px-12 py-2.5 rounded-lg border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-zinc-700 dark:text-zinc-200 font-medium hover:bg-zinc-50 dark:hover:bg-zinc-700 transition-colors"
         >
-          {/* Absolute so the three icons line up with each other, while the
-              labels stay centred as they were with the single button. */}
+          {/* Absolute so the icons line up with each other, while the labels
+              stay centred as they were with the single button. */}
           <span className="absolute left-4 flex items-center">{PROVIDER_ICONS[id]}</span>
           Sign in with {label}
         </button>
