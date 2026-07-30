@@ -3,18 +3,20 @@
  *
  * Runs all CSV pipeline phases in sequence:
  *   Phase 1: fetch-redlist-species  (IUCN DB → per-taxon CSVs)
- *   Phase 2: fetch-gbif-species     (GBIF API → per-taxon CSVs)
- *   Phase 3: match-redlist-species-to-gbif (GBIF Match API → data/mapping.csv)
- *   Phase 4: fetch-gbif-country-data (GBIF API → country occurrences per species)
- *   Phase 5: fetch-gbif-new-counts  (GBIF API → updates GBIF CSVs)
- *   Phase 6: build-parquet          (CSVs → assessed/unassessed parquets + search)
- *   Phase 7: fetch-col-xr           (CoL XR ColDP archive → NameUsage.tsv, full sync only)
- *   Phase 8: fetch-col-checklist    (curated CoL Checklist ColDP → demotion overlay, full sync only)
- *   Phase 9: build-backbone         (NameUsage.tsv → backbone.parquet + species/)
+ *   Phase 2: fetch-col-xr           (CoL XR ColDP archive → NameUsage.tsv, full sync only)
+ *   Phase 3: fetch-col-checklist    (curated CoL Checklist ColDP → demotion overlay, full sync only)
+ *   Phase 4: build-backbone         (NameUsage.tsv → backbone.parquet + species/ + vernaculars)
+ *   Phase 5: fetch-gbif-species     (GBIF facets + backbone → per-taxon CSVs)
+ *   Phase 6: match-redlist-species-to-gbif (GBIF Match API → data/mapping.csv)
+ *   Phase 7: fetch-gbif-country-data (GBIF API → country occurrences per species)
+ *   Phase 8: fetch-gbif-new-counts  (GBIF API → updates GBIF CSVs)
+ *   Phase 8b: fetch-lumped-own-counts (GBIF API → counts for keys facets cannot emit)
+ *   Phase 9: build-parquet          (CSVs → assessed/unassessed parquets + search)
  *   Phase 10: build-matching        (→ species_link.parquet, IUCN/GBIF → col_id)
  *   Phase 11: build-synonym-index   (→ synonym-index.parquet, search)
  *   Phase 12: build-col-taxon-ids   (taxonomy tree + backbone.parquet → src/config/col-taxon-ids.json, committed to git)
  *   Phase 13: build-taxa-summary    (CSVs + CoL artifacts → taxa-summary.json, incl. col counts)
+ *   Phase 13b: check-sync-regressions (diff per-group numbers against the live sync)
  *   Phase 14: upload-range-maps     (IUCN DB → R2, skips existing; skipped by --skip-redlist)
  *   Phase 15: upload-aoh-maps       (STAR GeoTIFFs → R2, skips existing; skipped by --skip-redlist)
  *
@@ -41,15 +43,17 @@
 
 import * as fs from "fs";
 import * as path from "path";
-import { loadEnvFiles, SyncLogger } from "./utils";
+import { loadEnvFiles, SyncLogger, DATA_DIR } from "./utils";
 import { run as fetchRedlistSpecies } from "./fetch-redlist-species";
 import { run as fetchGbifSpecies } from "./fetch-gbif-species";
 import { run as matchRedlistSpeciesToGbif } from "./match-redlist-species-to-gbif";
 import { run as fetchGbifNewCounts } from "./fetch-gbif-new-counts";
+import { run as fetchLumpedOwnCounts } from "./fetch-lumped-own-counts";
 import { run as fetchGbifCountryData } from "./fetch-gbif-country-data";
 import { run as buildTaxaSummary } from "./build-taxa-summary";
+import { run as checkSyncRegressions } from "./check-sync-regressions";
 import { run as buildSpeciesParquet } from "./build-parquet";
-import { run as fetchColXr } from "./fetch-col-xr";
+import { run as fetchColXr, resolveXrDataset, currentReleaseOnDisk } from "./fetch-col-xr";
 import { run as fetchColChecklist } from "./fetch-col-checklist";
 import { run as buildBackbone } from "./build-backbone";
 import { run as buildMatching } from "./build-matching";
@@ -91,48 +95,85 @@ async function main() {
       await fetchRedlistSpecies({ taxa: taxaFilter, logger });
     }
 
-    // Phase 2: GBIF species
-    console.log("\nPhase 2: fetch-gbif-species");
+    // The Catalogue of Life backbone comes first: the GBIF phases resolve species
+    // keys against it, because GBIF's occurrence index is keyed by CoL ids. It is
+    // taxon-independent, so a partial-taxa sync reuses whatever is already built.
+    if (!taxaFilter) {
+      // The CoL work is keyed to the release GBIF's occurrence index runs, and
+      // GBIF moves about once a month while this job runs weekly. When the
+      // release has not moved, re-downloading 3.4GB to rebuild an identical
+      // backbone is most of the sync's wall-clock for no change — so the archive
+      // is only refetched when GBIF's release id differs from the one on disk.
+      //
+      // The same comparison is the re-resolution trigger: a changed id means CoL
+      // has renumbered some usages, so the keys stored against the old release
+      // can no longer be trusted and the GBIF phases must run again. There is no
+      // notification for this; the id is the only signal.
+      const wantRelease = (await resolveXrDataset()).key;
+      const haveRelease = currentReleaseOnDisk();
+      const releaseMoved = wantRelease !== haveRelease;
+
+      if (!releaseMoved && fs.existsSync(path.join(DATA_DIR, "backbone.parquet"))) {
+        console.log(`\nPhases 2-4 (CoL backbone): skipped — GBIF still indexes release ${wantRelease}, already built.`);
+      } else {
+        if (haveRelease) {
+          console.log(`\nGBIF's indexed CoL release moved: ${haveRelease} → ${wantRelease}.`);
+          console.log("Species keys are renumbered between releases, so the backbone is rebuilt.");
+        }
+        console.log("\nPhase 2: fetch-col-xr (CoL XR ColDP → NameUsage.tsv + Reference.tsv + VernacularName.tsv)");
+        console.log("═".repeat(60));
+        const coldp = await fetchColXr();
+        coldpDir = coldp.dir;
+
+        console.log("\nPhase 3: fetch-col-checklist (curated CoL Checklist → demotion overlay)");
+        console.log("═".repeat(60));
+        checklistTsv = await fetchColChecklist();
+
+        console.log("\nPhase 4: build-backbone (→ backbone.parquet + species/ + vernacular-names.json)");
+        console.log("═".repeat(60));
+        await buildBackbone({ tsv: coldp.nameUsage, referenceTsv: coldp.reference, vernacularTsv: coldp.vernacularNames, demotionsTsv: checklistTsv });
+      }
+
+    } else {
+      console.log("\nCoL backbone: skipped on a partial-taxa sync — reusing the existing build.");
+    }
+
+    // Phase 5: GBIF species — resolved against the backbone built above.
+    console.log("\nPhase 5: fetch-gbif-species");
     console.log("═".repeat(60));
     await fetchGbifSpecies({ taxa: taxaFilter, logger });
 
-    // Phase 3: Match
-    console.log("\nPhase 3: match-redlist-species-to-gbif");
+    // Phase 6: Match
+    console.log("\nPhase 6: match-redlist-species-to-gbif");
     console.log("═".repeat(60));
     await matchRedlistSpeciesToGbif({ logger });
 
-    // Phase 4: GBIF country data
-    console.log("\nPhase 4: fetch-gbif-country-data");
+    // Phase 7: GBIF country data
+    console.log("\nPhase 7: fetch-gbif-country-data");
     console.log("═".repeat(60));
     await fetchGbifCountryData({ taxa: taxaFilter, logger });
 
-    // Phase 5: New GBIF counts
-    console.log("\nPhase 5: fetch-gbif-new-counts");
+    // Phase 8: New GBIF counts
+    console.log("\nPhase 8: fetch-gbif-new-counts");
     console.log("═".repeat(60));
     await fetchGbifNewCounts({ taxa: taxaFilter, logger });
 
-    // Phase 6: Build DuckDB read-layer parquets (#261) — also powers search.
-    console.log("\nPhase 6: build-parquet");
+    // Phase 8b: species CoL treats as synonyms of another species are not shown
+    // that species' counts, but they do have records of their own, and those keys
+    // never appear in the facet enumeration. Counted directly here.
+    console.log("\nPhase 8b: fetch-lumped-own-counts");
+    console.log("═".repeat(60));
+    await fetchLumpedOwnCounts({ taxa: taxaFilter, logger });
+
+    // Phase 9: Build DuckDB read-layer parquets (#261) — also powers search.
+    console.log("\nPhase 9: build-parquet");
     console.log("═".repeat(60));
     await buildSpeciesParquet();
 
-    // Phases 7-12: Catalogue of Life backbone (#271). The backbone is the whole tree
-    // (taxon-independent) and matching needs the complete assessed/unassessed parquets,
-    // so only run on a FULL sync; a partial-taxa sync leaves the existing CoL artifacts.
+    // Phases 10-12: the CoL joins (#271). Matching needs the complete
+    // assessed/unassessed parquets, so these run only on a FULL sync; a
+    // partial-taxa sync leaves the existing artifacts in place.
     if (!taxaFilter) {
-      console.log("\nPhase 7: fetch-col-xr (CoL XR ColDP → NameUsage.tsv + Reference.tsv + VernacularName.tsv)");
-      console.log("═".repeat(60));
-      const coldp = await fetchColXr();
-      coldpDir = coldp.dir;
-
-      console.log("\nPhase 8: fetch-col-checklist (curated CoL Checklist → demotion overlay)");
-      console.log("═".repeat(60));
-      checklistTsv = await fetchColChecklist();
-
-      console.log("\nPhase 9: build-backbone (→ backbone.parquet + species/ + vernacular-names.json)");
-      console.log("═".repeat(60));
-      await buildBackbone({ tsv: coldp.nameUsage, referenceTsv: coldp.reference, vernacularTsv: coldp.vernacularNames, demotionsTsv: checklistTsv });
-
       console.log("\nPhase 10: build-matching (→ species_link.parquet)");
       console.log("═".repeat(60));
       await buildMatching();
@@ -148,7 +189,7 @@ async function main() {
       console.log("═".repeat(60));
       await buildColTaxonIds();
     } else {
-      console.log("\nPhases 7-12 (CoL backbone): skipped on a partial-taxa sync — run a full sync to refresh.");
+      console.log("\nPhases 10-12 (CoL joins): skipped on a partial-taxa sync — run a full sync to refresh.");
     }
 
     // Phase 13: Build taxa summary LAST — it reads the CoL artifacts (species/ +
@@ -156,6 +197,18 @@ async function main() {
     console.log("\nPhase 13: build-taxa-summary");
     console.log("═".repeat(60));
     await buildTaxaSummary();
+
+    // A taxonomy migration moves numbers everywhere, which makes it exactly the
+    // situation where a group quietly collapsing hides in the noise. Reported
+    // rather than fatal — deciding whether a move is the intended one needs a
+    // person — but reported unconditionally, so nobody has to think to look.
+    console.log("\nChecking for per-group regressions against the live sync");
+    console.log("═".repeat(60));
+    // Deliberately not wrapped in a try/catch that downgrades failure to a
+    // warning. This ran that way once and spent every sync printing "skipped"
+    // because it could not reach its baseline — a check that cannot run must be
+    // loud, or it reads as a pass and the whole point is lost.
+    await checkSyncRegressions();
 
     // Phases 14-15: uploadRangeMaps needs the same IUCN Postgres access as phase 1;
     // uploadAohMaps needs local STAR pipeline output that only exists on this machine.
