@@ -50,11 +50,47 @@ export interface XrDatasetInfo {
   issued: string | null;
 }
 
-// Looked up by key (COL_XR_DATASET override) or by the newest xrelease dataset — either
-// way we still hit the API so the citation metadata (alias/doi/issued) below is always
-// accurate, not just the key.
+/**
+ * The Catalogue of Life release GBIF's occurrence index is built on.
+ *
+ * NOT the newest release, which is what this used to fetch. GBIF promotes each
+ * CoL release to production roughly three weeks after CoL publishes it, so the
+ * newest release is normally one ahead of the one GBIF is actually serving. Since
+ * CoL renumbers usage ids for names whose authorship changes — around 2% per
+ * release — being one ahead means a slice of GBIF's occurrence keys resolve to
+ * nothing locally. Measured on this data: 504 assessed and 9,092 unassessed keys
+ * unresolvable against the newest release, and zero against the indexed one.
+ *
+ * GBIF publishes which release it runs, though not where you would first look:
+ * the dataset record's top-level `doi` tracks the newest crawl and is misleading,
+ * while `/v2/species/match/metadata` reports the live index directly.
+ */
+async function resolveIndexedRelease(): Promise<string | null> {
+  try {
+    const res = await fetch("https://api.gbif.org/v2/species/match/metadata?checklistKey=xcol");
+    if (!res.ok) return null;
+    const body = (await res.json()) as { mainIndex?: { clbDatasetKey?: string; datasetAlias?: string } };
+    const key = body.mainIndex?.clbDatasetKey;
+    if (key) {
+      console.log(`fetch-col-xr: GBIF's occurrence index runs ${body.mainIndex?.datasetAlias ?? "?"} (${key})`);
+    }
+    return key ?? null;
+  } catch {
+    return null;
+  }
+}
+
+// Resolved in priority order: an explicit COL_XR_DATASET override, then the
+// release GBIF indexes, then — only if GBIF cannot be asked — the newest release,
+// which is a guess rather than an answer and says so.
 export async function resolveXrDataset(): Promise<XrDatasetInfo> {
-  const overrideKey = process.env.COL_XR_DATASET;
+  const overrideKey = process.env.COL_XR_DATASET ?? (await resolveIndexedRelease());
+  if (!process.env.COL_XR_DATASET && !overrideKey) {
+    console.warn(
+      "fetch-col-xr: could not determine which release GBIF indexes; falling back to the newest, " +
+      "which will leave some GBIF keys unresolvable locally."
+    );
+  }
   const res = overrideKey
     ? await fetch(`https://api.checklistbank.org/dataset/${overrideKey}`)
     : await fetch("https://api.checklistbank.org/dataset?origin=xrelease&limit=1&sortBy=created");
@@ -63,6 +99,24 @@ export async function resolveXrDataset(): Promise<XrDatasetInfo> {
   const ds = overrideKey ? body : body.result?.[0];
   if (!ds) throw new Error("resolveXrDataset: no xrelease datasets returned");
   return { key: String(ds.key), alias: ds.alias, doi: ds.doi ?? null, issued: ds.issued ?? null };
+}
+
+/**
+ * Whether the CoL archive on disk already matches the release we want.
+ *
+ * GBIF moves about once a month; this job runs weekly. Re-downloading a 3.4GB
+ * archive to rebuild an identical backbone is most of the sync's wall-clock time
+ * for no change at all, so a matching release id is grounds for skipping it —
+ * and a changed one is exactly the signal that keys must be re-resolved.
+ */
+export function currentReleaseOnDisk(): string | null {
+  try {
+    const p = path.join(__dirname, "../src/config/col-release.json");
+    if (!fs.existsSync(p)) return null;
+    return JSON.parse(fs.readFileSync(p, "utf-8")).key ?? null;
+  } catch {
+    return null;
+  }
 }
 
 // Citation metadata for the exact XR release the "described species" universe is built
