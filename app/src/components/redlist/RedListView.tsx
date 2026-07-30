@@ -3621,7 +3621,21 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
   return (
     <div className="space-y-1 min-w-0 flex-1 flex flex-col min-h-0">
       {/* Always show Taxa Summary table */}
-      <div ref={taxaSummaryScrollRef}>
+      {/* Country View's landing map is sized by a flex chain that runs from
+          page.tsx's min-h-screen box, through <main>, through this component's
+          root, down to TaxaSummary's own `flex-1 min-h-0` map wrapper — each
+          link has to be a flex container that passes the slack down. This
+          scroll-target wrapper is a plain block box, so it collapsed to the
+          map's intrinsic height and the landing map rendered at roughly half
+          height with dead space below it. Re-join the chain here, but only for
+          the landing state: once a country's picked the map lives in a 2-col
+          grid whose height comes from the table beside it, and in every
+          non-country layout this wrapper holds the full taxa table, which
+          should keep sizing to its own content. */}
+      <div
+        ref={taxaSummaryScrollRef}
+        className={layoutMode === "country" && !countryScope ? "flex-1 min-h-0 flex flex-col" : undefined}
+      >
       <TaxaSummary
         onToggleTaxon={handleToggleTaxon}
         selectedTaxa={selectedTaxa}
