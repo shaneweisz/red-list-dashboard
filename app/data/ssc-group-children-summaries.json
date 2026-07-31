@@ -160,7 +160,7 @@
       "estimatedDescribed": 0,
       "totalAssessed": 80,
       "outdated": 78,
-      "gbifNeSpeciesCount": 2,
+      "gbifNeSpeciesCount": 3,
       "byCategory": {
         "EN": 8,
         "LC": 50,
@@ -1108,7 +1108,7 @@
       "estimatedDescribed": 0,
       "totalAssessed": 1336,
       "outdated": 514,
-      "gbifNeSpeciesCount": 96,
+      "gbifNeSpeciesCount": 98,
       "byCategory": {
         "VU": 109,
         "EN": 89,
@@ -2136,7 +2136,7 @@
       "estimatedDescribed": 0,
       "totalAssessed": 39,
       "outdated": 17,
-      "gbifNeSpeciesCount": 11,
+      "gbifNeSpeciesCount": 12,
       "byCategory": {
         "VU": 14,
         "LC": 15,
@@ -3209,7 +3209,7 @@
       "estimatedDescribed": 0,
       "totalAssessed": 159,
       "outdated": 159,
-      "gbifNeSpeciesCount": 12,
+      "gbifNeSpeciesCount": 13,
       "byCategory": {
         "EN": 10,
         "LC": 109,
@@ -3430,7 +3430,7 @@
       "estimatedDescribed": 0,
       "totalAssessed": 2933,
       "outdated": 1110,
-      "gbifNeSpeciesCount": 137,
+      "gbifNeSpeciesCount": 141,
       "byCategory": {
         "CR": 74,
         "LC": 1859,
@@ -5964,7 +5964,7 @@
       "estimatedDescribed": 0,
       "totalAssessed": 121,
       "outdated": 95,
-      "gbifNeSpeciesCount": 14,
+      "gbifNeSpeciesCount": 15,
       "byCategory": {
         "VU": 5,
         "DD": 50,
@@ -6915,7 +6915,7 @@
       "estimatedDescribed": 0,
       "totalAssessed": 5393,
       "outdated": 3637,
-      "gbifNeSpeciesCount": 759,
+      "gbifNeSpeciesCount": 769,
       "byCategory": {
         "EN": 323,
         "NT": 227,
@@ -8153,7 +8153,7 @@
       "estimatedDescribed": 0,
       "totalAssessed": 1266,
       "outdated": 79,
-      "gbifNeSpeciesCount": 49,
+      "gbifNeSpeciesCount": 50,
       "byCategory": {
         "LC": 559,
         "VU": 196,
@@ -8884,7 +8884,7 @@
       "estimatedDescribed": 0,
       "totalAssessed": 521,
       "outdated": 336,
-      "gbifNeSpeciesCount": 23,
+      "gbifNeSpeciesCount": 24,
       "byCategory": {
         "LC": 418,
         "EN": 6,
@@ -9034,7 +9034,7 @@
       "estimatedDescribed": 0,
       "totalAssessed": 308,
       "outdated": 192,
-      "gbifNeSpeciesCount": 16,
+      "gbifNeSpeciesCount": 17,
       "byCategory": {
         "DD": 78,
         "EN": 10,
@@ -9612,7 +9612,7 @@
       "estimatedDescribed": 0,
       "totalAssessed": 25717,
       "outdated": 9850,
-      "gbifNeSpeciesCount": 3707,
+      "gbifNeSpeciesCount": 3716,
       "byCategory": {
         "CR": 748,
         "EX": 75,
@@ -13168,7 +13168,7 @@
       "estimatedDescribed": 0,
       "totalAssessed": 9957,
       "outdated": 5189,
-      "gbifNeSpeciesCount": 26672,
+      "gbifNeSpeciesCount": 26693,
       "byCategory": {
         "CR": 782,
         "EN": 771,
@@ -13344,7 +13344,7 @@
       "estimatedDescribed": 0,
       "totalAssessed": 1524,
       "outdated": 625,
-      "gbifNeSpeciesCount": 11966,
+      "gbifNeSpeciesCount": 11974,
       "byCategory": {
         "EN": 90,
         "CR": 25,
@@ -15510,7 +15510,7 @@
       "estimatedDescribed": 0,
       "totalAssessed": 1643,
       "outdated": 1007,
-      "gbifNeSpeciesCount": 10106,
+      "gbifNeSpeciesCount": 10107,
       "byCategory": {
         "VU": 220,
         "EN": 197,
@@ -15960,7 +15960,7 @@
       "estimatedDescribed": 0,
       "totalAssessed": 682,
       "outdated": 80,
-      "gbifNeSpeciesCount": 6852,
+      "gbifNeSpeciesCount": 6853,
       "byCategory": {
         "VU": 50,
         "CR": 14,
@@ -16921,7 +16921,7 @@
       "estimatedDescribed": 0,
       "totalAssessed": 6229,
       "outdated": 3071,
-      "gbifNeSpeciesCount": 194,
+      "gbifNeSpeciesCount": 195,
       "byCategory": {
         "EN": 313,
         "DD": 1829,
@@ -17244,7 +17244,7 @@
       "estimatedDescribed": 0,
       "totalAssessed": 2650,
       "outdated": 2558,
-      "gbifNeSpeciesCount": 346,
+      "gbifNeSpeciesCount": 348,
       "byCategory": {
         "CR": 117,
         "DD": 1042,
@@ -21187,7 +21187,7 @@
       "estimatedDescribed": 0,
       "totalAssessed": 303,
       "outdated": 0,
-      "gbifNeSpeciesCount": 2077,
+      "gbifNeSpeciesCount": 2080,
       "byCategory": {
         "LC": 79,
         "NT": 28,
@@ -23807,7 +23807,7 @@
       "estimatedDescribed": 0,
       "totalAssessed": 377,
       "outdated": 356,
-      "gbifNeSpeciesCount": 615,
+      "gbifNeSpeciesCount": 617,
       "byCategory": {
         "DD": 241,
         "VU": 10,
@@ -24590,7 +24590,7 @@
       "estimatedDescribed": 0,
       "totalAssessed": 3946,
       "outdated": 1307,
-      "gbifNeSpeciesCount": 255670,
+      "gbifNeSpeciesCount": 254271,
       "byCategory": {
         "VU": 449,
         "EN": 447,
@@ -33182,7 +33182,7 @@
       "estimatedDescribed": 0,
       "totalAssessed": 71284,
       "outdated": 15942,
-      "gbifNeSpeciesCount": 141637,
+      "gbifNeSpeciesCount": 141640,
       "byCategory": {
         "LR/cd": 95,
         "VU": 9845,
