@@ -26,7 +26,7 @@ import {
   readCsv,
   REDLIST_DIR,
 } from "./utils";
-import { getTaxa, TAXA, type RedlistQuery, type Taxon } from "./taxa";
+import { getTaxa, allTaxaUnchecked, type RedlistQuery, type Taxon } from "./taxa";
 
 const POPULATION_TRENDS: Record<string, string> = {
   "0": "Increasing",
@@ -452,7 +452,7 @@ async function checkTaxonCoverage(pgClient: Client): Promise<void> {
   const unmatched: string[] = [];
   const doubleMatched: string[] = [];
   for (const row of result.rows) {
-    const hits = TAXA.filter((taxon) =>
+    const hits = allTaxaUnchecked().filter((taxon) =>
       taxon.redlist.some((q) => {
         const value: string | null = row[FILTER_COLUMN_TO_TAXON_FIELD[q.filterColumn]];
         return value != null && q.filterValues.includes(value.toUpperCase());

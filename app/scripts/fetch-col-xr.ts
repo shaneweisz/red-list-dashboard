@@ -6,13 +6,18 @@
  * Downloads to a TEMP dir (outside data/) so the ~2.8GB TSVs are never swept into the
  * R2 upload; build-backbone reads them, then the sync removes the temp dir. Each XR
  * release gets its own numeric ChecklistBank dataset key (COL25.11 XR = 313100,
- * COL26.6 XR = 315557, …) — there's no rolling "latest" alias for XR the way "3LR"
- * rolls for the regular release, so resolveLatestXrDataset() below queries
- * ChecklistBank for the newest `origin=xrelease` dataset instead of hardcoding one.
- * A hardcoded key silently goes stale forever once written (caught #276: a sync
- * kept re-fetching a 7-month-old XR snapshot, showing real discrepancies vs the
- * live site for species added/reclassified since). Override via env COL_XR_DATASET
- * if a specific release is ever needed. Shells out to curl + unzip (streams a
+ * COL26.6 XR = 315557, …) and there's no rolling "latest" alias for XR the way
+ * "3LR" rolls for the regular release.
+ *
+ * This deliberately does not want the latest. GBIF promotes each release to its
+ * occurrence index 17-26 days after CoL publishes it, and the occurrence keys we
+ * store are that release's ids, so resolveXrDataset() below pins to the release
+ * GBIF reports it is running: COL_XR_DATASET override, then GBIF's index, then
+ * whatever is already pinned on disk, and only as a last resort the newest —
+ * which is a guess, and the specific guess known to be one release too far ahead.
+ * (A hardcoded key is the opposite failure and also real: #276 had a sync
+ * re-fetching a 7-month-old snapshot. The pin is re-checked every run, so it
+ * tracks GBIF rather than standing still.) Shells out to curl + unzip (streams a
  * 1.4GB zip to disk — too big for an in-memory fetch).
  *
  * Reference.tsv (the cited-publication table) carries each reference's `col:issued`
@@ -50,11 +55,64 @@ export interface XrDatasetInfo {
   issued: string | null;
 }
 
-// Looked up by key (COL_XR_DATASET override) or by the newest xrelease dataset — either
-// way we still hit the API so the citation metadata (alias/doi/issued) below is always
-// accurate, not just the key.
+/**
+ * The Catalogue of Life release GBIF's occurrence index is built on.
+ *
+ * NOT the newest release, which is what this used to fetch. GBIF promotes each
+ * CoL release to production roughly three weeks after CoL publishes it, so the
+ * newest release is normally one ahead of the one GBIF is actually serving. Since
+ * CoL renumbers usage ids for names whose authorship changes — around 2% per
+ * release — being one ahead means a slice of GBIF's occurrence keys resolve to
+ * nothing locally. Measured on this data: 504 assessed and 9,092 unassessed keys
+ * unresolvable against the newest release, and zero against the indexed one.
+ *
+ * GBIF publishes which release it runs, though not where you would first look:
+ * the dataset record's top-level `doi` tracks the newest crawl and is misleading,
+ * while `/v2/species/match/metadata` reports the live index directly.
+ */
+async function resolveIndexedRelease(): Promise<string | null> {
+  // Retried, because one unanswered request is expensive in two separate ways.
+  // Giving up makes the caller fall back, and the old fallback was the NEWEST
+  // release — which differs from the pin, so the sync concludes the release moved
+  // and spends 3.4GB rebuilding an identical backbone, and which is the one
+  // release known to be wrong, being ahead of GBIF's index. A blip should not
+  // silently reintroduce the exact problem the pin exists to solve.
+  for (let attempt = 0; attempt < 3; attempt++) {
+    try {
+      const res = await fetch("https://api.gbif.org/v2/species/match/metadata?checklistKey=xcol");
+      if (res.ok) {
+        const body = (await res.json()) as { mainIndex?: { clbDatasetKey?: string; datasetAlias?: string } };
+        const key = body.mainIndex?.clbDatasetKey;
+        if (key) {
+          console.log(`fetch-col-xr: GBIF's occurrence index runs ${body.mainIndex?.datasetAlias ?? "?"} (${key})`);
+          return key;
+        }
+      }
+    } catch {
+      // retry
+    }
+    if (attempt < 2) await new Promise((r) => setTimeout(r, 2 ** attempt * 2000));
+  }
+  return null;
+}
+
+// Resolved in priority order: an explicit COL_XR_DATASET override, then the
+// release GBIF indexes, then — only if GBIF cannot be asked — the newest release,
+// which is a guess rather than an answer and says so.
 export async function resolveXrDataset(): Promise<XrDatasetInfo> {
-  const overrideKey = process.env.COL_XR_DATASET;
+  const indexed = process.env.COL_XR_DATASET ?? (await resolveIndexedRelease());
+  // Standing on the pinned release beats guessing the newest: an unanswered
+  // question is not evidence that GBIF moved, and treating it as such both
+  // triggers a needless 3.4GB rebuild and builds from the wrong release.
+  const overrideKey = indexed ?? currentReleaseOnDisk() ?? undefined;
+  if (!process.env.COL_XR_DATASET && !indexed) {
+    console.warn(
+      overrideKey
+        ? `fetch-col-xr: could not reach GBIF to confirm its indexed release; keeping the pinned ${overrideKey}.`
+        : "fetch-col-xr: could not determine which release GBIF indexes and nothing is pinned; " +
+          "falling back to the newest, which will leave some GBIF keys unresolvable locally."
+    );
+  }
   const res = overrideKey
     ? await fetch(`https://api.checklistbank.org/dataset/${overrideKey}`)
     : await fetch("https://api.checklistbank.org/dataset?origin=xrelease&limit=1&sortBy=created");
@@ -63,6 +121,24 @@ export async function resolveXrDataset(): Promise<XrDatasetInfo> {
   const ds = overrideKey ? body : body.result?.[0];
   if (!ds) throw new Error("resolveXrDataset: no xrelease datasets returned");
   return { key: String(ds.key), alias: ds.alias, doi: ds.doi ?? null, issued: ds.issued ?? null };
+}
+
+/**
+ * Whether the CoL archive on disk already matches the release we want.
+ *
+ * GBIF moves about once a month; this job runs weekly. Re-downloading a 3.4GB
+ * archive to rebuild an identical backbone is most of the sync's wall-clock time
+ * for no change at all, so a matching release id is grounds for skipping it —
+ * and a changed one is exactly the signal that keys must be re-resolved.
+ */
+export function currentReleaseOnDisk(): string | null {
+  try {
+    const p = path.join(__dirname, "../src/config/col-release.json");
+    if (!fs.existsSync(p)) return null;
+    return JSON.parse(fs.readFileSync(p, "utf-8")).key ?? null;
+  } catch {
+    return null;
+  }
 }
 
 // Citation metadata for the exact XR release the "described species" universe is built
@@ -78,14 +154,22 @@ export function writeReleaseMetadata(xr: XrDatasetInfo): void {
 export async function run(opts: { destDir?: string } = {}): Promise<ColXrPaths> {
   const xr = await resolveXrDataset();
   const XR_DATASET = xr.key;
-  writeReleaseMetadata(xr);
+  // The pin is NOT written here. It is the id the sync compares to decide whether
+  // to rebuild, so writing it before the 1.4GB download meant any failure after
+  // this point left it naming the new release while backbone.parquet was still
+  // the old one — and the next run then saw "release unchanged, backbone present"
+  // and skipped the rebuild permanently. sync.ts writes it once the backbone is
+  // actually built from this release.
   const destDir = opts.destDir || fs.mkdtempSync(path.join(os.tmpdir(), "coldp-xr-"));
   fs.mkdirSync(destDir, { recursive: true });
   const zip = path.join(destDir, "coldp_xr.zip");
   const url = `https://api.checklistbank.org/dataset/${XR_DATASET}/export.zip?format=ColDP&extended=true`;
 
   console.log(`fetch-col-xr: downloading XR (${XR_DATASET}) ColDP export…`);
-  execFileSync("curl", ["-fsSL", url, "-o", zip], { stdio: ["ignore", "inherit", "inherit"] });
+  // Retried and resumable — the largest single network operation in the pipeline,
+  // and one blip otherwise discards a multi-hour run.
+  execFileSync("curl", ["-fsSL", "--retry", "5", "--retry-all-errors", "--retry-delay", "10",
+    "-C", "-", url, "-o", zip], { stdio: ["ignore", "inherit", "inherit"] });
   console.log("fetch-col-xr: extracting NameUsage.tsv + Reference.tsv + VernacularName.tsv…");
   execFileSync("unzip", ["-o", zip, "NameUsage.tsv", "Reference.tsv", "VernacularName.tsv", "-d", destDir], { stdio: ["ignore", "inherit", "inherit"] });
   fs.rmSync(zip, { force: true });

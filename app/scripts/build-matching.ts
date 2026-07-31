@@ -27,7 +27,7 @@
  */
 import * as path from "path";
 import { DuckDBInstance } from "@duckdb/node-api";
-import { loadEnvFiles, DATA_DIR } from "./utils";
+import { loadEnvFiles, DATA_DIR, CSV_QUOTING } from "./utils";
 
 export async function run(opts: { dataDir?: string } = {}): Promise<void> {
   const dir = opts.dataDir || DATA_DIR;
@@ -78,7 +78,7 @@ export async function run(opts: { dataDir?: string } = {}): Promise<void> {
                lower(trim(split_part(p, ':', 1))) AS nm
         FROM (
           SELECT sis_taxon_id, unnest(string_split(synonyms, ';')) AS p
-          FROM read_csv('${redlistGlob}', header=true, all_varchar=true, union_by_name=true)
+          FROM read_csv('${redlistGlob}', header=true, all_varchar=true, union_by_name=true, ${CSV_QUOTING})
           WHERE synonyms IS NOT NULL AND synonyms <> ''
         )
       ) WHERE nm <> '';

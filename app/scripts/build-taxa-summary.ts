@@ -20,10 +20,11 @@ import * as fs from "fs";
 import * as path from "path";
 import { DuckDBInstance, type DuckDBConnection } from "@duckdb/node-api";
 import { loadEnvFiles, DATA_DIR, REDLIST_DIR, GBIF_DIR } from "./utils";
-import { TAXA } from "./taxa";
+import { allTaxaUnchecked } from "./taxa";
 import { readRedlistCsv } from "./fetch-redlist-species";
 import { readGbifCsv } from "./fetch-gbif-species";
 import { readMappingCsv } from "./match-redlist-species-to-gbif";
+import { EXCLUDED_DOMESTICATED_GBIF_KEYS } from "../src/lib/data/taxonomy-constants";
 import { NODE_INDEX, hasChildren, matchesFilter } from "../src/lib/taxonomy-utils";
 import type { TaxonomyNode } from "../src/config/taxonomy-tree";
 import type { NodeSummary } from "../src/lib/data/species-store";
@@ -268,14 +269,14 @@ export async function run(): Promise<void> {
 
   // Load mapping to determine which GBIF species are linked to redlist entries
   const mapping = readMappingCsv();
-  const linkedGbifKeys = new Set<number>();
+  const linkedGbifKeys = new Set<string>();
   for (const links of mapping.values()) {
     for (const link of links) {
       if (link.gbif_species_key != null) linkedGbifKeys.add(link.gbif_species_key);
     }
   }
 
-  for (const taxon of TAXA) {
+  for (const taxon of allTaxaUnchecked()) {
     const redlistPath = path.join(REDLIST_DIR, `${taxon.id}.csv`);
     const gbifPath = path.join(GBIF_DIR, `${taxon.id}.csv`);
 
@@ -376,7 +377,7 @@ export async function run(): Promise<void> {
   // Build caches for CSV data (reusing what readRedlistCsv/readGbifCsv load)
   const redlistByGroup = new Map<string, ReturnType<typeof readRedlistCsv>>();
   const gbifByGroup = new Map<string, ReturnType<typeof readGbifCsv>>();
-  for (const taxon of TAXA) {
+  for (const taxon of allTaxaUnchecked()) {
     if (fs.existsSync(path.join(REDLIST_DIR, `${taxon.id}.csv`))) {
       redlistByGroup.set(taxon.id, readRedlistCsv(taxon.id));
     }
@@ -386,10 +387,9 @@ export async function run(): Promise<void> {
   }
 
   // Must match EXCLUDED_DOMESTICATED_GBIF_KEYS in species-store.ts
-  const excludedDomesticatedGbifKeys = new Set([
-    2441022, 2435035, 2441110, 2441056, 2440886, 7422937, 2440891,
-    9055455, 2441238, 5220190, 7515593, 2441019, 5219702, 10694102, 2436436,
-  ]);
+  // Was a hand-copied duplicate of the same list, carrying a comment asking that
+  // the two be kept in step; imported now so they cannot drift.
+  const excludedDomesticatedGbifKeys = EXCLUDED_DOMESTICATED_GBIF_KEYS;
 
   function computeNodeSummary(node: TaxonomyNode): NodeSummary {
     const filter = node.filter;
@@ -444,7 +444,7 @@ export async function run(): Promise<void> {
 
     // Complex case: track claimed rows for catch-all nodes
     const claimedRowIds = new Set<number>();
-    const claimedGbifKeys = new Set<number>();
+    const claimedGbifKeys = new Set<string>();
     const results: NodeSummary[] = [];
 
     const nonCatchAll = children.filter(c =>
@@ -598,9 +598,9 @@ async function checkTaxonomyAliasDrift(): Promise<void> {
     console.log("  Skipping — species/ or assessed.parquet missing.");
     return;
   }
-  const liveTaxa = TAXA.filter((t) => DYNAMIC_DRILLDOWN_ROOTS.has(t.id));
+  const liveTaxa = allTaxaUnchecked().filter((t) => DYNAMIC_DRILLDOWN_ROOTS.has(t.id));
   const conn = await (await DuckDBInstance.create(":memory:")).connect();
-  const dimensions: { label: "class" | "order"; col: string; taxa: typeof TAXA }[] = [
+  const dimensions: { label: "class" | "order"; col: string; taxa: ReturnType<typeof allTaxaUnchecked> }[] = [
     { label: "class", col: canonicalClassColumnSql("class_name"), taxa: liveTaxa.filter((t) => nextDynamicRank(t.id) === "class") },
     { label: "order", col: canonicalOrderColumnSql("order_name", "scientific_name"), taxa: liveTaxa },
   ];

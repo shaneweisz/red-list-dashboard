@@ -128,6 +128,19 @@ export const DATA_DIR = path.join(__dirname, "../data");
 export const REDLIST_DIR = path.join(DATA_DIR, "redlist");
 export const GBIF_DIR = path.join(DATA_DIR, "gbif");
 
+/**
+ * Quoting for DuckDB's read_csv, matching what writeCsv below emits.
+ *
+ * Pass this rather than letting auto-detection guess. It samples 20,480 rows and
+ * infers quote='' if it sees none, which is a coin flip on a file whose only
+ * quoted rows are rare: flowering_plants.csv has 231,000 rows and exactly two
+ * containing a comma inside a vernacular name ("Barun, Banny"). The sample
+ * missed both, quoting was inferred off, and the row split into ten fields —
+ * surfacing as a type error on a column four positions away, an hour and a half
+ * into a sync.
+ */
+export const CSV_QUOTING = `quote='"', escape='"'`;
+
 function csvEscape(value: string): string {
   if (value.includes(",") || value.includes('"') || value.includes("\n")) {
     return '"' + value.replace(/"/g, '""') + '"';

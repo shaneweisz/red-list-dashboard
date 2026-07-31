@@ -5,6 +5,7 @@ import { createPortal } from "react-dom";
 import dynamic from "next/dynamic";
 import TaxaSummary from "./TaxaSummary";
 import NewLiteratureSinceAssessment from "../LiteratureSearch";
+import { GBIF_CHECKLIST_KEY, gbifOccurrenceParams } from "@/lib/gbif";
 import RedListAssessments from "../RedListAssessments";
 import CitesSummary from "../CitesSummary";
 import WikipediaSummary from "../WikipediaSummary";
@@ -2398,7 +2399,7 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
   useEffect(() => {
     if (urlSpeciesHandledRef.current || selectedSpeciesKey == null || sortedSpecies.length === 0) return;
     const idx = sortedSpecies.findIndex(s => {
-      const key = isNewAssessments ? Math.abs(s.id) : (s.sis_taxon_id ?? s.gbif_species_key ?? s.id);
+      const key = isNewAssessments ? Math.abs(s.id) : (s.sis_taxon_id ?? s.id);
       return key === selectedSpeciesKey;
     });
     if (idx >= 0) {
@@ -2471,7 +2472,19 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
             ),
             // Check GBIF match status for species missing from CSV
             !s.gbif_species_key
-              ? fetch(`https://api.gbif.org/v1/species/match?name=${encodeURIComponent(s.scientific_name)}`, { signal })
+              ? fetch(
+                  // v2, with the classification the row already carries. v1
+                  // ignores checklistKey outright and hands back a Backbone
+                  // integer, which then builds a link that finds nothing.
+                  `https://api.gbif.org/v2/species/match?${new URLSearchParams({
+                    checklistKey: GBIF_CHECKLIST_KEY,
+                    scientificName: s.scientific_name,
+                    ...(s.class_name ? { class: s.class_name } : {}),
+                    ...(s.order_name ? { order: s.order_name } : {}),
+                    ...(s.family ? { family: s.family } : {}),
+                  })}`,
+                  { signal }
+                )
               : Promise.resolve(null),
           ];
 
@@ -2487,9 +2500,9 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
           if (gbifMatchRes?.ok) {
             const gbifMatch = await gbifMatchRes.json();
             gbifMatchStatus = {
-              matchType: gbifMatch.matchType || 'NONE',
-              matchedName: gbifMatch.scientificName,
-              matchedRank: gbifMatch.rank,
+              matchType: gbifMatch.diagnostics?.matchType || 'NONE',
+              matchedName: gbifMatch.usage?.name,
+              matchedRank: gbifMatch.usage?.rank,
             };
           }
 
@@ -2825,8 +2838,9 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
   // The backbone is frozen (last updated 2023), so the durable fix is to store
   // CoL keys in the pipeline instead — a much larger migration, tracked in #441.
   // Until then this keeps every link working.
-  const GBIF_BACKBONE_CHECKLIST_KEY = "d7dddbf4-2cf0-4f39-9b2a-bb099caae36c";
-  const GBIF_FILTERS = `checklistKey=${GBIF_BACKBONE_CHECKLIST_KEY}&hasCoordinate=true&hasGeospatialIssue=false&basisOfRecord=HUMAN_OBSERVATION&basisOfRecord=MACHINE_OBSERVATION&basisOfRecord=OCCURRENCE&basisOfRecord=MATERIAL_SAMPLE&basisOfRecord=OBSERVATION`;
+  // Built from the shared module so the links and the queries behind the numbers
+  // they sit next to can never name different checklists.
+  const GBIF_FILTERS = gbifOccurrenceParams().toString();
   const isNE = (s: Species) => s.category === "NE";
 
   // GBIF occurrence counts aren't filterable per-country/category/etc. — only show
@@ -4916,14 +4930,14 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
             </thead>
             <tbody className="divide-y divide-zinc-200 dark:divide-zinc-800">
               {paginatedSpecies.map((s) => {
-                const speciesKey = isNewAssessments ? Math.abs(s.id) : (s.sis_taxon_id ?? s.gbif_species_key ?? s.id);
+                const speciesKey = isNewAssessments ? Math.abs(s.id) : (s.sis_taxon_id ?? s.id);
                 const assessmentDateObj = s.assessment_date ? new Date(s.assessment_date) : null;
                 const assessmentYear = assessmentDateObj ? assessmentDateObj.getFullYear() : null;
                 const yearsSinceAssessment = assessmentDateObj
                   ? Math.floor((Date.now() - assessmentDateObj.getTime()) / (365.25 * 24 * 60 * 60 * 1000))
                   : null;
                 const details = speciesDetails[s.id];
-                const gbifSpeciesKey = s.gbif_species_key || (details?.gbifUrl ? parseInt(details.gbifUrl.split('/').pop() || '0') : null);
+                const gbifSpeciesKey = s.gbif_species_key || details?.gbifUrl?.split('/').pop() || null;
                 const isPinned = pinnedSet.has(speciesKey);
                 const isDragging = draggedSpecies === speciesKey;
                 const isDragOver = dragOverSpecies === speciesKey && draggedSpecies !== speciesKey;

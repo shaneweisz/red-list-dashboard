@@ -151,6 +151,7 @@ const ASSESSED_SELECT = `
 
 const splitList = (s: unknown): string[] => (typeof s === "string" && s ? s.split(";").filter(Boolean) : []);
 const num = (v: unknown): number | null => (v == null ? null : Number(v));
+const str = (v: unknown): string | null => (v == null ? null : String(v));
 
 export function toSpeciesRow(r: Record<string, unknown>) {
   const id = Number(r.id);
@@ -176,7 +177,7 @@ export function toSpeciesRow(r: Record<string, unknown>) {
     // whose parquet has no such column). Coalesced upstream from the author-year
     // columns with a cited-reference-year fallback — see build-backbone.
     described_year: num(r.described_year),
-    gbif_species_key: num(r.gbif_species_key),
+    gbif_species_key: str(r.gbif_species_key),
     gbif_occurrence_count: num(r.gbif_occurrence_count),
     gbif_observations_after_assessment_year: num(r.gbif_observations_after_assessment_year),
     // Latest (most recent) assessment's assessors/reviewers, denormalized into
@@ -354,7 +355,7 @@ export async function querySpecies(opts: {
           taxon_group: String(r.taxon_group),
           taxon_id: taxonId,
           described_year: num(r.described_year),
-          gbif_species_key: num(r.gbif_species_key),
+          gbif_species_key: str(r.gbif_species_key),
           gbif_occurrence_count: num(r.gbif_occurrence_count),
         } as unknown as ReturnType<typeof toSpeciesRow>);
       }
@@ -375,7 +376,7 @@ export interface SearchResult {
   taxon_id: string;
   taxon_group: string;
   category: string;
-  gbif_species_key: number | null;
+  gbif_species_key: string | null;
   assessment_id: number | null;
   assessment_date: string | null;
   countries: string[];
@@ -449,7 +450,7 @@ export async function searchSpecies(query: string, limit = 10): Promise<SearchRe
       taxon_id: cat === "NE" ? (GROUP_TO_LEAF_NODE.get(tg) ?? mapTaxonId(tg)) : mapTaxonId(tg),
       taxon_group: tg,
       category: cat,
-      gbif_species_key: num(r.gbif_species_key),
+      gbif_species_key: str(r.gbif_species_key),
       assessment_id: num(r.assessment_id),
       assessment_date: (r.assessment_date as string) ?? null,
       countries: splitList(r.countries),

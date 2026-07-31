@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { CACHE_5M } from "@/lib/cache-headers";
+import { GBIF_CHECKLIST_KEY } from "@/lib/gbif";
 
 interface InatObservation {
   url: string;
@@ -71,6 +72,7 @@ export async function GET(
     const buildParams = (extraParams: Record<string, string> = {}) => {
       const params = new URLSearchParams({
         taxonKey: speciesKey,
+        checklistKey: GBIF_CHECKLIST_KEY,
         hasCoordinate: "true",
         hasGeospatialIssue: "false",
         limit: "0",
@@ -117,9 +119,17 @@ export async function GET(
       fetch(`https://api.gbif.org/v1/occurrence/search?${buildParams({ basisOfRecord: "OCCURRENCE" })}`),
       // iNaturalist count (with current filters)
       fetch(`https://api.gbif.org/v1/occurrence/search?${buildParams({ datasetKey: INAT_DATASET_KEY })}`),
-      // Recent iNaturalist observations (up to 10 for preview)
+      // Recent iNaturalist observations (up to 10 for preview).
+      //
+      // Built by hand rather than through buildParams, and so was the one request
+      // in this route that never named a checklist. Against the default (frozen
+      // Backbone) a CoL key resolves to nothing — verified: taxonKey=43MJ7 with a
+      // dataset filter returns 0, and 2,771 with checklistKey. For the 3,416
+      // species whose CoL id happens to be all digits it is worse than empty, as
+      // the id is a valid Backbone key for an unrelated taxon.
       fetch(`https://api.gbif.org/v1/occurrence/search?${new URLSearchParams({
         taxonKey: speciesKey,
+        checklistKey: GBIF_CHECKLIST_KEY,
         datasetKey: INAT_DATASET_KEY,
         hasCoordinate: "true",
         limit: "10",

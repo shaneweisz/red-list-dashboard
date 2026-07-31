@@ -13,7 +13,7 @@ interface SearchResult {
   taxon_id: string;
   taxon_group: string;
   category: string;
-  gbif_species_key: number | null;
+  gbif_species_key: string | null;
   assessment_id: number | null;
   assessment_date: string | null;
   countries: string[];

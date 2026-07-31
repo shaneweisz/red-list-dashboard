@@ -271,6 +271,34 @@ export async function run(
     for (const r of rows) vernacularMap[String(r.name_lower)] = String(r.name);
     fs.writeFileSync(vernacularOut, JSON.stringify(vernacularMap, null, 0));
     console.log(`Wrote ${vernacularOut}: ${Object.keys(vernacularMap).length.toLocaleString()} class/order/family/genus common names`);
+
+    // species-vernaculars.parquet — col_id -> common name at species rank.
+    //
+    // Common names for GBIF species used to come from the GBIF species API, one
+    // request per species. Its replacement (v2 match) returns no vernacular field
+    // at all, and dropping that source silently emptied the common name of all
+    // 668,970 unassessed species — making ~88.5k of them unfindable by the only
+    // name most people know them by.
+    //
+    // Best-effort by construction: this is keyed by Catalogue of Life ids from
+    // the published export, and GBIF's index carries some usages that export does
+    // not, so a few species will not match. A name for most of them beats a name
+    // for none.
+    const speciesVernacularOut = path.join(outDir, "species-vernaculars.parquet");
+    await conn.run(`
+      COPY (
+        SELECT v.col_id,
+               upper(substr(v.name, 1, 1)) || substr(v.name, 2) AS vernacular_name
+        FROM vern_best v
+        JOIN nu n ON n.col_id = v.col_id
+        WHERE n.rank = 'species'
+          AND lower(v.name) != lower(n.scientific_name)
+      ) TO '${speciesVernacularOut}' (FORMAT PARQUET, COMPRESSION ZSTD);
+    `);
+    const speciesVernCount = (await (await conn.run(
+      `SELECT count(*) AS n FROM '${speciesVernacularOut}'`
+    )).getRowObjects())[0].n;
+    console.log(`Wrote ${speciesVernacularOut}: ${Number(speciesVernCount).toLocaleString()} species common names`);
   }
 
   // Plausible-publication-year window. Upper bound: next calendar year (tolerates

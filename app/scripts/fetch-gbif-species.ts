@@ -8,17 +8,22 @@
  *   npx tsx scripts/fetch-gbif-species.ts            # Fetch all taxa
  */
 
+import * as fs from "fs";
 import * as path from "path";
+import { DuckDBInstance } from "@duckdb/node-api";
 import {
   loadEnvFiles,
   SyncLogger,
   writeCsv,
   readCsv,
+  DATA_DIR,
   GBIF_DIR,
   delay,
   toTitleCase,
 } from "./utils";
 import { getTaxa, type Taxon, type GbifQuery } from "./taxa";
+
+import { GBIF_CHECKLIST_KEY, INCLUDED_BASIS_OF_RECORD } from "../src/lib/gbif";
 
 // =============================================================================
 // GBIF TAXA (legacy lookup — used by fetch-gbif-new-counts)
@@ -32,29 +37,24 @@ export type { Taxon, GbifQuery };
 
 const FACET_LIMIT = 100000;
 const REQUEST_DELAY = 200; // ms between GBIF requests
-const SPECIES_VALIDATION_BATCH_SIZE = 1000;
-const MAX_RETRIES = 5;
-
-const INCLUDED_BASIS_OF_RECORD = [
-  "HUMAN_OBSERVATION",
-  "MACHINE_OBSERVATION",
-  "OCCURRENCE",
-  "MATERIAL_SAMPLE",
-  "OBSERVATION",
-];
+// Patient rather than brisk. Under sustained throttling a five-attempt backoff
+// topping out at 32 seconds gives up while GBIF is still saying "slow down", and
+// giving up here aborts a run measured in hours.
+const MAX_RETRIES = 8;
+const BACKOFF_BASE_MS = 2000;
 
 // =============================================================================
 // TYPES
 // =============================================================================
 
 interface SpeciesCount {
-  speciesKey: number;
+  speciesKey: string;
   count: number;
   taxonGroup: string;
 }
 
 interface ValidatedSpecies {
-  key: number;
+  key: string;
   canonicalName: string;
   vernacularName: string;
   className: string;
@@ -63,7 +63,7 @@ interface ValidatedSpecies {
 }
 
 export interface GbifSpecies {
-  gbif_species_key: number;
+  gbif_species_key: string;
   scientific_name: string;
   common_name: string;
   taxon_group_table1a: string;
@@ -80,58 +80,63 @@ export interface GbifSpecies {
 // =============================================================================
 
 export async function fetchFacets(
-  keyType: string,
-  keyValue: number,
+  taxonKey: string,
   yearRange?: string,
   modifiedRange?: string,
-): Promise<Array<{ speciesKey: number; count: number }>> {
-  const allResults: Array<{ speciesKey: number; count: number }> = [];
+): Promise<Array<{ speciesKey: string; count: number }>> {
+  const allResults: Array<{ speciesKey: string; count: number }> = [];
   let offset = 0;
   let hasMore = true;
 
   while (hasMore) {
     const params = new URLSearchParams({
+      checklistKey: GBIF_CHECKLIST_KEY,
       hasCoordinate: "true",
       hasGeospatialIssue: "false",
       facet: "speciesKey",
       facetLimit: FACET_LIMIT.toString(),
       facetOffset: offset.toString(),
       limit: "0",
-      [keyType]: keyValue.toString(),
+      taxonKey,
     });
 
     if (yearRange) params.set("year", yearRange);
     if (modifiedRange) params.set("modified", modifiedRange);
     INCLUDED_BASIS_OF_RECORD.forEach((bor) => params.append("basisOfRecord", bor));
 
-    let response: Response | undefined;
+    // The body read has to sit inside the retry, not after it. A dropped socket
+    // part-way through a response throws from .json(), not from fetch(), and a
+    // sync that runs for hours will meet one — killing the whole run at whatever
+    // phase it happened to reach.
+    let data: { facets?: Array<{ field: string; counts: Array<{ name: string; count: number }> }> } | undefined;
     for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
       try {
-        response = await fetch(`https://api.gbif.org/v1/occurrence/search?${params}`);
+        const response = await fetch(`https://api.gbif.org/v1/occurrence/search?${params}`);
+        if (response.status === 429 || (response.status >= 500 && response.status < 600)) {
+          if (attempt < MAX_RETRIES) {
+            await delay(Math.min(Math.pow(2, attempt) * BACKOFF_BASE_MS, 120_000));
+            continue;
+          }
+          throw new Error(`GBIF API error: ${response.status} ${response.statusText}`);
+        }
+        if (!response.ok) throw new Error(`GBIF API error: ${response.status} ${response.statusText}`);
+        data = await response.json();
+        break;
       } catch (err) {
         if (attempt < MAX_RETRIES) {
-          const wait = Math.pow(2, attempt + 1) * 1000;
-          await delay(wait);
+          await delay(Math.min(Math.pow(2, attempt) * BACKOFF_BASE_MS, 120_000));
           continue;
         }
         throw err;
       }
-      if (response.status === 429 || (response.status >= 500 && response.status < 600)) {
-        const wait = Math.pow(2, attempt + 1) * 1000;
-        await delay(wait);
-        continue;
-      }
-      break;
     }
-    if (!response || !response.ok) throw new Error(`GBIF API error: ${response?.statusText}`);
-
-    const data = await response.json();
+    if (!data) throw new Error("GBIF API error: no response after retries");
     const facet = data.facets?.find((f: { field: string }) => f.field === "SPECIES_KEY");
 
     if (!facet || facet.counts.length === 0) break;
 
     for (const c of facet.counts) {
-      allResults.push({ speciesKey: parseInt(c.name, 10), count: c.count });
+      allResults.push({ speciesKey: c.name, count: c.count });
     }
 
     hasMore = facet.counts.length >= FACET_LIMIT;
@@ -150,7 +155,17 @@ export async function fetchGbifCounts(taxon: Taxon): Promise<SpeciesCount[]> {
   for (let i = 0; i < taxon.gbif.length; i++) {
     const q = taxon.gbif[i];
     process.stdout.write(`\r  Query ${i + 1}/${taxon.gbif.length}`);
-    const results = await fetchFacets(q.keyType, q.keyValue);
+    const results = await fetchFacets(q.taxonKey);
+    // Reported, not thrown. An empty facet does NOT mean the key is dead: it
+    // also happens when a real taxon has no records identified to species rank.
+    // Turbellaria (BDSSX) is exactly that — 13,998 occurrence records under this
+    // pipeline's own filters and zero speciesKey facets, because CoL XR places
+    // essentially none of them at species level. Throwing here aborted every
+    // sync at phase 5. Whether the key is still VALID is a different question,
+    // and assertRootKeysResolve answers it directly against the pinned release.
+    if (results.length === 0) {
+      console.warn(`  note: root key ${q.taxonKey} matched no species-rank taxa (it may legitimately have none)`);
+    }
     for (const r of results) {
       allResults.push({ speciesKey: r.speciesKey, count: r.count, taxonGroup: taxon.id });
     }
@@ -159,7 +174,7 @@ export async function fetchGbifCounts(taxon: Taxon): Promise<SpeciesCount[]> {
   console.log("");
 
   // Deduplicate: keep highest count per speciesKey
-  const seen = new Map<number, SpeciesCount>();
+  const seen = new Map<string, SpeciesCount>();
   for (const r of allResults) {
     if (!seen.has(r.speciesKey) || seen.get(r.speciesKey)!.count < r.count) {
       seen.set(r.speciesKey, r);
@@ -169,62 +184,177 @@ export async function fetchGbifCounts(taxon: Taxon): Promise<SpeciesCount[]> {
   return Array.from(seen.values()).sort((a, b) => b.count - a.count);
 }
 
-export async function validateSpeciesKeys(speciesKeys: number[]): Promise<Map<number, ValidatedSpecies>> {
-  const valid = new Map<number, ValidatedSpecies>();
+/**
+ * Resolve the species keys GBIF's facets returned to names and lineage.
+ *
+ * A local join against the Catalogue of Life release GBIF's occurrence index
+ * runs. This used to be one GBIF request per key — some 680,000 per sync, which
+ * rate-limited hard enough to kill three full runs — on the reasoning that GBIF's
+ * index held usages the published CoL export did not.
+ *
+ * That reasoning was wrong. The export was simply the wrong release: the sync
+ * downloaded the newest, GBIF promotes each release to production about three
+ * weeks later, and CoL renumbers ids for names whose authorship changes. Pinned
+ * to the indexed release (see fetch-col-xr), every one of those keys resolves
+ * locally — 504 assessed and 9,092 unassessed unresolvable before, zero after —
+ * and the local answer matches GBIF's own matcher on rank and status.
+ *
+ * What still genuinely needs GBIF is the other direction: fuzzy name-to-key
+ * matching, where GBIF's matcher handles spelling and authorship variants no
+ * lookup can. That remains in match-redlist-species-to-gbif.
+ *
+ * assertPinnedRelease below is what keeps this honest — it is only safe while the
+ * local release and the indexed one agree, so that is checked rather than assumed.
+ */
+export async function validateSpeciesKeys(
+  speciesKeys: string[],
+  opts: { onProgress?: (done: number, total: number, cached: number) => void } = {},
+): Promise<Map<string, ValidatedSpecies>> {
+  const valid = new Map<string, ValidatedSpecies>();
+  if (speciesKeys.length === 0) return valid;
 
-  for (let i = 0; i < speciesKeys.length; i += SPECIES_VALIDATION_BATCH_SIZE) {
-    const batch = speciesKeys.slice(i, i + SPECIES_VALIDATION_BATCH_SIZE);
-
-    const results = await Promise.all(
-      batch.map(async (key) => {
-        for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
-          try {
-            const res = await fetch(`https://api.gbif.org/v1/species/${key}`, {
-              headers: { "Accept-Language": "en" },
-            });
-            if (res.status === 429 || (res.status >= 500 && res.status < 600)) {
-              if (attempt < MAX_RETRIES) {
-                await delay(Math.pow(2, attempt + 1) * 1000);
-                continue;
-              }
-              return { key, rank: "UNKNOWN", status: "UNKNOWN", canonicalName: "", vernacularName: "", className: "", orderName: "", familyName: "" };
-            }
-            if (!res.ok) return { key, rank: "UNKNOWN", status: "UNKNOWN", canonicalName: "", vernacularName: "", className: "", orderName: "", familyName: "" };
-            const data = await res.json();
-            return {
-              key,
-              rank: data.rank || "UNKNOWN",
-              status: data.taxonomicStatus || "UNKNOWN",
-              canonicalName: data.canonicalName || data.scientificName || "",
-              vernacularName: data.vernacularName || "",
-              className: data.class || "",
-              orderName: data.order || "",
-              familyName: data.family || "",
-            };
-          } catch {
-            if (attempt < MAX_RETRIES) {
-              await delay(Math.pow(2, attempt + 1) * 1000);
-              continue;
-            }
-            return { key, rank: "ERROR", status: "ERROR", canonicalName: "", vernacularName: "", className: "", orderName: "", familyName: "" };
-          }
-        }
-        return { key, rank: "ERROR", status: "ERROR", canonicalName: "", vernacularName: "", className: "", orderName: "", familyName: "" };
-      })
+  const backbone = path.join(DATA_DIR, "backbone.parquet");
+  const speciesGlob = path.join(DATA_DIR, "species", "**", "*.parquet");
+  const vernaculars = path.join(DATA_DIR, "species-vernaculars.parquet");
+  if (!fs.existsSync(backbone)) {
+    throw new Error(
+      `validateSpeciesKeys: ${backbone} not found. It is written by build-backbone, ` +
+      `which must run before the GBIF phases.`
     );
+  }
+  const hasVernaculars = fs.existsSync(vernaculars);
 
-    for (const info of results) {
-      if (info.rank === "SPECIES" && info.status === "ACCEPTED") {
-        valid.set(info.key, { key: info.key, canonicalName: info.canonicalName, vernacularName: info.vernacularName, className: info.className, orderName: info.orderName, familyName: info.familyName });
-      }
+  const inst = await DuckDBInstance.create(":memory:");
+  const conn = await inst.connect();
+  try {
+    await conn.run(`CREATE TEMP TABLE wanted (col_id VARCHAR);`);
+    const appender = await conn.createAppender("wanted");
+    for (const k of speciesKeys) {
+      appender.appendVarchar(k);
+      appender.endRow();
     }
+    appender.closeSync();
 
-    const progress = Math.min(i + SPECIES_VALIDATION_BATCH_SIZE, speciesKeys.length);
-    process.stdout.write(`\r  Validated ${progress}/${speciesKeys.length} (${valid.size} valid)`);
+    // Lineage comes from species/, which build-backbone writes with the
+    // classification already denormalised; the backbone join covers keys that are
+    // real but not species rank, which species/ deliberately excludes.
+    const reader = await conn.runAndReadAll(`
+      SELECT w.col_id,
+             coalesce(sp.scientific_name, b.scientific_name) AS scientific_name,
+             coalesce(sp.class_name, '')  AS class_name,
+             coalesce(sp.order_name, '')  AS order_name,
+             coalesce(sp.family, '')      AS family,
+             ${hasVernaculars ? "coalesce(v.vernacular_name, '')" : "''"} AS vernacular_name
+      FROM wanted w
+      JOIN '${backbone}' b ON b.col_id = w.col_id
+      LEFT JOIN '${speciesGlob}' sp ON sp.col_id = w.col_id
+      ${hasVernaculars ? `LEFT JOIN '${vernaculars}' v ON v.col_id = w.col_id` : ""}
+      WHERE b.rank = 'species' AND b.status IN ('accepted', 'provisionally accepted')
+    `);
+
+    for (const r of reader.getRowObjects()) {
+      const key = String(r.col_id);
+      valid.set(key, {
+        key,
+        canonicalName: String(r.scientific_name ?? ""),
+        vernacularName: String(r.vernacular_name ?? ""),
+        className: String(r.class_name ?? ""),
+        orderName: String(r.order_name ?? ""),
+        familyName: String(r.family ?? ""),
+      });
+    }
+  } finally {
+    conn.closeSync();
+    inst.closeSync();
   }
 
-  console.log("");
+  opts.onProgress?.(speciesKeys.length, speciesKeys.length, speciesKeys.length);
   return valid;
+}
+
+/**
+ * Confirm the local Catalogue of Life release is the one GBIF's index runs.
+ *
+ * Everything resolved locally depends on this, and the failure is silent: a
+ * mismatched release does not error, it just fails to find keys, which reads
+ * exactly like species that have no records. So a sample of the keys GBIF has
+ * just returned is checked against the local copy before any of it is trusted.
+ *
+ * Cheap — no extra requests, since the keys are already in hand.
+ */
+export async function assertPinnedRelease(sampleKeys: string[]): Promise<void> {
+  if (sampleKeys.length === 0) return;
+  const backbone = path.join(DATA_DIR, "backbone.parquet");
+  if (!fs.existsSync(backbone)) return;
+
+  const sample = sampleKeys.slice(0, 500);
+  const inst = await DuckDBInstance.create(":memory:");
+  const conn = await inst.connect();
+  try {
+    await conn.run(`CREATE TEMP TABLE probe (col_id VARCHAR);`);
+    const appender = await conn.createAppender("probe");
+    for (const k of sample) {
+      appender.appendVarchar(k);
+      appender.endRow();
+    }
+    appender.closeSync();
+    const row = (await conn.runAndReadAll(`
+      SELECT count(*) AS found FROM probe p JOIN '${backbone}' b ON b.col_id = p.col_id
+    `)).getRowObjects()[0];
+    const rate = Number(row.found) / sample.length;
+    if (rate < MIN_PINNED_RELEASE_AGREEMENT) {
+      throw new Error(
+        `fetch-gbif-species: only ${(rate * 100).toFixed(1)}% of GBIF's own species keys resolve ` +
+        `against the local Catalogue of Life release (floor ${MIN_PINNED_RELEASE_AGREEMENT * 100}%). ` +
+        `GBIF has almost certainly moved to a newer release — rerun the CoL phases so the local ` +
+        `copy matches what its index is keyed by.`
+      );
+    }
+  } finally {
+    conn.closeSync();
+    inst.closeSync();
+  }
+}
+
+const MIN_PINNED_RELEASE_AGREEMENT = 0.99;
+
+/**
+ * Refuse to write a taxon whose keys mostly failed to resolve.
+ *
+ * Not every facet key becomes a species — synonyms, higher taxa and unplaced
+ * names are all expected to drop out, so some loss is normal. What is not normal
+ * is most of a group vanishing, and that is exactly what a key-space mismatch
+ * looks like: in the first attempt at this migration Mantodea went from 1,110
+ * species to 97 and nothing was printed, because the drop had no floor under it.
+ *
+ * The threshold is deliberately loose. It is here to catch a group collapsing,
+ * not to police normal attrition.
+ */
+const MIN_RESOLUTION_RATE = 0.5;
+const RESOLUTION_RATE_FLOOR_SAMPLE = 50;
+
+export function assertResolutionRate(taxonId: string, requested: number, resolved: number): void {
+  // Zero requested is the loudest signal there is, not the quietest: it means the
+  // facet query returned nothing at all, which is what a dead group root key
+  // looks like. The early return for small groups used to swallow it, because
+  // zero is smaller than any threshold.
+  if (requested === 0) {
+    throw new Error(
+      `fetch-gbif-species: the facet query for "${taxonId}" returned no species at all. ` +
+      `That is not an empty group — it is what a group key that no longer resolves looks like. ` +
+      `Rerun scripts/derive-gbif-taxon-keys.ts; Catalogue of Life renumbers keys between releases.`
+    );
+  }
+  // Tiny groups are noisy — a group of four species is not evidence of anything.
+  if (requested < RESOLUTION_RATE_FLOOR_SAMPLE) return;
+  const rate = resolved / requested;
+  if (rate >= MIN_RESOLUTION_RATE) return;
+  throw new Error(
+    `fetch-gbif-species: only ${resolved} of ${requested} keys resolved for "${taxonId}" ` +
+    `(${(rate * 100).toFixed(1)}%, floor ${MIN_RESOLUTION_RATE * 100}%). ` +
+    `That is the signature of a key-space mismatch rather than normal attrition — ` +
+    `writing this file would silently shrink the group.`
+  );
 }
 
 // =============================================================================
@@ -237,7 +367,7 @@ const GBIF_CSV_COLUMNS = [
   "total_count", "count_after_assessment_year", "countries",
 ];
 
-export function writeGbifCsv(speciesMap: Map<number, GbifSpecies>, outputPath: string): void {
+export function writeGbifCsv(speciesMap: Map<string, GbifSpecies>, outputPath: string): void {
   const rows = Array.from(speciesMap.values())
     .map((s) => ({
       gbif_species_key: s.gbif_species_key,
@@ -255,10 +385,10 @@ export function writeGbifCsv(speciesMap: Map<number, GbifSpecies>, outputPath: s
   writeCsv(rows, GBIF_CSV_COLUMNS, outputPath);
 }
 
-export function readGbifCsv(taxonId: string): Map<number, GbifSpecies> {
+export function readGbifCsv(taxonId: string): Map<string, GbifSpecies> {
   const csvPath = path.join(GBIF_DIR, `${taxonId}.csv`);
   const rows = readCsv<GbifSpecies>(csvPath, (r) => ({
-    gbif_species_key: parseInt(r.gbif_species_key, 10),
+    gbif_species_key: r.gbif_species_key,
     scientific_name: r.scientific_name,
     common_name: r.common_name,
     taxon_group_table1a: r.taxon_group_table1a,
@@ -269,7 +399,7 @@ export function readGbifCsv(taxonId: string): Map<number, GbifSpecies> {
     family: r.family || "",
     countries: r.countries || "",
   }));
-  const map = new Map<number, GbifSpecies>();
+  const map = new Map<string, GbifSpecies>();
   for (const row of rows) map.set(row.gbif_species_key, row);
   return map;
 }
@@ -278,12 +408,63 @@ export function readGbifCsv(taxonId: string): Map<number, GbifSpecies> {
 // MAIN
 // =============================================================================
 
+/**
+ * Confirm every group's root keys still exist in the pinned Catalogue of Life
+ * release.
+ *
+ * These are CoL ids like any other usage, and CoL renumbers them: between
+ * COL26.6 and COL26.7, Rhodophyta went L2MHG -> CHDNQ and Blattodea's key
+ * disappeared outright. Rhodophyta is red_algae's ONLY root key, so a stale one
+ * silently empties an entire group.
+ *
+ * A local join, so it costs nothing and runs before any request is made. It
+ * deliberately tests EXISTENCE rather than "did this key return species" — a
+ * live taxon can legitimately have no species-rank records, which is a different
+ * thing from a key that no longer exists.
+ */
+export async function assertRootKeysResolve(
+  taxa: Taxon[],
+  /** Overridable so the guard itself can be tested against a known taxonomy. */
+  backbonePath = path.join(DATA_DIR, "backbone.parquet")
+): Promise<void> {
+  const backbone = backbonePath;
+  if (!fs.existsSync(backbone)) return;
+  const wanted = taxa.flatMap((t) => t.gbif.map((q) => ({ taxon: t.id, key: q.taxonKey })));
+  if (wanted.length === 0) return;
+
+  const inst = await DuckDBInstance.create(":memory:");
+  const conn = await inst.connect();
+  try {
+    const list = wanted.map((w) => `'${w.key}'`).join(",");
+    const found = new Set(
+      (await conn.runAndReadAll(
+        `SELECT col_id FROM '${backbone}' WHERE col_id IN (${list})`
+      )).getRowObjects().map((r) => String(r.col_id))
+    );
+    const dead = wanted.filter((w) => !found.has(w.key));
+    if (dead.length > 0) {
+      throw new Error(
+        `fetch-gbif-species: ${dead.length} group root key(s) no longer exist in the pinned ` +
+        `Catalogue of Life release:\n` +
+        dead.map((d) => `  ${d.taxon}: ${d.key}`).join("\n") +
+        `\nCoL renumbers these between releases. Rerun derive-gbif-taxon-keys (sync phase 4b) ` +
+        `to re-derive them against what GBIF currently indexes.`
+      );
+    }
+  } finally {
+    conn.closeSync();
+    inst.closeSync();
+  }
+}
+
 export async function run(opts: {
   taxa?: string[];
   logger?: SyncLogger;
 } = {}): Promise<void> {
   const taxaToSync = getTaxa(opts.taxa);
   const logger = opts.logger ?? SyncLogger.noop();
+
+  await assertRootKeysResolve(taxaToSync);
 
   const startTime = Date.now();
 
@@ -302,12 +483,22 @@ export async function run(opts: {
     const rawResults = await fetchGbifCounts(taxon);
     console.log(`  Raw species: ${rawResults.length}`);
 
-    console.log("  Validating species keys...");
+    console.log("  Resolving species keys...");
     const speciesKeys = rawResults.map((r) => r.speciesKey);
-    const validSpecies = await validateSpeciesKeys(speciesKeys);
+    // Before trusting any local resolution, confirm the local CoL release is the
+    // one these keys came from. GBIF moving to a newer release is silent
+    // otherwise: keys simply stop being found, which looks like absent species.
+    await assertPinnedRelease(speciesKeys);
+    const validSpecies = await validateSpeciesKeys(speciesKeys, {
+      onProgress: (doneCount, total, cached) =>
+        process.stdout.write(`\r  Resolved ${doneCount}/${total} (${cached} from cache)`),
+    });
+    if (speciesKeys.length > 0) console.log("");
     console.log(`  Valid species: ${validSpecies.size}`);
 
-    const taxonMap = new Map<number, GbifSpecies>();
+    assertResolutionRate(taxon.id, speciesKeys.length, validSpecies.size);
+
+    const taxonMap = new Map<string, GbifSpecies>();
     for (const r of rawResults) {
       const info = validSpecies.get(r.speciesKey);
       if (!info) continue;

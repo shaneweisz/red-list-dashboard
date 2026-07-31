@@ -41,6 +41,9 @@ yarn-error.log*
 # Run `npm run fetch-data-from-r2` after cloning to populate locally.
 # Exceptions: small derived aggregates that tests/CI depend on are kept
 # in-repo so CI doesn't need R2 credentials.
+# Build-time caches for the sync scripts; never published (see fetch-gbif-species).
+/.sync-cache/
+
 /data/*
 !/data/taxa-summary.json
 !/data/table1a-children-summaries.json
@@ -64,3 +67,6 @@ next-env.d.ts
 
 # Sentry Config File
 .env.sentry-build-plugin
+
+# Written by the sync's regression phase; surfaced in the weekly PR body, not committed.
+/sync-regressions.md
