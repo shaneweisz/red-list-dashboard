@@ -7,6 +7,7 @@ All notable changes to the IUCN Red List Assessments Dashboard.
 - Added sign-in — GitHub, Google and Microsoft accounts via Supabase Auth, backed by a generic `user_roles` table so permissions aren't hardcoded per user. Signing in returns you to the page and query string you were on, and works across all the custom domains (Microsoft is wired up and working, but its button is hidden for now)
 - Added a Compare mode — two dashboard panels side by side, each with its own filters and view mode, reachable from the View dropdown
 - Added Criteria, Habitat and "Number of Assessments" filter charts, and unified all three hierarchical filters (Criteria, Threats, Habitat) on a single pattern: a bar chart at the top level that drills into pills, rather than a second nested bar chart. Criteria deliberately stays in A–E order rather than sorting by count, since that ordering is the standard one
+- Added IUCN range map and Area of Habitat (AOH) layers to the species occurrence map, served as rasters from R2 and gated to admin accounts
 - Reworked the taxa-view header controls and filter cards: the View selector moved into the taxa breadcrumb table itself (landing-only), "More Filters" became a full-width card row and now holds the Country map and Threats chart, and the taxon stat card shows the filtered count instead of a static total
 - Reworked the Country view to lead with the map, revealing the table on click, and restored the landing map's full height
 - Moved the header controls onto the title row and the iNaturalist photos below the map on mobile
