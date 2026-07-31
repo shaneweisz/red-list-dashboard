@@ -422,8 +422,12 @@ export function readGbifCsv(taxonId: string): Map<string, GbifSpecies> {
  * live taxon can legitimately have no species-rank records, which is a different
  * thing from a key that no longer exists.
  */
-export async function assertRootKeysResolve(taxa: Taxon[]): Promise<void> {
-  const backbone = path.join(DATA_DIR, "backbone.parquet");
+export async function assertRootKeysResolve(
+  taxa: Taxon[],
+  /** Overridable so the guard itself can be tested against a known taxonomy. */
+  backbonePath = path.join(DATA_DIR, "backbone.parquet")
+): Promise<void> {
+  const backbone = backbonePath;
   if (!fs.existsSync(backbone)) return;
   const wanted = taxa.flatMap((t) => t.gbif.map((q) => ({ taxon: t.id, key: q.taxonKey })));
   if (wanted.length === 0) return;
