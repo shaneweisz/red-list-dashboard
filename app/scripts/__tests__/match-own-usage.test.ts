@@ -31,7 +31,7 @@ describe("keeping a lumped species' own usage", () => {
     // confirming the name, not a different species.
     vi.stubGlobal("fetch", vi.fn(async () => gbifLump("Sminthopsis fuliginosus", "Sminthopsis crassicaudata")));
     const r = await matchGbifSpecies("Sminthopsis fuliginosa", {}, "Sminthopsis fuliginosa");
-    expect(r.matchType).toBe("LUMPED");
+    expect(r.verdict).toBe("lumped");
     expect(r.key).toBe("OWNKEY");
   });
 
@@ -40,7 +40,10 @@ describe("keeping a lumped species' own usage", () => {
     // European grass's usage, carrying 19,901 records that are not its own.
     vi.stubGlobal("fetch", vi.fn(async () => gbifLump("Catapodium marinum", "Catapodium marinum")));
     const r = await matchGbifSpecies("Desmazeria marina", {}, "Catapodium borgesii");
-    expect(r.matchType).toBe("LUMPED");
+    // REFUSED rather than LUMPED: the two are now distinguished, because they
+    // mean different things downstream. LUMPED keeps the species' own usage and
+    // has its records counted separately; REFUSED keeps nothing at all.
+    expect(r.verdict).toBe("refused");
     expect(r.key).toBeNull();
   });
 

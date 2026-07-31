@@ -29,6 +29,7 @@ import {
 import { readRedlistCsv } from "./fetch-redlist-species";
 import { readGbifCsv } from "./fetch-gbif-species";
 import { TAXA } from "./taxa";
+import { decideKey, type Verdict } from "./species-key";
 import { GBIF_CHECKLIST_KEY } from "../src/lib/gbif";
 
 // =============================================================================
@@ -89,7 +90,11 @@ export interface MatchContext {
 export interface MatchOutcome {
   key: string | null;
   matchType: string;
-  /** Set when CoL folds this name into a different species — see shouldFollowSynonym. */
+  /** The durable decision — see species-key.ts. Stored in mapping.csv. */
+  verdict?: Verdict;
+  /** Why, in words, so an unexpected blank is answerable without re-running anything. */
+  reason?: string;
+  /** The taxon CoL wanted to fold this species into, when it did. */
   lumpedInto?: string;
 }
 
@@ -267,65 +272,38 @@ export async function matchGbifSpecies(
     return { key: null, matchType: `UNUSABLE_${status}` };
   }
 
-  const accepted = data.acceptedUsage;
-  const landedOn = accepted?.canonicalName ?? data.usage.canonicalName;
-  const wouldFollow =
-    landedOn !== undefined &&
-    shouldFollowSynonym(speciesName, landedOn, data.usage.authorship, accepted?.authorship) &&
-    // ...unless CoL is folding this species into another species the Red List
-    // assesses separately, which is a taxonomic opinion we cannot act on without
-    // one Red List entry swallowing another's records.
-    !isSeparatelyAssessed(landedOn, speciesName);
-  if (landedOn && !wouldFollow) {
-    // Refusing the lump does not have to mean refusing everything. The name we
-    // searched has a usage of its own, and GBIF holds the records identified
-    // under that name against it — a small number, but the species' own.
-    //
-    // Malus sieversii is the case that makes this worth doing: the wild apple
-    // displayed 146,340 records, of which 8,135 are its own and the rest belong
-    // to the cultivated apple CoL folds it into. Blanking it outright trades one
-    // wrong number for no number, when the right number is available.
-    //
-    // Counts for these keys come from fetch-lumped-own-counts, not from the facet
-    // enumeration, which only ever emits accepted usages.
-    // Keep a key only when the usage GBIF returned really is this species' own
-    // name. Searching one of its Red List synonyms can resolve straight to the
-    // accepted usage of a different species, in which case usage.key IS that
-    // species' key — Catapodium borgesii (VU, Azores endemic) came back with
-    // Catapodium marinum's key and 19,901 records of a widespread European grass.
-    // Handing that over as "its own records" is the exact defect this policy
-    // exists to prevent, so an unrecognisable usage yields no key at all.
-    // The question is how we REACHED this usage, not how its name is spelled.
-    //
-    // Searching the species' own canonical name and getting a usage back means
-    // that usage is this species' name — including when GBIF calls the match
-    // VARIANT, which is precisely its way of saying "same name, different
-    // spelling": Sminthopsis fuliginosa -> fuliginosus, Nothofagus alessandrii ->
-    // alessandri, Keysseria helena -> helenae. Requiring the epithets to match
-    // exactly rejected all of those and took 21 species' own records with them,
-    // including a CR and an EN. GBIF had already vouched for the name; the check
-    // second-guessed it on a string compare.
-    //
-    // Reaching a usage through one of the species' Red List SYNONYMS is the
-    // dangerous case, because that can land on the accepted usage of a different
-    // species — Catapodium borgesii (VU, Azores endemic) came back holding
-    // Catapodium marinum's key and 19,901 records of a widespread European grass.
-    // That is what this refuses. (fetch-lumped-own-counts independently filters
-    // synonym-sourced rows, so this is the first of two layers, not the only one.)
-    const reachedByOwnName = name.trim().toLowerCase() === speciesName.trim().toLowerCase();
-    const ownUsage = data.usage.canonicalName
-      ? (reachedByOwnName ||
-         terminalEpithet(data.usage.canonicalName) === terminalEpithet(speciesName)) &&
-        !isSeparatelyAssessed(data.usage.canonicalName, speciesName)
-      : false;
-    return {
-      key: ownUsage ? data.usage.key ?? null : null,
-      matchType: "LUMPED",
-      lumpedInto: landedOn,
-    };
-  }
+  // The decision itself lives in species-key.ts, which is the only place that
+  // knows how to tell a rename from a lump. It used to be made here, again in
+  // fetch-lumped-own-counts, and a third time in build-parquet's SQL, with three
+  // different rules — and every disagreement between them was a species showing
+  // somebody else's occurrence count.
+  const decision = decideKey({
+    species: { scientificName: speciesName, authorship: data.usage.authorship },
+    reachedBy: name.trim().toLowerCase() === speciesName.trim().toLowerCase() ? "canonical" : "synonym",
+    usage: {
+      key: String(data.usage.key),
+      scientificName: data.usage.canonicalName ?? speciesName,
+      authorship: data.usage.authorship,
+    },
+    acceptedUsage: data.acceptedUsage?.key
+      ? {
+          key: String(data.acceptedUsage.key),
+          scientificName: data.acceptedUsage.canonicalName ?? "",
+          authorship: data.acceptedUsage.authorship,
+        }
+      : undefined,
+    assessedNames,
+  });
 
-  return { key: accepted?.key || data.usage.key || null, matchType };
+  return {
+    key: decision.key,
+    // The verdict is the durable answer; matchType stays as GBIF's own label for
+    // how the NAME matched, which is a different question and still worth keeping.
+    matchType: decision.verdict === "own" ? matchType : decision.verdict.toUpperCase(),
+    verdict: decision.verdict,
+    reason: decision.reason,
+    lumpedInto: decision.lumpedInto,
+  };
 }
 
 const MAPPING_CSV_PATH = path.join(DATA_DIR, "mapping.csv");
