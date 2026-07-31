@@ -37,9 +37,8 @@ import {
   writeCsv,
   delay,
 } from "./utils";
-import { readMappingCsv } from "./match-redlist-species-to-gbif";
+import { readMappingCsv, loadAllGbifKeys } from "./match-redlist-species-to-gbif";
 import { readRedlistCsv } from "./fetch-redlist-species";
-import { readGbifCsv } from "./fetch-gbif-species";
 import { getTaxa } from "./taxa";
 import { GBIF_CHECKLIST_KEY, INCLUDED_BASIS_OF_RECORD } from "../src/lib/gbif";
 
@@ -64,18 +63,20 @@ const LUMPED_CSV_COLUMNS = [
   // 4,371 of its own records reading "no data"), and its key surfaces separately
   // in unassessed.parquet as a browsable species that does not exist.
   "sis_taxon_id",
-  "gbif_species_key", "scientific_name", "taxon_group_table1a",
-  "class_name", "order_name", "family", "total_count", "count_after_assessment_year",
+  "gbif_species_key",
+  // Which group's file these rows belong with, for the per-group enrichment join.
+  "taxon_group_table1a",
+  "total_count", "count_after_assessment_year",
 ];
+// Name and lineage are deliberately absent. They were written for years and read
+// by nothing: the only consumer that wants them is the browsable-species export,
+// and it excludes every key in this file by construction, because each one
+// belongs to a species the Red List has already assessed.
 
 interface LumpedSpecies {
   sisTaxonId: number;
   taxonId: string;
   gbifKey: string;
-  scientificName: string;
-  className: string;
-  orderName: string;
-  family: string;
   assessmentYear: number | null;
 }
 
@@ -170,10 +171,13 @@ async function countBatch(keys: string[], yearRange?: string): Promise<Map<strin
  */
 export function loadLumpedSpecies(taxaIds?: string[]): LumpedSpecies[] {
   const mapping = readMappingCsv();
+  // Global, not per-group: a species' key can arrive in a different group's file
+  // than the one IUCN files the species under, and asking the wrong file would
+  // count a species that already has its number.
+  const fetched = loadAllGbifKeys();
   const out: LumpedSpecies[] = [];
 
   for (const taxon of getTaxa(taxaIds)) {
-    const fetched = readGbifCsv(taxon.id);
     for (const s of readRedlistCsv(taxon.id)) {
       const links = mapping.get(s.sis_taxon_id) ?? [];
 
@@ -183,25 +187,22 @@ export function loadLumpedSpecies(taxaIds?: string[]): LumpedSpecies[] {
       // species links to that key it would surface in unassessed.parquet as a
       // browsable species — a phantom duplicate of the accepted one. Skipping
       // these takes the phase from 56,395 species to the ~14,800 it is for.
-      if (links.some((l) => l.gbif_species_key && fetched.has(l.gbif_species_key))) continue;
+      //
+      // A non-null gbif_species_key already means the key passed the same global
+      // check, because matching refuses to record one that did not.
+      if (links.some((l) => l.gbif_species_key)) continue;
 
+      // The verdict, asked rather than re-derived. This used to reconstruct the
+      // decision from match_type and name_source, which is how the pipeline came
+      // to answer "is this key this species' key?" three times in three ways —
+      // and every disagreement was a species showing the wrong number.
+      //
+      // "lumped" is precisely the case this phase exists for: CoL folds the
+      // species into another, we kept its own usage, and that usage is a synonym
+      // (or a taxon CoL ranks below species) so no facet over accepted species
+      // will ever emit it.
       const lumped = links.find(
-        (l) =>
-          l.unfetched_key &&
-          !fetched.has(l.unfetched_key) &&
-          // NO_GBIF_DATA keys are excluded, and the reason is worth recording
-          // because it is not the obvious one. They are not keys GBIF has no
-          // records for — they are keys the facet enumeration never emitted, and
-          // sampling 300 of the 49,521 evenly found 0.7% do hold records. So
-          // there is real data here, just not much: fetching all of them would
-          // recover roughly 350 species at the cost of ~20 minutes on every
-          // weekly sync. It is also not a regression — those species were absent
-          // from the enumeration before this migration too, and showed no data
-          // then either. Left for its own change rather than folded into this
-          // one. (Beware sampling the head of this list: the first few are
-          // well-recorded mammals and suggest a hit rate of 60%.)
-          l.match_type !== "NO_GBIF_DATA" &&
-          (l.match_type !== "LUMPED" || l.name_source === "canonical")
+        (l) => l.verdict === "lumped" && l.unfetched_key && !fetched.has(l.unfetched_key)
       );
       if (!lumped?.unfetched_key) continue;
 
@@ -210,10 +211,6 @@ export function loadLumpedSpecies(taxaIds?: string[]): LumpedSpecies[] {
         sisTaxonId: s.sis_taxon_id,
         taxonId: taxon.id,
         gbifKey: lumped.unfetched_key,
-        scientificName: s.scientific_name,
-        className: s.class_name ?? "",
-        orderName: s.order_name ?? "",
-        family: s.family ?? "",
         assessmentYear: Number.isNaN(year) ? null : year,
       });
     }
@@ -274,11 +271,7 @@ export async function run(opts: { taxa?: string[]; logger?: SyncLogger } = {}): 
     .map((sp) => ({
     sis_taxon_id: sp.sisTaxonId,
     gbif_species_key: sp.gbifKey,
-    scientific_name: sp.scientificName,
     taxon_group_table1a: sp.taxonId,
-    class_name: sp.className,
-    order_name: sp.orderName,
-    family: sp.family,
     total_count: totals.get(sp.gbifKey) ?? 0,
     count_after_assessment_year: since.has(sp.gbifKey) ? since.get(sp.gbifKey)! : null,
   }));

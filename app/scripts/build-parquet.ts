@@ -68,6 +68,16 @@ export async function run(): Promise<void> {
       FROM read_csv_auto('${gbifGlob}', union_by_name=true, ${CSV_QUOTING});
   `);
 
+  // Group sizes are measured here, before the directly-counted rows are folded
+  // in below, because this is the number that stands for "how narrow is this
+  // group's definition". Those rows are distributed unevenly across groups — a
+  // group with many lumped species would look broader than it is and lose the
+  // tie-break above to a group that is genuinely wider.
+  await conn.run(`
+    CREATE TEMP TABLE group_sizes AS
+      SELECT taxon_group, count(*) AS n FROM gbif_rows GROUP BY 1;
+  `);
+
   // Species whose key the facet enumeration cannot emit — synonyms kept after a
   // lump was refused, and taxa CoL ranks below species. Counted directly by
   // fetch-lumped-own-counts into its own file, and folded in here. The facet rows
@@ -82,9 +92,12 @@ export async function run(): Promise<void> {
       INSERT INTO gbif_rows
         SELECT
           CAST(l.gbif_species_key AS VARCHAR),
-          l.scientific_name, '' AS common_name,
+          -- Name and lineage are blank because nothing reads them for these rows:
+          -- the browsable-species export is the only consumer of those columns and
+          -- it excludes every key here, each one belonging to an assessed species.
+          '' AS scientific_name, '' AS common_name,
           l.taxon_group_table1a,
-          lower(l.class_name), lower(l.order_name), lower(l.family),
+          '' AS class_name, '' AS order_name, '' AS family,
           CAST(l.total_count AS BIGINT),
           CAST(l.count_after_assessment_year AS BIGINT),
           '' AS countries
@@ -97,10 +110,6 @@ export async function run(): Promise<void> {
     const added = (await countRows()) - before;
     console.log(`  directly-counted species folded in: ${added.toLocaleString()}`);
   }
-  await conn.run(`
-    CREATE TEMP TABLE group_sizes AS
-      SELECT taxon_group, count(*) AS n FROM gbif_rows GROUP BY 1;
-  `);
   await conn.run(`
     CREATE TEMP TABLE gbif_all AS
       SELECT * EXCLUDE (rn) FROM (

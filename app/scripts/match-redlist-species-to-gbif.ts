@@ -369,7 +369,32 @@ export function readMappingCsv(): Map<number, MappingLink[]> {
       name_source: e.name_source,
     });
   }
+  assertVerdictsPopulated(map);
   return map;
+}
+
+/**
+ * Refuse a mapping.csv written before verdicts existed.
+ *
+ * Every phase downstream now asks the verdict which key belongs to a species.
+ * Against a file whose verdict column is absent or blank, each of those asks
+ * comes back "no" — and the result is not an error but an empty one: no species
+ * qualifies as lumped, no candidate is usable, and every count quietly reads
+ * zero. That is indistinguishable from a sync that legitimately found nothing.
+ *
+ * A real run always produces plenty of "own", so requiring one turns the worst
+ * failure mode in this pipeline back into a crash.
+ */
+function assertVerdictsPopulated(map: Map<number, MappingLink[]>): void {
+  if (map.size === 0) return;
+  for (const links of map.values()) {
+    if (links.some((l) => l.verdict === "own")) return;
+  }
+  throw new Error(
+    `${MAPPING_CSV_PATH} has ${map.size} species but not one carries verdict="own". ` +
+      `It predates scripts/species-key.ts, and every phase that reads it would ` +
+      `silently produce zero counts. Re-run the matching phase.`
+  );
 }
 
 // =============================================================================
@@ -417,7 +442,16 @@ const KINGDOM_NAME: Record<string, string> = {
   P: "Plantae",
 };
 
-function loadAllGbifKeys(): Set<string> {
+/**
+ * Every key the facet enumeration emitted, across all groups.
+ *
+ * Global on purpose. A species' key can land in a different group's file than
+ * the one IUCN files the species under — IUCN lists one octocoral under other
+ * invertebrates while its key arrives in the corals file — so asking "did the
+ * enumeration produce this key?" of a single group's file gets the wrong answer
+ * for exactly the species where the two taxonomies disagree.
+ */
+export function loadAllGbifKeys(): Set<string> {
   const keys = new Set<string>();
   for (const taxon of TAXA) {
     const csvPath = path.join(GBIF_DIR, `${taxon.id}.csv`);
