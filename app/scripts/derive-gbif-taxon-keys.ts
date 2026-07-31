@@ -76,6 +76,14 @@ const RETIRED_NAMES: Record<string, { resolveAs?: string; coveredBy?: string; wh
     resolveAs: "Copepoda",
     why: "obsolete class; all 36 assessed species carrying it match to class Copepoda in CoL",
   },
+  TURBELLARIA: {
+    resolveAs: "Tricladida",
+    why:
+      "Turbellaria is paraphyletic and CoL keeps it only as a near-empty husk — 13 species, " +
+      "against 1,938 in Tricladida, where both assessed species (Romankenkius pedderensis NT, " +
+      "Sphalloplana coreana DD) actually sit. Resolving the class name gave a key that matched " +
+      "13,998 occurrences but no species-rank taxa at all, so the group silently had no flatworms",
+  },
   PENICILLARIA: {
     resolveAs: "Ceriantharia",
     why: "the one assessed species carrying it (Arachnanthus oligopodus) is order Ceriantharia in CoL",

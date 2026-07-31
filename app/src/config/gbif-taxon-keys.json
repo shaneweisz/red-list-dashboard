@@ -809,13 +809,14 @@
     {
       "redlistName": "TURBELLARIA",
       "rank": "class",
-      "taxonKey": "BDSSX",
-      "matchedName": "Turbellaria",
+      "taxonKey": "7NGC4",
+      "matchedName": "Tricladida",
       "matchType": "EXACT",
       "ancestors": [
         "CS5HF",
         "N",
-        "7NF2H"
+        "7NF2H",
+        "7NF2W"
       ]
     },
     {

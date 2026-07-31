@@ -352,6 +352,11 @@ export async function run(): Promise<void> {
   // Unassessed (GBIF species with no IUCN assessment) — cold, huge under CoL,
   // lean schema (no assessment-only columns).
   await conn.run(`
+    CREATE TEMP TABLE assessed_names AS
+      SELECT DISTINCT r.scientific_name, r.taxon_group_table1a AS taxon_group
+      FROM read_csv_auto('${redlistGlob}', union_by_name=true, ${CSV_QUOTING}) r;
+  `);
+  await conn.run(`
     COPY (
       SELECT
         -- Synthetic negative id; assessed rows use the positive sis_taxon_id.
@@ -373,6 +378,21 @@ export async function run(): Promise<void> {
       LEFT JOIN species_vernaculars v ON v.col_id = g.gbif_species_key
       WHERE g.gbif_species_key NOT IN (SELECT DISTINCT gbif_species_key FROM map)
         AND g.gbif_species_key NOT IN (${domesticated})
+        -- ...and not a second usage of a species that IS assessed.
+        --
+        -- Catalogue of Life carries some taxa twice, once accepted and once
+        -- 'provisionally accepted', under the same name in the same genus. The
+        -- assessed row takes the accepted key, and the other one then arrives
+        -- here and is published as a browsable species — so Miniopterus
+        -- schreibersii, a VU bat, was listed simultaneously as Not Evaluated,
+        -- with 27,596 records under the twin and 24,530 under itself. Columba
+        -- livia came back the same way, through the very list written to keep it
+        -- out. Matching on name within the group is enough: a genuine homonym in
+        -- another kingdom is in another taxon group.
+        AND NOT EXISTS (
+          SELECT 1 FROM assessed_names a
+          WHERE a.scientific_name = g.scientific_name AND a.taxon_group = g.taxon_group
+        )
       ORDER BY class_name, order_name, family, scientific_name
     ) TO '${unassessedOut}' (FORMAT PARQUET, COMPRESSION ZSTD);
   `);
