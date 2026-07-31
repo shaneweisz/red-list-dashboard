@@ -675,7 +675,18 @@ export async function matchSpeciesList(
     // CoL ranks it a subspecies of Fringilla teydea. Keeping the key lets
     // fetch-lumped-own-counts count it directly instead of the species showing
     // nothing.
-    const unfetchedKey = candidates.find((r) => r.key !== null && !gbifKeys.has(r.key))?.key ?? null;
+    //
+    // The verdict travels with the key, because that is what says the key is
+    // this species' to count. Preferring an "own" match reached by the species'
+    // own name keeps the best-evidenced candidate rather than whichever the
+    // iteration reached first.
+    const unfetchable = (r: MatchResult) => r.key !== null && !gbifKeys.has(r.key);
+    const unfetched =
+      candidates.find((r) => unfetchable(r) && r.verdict === "own" && r.source === "canonical") ??
+      candidates.find((r) => unfetchable(r) && r.verdict === "own") ??
+      candidates.find(unfetchable) ??
+      null;
+    const unfetchedKey = unfetched?.key ?? null;
     for (const r of candidates) {
       if (r.matchType === "ERROR") sawError = true;
       else if (r.key !== null && !gbifKeys.has(r.key)) sawNoGbifData = true;
@@ -694,6 +705,7 @@ export async function matchSpeciesList(
       name_source: "",
       ...(lumpedInto ? { lumped_into: lumpedInto } : {}),
       ...(bestType === "NO_GBIF_DATA" && unfetchedKey ? { unfetched_key: unfetchedKey } : {}),
+      ...(bestType === "NO_GBIF_DATA" && unfetched?.verdict ? { verdict: unfetched.verdict } : {}),
     });
   }
 

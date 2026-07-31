@@ -17,9 +17,22 @@
  * So blanking them outright trades a wrong number for no number when the right
  * number exists. This phase fetches it.
  *
+ * The same problem has a second shape. Where CoL ranks a species below species —
+ * Fringilla polatzeki (EN) is a subspecies of F. teydea in CoL — the key is the
+ * species' outright, no lump involved, and the enumeration still cannot produce
+ * it. Those were written off as "no GBIF data", which reads as "GBIF holds
+ * nothing" when the truth is "a facet cannot express this key". 358 species lost
+ * counts they had before this migration that way, 96 of them threatened.
+ *
+ * So the phase is really "count the keys the enumeration cannot emit", and it
+ * takes both verdicts that mean the key belongs to the species: lumped and own.
+ * (Its name predates the second case; the rename is tracked in the file-layout
+ * restructure, since it moves the output file too.)
+ *
  * These keys cannot come from the facet enumeration in fetch-gbif-species, which
- * only ever emits accepted usages — a synonym's own key is absent from it by
- * construction. So each is counted directly, into a standalone
+ * only ever emits accepted, species-rank usages — a synonym's own key, or a
+ * subspecies key, is absent from it by construction. So each is counted
+ * directly, into a standalone
  * data/lumped-own-counts.csv rewritten whole on every run. It is deliberately NOT
  * appended into the per-taxon GBIF CSVs: that made the phase depend on its own
  * run history, so tightening the rule deciding which species qualify had no
@@ -197,12 +210,24 @@ export function loadLumpedSpecies(taxaIds?: string[]): LumpedSpecies[] {
       // to answer "is this key this species' key?" three times in three ways —
       // and every disagreement was a species showing the wrong number.
       //
-      // "lumped" is precisely the case this phase exists for: CoL folds the
-      // species into another, we kept its own usage, and that usage is a synonym
-      // (or a taxon CoL ranks below species) so no facet over accepted species
-      // will ever emit it.
+      // Both verdicts that mean "this key is this species'":
+      //
+      //   lumped — CoL folds the species into another and we kept its own usage,
+      //     which is a synonym, so no facet over accepted usages emits it.
+      //   own — the key is the species' outright, but the enumeration still did
+      //     not produce it, because facets emit only species-rank usages and CoL
+      //     ranks this taxon below species. Fringilla polatzeki (EN) is one: CoL
+      //     makes it a subspecies of F. teydea.
+      //
+      // The second case used to be discarded as NO_GBIF_DATA, which read as "GBIF
+      // has nothing" when the truth was "the enumeration cannot express this key".
+      // 358 species lost counts they had before the migration that way, 96 of
+      // them threatened.
       const lumped = links.find(
-        (l) => l.verdict === "lumped" && l.unfetched_key && !fetched.has(l.unfetched_key)
+        (l) =>
+          (l.verdict === "lumped" || l.verdict === "own") &&
+          l.unfetched_key &&
+          !fetched.has(l.unfetched_key)
       );
       if (!lumped?.unfetched_key) continue;
 
