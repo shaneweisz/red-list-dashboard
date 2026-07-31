@@ -247,7 +247,9 @@ export async function run(opts: { taxa?: string[]; logger?: SyncLogger } = {}): 
   const logger = opts.logger ?? SyncLogger.noop();
   const lumped = loadLumpedSpecies(opts.taxa);
 
-  console.log(`  ${lumped.length} species CoL folds into another — counting their own records`);
+  console.log(
+    `  ${lumped.length} species whose key the enumeration cannot emit — counting them directly`
+  );
   if (lumped.length === 0) return;
 
   // Totals: batched across all of them.
