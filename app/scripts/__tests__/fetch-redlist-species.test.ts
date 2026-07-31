@@ -22,6 +22,7 @@ function makeSpecies(overrides: Partial<RedlistSpecies> = {}): RedlistSpecies {
     sis_taxon_id: 58565,
     assessment_id: 1,
     scientific_name: "Aquarana catesbeianus",
+    authority: "Shaw, 1802",
     common_name: "American Bullfrog",
     class_name: "amphibia",
     order_name: "anura",

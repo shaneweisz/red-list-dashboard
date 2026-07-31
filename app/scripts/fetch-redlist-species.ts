@@ -46,10 +46,35 @@ export interface RedlistSynonym {
   status: string;
 }
 
+/**
+ * The IUCN `authority` column stores HTML entities literally — `&amp;` rather
+ * than `&`. Left alone, "(Temminck &amp; Schlegel, 1838)" never compares equal
+ * to Catalogue of Life's "(Temminck & Schlegel, 1838)", and 16.6% of authorship
+ * comparisons fail for that reason alone.
+ */
+export function decodeEntities(value: string | null | undefined): string | null {
+  if (!value) return null;
+  return value
+    .replace(/&amp;/g, "&")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/&apos;/g, "'");
+}
+
 export interface RedlistSpecies {
   sis_taxon_id: number;
   assessment_id: number;
   scientific_name: string;
+  /**
+   * The author and year IUCN publishes for this name.
+   *
+   * Carried so the matching phase can hand it to GBIF, which needs authorship as
+   * its own parameter to resolve a name whose spelling differs from Catalogue of
+   * Life's. Without it GBIF backs off to the genus and the species shows nothing.
+   */
+  authority: string | null;
   common_name: string | null;
   class_name: string | null;
   order_name: string | null;
@@ -124,6 +149,7 @@ export async function fetchFromIucnDb(
       t.sis_id as sis_taxon_id,
       a.id as assessment_id,
       t.scientific_name,
+      t.authority,
       tcn.name as common_name,
       t.class_name,
       t.order_name,
@@ -175,6 +201,7 @@ export async function fetchFromIucnDb(
       sis_taxon_id: Number(row.sis_taxon_id),
       assessment_id: assessmentId,
       scientific_name: row.scientific_name,
+      authority: decodeEntities(row.authority),
       common_name: row.common_name || null,
       class_name: row.class_name?.toLowerCase() || null,
       order_name: row.order_name?.toLowerCase() || null,
@@ -563,7 +590,7 @@ export async function fetchAssessmentHistory(
 // =============================================================================
 
 const REDLIST_CSV_COLUMNS = [
-  "sis_taxon_id", "scientific_name", "common_name", "class_name", "order_name",
+  "sis_taxon_id", "scientific_name", "authority", "common_name", "class_name", "order_name",
   "family", "taxon_group_table1a", "assessment_id", "iucn_category", "assessment_date",
   "year_published", "population_trend", "countries", "systems", "growth_forms",
   "movement_pattern", "possibly_extinct", "possibly_extinct_in_the_wild",
@@ -631,6 +658,7 @@ export function readRedlistCsv(taxonId: string): RedlistSpecies[] {
     sis_taxon_id: parseInt(r.sis_taxon_id, 10),
     assessment_id: parseInt(r.assessment_id, 10),
     scientific_name: r.scientific_name,
+    authority: r.authority || null,
     common_name: r.common_name || null,
     class_name: r.class_name || null,
     order_name: r.order_name || null,

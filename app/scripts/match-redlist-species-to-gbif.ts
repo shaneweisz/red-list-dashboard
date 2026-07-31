@@ -89,6 +89,14 @@ export interface MatchContext {
   class_name?: string | null;
   order_name?: string | null;
   family?: string | null;
+  /**
+   * The author and year IUCN publishes for this name.
+   *
+   * Only used to retry a name GBIF could not place below genus. Supplied as its
+   * own parameter — embedding it in the name string does nothing, which the
+   * endpoint's own documentation suggests it should.
+   */
+  authorship?: string | null;
 }
 
 export interface MatchOutcome {
@@ -139,6 +147,12 @@ export async function matchGbifSpecies(
    * the species' own name closes that route.
    */
   speciesName: string = name,
+  /**
+   * Send IUCN's authorship as its own parameter. Off for the first attempt, so
+   * every name that resolves today keeps taking exactly the path it takes today,
+   * and this can only add matches where there were none.
+   */
+  withAuthorship = false,
 ): Promise<MatchOutcome> {
   // Classification context is not optional in practice. Asked for "Agelaius
   // phoeniceus" with nothing else, GBIF answers HIGHERRANK/Animalia — a species
@@ -149,6 +163,9 @@ export async function matchGbifSpecies(
   if (context.class_name) params.set("class", context.class_name);
   if (context.order_name) params.set("order", context.order_name);
   if (context.family) params.set("family", context.family);
+  if (withAuthorship && context.authorship) {
+    params.set("scientificNameAuthorship", context.authorship);
+  }
 
   let response: Response | undefined;
   for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
@@ -175,6 +192,18 @@ export async function matchGbifSpecies(
   const matchType = data.diagnostics?.matchType;
 
   if (!matchType || matchType === "NONE" || matchType === "HIGHERRANK") {
+    // Nothing below genus. GBIF can often place the name once told who published
+    // it — Colostygia puengeleri (EN) is spelled pungeleri in Catalogue of Life,
+    // and with "(Stertz, 1902)" supplied GBIF returns VARIANT and the right key
+    // instead of backing off to the genus.
+    //
+    // Retried only from here, never on the first attempt, so a name that already
+    // resolves is never asked a different question. Whatever comes back still
+    // goes through the same checks below, including the refusal of ambiguous and
+    // misapplied names.
+    if (!withAuthorship && context.authorship) {
+      return matchGbifSpecies(name, context, speciesName, true);
+    }
     return { key: null, matchType: matchType || "NONE" };
   }
   if (data.usage?.rank !== "SPECIES") {
@@ -339,6 +368,7 @@ function loadAllRedlistSpecies(): SpeciesInput[] {
           class_name: s.class_name,
           order_name: s.order_name,
           family: s.family,
+          authorship: s.authority,
         },
       });
     }
