@@ -325,6 +325,13 @@ export async function fetchFromIucnDb(
          AND scc.species_name = als.species_name
         WHERE als.sis_id = ANY($1)
           AND scc.claim_count = 1
+        -- Ordered so a re-run reproduces the file. Without this Postgres returns
+        -- these rows in whatever order it likes, and the synonyms column comes
+        -- out permuted: 58 species differed between two consecutive extracts of
+        -- an unchanged database, same synonyms in a different sequence. Every
+        -- resync diff then carries dozens of changes that mean nothing, which is
+        -- how a change that means something gets waved through.
+        ORDER BY als.sis_id, als.genus_name, als.species_name, als.status
       `, [sisIds]),
     ]);
 
@@ -414,6 +421,16 @@ export async function fetchFromIucnDb(
         seen = new Set();
         seenBySisId.set(sisId, seen);
       }
+      // IUCN records the same synonym name more than once for a taxon, under
+      // different statuses — Bufo arunco is filed against Rhinella arunco as both
+      // "A" and "ADD", Montastraea annularis against Orbicella annularis as both
+      // "ADD" and "NEW". The name is what matters and is identical either way, so
+      // the first row wins and the rest are dropped.
+      //
+      // Which status that leaves is therefore arbitrary, though stable now the
+      // query is ordered. Nothing reads it: matching takes only the name, and the
+      // status filters elsewhere in the pipeline are on Catalogue of Life's
+      // status, not this one. Do not start reading meaning into it.
       if (seen.has(name)) continue;
       seen.add(name);
       let list = synonymsBySisId.get(sisId);
@@ -627,6 +644,7 @@ export function writeRedlistCsv(species: RedlistSpecies[], outputPath: string): 
     .map((s) => ({
       sis_taxon_id: s.sis_taxon_id,
       scientific_name: s.scientific_name,
+      authority: s.authority,
       common_name: s.common_name,
       class_name: s.class_name,
       order_name: s.order_name,
