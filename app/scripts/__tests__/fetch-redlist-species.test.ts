@@ -22,6 +22,7 @@ function makeSpecies(overrides: Partial<RedlistSpecies> = {}): RedlistSpecies {
     sis_taxon_id: 58565,
     assessment_id: 1,
     scientific_name: "Aquarana catesbeianus",
+    authority: "Shaw, 1802",
     common_name: "American Bullfrog",
     class_name: "amphibia",
     order_name: "anura",
@@ -86,6 +87,28 @@ describe("writeRedlistCsv / readRedlistCsv (synonyms column)", () => {
   function cleanup(taxonId: string) {
     try { fs.unlinkSync(tmpTaxonPath(taxonId)); } catch { /* ignore */ }
   }
+
+  it("carries every scalar field through write→read, not just the ones we remembered", () => {
+    // writeRedlistCsv builds each row by naming fields one at a time, so a field
+    // added to RedlistSpecies and to the column list is still silently dropped
+    // unless it is added there too. That is exactly how `authority` shipped as an
+    // empty column: present in the query, present in the header, absent from the
+    // writer. Enumerating the object rather than a hand-written list of fields is
+    // what makes this test notice the next one.
+    const taxonId = `__test_allfields_${process.pid}_${Date.now()}`;
+    const species = makeSpecies({ taxon_group_table1a: taxonId });
+    const skip = new Set(["synonyms", "countries", "systems", "growth_forms", "threat_codes", "habitat_codes"]);
+    try {
+      writeRedlistCsv([species], tmpTaxonPath(taxonId));
+      const parsed = readRedlistCsv(taxonId)[0];
+      for (const [field, value] of Object.entries(species)) {
+        if (skip.has(field) || value === null || value === undefined) continue;
+        expect(parsed[field as keyof typeof parsed], `field "${field}" was lost`).toEqual(value);
+      }
+    } finally {
+      cleanup(taxonId);
+    }
+  });
 
   it("preserves synonyms array through write→read roundtrip", () => {
     const taxonId = `__test_synonyms_${process.pid}_${Date.now()}`;
