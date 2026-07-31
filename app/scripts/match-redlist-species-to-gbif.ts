@@ -49,6 +49,10 @@ export interface MappingEntry {
   sis_taxon_id: number;
   gbif_species_key: string | null;
   match_type: string;
+  /** The decision from species-key.ts. Downstream phases read this, not match_type. */
+  verdict?: Verdict | "";
+  /** Why, in words — so a blank count is answerable without re-running the match. */
+  reason?: string;
   /** Whether the GBIF key was found via the species's canonical name or via a synonym. */
   name_source: NameSource | "";
   /**
@@ -307,13 +311,15 @@ export async function matchGbifSpecies(
 }
 
 const MAPPING_CSV_PATH = path.join(DATA_DIR, "mapping.csv");
-const MAPPING_CSV_COLUMNS = ["sis_taxon_id", "gbif_species_key", "match_type", "name_source", "lumped_into", "unfetched_key"];
+const MAPPING_CSV_COLUMNS = ["sis_taxon_id", "gbif_species_key", "match_type", "verdict", "reason", "name_source", "lumped_into", "unfetched_key"];
 
 export function writeMappingCsv(entries: MappingEntry[]): void {
   const rows = entries.map((e) => ({
     sis_taxon_id: e.sis_taxon_id,
     gbif_species_key: e.gbif_species_key,
     match_type: e.match_type,
+    verdict: e.verdict ?? "",
+    reason: e.reason ?? "",
     name_source: e.name_source,
     lumped_into: e.lumped_into ?? null,
     unfetched_key: e.unfetched_key ?? null,
@@ -323,6 +329,7 @@ export function writeMappingCsv(entries: MappingEntry[]): void {
 
 export interface MappingLink {
   gbif_species_key: string | null;
+  verdict: Verdict | "";
   unfetched_key: string | null;
   match_type: string;
   name_source: NameSource | "";
@@ -339,6 +346,8 @@ export function readMappingCsv(): Map<number, MappingLink[]> {
     sis_taxon_id: parseInt(r.sis_taxon_id, 10),
     gbif_species_key: r.gbif_species_key || null,
     match_type: r.match_type || "",
+    verdict: (r.verdict as Verdict) || "",
+    reason: r.reason || "",
     name_source: (r.name_source as NameSource) || "",
     unfetched_key: r.unfetched_key || null,
   }));
@@ -351,6 +360,7 @@ export function readMappingCsv(): Map<number, MappingLink[]> {
     }
     list.push({
       gbif_species_key: e.gbif_species_key,
+      verdict: e.verdict ?? "",
       // Required, not optional: fetch-lumped-own-counts keys the entire phase off
       // this field, and dropping it here made that phase silently find 0 species
       // to count while the column sat populated on 115,837 rows of the file.
@@ -461,6 +471,9 @@ interface MatchTask {
 interface MatchResult extends MatchTask {
   key: string | null;
   matchType: string;
+  /** The decision from species-key.ts — what downstream phases actually read. */
+  verdict?: Verdict;
+  reason?: string;
   /** The taxon CoL folded this name into, when the resolution was refused. */
   lumpedInto?: string;
 }
@@ -491,12 +504,12 @@ export async function matchSpeciesList(
     concurrency,
     async (task): Promise<MatchResult> => {
       try {
-        const { key, matchType, lumpedInto } = await matchFn(task.name, task.species.context, task.species.scientific_name);
+        const { key, matchType, lumpedInto, verdict, reason } = await matchFn(task.name, task.species.context, task.species.scientific_name);
         progress++;
         if (progress % 1000 === 0) {
           process.stdout.write(`\r  Matched ${progress}/${tasks.length}`);
         }
-        return { ...task, key, matchType, lumpedInto };
+        return { ...task, key, matchType, lumpedInto, verdict, reason };
       } catch (err) {
         logger.log("error", {
           sis_taxon_id: task.species.sis_taxon_id,
@@ -573,13 +586,17 @@ export async function matchSpeciesList(
     claimedBy.set(key, species.sis_taxon_id);
     entries.push({
       sis_taxon_id: species.sis_taxon_id,
-      gbif_species_key: matchType === "LUMPED" ? null : key,
+      // A lumped species' key is its OWN usage, which the facet enumeration
+      // never emits, so it goes in unfetched_key and is counted separately.
+      gbif_species_key: r.verdict === "lumped" ? null : key,
       match_type: matchType,
       name_source: r.source,
       // Only carried when they mean something, so an ordinary linked row keeps
       // the shape it has always had.
+      ...(r.verdict ? { verdict: r.verdict } : {}),
+      ...(r.reason ? { reason: r.reason } : {}),
       ...(r.lumpedInto ? { lumped_into: r.lumpedInto } : {}),
-      ...(matchType === "LUMPED" ? { unfetched_key: key } : {}),
+      ...(r.verdict === "lumped" ? { unfetched_key: key } : {}),
     });
     if (matchType === "EXACT") exact++;
     else fuzzy++;
