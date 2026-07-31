@@ -19,8 +19,11 @@
  *
  * These keys cannot come from the facet enumeration in fetch-gbif-species, which
  * only ever emits accepted usages — a synonym's own key is absent from it by
- * construction. So each is counted directly, and the results are appended to the
- * per-taxon GBIF CSVs where build-parquet already looks for them.
+ * construction. So each is counted directly, into a standalone
+ * data/lumped-own-counts.csv rewritten whole on every run. It is deliberately NOT
+ * appended into the per-taxon GBIF CSVs: that made the phase depend on its own
+ * run history, so tightening the rule deciding which species qualify had no
+ * effect on species a looser rule had already written.
  *
  * Usage:
  *   npx tsx scripts/fetch-lumped-own-counts.ts

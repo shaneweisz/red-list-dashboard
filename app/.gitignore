@@ -67,3 +67,6 @@ next-env.d.ts
 
 # Sentry Config File
 .env.sentry-build-plugin
+
+# Written by the sync's regression phase; surfaced in the weekly PR body, not committed.
+/sync-regressions.md

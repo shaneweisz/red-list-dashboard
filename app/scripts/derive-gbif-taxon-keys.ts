@@ -301,7 +301,7 @@ export function findOverlaps(keys: DerivedKey[]): Array<{ ancestor: string; desc
   return overlaps;
 }
 
-async function run(write: boolean): Promise<void> {
+export async function run(write: boolean = false): Promise<void> {
   const config: Record<string, DerivedKey[]> = {};
   let unresolved = 0;
   let overlapping = 0;
@@ -416,9 +416,13 @@ async function run(write: boolean): Promise<void> {
   }
 
   if (unresolved > 0 || overlapping > 0) {
-    console.log("\nBoth are failures, not warnings: an unresolved name is a group missing");
-    console.log("species, and an overlap double-counts them.");
-    process.exitCode = 1;
+    // Thrown, not just an exit code, so that running inside sync.ts fails the
+    // sync rather than quietly setting a status nobody reads.
+    throw new Error(
+      `derive-gbif-taxon-keys: ${unresolved} unresolved, ${overlapping} overlapping. ` +
+      `Both are failures, not warnings: an unresolved name is a group missing species, ` +
+      `and an overlap double-counts them.`
+    );
   }
 }
 

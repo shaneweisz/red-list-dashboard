@@ -6,6 +6,7 @@
  *   Phase 2: fetch-col-xr           (CoL XR ColDP archive → NameUsage.tsv, full sync only)
  *   Phase 3: fetch-col-checklist    (curated CoL Checklist ColDP → demotion overlay, full sync only)
  *   Phase 4: build-backbone         (NameUsage.tsv → backbone.parquet + species/ + vernaculars)
+ *   Phase 4b: derive-gbif-taxon-keys (Red List groups + backbone → src/config/gbif-taxon-keys.json, committed to git)
  *   Phase 5: fetch-gbif-species     (GBIF facets + backbone → per-taxon CSVs)
  *   Phase 6: match-redlist-species-to-gbif (GBIF Match API → data/mapping.csv)
  *   Phase 7: fetch-gbif-country-data (GBIF API → country occurrences per species)
@@ -53,9 +54,10 @@ import { run as fetchGbifCountryData } from "./fetch-gbif-country-data";
 import { run as buildTaxaSummary } from "./build-taxa-summary";
 import { run as checkSyncRegressions } from "./check-sync-regressions";
 import { run as buildSpeciesParquet } from "./build-parquet";
-import { run as fetchColXr, resolveXrDataset, currentReleaseOnDisk } from "./fetch-col-xr";
+import { run as fetchColXr, resolveXrDataset, currentReleaseOnDisk, writeReleaseMetadata } from "./fetch-col-xr";
 import { run as fetchColChecklist } from "./fetch-col-checklist";
 import { run as buildBackbone } from "./build-backbone";
+import { run as deriveGbifTaxonKeys } from "./derive-gbif-taxon-keys";
 import { run as buildMatching } from "./build-matching";
 import { run as buildSynonymIndex } from "./build-synonym-index";
 import { run as buildColTaxonIds } from "./build-col-taxon-ids";
@@ -132,6 +134,30 @@ async function main() {
         console.log("\nPhase 4: build-backbone (→ backbone.parquet + species/ + vernacular-names.json)");
         console.log("═".repeat(60));
         await buildBackbone({ tsv: coldp.nameUsage, referenceTsv: coldp.reference, vernacularTsv: coldp.vernacularNames, demotionsTsv: checklistTsv });
+
+        // Only now is the pin true. It records which release backbone.parquet was
+        // built from, and it is what the skip above tests, so writing it any
+        // earlier lets a failed download leave the two disagreeing — with the
+        // sync skipping the rebuild from then on because the pin already claims
+        // to be current.
+        writeReleaseMetadata(coldp.xrDataset);
+
+        // Phase 4b: the group root keys are CoL ids too, and they are renumbered
+        // by the same mechanism as any other usage. Between COL26.6 and 26.7 two
+        // of the 74 died: Blattodea, and Rhodophyta — which is red_algae's ONLY
+        // root key, so that group would lose every species it has.
+        //
+        // Without this the sync could not heal itself across a release: the
+        // per-query guard in fetch-gbif-species would (correctly) fail the run,
+        // and then keep failing every week until a human noticed and ran this
+        // script by hand. Deriving here, on the same trigger that rebuilt the
+        // backbone, is what makes the pin-and-rebuild design actually automatic.
+        //
+        // It asserts coverage and non-overlap and throws if either fails, so an
+        // automated rewrite cannot quietly widen or narrow a group.
+        console.log("\nPhase 4b: derive-gbif-taxon-keys (→ src/config/gbif-taxon-keys.json)");
+        console.log("═".repeat(60));
+        await deriveGbifTaxonKeys(true);
       }
 
     } else {
@@ -161,9 +187,21 @@ async function main() {
     // Phase 8b: species CoL treats as synonyms of another species are not shown
     // that species' counts, but they do have records of their own, and those keys
     // never appear in the facet enumeration. Counted directly here.
-    console.log("\nPhase 8b: fetch-lumped-own-counts");
-    console.log("═".repeat(60));
-    await fetchLumpedOwnCounts({ taxa: taxaFilter, logger });
+    // Skipped on a partial sync, like the other whole-dataset phases. This one
+    // rewrites lumped-own-counts.csv in its entirety — that is deliberate, and is
+    // what makes it idempotent — but with a taxa filter it would rewrite the file
+    // containing ONLY those taxa, deleting every other group's rows. Phase 9 is
+    // not filtered, so it would immediately consume the truncated file and drop
+    // every other lumped species back to "no data", which is exactly the defect
+    // this phase exists to fix, reintroduced through the partial-sync door.
+    if (!taxaFilter) {
+      console.log("\nPhase 8b: fetch-lumped-own-counts");
+      console.log("═".repeat(60));
+      await fetchLumpedOwnCounts({ logger });
+    } else {
+      console.log("\nPhase 8b (lumped own counts): skipped on a partial-taxa sync — it rewrites the");
+      console.log("whole file, so running it filtered would delete the other taxa's rows.");
+    }
 
     // Phase 9: Build DuckDB read-layer parquets (#261) — also powers search.
     console.log("\nPhase 9: build-parquet");
@@ -218,7 +256,25 @@ async function main() {
     // So a failure here is recorded and re-raised once the remaining phases have
     // run: the sync still exits non-zero and says why, having finished its work.
     try {
-      await checkSyncRegressions();
+      // The findings are written to a file as well as the log. The log is four
+      // hours long and nobody reads it, so a phase whose entire purpose is "no
+      // change goes unseen" was reporting into a void — the weekly job would
+      // print "corals lost 45% of their occurrences", exit 0, upload, and open a
+      // PR whose body said only "review the diff". The workflow puts this file
+      // into that PR body.
+      const { regressions } = await checkSyncRegressions();
+      const summary = regressions.length === 0
+        ? "No material per-group regressions against the live sync."
+        : [
+            `${regressions.length} material regression(s) against the live sync:`,
+            "",
+            ...regressions.map(
+              (r) =>
+                `- ${r.taxonGroup} — ${r.metric}: ${r.before.toLocaleString()} → ` +
+                `${r.after.toLocaleString()} (${(r.pctChange * 100).toFixed(1)}%)`
+            ),
+          ].join("\n");
+      fs.writeFileSync(path.join(DATA_DIR, "..", "sync-regressions.md"), summary + "\n");
     } catch (err) {
       regressionCheckError = err instanceof Error ? err : new Error(String(err));
       console.error("\n*** REGRESSION CHECK FAILED TO RUN ***");
