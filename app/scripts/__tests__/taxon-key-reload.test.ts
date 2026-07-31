@@ -19,17 +19,34 @@
  * they verify the guard and not the wiring. This one goes through getTaxa(),
  * which is what the pipeline actually calls.
  */
-import { describe, it, expect, afterEach } from "vitest";
+import { describe, it, expect, afterEach, beforeAll, afterAll } from "vitest";
 import * as fs from "fs";
+import * as os from "os";
 import * as path from "path";
 import { fileURLToPath } from "url";
 import { getTaxa, reloadTaxonKeys } from "../taxa";
 
-const CONFIG = path.resolve(
+// A scratch copy, never the git-tracked file. Rewriting the real config to test
+// a rewrite means an interrupted run leaves invented keys in a committed file.
+const REAL = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
   "../../src/config/gbif-taxon-keys.json"
 );
-const original = fs.readFileSync(CONFIG, "utf8");
+const original = fs.readFileSync(REAL, "utf8");
+const dir = fs.mkdtempSync(path.join(os.tmpdir(), "taxonkeys-"));
+const CONFIG = path.join(dir, "gbif-taxon-keys.json");
+
+beforeAll(() => {
+  fs.writeFileSync(CONFIG, original);
+  process.env.GBIF_TAXON_KEYS_PATH = CONFIG;
+  reloadTaxonKeys();
+});
+
+afterAll(() => {
+  delete process.env.GBIF_TAXON_KEYS_PATH;
+  fs.rmSync(dir, { recursive: true, force: true });
+  reloadTaxonKeys();
+});
 
 afterEach(() => {
   fs.writeFileSync(CONFIG, original);

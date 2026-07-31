@@ -145,6 +145,39 @@ describe("decideKey", () => {
     });
     expect(d).toMatchObject({ key: null, verdict: "refused" });
   });
+
+  it("keeps a species' own usage when CoL demotes it to a subspecies", () => {
+    // CoL ranks Fringilla polatzeki (EN) a subspecies of F. teydea. The Red List
+    // assesses it as a species, so it keeps its own usage and is counted directly
+    // — a subspecies key is never emitted by a facet over species-rank usages.
+    //
+    // sameOrganism says no here, because the second word is what names the
+    // organism in a binomial and "teydea" is not "polatzeki". A deleted rule used
+    // to compare the LAST word instead, which said yes; this asserts the outcome
+    // is right either way, since the canonical-name branch keeps the key.
+    const d = decideKey({
+      species: { scientificName: "Fringilla polatzeki", authorship: "Hartert, 1905" },
+      reachedBy: "canonical",
+      usage: { key: "OWN", scientificName: "Fringilla polatzeki", authorship: "Hartert, 1905" },
+      acceptedUsage: { key: "PARENT", scientificName: "Fringilla teydea polatzeki", authorship: "Hartert, 1905" },
+      assessedNames: none,
+    });
+    expect(d).toMatchObject({ key: "OWN", verdict: "lumped" });
+    expect(d.key).not.toBe("PARENT");
+  });
+
+  it("does not follow a demotion onto a parent the Red List assesses separately", () => {
+    // Fringilla teydea is itself assessed. Taking the parent's key would give a
+    // species its relative's records and leave the relative with none.
+    const d = decideKey({
+      species: { scientificName: "Fringilla polatzeki", authorship: "Hartert, 1905" },
+      reachedBy: "canonical",
+      usage: { key: "OWN", scientificName: "Fringilla polatzeki", authorship: "Hartert, 1905" },
+      acceptedUsage: { key: "PARENT", scientificName: "Fringilla teydea", authorship: "Webb, Berthelot & Moquin-Tandon, 1841" },
+      assessedNames: new Set(["fringilla polatzeki", "fringilla teydea"]),
+    });
+    expect(d.key).not.toBe("PARENT");
+  });
 });
 
 describe("chooseRepresentative", () => {

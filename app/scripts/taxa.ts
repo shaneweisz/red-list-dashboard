@@ -221,7 +221,13 @@ export const TAXA_DEFINITIONS: Array<Omit<Taxon, "gbif">> = [
 // HELPERS
 // =============================================================================
 
-const DERIVED_KEYS_PATH = path.join(__dirname, "../src/config/gbif-taxon-keys.json");
+/**
+ * Overridable so a test can point at a scratch copy. Without it the only way to
+ * exercise a rewritten config is to rewrite the real one, and an interrupted run
+ * then leaves invented keys in a git-tracked file.
+ */
+const derivedKeysPath = () =>
+  process.env.GBIF_TAXON_KEYS_PATH ?? path.join(__dirname, "../src/config/gbif-taxon-keys.json");
 
 type DerivedKeyFile = Record<string, Array<{ redlistName: string; taxonKey: string | null }>>;
 
@@ -243,8 +249,9 @@ type DerivedKeyFile = Record<string, Array<{ redlistName: string; taxonKey: stri
 let derivedKeysCache: DerivedKeyFile | null = null;
 function derivedKeys(): DerivedKeyFile {
   if (!derivedKeysCache) {
-    derivedKeysCache = fs.existsSync(DERIVED_KEYS_PATH)
-      ? (JSON.parse(fs.readFileSync(DERIVED_KEYS_PATH, "utf8")) as DerivedKeyFile)
+    const file = derivedKeysPath();
+    derivedKeysCache = fs.existsSync(file)
+      ? (JSON.parse(fs.readFileSync(file, "utf8")) as DerivedKeyFile)
       : {};
   }
   return derivedKeysCache;
