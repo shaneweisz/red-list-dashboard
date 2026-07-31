@@ -295,13 +295,27 @@ export async function matchGbifSpecies(
     // Catapodium marinum's key and 19,901 records of a widespread European grass.
     // Handing that over as "its own records" is the exact defect this policy
     // exists to prevent, so an unrecognisable usage yields no key at all.
-    // Compared on the NAME, not on authorship. Passing data.usage.authorship as
-    // both sides made this `a === a` — always true whenever authorship was
-    // present, so it only ever fired when GBIF returned none. The check exists to
-    // confirm the usage GBIF returned really is this species' own name, and the
-    // name is what has to answer that.
+    // The question is how we REACHED this usage, not how its name is spelled.
+    //
+    // Searching the species' own canonical name and getting a usage back means
+    // that usage is this species' name — including when GBIF calls the match
+    // VARIANT, which is precisely its way of saying "same name, different
+    // spelling": Sminthopsis fuliginosa -> fuliginosus, Nothofagus alessandrii ->
+    // alessandri, Keysseria helena -> helenae. Requiring the epithets to match
+    // exactly rejected all of those and took 21 species' own records with them,
+    // including a CR and an EN. GBIF had already vouched for the name; the check
+    // second-guessed it on a string compare.
+    //
+    // Reaching a usage through one of the species' Red List SYNONYMS is the
+    // dangerous case, because that can land on the accepted usage of a different
+    // species — Catapodium borgesii (VU, Azores endemic) came back holding
+    // Catapodium marinum's key and 19,901 records of a widespread European grass.
+    // That is what this refuses. (fetch-lumped-own-counts independently filters
+    // synonym-sourced rows, so this is the first of two layers, not the only one.)
+    const reachedByOwnName = name.trim().toLowerCase() === speciesName.trim().toLowerCase();
     const ownUsage = data.usage.canonicalName
-      ? terminalEpithet(data.usage.canonicalName) === terminalEpithet(speciesName) &&
+      ? (reachedByOwnName ||
+         terminalEpithet(data.usage.canonicalName) === terminalEpithet(speciesName)) &&
         !isSeparatelyAssessed(data.usage.canonicalName, speciesName)
       : false;
     return {

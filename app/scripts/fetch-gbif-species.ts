@@ -156,18 +156,15 @@ export async function fetchGbifCounts(taxon: Taxon): Promise<SpeciesCount[]> {
     const q = taxon.gbif[i];
     process.stdout.write(`\r  Query ${i + 1}/${taxon.gbif.length}`);
     const results = await fetchFacets(q.taxonKey);
-    // Checked per query, not only on the pooled result. A group can name up to
-    // 51 root keys, so one of them going dead after a CoL renumber takes a whole
-    // sub-clade with it while the group's total stays large and its resolution
-    // rate stays healthy — no threshold notices. That is exactly how the coral
-    // gap got through the first attempt at this migration.
+    // Reported, not thrown. An empty facet does NOT mean the key is dead: it
+    // also happens when a real taxon has no records identified to species rank.
+    // Turbellaria (BDSSX) is exactly that — 13,998 occurrence records under this
+    // pipeline's own filters and zero speciesKey facets, because CoL XR places
+    // essentially none of them at species level. Throwing here aborted every
+    // sync at phase 5. Whether the key is still VALID is a different question,
+    // and assertRootKeysResolve answers it directly against the pinned release.
     if (results.length === 0) {
-      throw new Error(
-        `fetch-gbif-species: ${taxon.id} root key ${q.taxonKey} ` +
-        `returned no species at all. Either the key no longer exists in the ` +
-        `Catalogue of Life release GBIF indexes, or the group definition is wrong — ` +
-        `rerun derive-gbif-taxon-keys.`
-      );
+      console.warn(`  note: root key ${q.taxonKey} matched no species-rank taxa (it may legitimately have none)`);
     }
     for (const r of results) {
       allResults.push({ speciesKey: r.speciesKey, count: r.count, taxonGroup: taxon.id });
@@ -411,12 +408,59 @@ export function readGbifCsv(taxonId: string): Map<string, GbifSpecies> {
 // MAIN
 // =============================================================================
 
+/**
+ * Confirm every group's root keys still exist in the pinned Catalogue of Life
+ * release.
+ *
+ * These are CoL ids like any other usage, and CoL renumbers them: between
+ * COL26.6 and COL26.7, Rhodophyta went L2MHG -> CHDNQ and Blattodea's key
+ * disappeared outright. Rhodophyta is red_algae's ONLY root key, so a stale one
+ * silently empties an entire group.
+ *
+ * A local join, so it costs nothing and runs before any request is made. It
+ * deliberately tests EXISTENCE rather than "did this key return species" — a
+ * live taxon can legitimately have no species-rank records, which is a different
+ * thing from a key that no longer exists.
+ */
+export async function assertRootKeysResolve(taxa: Taxon[]): Promise<void> {
+  const backbone = path.join(DATA_DIR, "backbone.parquet");
+  if (!fs.existsSync(backbone)) return;
+  const wanted = taxa.flatMap((t) => t.gbif.map((q) => ({ taxon: t.id, key: q.taxonKey })));
+  if (wanted.length === 0) return;
+
+  const inst = await DuckDBInstance.create(":memory:");
+  const conn = await inst.connect();
+  try {
+    const list = wanted.map((w) => `'${w.key}'`).join(",");
+    const found = new Set(
+      (await conn.runAndReadAll(
+        `SELECT col_id FROM '${backbone}' WHERE col_id IN (${list})`
+      )).getRowObjects().map((r) => String(r.col_id))
+    );
+    const dead = wanted.filter((w) => !found.has(w.key));
+    if (dead.length > 0) {
+      throw new Error(
+        `fetch-gbif-species: ${dead.length} group root key(s) no longer exist in the pinned ` +
+        `Catalogue of Life release:\n` +
+        dead.map((d) => `  ${d.taxon}: ${d.key}`).join("\n") +
+        `\nCoL renumbers these between releases. Rerun derive-gbif-taxon-keys (sync phase 4b) ` +
+        `to re-derive them against what GBIF currently indexes.`
+      );
+    }
+  } finally {
+    conn.closeSync();
+    inst.closeSync();
+  }
+}
+
 export async function run(opts: {
   taxa?: string[];
   logger?: SyncLogger;
 } = {}): Promise<void> {
   const taxaToSync = getTaxa(opts.taxa);
   const logger = opts.logger ?? SyncLogger.noop();
+
+  await assertRootKeysResolve(taxaToSync);
 
   const startTime = Date.now();
 

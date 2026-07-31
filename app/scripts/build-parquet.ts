@@ -177,12 +177,27 @@ export async function run(): Promise<void> {
   // still wins — that is the rule protecting Acacia koaia from Acacia koa, and
   // it applies to 139 of the 297 split pairs. Only the 142 with matching
   // authorship take the record count into account.
+  //
+  // Authorship alone is NOT enough, and this is the second place that lesson had
+  // to be learned: congeners described in the same paper carry the same
+  // authorship string verbatim, so the test cannot tell a genus transfer from a
+  // different species. It handed five species another accepted species' records,
+  // including Pseudophilautus abundus (EN), which showed P. procax's 21 records
+  // instead of its own 1 — both accepted, both (Manamendra-Arachchi &
+  // Pethiyagoda, 2005). A genus transfer keeps the epithet (Hylatomus pileatus ->
+  // Dryocopus pileatus); a different species does not (abundus -> procax). So
+  // both have to agree, which keeps 29 of the 34 and drops exactly the 5.
+  // Species epithet, with the hybrid marker stripped so Solanum x vallis-mexici
+  // and Solanum vallis-mexici compare equal — they are the same plant.
+  const epithet = (col: string) =>
+    `lower(regexp_replace(split_part(${col}, ' ', 2), '^×', ''))`;
   const normAuthor = (col: string) =>
     `lower(regexp_replace(regexp_replace(coalesce(${col}, ''), '[()\\[\\].,;]', '', 'g'), '\\s+', ' ', 'g'))`;
   await conn.run(`
     CREATE TEMP TABLE link_ranked AS
       SELECT m.sis_taxon_id, m.gbif_species_key, m.name_source, g.total_count,
-             ${normAuthor("b.authorship")} AS author
+             ${normAuthor("b.authorship")} AS author,
+             ${epithet("b.scientific_name")} AS epithet
       FROM map m
       JOIN gbif_all g ON g.gbif_species_key = m.gbif_species_key
       LEFT JOIN '${path.join(DATA_DIR, "backbone.parquet")}' b ON b.col_id = m.gbif_species_key;
@@ -190,7 +205,9 @@ export async function run(): Promise<void> {
   await conn.run(`
     CREATE TEMP TABLE chosen_link AS
       WITH canon AS (
-        SELECT sis_taxon_id, min(author) FILTER (name_source='canonical') AS canon_author
+        SELECT sis_taxon_id,
+               min(author)  FILTER (name_source='canonical') AS canon_author,
+               min(epithet) FILTER (name_source='canonical') AS canon_epithet
         FROM link_ranked GROUP BY 1
       )
       SELECT
@@ -198,7 +215,7 @@ export async function run(): Promise<void> {
         arg_min(
           r.gbif_species_key,
           -- same organism as the canonical name: rank by records, fullest first
-          CASE WHEN r.author <> '' AND r.author = c.canon_author
+          CASE WHEN r.author <> '' AND r.author = c.canon_author AND r.epithet = c.canon_epithet
                THEN '0' || lpad((999999999999 - coalesce(r.total_count, 0))::VARCHAR, 12, '0')
                -- otherwise the original rule, unchanged
                WHEN r.name_source = 'canonical' THEN '1'
