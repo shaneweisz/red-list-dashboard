@@ -59,6 +59,9 @@ The GBIF map is more than a scatter of points:
 - **Basis of record** — human observations (incl. an iNaturalist subset), preserved specimens, machine observations
 - **Overlays** — protected areas, POWO native range, IUCN native range
 
+### Range maps and Area of Habitat
+IUCN range maps and Area of Habitat (AOH) rasters can be overlaid on the species occurrence map, served from the `dashboard-maps` R2 bucket via `/api/species/[key]/range-map` and `/api/species/[key]/aoh`. Both are **gated to `admin` accounts** — the routes return 403 otherwise. Rasters are uploaded out of band with `scripts/upload-range-maps.ts` and `scripts/upload-aoh-maps.ts`.
+
 ### Country view
 A per-country landing page and country list, combining live DuckDB queries with a precomputed all-species country aggregate — assessment coverage, endemics, and occurrence totals for a single country.
 
@@ -69,7 +72,7 @@ A per-country landing page and country list, combining live DuckDB queries with 
 An MCP server at `/api/mcp` (`@modelcontextprotocol/sdk` + `mcp-handler`) exposes the dashboard's data to agents. Results carry a verifiable `dashboard_url` that resolves to the equivalent UI view.
 
 ### Accounts
-Sign-in is handled by Supabase Auth with OAuth providers (GitHub, Google, and Microsoft/Entra). Roles are stored in a `user_roles` table and checked server-side (`src/lib/auth/roles.ts`); `admin` is currently the only role. Schema lives in `app/supabase/migrations/`.
+Sign-in is handled by Supabase Auth with OAuth providers (GitHub, Google, and Microsoft/Entra). Roles are stored in a `user_roles` table and checked server-side (`src/lib/auth/roles.ts`); `admin` is currently the only role, and it gates the range map and AOH layers below. Schema lives in `app/supabase/migrations/`.
 
 ### Dark mode
 Light, dark, and system theme modes.
