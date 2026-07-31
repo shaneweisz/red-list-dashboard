@@ -25,8 +25,9 @@
 import * as fs from "fs";
 import * as path from "path";
 import { DuckDBInstance } from "@duckdb/node-api";
-import { loadEnvFiles, DATA_DIR, REDLIST_DIR, GBIF_DIR, CSV_QUOTING } from "./utils";
+import { loadEnvFiles, DATA_DIR, REDLIST_DIR, GBIF_DIR, CSV_QUOTING, writeCsv } from "./utils";
 import { EXCLUDED_DOMESTICATED_GBIF_KEYS } from "../src/lib/data/taxonomy-constants";
+import { chooseRepresentative, type Verdict } from "./species-key";
 
 export async function run(): Promise<void> {
   const redlistGlob = path.join(REDLIST_DIR, "*.csv");
@@ -134,12 +135,12 @@ export async function run(): Promise<void> {
     CREATE TEMP TABLE map AS
       SELECT CAST(sis_taxon_id AS BIGINT) AS sis_taxon_id,
              CAST(gbif_species_key AS VARCHAR) AS gbif_species_key,
-             name_source
+             verdict
       FROM read_csv_auto('${mappingCsv}', ${CSV_QUOTING})
       WHERE gbif_species_key IS NOT NULL
       ${fs.existsSync(lumpedCsv) ? `
       UNION
-      SELECT CAST(sis_taxon_id AS BIGINT), CAST(gbif_species_key AS VARCHAR), 'canonical'
+      SELECT CAST(sis_taxon_id AS BIGINT), CAST(gbif_species_key AS VARCHAR), 'lumped'
       FROM read_csv_auto('${lumpedCsv}', ${CSV_QUOTING})` : ""};
   `);
 
@@ -169,71 +170,53 @@ export async function run(): Promise<void> {
   // representative key is, the numbers shown must be that key's numbers, so the
   // count a user sees and the search the link opens describe the same taxon.
   //
-  // The representative key prefers a canonical-source match, then the lowest key,
-  // which is deterministic across runs.
+  // Which of a species' keys represents it is decided by species-key.ts, which
+  // is where that question is decided for the whole pipeline. This block used to
+  // decide it again here, in SQL, re-deriving authorship and epithet comparisons
+  // that the matching phase had already made — and the two rules disagreed. The
+  // SQL version handed five species another accepted species' records, among them
+  // Pseudophilautus abundus (EN), which showed P. procax's 21 instead of its own
+  // 1: congeners described in one paper share an author string verbatim, so
+  // authorship could not tell a genus transfer from a different frog.
   //
-  // With one exception, because Catalogue of Life sometimes carries the same
-  // organism as two *accepted* usages under different genera, and GBIF's index
-  // then splits its records between them. The Red List uses the older genus, so
-  // preferring the canonical match picks the emptier of the two: Hylatomus
-  // pileatus (Linnaeus, 1758) held 156 records while Dryocopus pileatus
-  // (Linnaeus, 1758) — the same bird, same authorship — held 5,371,684.
+  // Nothing is re-derived now. Each candidate arrives with the verdict matching
+  // gave it, and chooseRepresentative sorts them: a key that is this species'
+  // own beats one kept from a refused lump, then more records wins, then the key
+  // itself so runs are reproducible.
   //
-  // Authorship is what makes this safe to act on, exactly as it does for
-  // synonyms: identical authorship means one organism under two names, so
-  // preferring the fuller key cannot pull in another species' records. Where
-  // authorship differs the names are genuinely different taxa and canonical
-  // still wins — that is the rule protecting Acacia koaia from Acacia koa, and
-  // it applies to 139 of the 297 split pairs. Only the 142 with matching
-  // authorship take the record count into account.
-  //
-  // Authorship alone is NOT enough, and this is the second place that lesson had
-  // to be learned: congeners described in the same paper carry the same
-  // authorship string verbatim, so the test cannot tell a genus transfer from a
-  // different species. It handed five species another accepted species' records,
-  // including Pseudophilautus abundus (EN), which showed P. procax's 21 records
-  // instead of its own 1 — both accepted, both (Manamendra-Arachchi &
-  // Pethiyagoda, 2005). A genus transfer keeps the epithet (Hylatomus pileatus ->
-  // Dryocopus pileatus); a different species does not (abundus -> procax). So
-  // both have to agree, which keeps 29 of the 34 and drops exactly the 5.
-  // Species epithet, with the hybrid marker stripped so Solanum x vallis-mexici
-  // and Solanum vallis-mexici compare equal — they are the same plant.
-  const epithet = (col: string) =>
-    `lower(regexp_replace(split_part(${col}, ' ', 2), '^×', ''))`;
-  const normAuthor = (col: string) =>
-    `lower(regexp_replace(regexp_replace(coalesce(${col}, ''), '[()\\[\\].,;]', '', 'g'), '\\s+', ' ', 'g'))`;
-  await conn.run(`
-    CREATE TEMP TABLE link_ranked AS
-      SELECT m.sis_taxon_id, m.gbif_species_key, m.name_source, g.total_count,
-             ${normAuthor("b.authorship")} AS author,
-             ${epithet("b.scientific_name")} AS epithet
-      FROM map m
-      JOIN gbif_all g ON g.gbif_species_key = m.gbif_species_key
-      LEFT JOIN '${path.join(DATA_DIR, "backbone.parquet")}' b ON b.col_id = m.gbif_species_key;
-  `);
+  // "More records wins" matters because CoL sometimes carries one organism as two
+  // accepted usages in different genera and GBIF splits the records between them.
+  // The Red List uses the older genus, so the obvious choice picks the emptier:
+  // Hylatomus pileatus held 156 records, Dryocopus pileatus 5,371,684. Ranking by
+  // count is only safe because the verdict has already established these are the
+  // same bird — it is not deciding that here.
+  const candidates = new Map<number, Array<{ key: string; count: number; verdict: Verdict }>>();
+  for (const row of (await conn.runAndReadAll(`
+        SELECT m.sis_taxon_id, m.gbif_species_key, m.verdict, g.total_count
+        FROM map m JOIN gbif_all g ON g.gbif_species_key = m.gbif_species_key`)).getRowObjects()) {
+    const id = Number(row.sis_taxon_id);
+    const list = candidates.get(id) ?? [];
+    list.push({
+      key: String(row.gbif_species_key),
+      count: Number(row.total_count ?? 0),
+      verdict: (row.verdict as Verdict) || "own",
+    });
+    candidates.set(id, list);
+  }
+  const chosenRows: Array<{ sis_taxon_id: number; gbif_species_key: string }> = [];
+  for (const [id, list] of candidates) {
+    const best = chooseRepresentative(list);
+    if (best) chosenRows.push({ sis_taxon_id: id, gbif_species_key: best.key });
+  }
+  const chosenCsv = path.join(DATA_DIR, "_chosen-link.csv");
+  writeCsv(chosenRows, ["sis_taxon_id", "gbif_species_key"], chosenCsv);
   await conn.run(`
     CREATE TEMP TABLE chosen_link AS
-      WITH canon AS (
-        SELECT sis_taxon_id,
-               min(author)  FILTER (name_source='canonical') AS canon_author,
-               min(epithet) FILTER (name_source='canonical') AS canon_epithet
-        FROM link_ranked GROUP BY 1
-      )
-      SELECT
-        r.sis_taxon_id,
-        arg_min(
-          r.gbif_species_key,
-          -- same organism as the canonical name: rank by records, fullest first
-          CASE WHEN r.author <> '' AND r.author = c.canon_author AND r.epithet = c.canon_epithet
-               THEN '0' || lpad((999999999999 - coalesce(r.total_count, 0))::VARCHAR, 12, '0')
-               -- otherwise the original rule, unchanged
-               WHEN r.name_source = 'canonical' THEN '1'
-               ELSE '2' END || r.gbif_species_key
-        ) AS gbif_species_key
-      FROM link_ranked r
-      JOIN canon c USING (sis_taxon_id)
-      GROUP BY r.sis_taxon_id;
+      SELECT CAST(sis_taxon_id AS BIGINT) AS sis_taxon_id,
+             CAST(gbif_species_key AS VARCHAR) AS gbif_species_key
+      FROM read_csv_auto('${chosenCsv}', ${CSV_QUOTING});
   `);
+  fs.rmSync(chosenCsv, { force: true });
   await conn.run(`
     CREATE TEMP TABLE enrich AS
       SELECT
