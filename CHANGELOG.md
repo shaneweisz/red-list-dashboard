@@ -2,12 +2,46 @@
 
 All notable changes to the IUCN Red List Assessments Dashboard.
 
-## [Unreleased]
+## [v2.19.0] — 2026-07-24 – 2026-07-30 — Sign-in, Compare Mode & Filter Charts
 
+- Added sign-in — GitHub, Google and Microsoft accounts via Supabase Auth, backed by a generic `user_roles` table so permissions aren't hardcoded per user. Signing in returns you to the page and query string you were on, and works across all the custom domains (Microsoft is wired up and working, but its button is hidden for now)
+- Added a Compare mode — two dashboard panels side by side, each with its own filters and view mode, reachable from the View dropdown
+- Added Criteria, Habitat and "Number of Assessments" filter charts, and unified all three hierarchical filters (Criteria, Threats, Habitat) on a single pattern: a bar chart at the top level that drills into pills, rather than a second nested bar chart. Criteria deliberately stays in A–E order rather than sorting by count, since that ordering is the standard one
+- Reworked the taxa-view header controls and filter cards: the View selector moved into the taxa breadcrumb table itself (landing-only), "More Filters" became a full-width card row and now holds the Country map and Threats chart, and the taxon stat card shows the filtered count instead of a static total
+- Reworked the Country view to lead with the map, revealing the table on click, and restored the landing map's full height
+- Moved the header controls onto the title row and the iNaturalist photos below the map on mobile
+- Zoomed the By Country map in one level by default
+- Fixed GBIF occurrence links returning 0 records
+- Fixed wrong species thumbnails for name-ambiguous iNaturalist matches, and cached the thumbnail proxy
+- Fixed a country selection outside Country view silently re-scoping the taxa breadcrumb table's own numbers — only the species list below it is scoped now
+- Fixed the weekly data sync still running DB-dependent phases under `--skip-redlist`
+
+## [v2.18.0] — 2026-07-19 – 2026-07-23 — Native Range, Country View & Dynamic Taxon Browsing
+
+- Added a Country view — a per-country landing page and a sortable country list alongside the existing world map
+- Added trait data from EOL TraitBank to the Encyclopedia of Life tab
+- Added an overall "load more" button and a date-range filter to the GBIF occurrence map
 - Added a "Native range only" check to the GBIF occurrence map's Coordinate cleaning dropdown — hides occurrences reported outside a species' native countries, catching cultivated/naturalized botanical-garden specimens. Two selectable sources (POWO/WCVP default, or the Red List assessment's own locations), which can genuinely disagree on native range. POWO now covers the full WCVP checklist (~983k names, current and synonym), not just already-assessed species — served from a Parquet file queried via DuckDB rather than a JSON import, cutting the cold-start lookup from ~3s to ~200ms
 - Added an "Overlays" dropdown to the GBIF occurrence map (Protected areas, POWO native range, IUCN native range) — shades which countries a source considers native, independent of the occurrence filter above; info icons link to the species' real POWO page and to Protected Planet
 - Tightened the Basis of Record dropdown's layout (narrower) and made its counts, and Coordinate cleaning's, cross-filter consistently with the new native-range check; moved the "Loaded X of Y" summary onto the map itself (top-right)
+- Made the taxonomic browser fully dynamic — every taxon now drills down live against the Catalogue of Life, replacing the hand-crafted described-species citations
+- Showed ancestor breadcrumb rows when jumping straight to a taxon from search, so it's clear where in the tree you've landed
 - Fixed the occurrence map re-fitting its zoom/bounds every time a filter checkbox was toggled — it now only re-fits on genuinely new data (new species, larger sample), not on filter changes
+- Fixed a Not Evaluated count mismatch for Mammals, and stopped the Not Evaluated view being offered for All Species
+- Fixed two weekly data-sync failures: a CoL checklist 404 during the monthly release rollover, and a stale file allowlist that broke the pointer-bump PR
+- Refreshed the GBIF/CoL data sync, adding Red List assessment criteria
+
+## [v2.17.0] — 2026-07-09 – 2026-07-18 — Coordinate Cleaning, SSC Groups & Red List 2026-1
+
+- Added GBIF coordinate cleaning — a TypeScript port of R's CoordinateCleaner checks (country centroids, capitals, biodiversity institutions, sea and urban tests, and range-based checks), together with an overhaul of the occurrence map's filter UI built around it
+- Added an SSC Specialist Groups view, piloted on IUCN's mammal Specialist Groups and then extended to all six taxa (reptiles, fishes, invertebrates, plants, fungi)
+- Synced to IUCN Red List 2026-1, and dropped the `has_map` column since range maps are unavailable
+- Added a "% Outdated" mode to the country map, switched its colouring to a linear gradient, and tidied its loading and Clear-all behaviour
+- Renamed "Assessments by Year" to "Year of Latest Assessment" and gave it an Outdated toggle
+- Defaulted unevaluated species to the Catalogue of Life tab when there's no occurrence data to show
+- Added a weekly data-sync GitHub Action, so the GBIF/CoL refresh and its pointer-bump PR now happen on a schedule instead of by hand
+- Fixed country-map name mismatches that were hiding data for ~40 territories, and folded Kosovo into Serbia as already done for Somaliland and Northern Cyprus
+- Fixed crustaceans missing two SIS-assessed barnacle species
 
 ## [v2.16.0] — 2026-06-30 – 2026-07-07 — Shared Filters, Attribution & Taxon Browsing
 
