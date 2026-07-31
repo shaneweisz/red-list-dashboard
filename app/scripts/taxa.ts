@@ -1,4 +1,5 @@
-import DERIVED_KEYS from "../src/config/gbif-taxon-keys.json";
+import * as fs from "fs";
+import * as path from "path";
 
 /**
  * Unified taxa configuration for Red List and GBIF pipelines.
@@ -220,13 +221,53 @@ export const TAXA_DEFINITIONS: Array<Omit<Taxon, "gbif">> = [
 // HELPERS
 // =============================================================================
 
-export const TAXA: Taxon[] = TAXA_DEFINITIONS.map(withGbifKeys);
+const DERIVED_KEYS_PATH = path.join(__dirname, "../src/config/gbif-taxon-keys.json");
 
-const TAXA_BY_ID = new Map(TAXA.map((t) => [t.id, t]));
+type DerivedKeyFile = Record<string, Array<{ redlistName: string; taxonKey: string | null }>>;
+
+/**
+ * The derived keys, read from disk rather than imported.
+ *
+ * This used to be a static `import` of the JSON, which meant the group root keys
+ * were frozen at module load — and the sync's whole self-healing story depended
+ * on them not being. Phase 4b rewrites this file when Catalogue of Life
+ * renumbers a root key, and phase 5 then validates the keys it holds against the
+ * newly built taxonomy. With a static import phase 5 still held the *previous*
+ * release's keys, so the run it was meant to rescue failed instead: Rhodophyta
+ * renumbered, red_algae's only root key dead, guard throws, weekly job red every
+ * Sunday until someone ran the derivation by hand.
+ *
+ * Read lazily and cached, with reloadTaxonKeys() to drop the cache after the
+ * file is rewritten.
+ */
+let derivedKeysCache: DerivedKeyFile | null = null;
+function derivedKeys(): DerivedKeyFile {
+  if (!derivedKeysCache) {
+    derivedKeysCache = fs.existsSync(DERIVED_KEYS_PATH)
+      ? (JSON.parse(fs.readFileSync(DERIVED_KEYS_PATH, "utf8")) as DerivedKeyFile)
+      : {};
+  }
+  return derivedKeysCache;
+}
+
+let taxaCache: Taxon[] | null = null;
+function allTaxa(): Taxon[] {
+  if (!taxaCache) taxaCache = TAXA_DEFINITIONS.map(withGbifKeys);
+  return taxaCache;
+}
+
+/**
+ * Forget the cached keys, so the next read picks up a rewritten config.
+ * Called by sync.ts immediately after phase 4b regenerates it.
+ */
+export function reloadTaxonKeys(): void {
+  derivedKeysCache = null;
+  taxaCache = null;
+}
 
 export function getTaxon(id: string): Taxon {
-  const taxon = TAXA_BY_ID.get(id);
-  if (!taxon) throw new Error(`Unknown taxon: ${id}. Available: ${TAXA.map((t) => t.id).join(", ")}`);
+  const taxon = allTaxa().find((t) => t.id === id);
+  if (!taxon) throw new Error(`Unknown taxon: ${id}. Available: ${allTaxa().map((t) => t.id).join(", ")}`);
   assertHasGbifKeys(taxon);
   return taxon;
 }
@@ -248,7 +289,7 @@ function assertHasGbifKeys(taxon: Taxon): void {
 
 /** Attach the derived GBIF keys to each group. */
 function withGbifKeys(taxon: Omit<Taxon, "gbif">): Taxon {
-  const derived = (DERIVED_KEYS as Record<string, Array<{ redlistName: string; taxonKey: string | null }>>)[taxon.id] ?? [];
+  const derived = derivedKeys()[taxon.id] ?? [];
   const gbif = derived
     .filter((d) => d.taxonKey)
     .map((d) => ({ taxonKey: d.taxonKey as string, fromName: d.redlistName }));
@@ -257,8 +298,18 @@ function withGbifKeys(taxon: Omit<Taxon, "gbif">): Taxon {
 
 export function getTaxa(ids?: string[]): Taxon[] {
   if (!ids) {
-    TAXA.forEach(assertHasGbifKeys);
-    return TAXA;
+    const all = allTaxa();
+    all.forEach(assertHasGbifKeys);
+    return all;
   }
   return ids.map(getTaxon);
+}
+
+/**
+ * Every group, without the has-keys assertion — for callers that only need the
+ * Red List side (which group a species belongs to) and must still work before
+ * the keys have ever been derived.
+ */
+export function allTaxaUnchecked(): Taxon[] {
+  return allTaxa();
 }

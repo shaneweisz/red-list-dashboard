@@ -20,7 +20,7 @@ import * as fs from "fs";
 import * as path from "path";
 import { DuckDBInstance, type DuckDBConnection } from "@duckdb/node-api";
 import { loadEnvFiles, DATA_DIR, REDLIST_DIR, GBIF_DIR } from "./utils";
-import { TAXA } from "./taxa";
+import { allTaxaUnchecked } from "./taxa";
 import { readRedlistCsv } from "./fetch-redlist-species";
 import { readGbifCsv } from "./fetch-gbif-species";
 import { readMappingCsv } from "./match-redlist-species-to-gbif";
@@ -276,7 +276,7 @@ export async function run(): Promise<void> {
     }
   }
 
-  for (const taxon of TAXA) {
+  for (const taxon of allTaxaUnchecked()) {
     const redlistPath = path.join(REDLIST_DIR, `${taxon.id}.csv`);
     const gbifPath = path.join(GBIF_DIR, `${taxon.id}.csv`);
 
@@ -377,7 +377,7 @@ export async function run(): Promise<void> {
   // Build caches for CSV data (reusing what readRedlistCsv/readGbifCsv load)
   const redlistByGroup = new Map<string, ReturnType<typeof readRedlistCsv>>();
   const gbifByGroup = new Map<string, ReturnType<typeof readGbifCsv>>();
-  for (const taxon of TAXA) {
+  for (const taxon of allTaxaUnchecked()) {
     if (fs.existsSync(path.join(REDLIST_DIR, `${taxon.id}.csv`))) {
       redlistByGroup.set(taxon.id, readRedlistCsv(taxon.id));
     }
@@ -598,9 +598,9 @@ async function checkTaxonomyAliasDrift(): Promise<void> {
     console.log("  Skipping — species/ or assessed.parquet missing.");
     return;
   }
-  const liveTaxa = TAXA.filter((t) => DYNAMIC_DRILLDOWN_ROOTS.has(t.id));
+  const liveTaxa = allTaxaUnchecked().filter((t) => DYNAMIC_DRILLDOWN_ROOTS.has(t.id));
   const conn = await (await DuckDBInstance.create(":memory:")).connect();
-  const dimensions: { label: "class" | "order"; col: string; taxa: typeof TAXA }[] = [
+  const dimensions: { label: "class" | "order"; col: string; taxa: ReturnType<typeof allTaxaUnchecked> }[] = [
     { label: "class", col: canonicalClassColumnSql("class_name"), taxa: liveTaxa.filter((t) => nextDynamicRank(t.id) === "class") },
     { label: "order", col: canonicalOrderColumnSql("order_name", "scientific_name"), taxa: liveTaxa },
   ];

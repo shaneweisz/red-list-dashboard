@@ -63,6 +63,7 @@ import { run as buildSynonymIndex } from "./build-synonym-index";
 import { run as buildColTaxonIds } from "./build-col-taxon-ids";
 import { run as uploadRangeMaps } from "./upload-range-maps";
 import { run as uploadAohMaps } from "./upload-aoh-maps";
+import { reloadTaxonKeys } from "./taxa";
 
 async function main() {
   loadEnvFiles();
@@ -140,8 +141,6 @@ async function main() {
         // earlier lets a failed download leave the two disagreeing — with the
         // sync skipping the rebuild from then on because the pin already claims
         // to be current.
-        writeReleaseMetadata(coldp.xrDataset);
-
         // Phase 4b: the group root keys are CoL ids too, and they are renumbered
         // by the same mechanism as any other usage. Between COL26.6 and 26.7 two
         // of the 74 died: Blattodea, and Rhodophyta — which is red_algae's ONLY
@@ -158,6 +157,22 @@ async function main() {
         console.log("\nPhase 4b: derive-gbif-taxon-keys (→ src/config/gbif-taxon-keys.json)");
         console.log("═".repeat(60));
         await deriveGbifTaxonKeys(true);
+
+        // The keys were loaded when this process started, which was before the
+        // file above was rewritten. Without dropping that cache, phase 5 checks
+        // the PREVIOUS release's root keys against the taxonomy just built from
+        // the new one, finds Rhodophyta renumbered and Blattodea gone, and fails
+        // the run it exists to rescue — every Sunday, until someone ran the
+        // derivation by hand. Which is the exact outcome this phase is here to
+        // prevent.
+        reloadTaxonKeys();
+
+        // Only now is the pin true. It records which release backbone.parquet was
+        // built from AND whose root keys are on disk, and it is what the skip
+        // test above reads. Writing it any earlier lets a failure in between
+        // leave a pin claiming to be current while the keys are not — and since
+        // the skip then fires, the phase that would fix them never runs again.
+        writeReleaseMetadata(coldp.xrDataset);
       }
 
     } else {

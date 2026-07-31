@@ -5,16 +5,13 @@
  * mock matchFn explicitly so tests don't need a live IUCN DB or GBIF API.
  */
 
-import { describe, it, expect, beforeEach, afterEach} from "vitest";
+import { describe, it, expect} from "vitest";
 import { SyncLogger } from "../utils";
 import {
   matchSpeciesList,
   type SpeciesInput,
   type MatchFn,
   type MappingEntry,
-  shouldFollowSynonym,
-  setAssessedNames,
-  isSeparatelyAssessed,
 } from "../match-redlist-species-to-gbif";
 
 function speciesOf(sis: number, name: string, synonyms: string[] = []): SpeciesInput {
@@ -265,66 +262,5 @@ describe("classification context", () => {
   });
 });
 
-describe("shouldFollowSynonym", () => {
-  // A synonym can mean two very different things, and only one should be followed.
-  // Getting it wrong is what put 3.4M records of a common butterfly under a
-  // threatened Madeiran endemic in an earlier attempt at this migration.
-  //
-  // Authorship decides it by definition: a name that keeps its original author
-  // and year is the same name reworded; a lump under a different author is
-  // somebody else's species. Every pair below is real, taken from GBIF.
-  it("follows nomenclatural changes — same organism, same authorship", () => {
-    // orthographic correction
-    expect(shouldFollowSynonym("Pica nutalli", "Pica nutallii", "(Audubon, 1837)", "(Audubon, 1837)")).toBe(true);
-    // demotion to subspecies of a relative
-    expect(shouldFollowSynonym("Fringilla polatzeki", "Fringilla teydea polatzeki", "Hartert, 1905", "Hartert, 1905")).toBe(true);
-    // genus move: convention brackets the original author afterwards, so the
-    // brackets must not count as a difference
-    expect(shouldFollowSynonym("Aquarana catesbeianus", "Lithobates catesbeianus", "Shaw, 1802", "(Shaw, 1802)")).toBe(true);
-  });
-
-  it("refuses taxonomic lumping — a different author means a different species", () => {
-    expect(shouldFollowSynonym("Pieris segonzaci", "Pieris napi", "Le Cerf, 1923", "(Linnaeus, 1758)")).toBe(false);
-    expect(shouldFollowSynonym("Sus bucculentus", "Sus scrofa", "Heude, 1892", "Linnaeus, 1758")).toBe(false);
-    expect(shouldFollowSynonym("Malus sieversii", "Malus domestica", "(Ledeb.) M.Roem.", "(Suckow) Borkh.")).toBe(false);
-  });
-
-  it("separates near-identical epithets that an edit distance could not", () => {
-    // Acacia koaia (VU, Hawaiian endemic) and Acacia koa (LC) are three
-    // characters apart. A distance threshold handed the endemic the common
-    // tree's 2,180 records; the authors settle it with nothing to tune.
-    expect(shouldFollowSynonym("Acacia koaia", "Acacia koa", "Hillebr.", "A.Gray")).toBe(false);
-  });
-
-  it("falls back to the terminal epithet when authorship is missing", () => {
-    // Nothing else to go on, so same-organism-renamed is accepted and anything
-    // further apart is refused — erring toward showing no data over wrong data.
-    expect(shouldFollowSynonym("Fringilla polatzeki", "Fringilla teydea polatzeki")).toBe(true);
-    expect(shouldFollowSynonym("Pieris segonzaci", "Pieris napi")).toBe(false);
-    expect(shouldFollowSynonym("Morimus asper", "Morimus asper funereus")).toBe(false);
-  });
-});
 
 
-describe("a lump onto another assessed species", () => {
-  // Authorship alone waves these through: two species described by the same
-  // author in the same work keep identical authorship when CoL later folds one
-  // into the other. 54 assessed species ended up displaying a different assessed
-  // species' records, 22 of them CR/EN/VU/EX.
-  beforeEach(() => setAssessedNames(["Actinodaphne latifolia", "Actinodaphne nitida", "Pica nutalli"]));
-  afterEach(() => setAssessedNames([]));
-
-  it("refuses when CoL folds one assessed species into another", () => {
-    // Both are Red List species; one key cannot serve both, and whichever loses
-    // is rejected as DUPLICATE and shows nothing at all.
-    expect(isSeparatelyAssessed("Actinodaphne nitida", "Actinodaphne latifolia")).toBe(true);
-  });
-
-  it("still allows a rename onto a name nobody else is assessed under", () => {
-    expect(isSeparatelyAssessed("Pica nuttallii", "Pica nutalli")).toBe(false);
-  });
-
-  it("does not treat a species' own name as somebody else's", () => {
-    expect(isSeparatelyAssessed("Pica nutalli", "Pica nutalli")).toBe(false);
-  });
-});

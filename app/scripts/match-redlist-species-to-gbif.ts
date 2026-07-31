@@ -28,7 +28,7 @@ import {
 } from "./utils";
 import { readRedlistCsv } from "./fetch-redlist-species";
 import { readGbifCsv } from "./fetch-gbif-species";
-import { TAXA } from "./taxa";
+import { allTaxaUnchecked } from "./taxa";
 import { decideKey, type Verdict } from "./species-key";
 import { GBIF_CHECKLIST_KEY } from "../src/lib/gbif";
 
@@ -103,67 +103,6 @@ export interface MatchOutcome {
 }
 
 /**
- * The epithet that identifies the organism: the last word of the name.
- *
- * Not the second word. Catalogue of Life demotes plenty of species to subspecies
- * of a relative — Fringilla polatzeki becomes Fringilla teydea polatzeki — and
- * taking word two compares "polatzeki" against "teydea", concludes they are
- * different organisms, and discards a species' records. The terminal epithet is
- * the one that survives a rank change, because it is the one that names the
- * organism rather than its parent.
- */
-function terminalEpithet(name: string): string {
-  const parts = name.trim().toLowerCase().split(/\s+/).filter((w) => w !== "x" && w !== "×");
-  return parts.length > 1 ? parts[parts.length - 1] : "";
-}
-
-/**
- * The author and year a name was published, normalised for comparison.
- *
- * Brackets are dropped deliberately. Botanical and zoological convention wraps
- * the original author in parentheses once a species is moved to another genus, so
- * "(Shaw, 1802)" and "Shaw, 1802" are the same attribution seen before and after
- * a transfer — which is exactly the case that must compare equal.
- */
-function normaliseAuthorship(authorship: string | undefined): string {
-  if (!authorship) return "";
-  return authorship
-    .toLowerCase()
-    .replace(/[()]/g, " ")
-    .replace(/[.,;]/g, " ")
-    .replace(/\s+/g, " ")
-    .trim();
-}
-
-/**
- * Whether a resolution should be followed to the taxon Catalogue of Life points at.
- *
- * Two very different things arrive looking the same. A NOMENCLATURAL change is
- * the same organism under a different name — a genus move, a gender agreement, an
- * orthographic correction, a demotion to subspecies. The records are this
- * species'. A TAXONOMIC change is CoL deciding two species the Red List assesses
- * separately are one, and following that puts a common species' records under a
- * threatened one.
- *
- * Authorship decides it, and does so by definition rather than by resemblance: a
- * name that keeps its original author and year is the same name reworded, while a
- * lump under a different author is somebody else's species. Compare:
- *
- *   Pica nutalli      (Audubon, 1837)   -> Pica nutallii  (Audubon, 1837)   follow
- *   Fringilla polatzeki Hartert, 1905   -> F. teydea polatzeki Hartert, 1905 follow
- *   Acacia koaia      Hillebr.          -> Acacia koa     A.Gray            refuse
- *   Pieris segonzaci  Le Cerf, 1923     -> Pieris napi    (Linnaeus, 1758)  refuse
- *   Malus sieversii   (Ledeb.) M.Roem.  -> Malus domestica (Suckow) Borkh.  refuse
- *
- * This replaced an edit distance on the epithet, which needed two tuned constants
- * and still got Acacia koaia wrong — koaia and koa are three characters apart, so
- * a Hawaiian endemic listed VU was handed the common tree's records. Authorship
- * needs no threshold and no second guess.
- *
- * The epithet comparison survives only as a fallback for records with no
- * authorship on one side, where there is nothing else to go on.
- */
-/**
  * Scientific names the Red List assesses in their own right.
  *
  * Consulted when deciding whether to follow a CoL synonym resolution. Authorship
@@ -183,31 +122,6 @@ let assessedNames: Set<string> = new Set();
 
 export function setAssessedNames(names: Iterable<string>): void {
   assessedNames = new Set([...names].map((n) => n.trim().toLowerCase()));
-}
-
-/** Exported for tests. */
-export function isSeparatelyAssessed(candidate: string, ownName: string): boolean {
-  const c = candidate.trim().toLowerCase();
-  return c !== ownName.trim().toLowerCase() && assessedNames.has(c);
-}
-
-export function shouldFollowSynonym(
-  fromName: string,
-  toName: string,
-  fromAuthorship?: string,
-  toAuthorship?: string,
-): boolean {
-  const a = normaliseAuthorship(fromAuthorship);
-  const b = normaliseAuthorship(toAuthorship);
-  if (a && b) return a === b;
-
-  // No authorship to compare — fall back to the name itself. Same terminal
-  // epithet means the same organism renamed or re-ranked; anything further apart
-  // is treated as a different species, which is the safe direction to err.
-  const from = terminalEpithet(fromName);
-  const to = terminalEpithet(toName);
-  if (!from || !to) return false;
-  return from === to;
 }
 
 // =============================================================================
@@ -412,7 +326,7 @@ export interface SpeciesInput {
 
 function loadAllRedlistSpecies(): SpeciesInput[] {
   const allSpecies: SpeciesInput[] = [];
-  for (const taxon of TAXA) {
+  for (const taxon of allTaxaUnchecked()) {
     const csvPath = path.join(REDLIST_DIR, `${taxon.id}.csv`);
     if (!fs.existsSync(csvPath)) continue;
     for (const s of readRedlistCsv(taxon.id)) {
@@ -453,7 +367,7 @@ const KINGDOM_NAME: Record<string, string> = {
  */
 export function loadAllGbifKeys(): Set<string> {
   const keys = new Set<string>();
-  for (const taxon of TAXA) {
+  for (const taxon of allTaxaUnchecked()) {
     const csvPath = path.join(GBIF_DIR, `${taxon.id}.csv`);
     if (!fs.existsSync(csvPath)) continue;
     const map = readGbifCsv(taxon.id);
