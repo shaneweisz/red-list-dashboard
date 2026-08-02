@@ -5,8 +5,8 @@
       "name": "Insects",
       "estimatedDescribed": 1008355,
       "totalAssessed": 14531,
-      "outdated": 6044,
-      "gbifNeSpeciesCount": 249222,
+      "outdated": 6045,
+      "gbifNeSpeciesCount": 249223,
       "byCategory": {
         "VU": 1086,
         "EN": 1185,
@@ -29,7 +29,7 @@
       "estimatedDescribed": 98006,
       "totalAssessed": 1057,
       "outdated": 247,
-      "gbifNeSpeciesCount": 22417,
+      "gbifNeSpeciesCount": 22418,
       "byCategory": {
         "EN": 165,
         "VU": 104,
@@ -164,8 +164,8 @@
       "name": "Flowering Plants",
       "estimatedDescribed": 369000,
       "totalAssessed": 76102,
-      "outdated": 18525,
-      "gbifNeSpeciesCount": 140491,
+      "outdated": 18638,
+      "gbifNeSpeciesCount": 140497,
       "byCategory": {
         "LR/cd": 102,
         "VU": 10376,
@@ -281,7 +281,7 @@
       "estimatedDescribed": 157648,
       "totalAssessed": 1351,
       "outdated": 56,
-      "gbifNeSpeciesCount": 52367,
+      "gbifNeSpeciesCount": 52407,
       "byCategory": {
         "EN": 130,
         "CR": 48,
