@@ -26,7 +26,7 @@ import { isOutdated, outdatedCutoffDate } from "@/lib/outdated";
 
 import AssessorCandidatesTable from "../AssessorCandidatesTable";
 import ReviewerCandidatesTable from "../ReviewerCandidatesTable";
-import { getLastSearchResult, clearLastSearchResult } from "../SpeciesSearchBar";
+import { getLastSearchResult, clearLastSearchResult, type SearchResult } from "../SpeciesSearchBar";
 
 // Species list is served by the DuckDB/Parquet-backed /api/redlist/species route.
 const SPECIES_API = "/api/redlist/species";
@@ -385,6 +385,45 @@ interface SpeciesDetails {
   gbifMatchFetched?: boolean;
 }
 
+// A search hit as a species row: everything the search index knows, with the
+// assessment-only fields (trend, criteria, threats, assessors, …) left empty — the same
+// shape and the same absent-field handling as a Not-Evaluated row from the species list.
+// Lets the searched species be rendered before (or without) the taxon's own list.
+function previewFromSearchResult(r: SearchResult): RedListSpecies {
+  return {
+    id: r.id,
+    sis_taxon_id: r.id > 0 ? r.id : null,
+    assessment_id: r.assessment_id,
+    scientific_name: r.scientific_name,
+    common_name: r.common_name,
+    family: r.family,
+    category: r.category,
+    assessment_date: r.assessment_date,
+    year_published: null,
+    population_trend: null,
+    countries: r.countries,
+    class_name: r.class_name,
+    order_name: r.order_name,
+    taxon_group: r.taxon_group,
+    taxon_id: r.taxon_id,
+    described_year: null,
+    gbif_species_key: r.gbif_species_key,
+    gbif_occurrence_count: r.gbif_occurrence_count,
+    gbif_observations_after_assessment_year: null,
+    latest_assessors: null,
+    latest_reviewers: null,
+    previous_assessments: [],
+    systems: [],
+    growth_forms: [],
+    movement_pattern: null,
+    possibly_extinct: false,
+    possibly_extinct_in_the_wild: false,
+    criteria: null,
+    threat_codes: [],
+    habitat_codes: [],
+    assessment_count: null,
+  };
+}
 
 // Debounced search input — manages own state for instant typing, debounces parent updates.
 // Filters the currently-visible species table by name in place, composing with whatever
@@ -1208,7 +1247,7 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
   // mutes bars for selectedCategories rather than dropping them. Every other
   // memo/the table uses this outdated-filtered version, so the Outdated button
   // behaves like a real, dashboard-wide filter everywhere except its own chart.
-  const taxaFilteredSpecies = useMemo(() => {
+  const taxaFilteredSpeciesNoPreview = useMemo(() => {
     if (!exactFilters.outdated) return taxaFilteredSpeciesExceptOutdated;
     const wantOutdated = exactFilters.outdated === "yes";
     return taxaFilteredSpeciesExceptOutdated.filter(s => isOutdated(s.assessment_date, dataAsOf) === wantOutdated);
@@ -1447,41 +1486,29 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
     const cached = getLastSearchResult();
     if (cached && cached.id === urlSpecies) {
       clearLastSearchResult();
-      setSingleSpeciesPreview({
-        id: cached.id,
-        sis_taxon_id: cached.id > 0 ? cached.id : null,
-        assessment_id: cached.assessment_id,
-        scientific_name: cached.scientific_name,
-        common_name: cached.common_name,
-        family: null,
-        category: cached.category,
-        assessment_date: cached.assessment_date,
-        year_published: null,
-        population_trend: null,
-        countries: cached.countries,
-        class_name: null,
-        order_name: null,
-        taxon_group: cached.taxon_group,
-        taxon_id: cached.taxon_id,
-        described_year: null,
-        gbif_species_key: cached.gbif_species_key,
-        gbif_occurrence_count: null,
-        gbif_observations_after_assessment_year: null,
-        latest_assessors: null,
-        latest_reviewers: null,
-        previous_assessments: [],
-        systems: [],
-        growth_forms: [],
-        movement_pattern: null,
-        possibly_extinct: false,
-        possibly_extinct_in_the_wild: false,
-        criteria: null,
-        threat_codes: [],
-        habitat_codes: [],
-        assessment_count: null,
-      });
+      setSingleSpeciesPreview(previewFromSearchResult(cached));
       urlSpeciesHandledRef.current = true;
+      return;
     }
+
+    // Reload or shared link: the cached result only survives an in-page search, so
+    // re-resolve the species by the name the search bar left in `search=`. Without this
+    // the link renders an empty list whenever the taxon's own list doesn't carry the
+    // species — while it's still loading, or permanently for one excluded from the
+    // not-evaluated universe by a CoL id collision (see taxaFilteredSpecies).
+    if (!searchFilter) return;
+    let cancelled = false;
+    fetch(`/api/search?q=${encodeURIComponent(searchFilter)}&limit=10`)
+      .then(r => (r.ok ? r.json() : null))
+      .then((data: { results?: SearchResult[] } | null) => {
+        if (cancelled || !data) return;
+        const hit = data.results?.find(r => r.id === urlSpecies);
+        if (!hit) return;
+        setSingleSpeciesPreview(previewFromSearchResult(hit));
+        urlSpeciesHandledRef.current = true;
+      })
+      .catch(() => { /* preview is a nicety — the list path still applies */ });
+    return () => { cancelled = true; };
   }, [urlSpecies]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Clear preview once the species appears in bulk-loaded data
@@ -1491,6 +1518,24 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
       setSingleSpeciesPreview(null);
     }
   }, [assessedSpecies, singleSpeciesPreview]);
+
+  // Fold the searched species (?species=, previewed from the cached search result) into the
+  // species set the charts and table are built from, so the single-species view resolves
+  // while the taxon's own list is still loading — or when that list simply doesn't contain
+  // it. The latter is real: an NE species whose CoL id was claimed by an assessed congener
+  // (a synonym mismatch — Pararge aegeria's id is held by the assessed Pararge xiphioides)
+  // is filtered out of the not-evaluated universe as "already assessed", so search is the
+  // only way to reach it and the list it lands in will never list it.
+  // Dedupe as paginatedSpecies does — by id, and for NE also by name, since a row loaded
+  // from the NE list is keyed on its CoL id while the search result is keyed on its GBIF one.
+  const taxaFilteredSpecies = useMemo(() => {
+    if (!singleSpeciesPreview) return taxaFilteredSpeciesNoPreview;
+    if (taxaFilteredSpeciesNoPreview.some(s =>
+      s.id === singleSpeciesPreview.id ||
+      (singleSpeciesPreview.category === "NE" && s.scientific_name === singleSpeciesPreview.scientific_name)
+    )) return taxaFilteredSpeciesNoPreview;
+    return [singleSpeciesPreview, ...taxaFilteredSpeciesNoPreview];
+  }, [taxaFilteredSpeciesNoPreview, singleSpeciesPreview]);
 
   const [mounted, setMounted] = useState(false);
 
@@ -3714,7 +3759,10 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
           "all" in that mode as a side effect of loading species for the map's own
           stats (see setLayoutMode), not a real drill-down into All Species. */}
       {selectedTaxa.size > 0 && layoutMode !== "country" && (
-      neTooLarge ? (
+      // The drill-down prompt is about not being able to list a whole giant taxon — it
+      // must not swallow a specific species the user searched for, which is already in
+      // hand (singleSpeciesPreview) and needs no list to render.
+      neTooLarge && !singleSpeciesPreview ? (
         <div className="bg-white dark:bg-zinc-900 rounded-xl border border-amber-200 dark:border-amber-900/40 px-6 py-10 text-center">
           <p className="text-base font-medium text-zinc-700 dark:text-zinc-200">
             {neTooLarge.names.join(" & ")} has {neTooLarge.neTotal.toLocaleString()} not-evaluated species — too many to load at once.
