@@ -2730,7 +2730,7 @@
       "name": "New World Marsupial Specialist Group",
       "estimatedDescribed": 0,
       "totalAssessed": 107,
-      "outdated": 92,
+      "outdated": 93,
       "gbifNeSpeciesCount": 28,
       "byCategory": {
         "LC": 72,
@@ -3429,7 +3429,7 @@
       "name": "Small Mammal Specialist Group",
       "estimatedDescribed": 0,
       "totalAssessed": 2933,
-      "outdated": 1113,
+      "outdated": 1127,
       "gbifNeSpeciesCount": 133,
       "byCategory": {
         "CR": 74,
@@ -9033,7 +9033,7 @@
       "name": "Seahorse, Pipefish and Seadragon Specialist Group",
       "estimatedDescribed": 0,
       "totalAssessed": 308,
-      "outdated": 192,
+      "outdated": 197,
       "gbifNeSpeciesCount": 16,
       "byCategory": {
         "DD": 78,
@@ -24589,8 +24589,8 @@
       "name": "No / Other SSC Group",
       "estimatedDescribed": 0,
       "totalAssessed": 3946,
-      "outdated": 1307,
-      "gbifNeSpeciesCount": 254261,
+      "outdated": 1308,
+      "gbifNeSpeciesCount": 254263,
       "byCategory": {
         "VU": 449,
         "EN": 447,
@@ -28658,7 +28658,7 @@
       "estimatedDescribed": 0,
       "totalAssessed": 2443,
       "outdated": 1100,
-      "gbifNeSpeciesCount": 10443,
+      "gbifNeSpeciesCount": 10444,
       "byCategory": {
         "VU": 315,
         "NT": 134,
@@ -31844,7 +31844,7 @@
       "name": "Palm Specialist Group",
       "estimatedDescribed": 0,
       "totalAssessed": 1330,
-      "outdated": 436,
+      "outdated": 438,
       "gbifNeSpeciesCount": 400,
       "byCategory": {
         "VU": 138,
@@ -32281,7 +32281,7 @@
       "name": "Carnivorous Plant Specialist Group",
       "estimatedDescribed": 0,
       "totalAssessed": 505,
-      "outdated": 217,
+      "outdated": 320,
       "gbifNeSpeciesCount": 340,
       "byCategory": {
         "VU": 48,
@@ -33181,8 +33181,8 @@
       "name": "No / Other SSC Group",
       "estimatedDescribed": 0,
       "totalAssessed": 71284,
-      "outdated": 15943,
-      "gbifNeSpeciesCount": 140464,
+      "outdated": 15951,
+      "gbifNeSpeciesCount": 140469,
       "byCategory": {
         "LR/cd": 95,
         "VU": 9845,
@@ -71072,7 +71072,7 @@
       "estimatedDescribed": 0,
       "totalAssessed": 1149,
       "outdated": 47,
-      "gbifNeSpeciesCount": 17500,
+      "gbifNeSpeciesCount": 17501,
       "byCategory": {
         "LC": 478,
         "NT": 101,
@@ -72564,7 +72564,7 @@
       "estimatedDescribed": 0,
       "totalAssessed": 5,
       "outdated": 0,
-      "gbifNeSpeciesCount": 2693,
+      "gbifNeSpeciesCount": 2694,
       "byCategory": {
         "VU": 2,
         "CR": 2,
@@ -72681,7 +72681,7 @@
       "estimatedDescribed": 0,
       "totalAssessed": 55,
       "outdated": 1,
-      "gbifNeSpeciesCount": 23662,
+      "gbifNeSpeciesCount": 23700,
       "byCategory": {
         "VU": 8,
         "LC": 7,
