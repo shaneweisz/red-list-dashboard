@@ -53,7 +53,11 @@ import {
 import { readMappingCsv, loadAllGbifKeys } from "./match-redlist-species-to-gbif";
 import { readRedlistCsv } from "./fetch-redlist-species";
 import { getTaxa } from "./taxa";
-import { GBIF_CHECKLIST_KEY, INCLUDED_BASIS_OF_RECORD } from "../src/lib/gbif";
+import {
+  GBIF_CHECKLIST_KEY,
+  includedBasisOfRecord,
+  kingdomCountsPreservedSpecimens,
+} from "../src/lib/gbif";
 
 // Counts are read from a faceted query over many keys at once rather than one
 // request per species. Individually there are 6,000+ species and two counts each,
@@ -91,6 +95,8 @@ interface LumpedSpecies {
   taxonId: string;
   gbifKey: string;
   assessmentYear: number | null;
+  /** Whether this species' counts include preserved specimens (plants, fungi). */
+  preservedSpecimens: boolean;
 }
 
 function chunk<T>(items: T[], size: number): T[][] {
@@ -107,8 +113,15 @@ function chunk<T>(items: T[], size: number): T[][] {
  * facet having been truncated — so the caller's keys are reconciled against the
  * response and a short facet is retried in smaller pieces rather than silently
  * read as a row of zeroes.
+ *
+ * One batch is one set of record types, so callers batch plants and fungi
+ * separately from animals — see kingdomCountsPreservedSpecimens.
  */
-async function countBatch(keys: string[], yearRange?: string): Promise<Map<string, number>> {
+async function countBatch(
+  keys: string[],
+  yearRange?: string,
+  includePreservedSpecimens = false,
+): Promise<Map<string, number>> {
   const params = new URLSearchParams({
     checklistKey: GBIF_CHECKLIST_KEY,
     facet: "taxonKey",
@@ -119,7 +132,9 @@ async function countBatch(keys: string[], yearRange?: string): Promise<Map<strin
   });
   for (const k of keys) params.append("taxonKey", k);
   if (yearRange) params.set("year", yearRange);
-  INCLUDED_BASIS_OF_RECORD.forEach((b) => params.append("basisOfRecord", b));
+  includedBasisOfRecord(includePreservedSpecimens).forEach((b) =>
+    params.append("basisOfRecord", b),
+  );
 
   for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
     try {
@@ -146,7 +161,9 @@ async function countBatch(keys: string[], yearRange?: string): Promise<Map<strin
         const halves = chunk(keys, Math.ceil(keys.length / 2));
         const merged = new Map<string, number>();
         for (const half of halves) {
-          for (const [k, v] of await countBatch(half, yearRange)) merged.set(k, v);
+          for (const [k, v] of await countBatch(half, yearRange, includePreservedSpecimens)) {
+            merged.set(k, v);
+          }
         }
         return merged;
       }
@@ -237,6 +254,7 @@ export function loadLumpedSpecies(taxaIds?: string[]): LumpedSpecies[] {
         taxonId: taxon.id,
         gbifKey: lumped.unfetched_key,
         assessmentYear: Number.isNaN(year) ? null : year,
+        preservedSpecimens: kingdomCountsPreservedSpecimens(taxon.kingdomKey),
       });
     }
   }
@@ -252,33 +270,45 @@ export async function run(opts: { taxa?: string[]; logger?: SyncLogger } = {}): 
   );
   if (lumped.length === 0) return;
 
+  // A batch is one set of record types, so every grouping below is split on it:
+  // a plant counted in an animal's batch would silently lose its herbarium
+  // records, which for a plant is most of what GBIF holds about it.
+  const preservedKeys = new Set(lumped.filter((s) => s.preservedSpecimens).map((s) => s.gbifKey));
+
   // Totals: batched across all of them.
   const totals = new Map<string, number>();
   const allKeys = [...new Set(lumped.map((s) => s.gbifKey))];
-  const totalBatches = chunk(allKeys, BATCH_SIZE);
-  for (let i = 0; i < totalBatches.length; i++) {
-    for (const [k, v] of await countBatch(totalBatches[i])) totals.set(k, v);
-    process.stdout.write(`\r  Totals ${Math.min((i + 1) * BATCH_SIZE, allKeys.length)}/${allKeys.length}`);
+  let totalsDone = 0;
+  for (const preserved of [false, true]) {
+    const keys = allKeys.filter((k) => preservedKeys.has(k) === preserved);
+    for (const batch of chunk(keys, BATCH_SIZE)) {
+      for (const [k, v] of await countBatch(batch, undefined, preserved)) totals.set(k, v);
+      totalsDone += batch.length;
+      process.stdout.write(`\r  Totals ${totalsDone}/${allKeys.length}`);
+    }
   }
   console.log("");
 
   // Records since assessment: the window differs per species, so batch by the
-  // assessment year they share.
-  const byYear = new Map<number, string[]>();
+  // assessment year they share (and by record types, as above).
+  const byYear = new Map<string, { year: number; preserved: boolean; keys: string[] }>();
   for (const sp of lumped) {
     if (sp.assessmentYear === null || sp.assessmentYear + 1 > CURRENT_YEAR) continue;
-    const list = byYear.get(sp.assessmentYear) ?? [];
-    list.push(sp.gbifKey);
-    byYear.set(sp.assessmentYear, list);
+    const bucketKey = `${sp.assessmentYear}:${sp.preservedSpecimens}`;
+    const bucket = byYear.get(bucketKey)
+      ?? { year: sp.assessmentYear, preserved: sp.preservedSpecimens, keys: [] };
+    bucket.keys.push(sp.gbifKey);
+    byYear.set(bucketKey, bucket);
   }
   const since = new Map<string, number>();
-  let yearsDone = 0;
-  for (const [year, keys] of byYear) {
+  let bucketsDone = 0;
+  for (const { year, preserved, keys } of byYear.values()) {
     for (const batch of chunk([...new Set(keys)], BATCH_SIZE)) {
-      for (const [k, v] of await countBatch(batch, `${year + 1},${CURRENT_YEAR}`)) since.set(k, v);
+      const counts = await countBatch(batch, `${year + 1},${CURRENT_YEAR}`, preserved);
+      for (const [k, v] of counts) since.set(k, v);
     }
-    yearsDone++;
-    process.stdout.write(`\r  Since-assessment windows ${yearsDone}/${byYear.size}`);
+    bucketsDone++;
+    process.stdout.write(`\r  Since-assessment windows ${bucketsDone}/${byYear.size}`);
   }
   if (byYear.size > 0) console.log("");
 

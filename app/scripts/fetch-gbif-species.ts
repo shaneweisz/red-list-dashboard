@@ -23,7 +23,11 @@ import {
 } from "./utils";
 import { getTaxa, type Taxon, type GbifQuery } from "./taxa";
 
-import { GBIF_CHECKLIST_KEY, INCLUDED_BASIS_OF_RECORD } from "../src/lib/gbif";
+import {
+  GBIF_CHECKLIST_KEY,
+  includedBasisOfRecord,
+  kingdomCountsPreservedSpecimens,
+} from "../src/lib/gbif";
 
 // =============================================================================
 // GBIF TAXA (legacy lookup — used by fetch-gbif-new-counts)
@@ -81,8 +85,16 @@ export interface GbifSpecies {
 
 export async function fetchFacets(
   taxonKey: string,
-  yearRange?: string,
-  modifiedRange?: string,
+  {
+    yearRange,
+    modifiedRange,
+    includePreservedSpecimens = false,
+  }: {
+    yearRange?: string;
+    modifiedRange?: string;
+    /** See kingdomCountsPreservedSpecimens — on for plants, fungi and algae. */
+    includePreservedSpecimens?: boolean;
+  } = {},
 ): Promise<Array<{ speciesKey: string; count: number }>> {
   const allResults: Array<{ speciesKey: string; count: number }> = [];
   let offset = 0;
@@ -102,7 +114,9 @@ export async function fetchFacets(
 
     if (yearRange) params.set("year", yearRange);
     if (modifiedRange) params.set("modified", modifiedRange);
-    INCLUDED_BASIS_OF_RECORD.forEach((bor) => params.append("basisOfRecord", bor));
+    includedBasisOfRecord(includePreservedSpecimens).forEach((bor) =>
+      params.append("basisOfRecord", bor),
+    );
 
     // The body read has to sit inside the retry, not after it. A dropped socket
     // part-way through a response throws from .json(), not from fetch(), and a
@@ -151,11 +165,12 @@ export async function fetchFacets(
 
 export async function fetchGbifCounts(taxon: Taxon): Promise<SpeciesCount[]> {
   const allResults: SpeciesCount[] = [];
+  const includePreservedSpecimens = kingdomCountsPreservedSpecimens(taxon.kingdomKey);
 
   for (let i = 0; i < taxon.gbif.length; i++) {
     const q = taxon.gbif[i];
     process.stdout.write(`\r  Query ${i + 1}/${taxon.gbif.length}`);
-    const results = await fetchFacets(q.taxonKey);
+    const results = await fetchFacets(q.taxonKey, { includePreservedSpecimens });
     // Reported, not thrown. An empty facet does NOT mean the key is dead: it
     // also happens when a real taxon has no records identified to species rank.
     // Turbellaria (BDSSX) is exactly that — 13,998 occurrence records under this

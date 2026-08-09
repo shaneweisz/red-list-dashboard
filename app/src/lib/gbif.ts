@@ -45,9 +45,10 @@ export const GBIF_BACKBONE_CHECKLIST_KEY = "d7dddbf4-2cf0-4f39-9b2a-bb099caae36c
 export const GBIF_CHECKLIST_KEY = COL_XR_CHECKLIST_KEY;
 
 /**
- * Occurrence types this dashboard counts: georeferenced records representing an
- * observation of a living organism in the wild. Excludes preserved, fossil and
- * living specimens (herbaria, museums, zoos) and material citations.
+ * Occurrence types this dashboard counts for animals: georeferenced records
+ * representing an observation of a living organism in the wild. Excludes
+ * preserved, fossil and living specimens (herbaria, museums, zoos) and material
+ * citations.
  */
 export const INCLUDED_BASIS_OF_RECORD = [
   "HUMAN_OBSERVATION",
@@ -58,17 +59,81 @@ export const INCLUDED_BASIS_OF_RECORD = [
 ] as const;
 
 /**
+ * Plants and fungi count preserved specimens too.
+ *
+ * A herbarium or fungarium sheet is not a museum curiosity for these kingdoms —
+ * it is the primary, and for many species the only, georeferenced record of the
+ * taxon, and it is what a Red List assessment is actually written from. Counting
+ * only field observations reported Parkinsonia peruviana (a Peruvian tree) as
+ * having one georeferenced GBIF record when it has 31 — the other 30 are
+ * herbarium sheets. That reads as "almost nothing is known about this species"
+ * when what is known simply sits in a different record type.
+ *
+ * The map's basis-of-record checkboxes have defaulted preserved specimens ON for
+ * plants and fungi since they were added; this applies the same rule to the
+ * counts behind the map, so the two describe the same records.
+ */
+export const INCLUDED_BASIS_OF_RECORD_WITH_SPECIMENS = [
+  ...INCLUDED_BASIS_OF_RECORD,
+  "PRESERVED_SPECIMEN",
+] as const;
+
+/** The occurrence types counted for a taxon, per the rule above. */
+export function includedBasisOfRecord(includePreservedSpecimens: boolean): readonly string[] {
+  return includePreservedSpecimens
+    ? INCLUDED_BASIS_OF_RECORD_WITH_SPECIMENS
+    : INCLUDED_BASIS_OF_RECORD;
+}
+
+/** Catalogue of Life kingdom key for Animalia — the taxa config carries N/P/F/C. */
+const COL_KINGDOM_ANIMALIA = "N";
+
+/**
+ * Whether a kingdom's counts include preserved specimens, for the sync scripts,
+ * which query GBIF per Table 1a group and know the kingdom each one sits in.
+ *
+ * Everything except Animalia: Plantae and Fungi for the reason above, and
+ * Chromista because the only Chromista group here is brown algae, which the
+ * dashboard files under fungi and which are likewise known mostly from
+ * collected, preserved material.
+ */
+export function kingdomCountsPreservedSpecimens(colKingdomKey: string): boolean {
+  return colKingdomKey !== COL_KINGDOM_ANIMALIA;
+}
+
+/**
+ * The same rule expressed over a Table 1a CSV group (`flowering_plants`,
+ * `mushrooms`…) or a dashboard taxon id (`plantae`), for the runtime, which
+ * knows a species' group rather than its kingdom. Kept in step with
+ * kingdomCountsPreservedSpecimens by a test over every group.
+ */
+export function taxonGroupCountsPreservedSpecimens(taxonGroup: string | undefined): boolean {
+  if (!taxonGroup) return false;
+  const taxonId = mapTaxonId(taxonGroup);
+  return taxonId === "plantae" || taxonId === "fungi";
+}
+
+/**
  * Base parameters shared by every GBIF occurrence query and outbound link, so a
  * count shown here and the search a user lands on describe the same records.
+ *
+ * `includePreservedSpecimens` follows the taxon: pass it wherever the caller
+ * knows which group the query is about, or the link next to a plant's count will
+ * land on a search that excludes most of what the count included.
  */
-export function gbifOccurrenceParams(extra: Record<string, string> = {}): URLSearchParams {
+export function gbifOccurrenceParams(
+  extra: Record<string, string> = {},
+  { includePreservedSpecimens = false }: { includePreservedSpecimens?: boolean } = {},
+): URLSearchParams {
   const params = new URLSearchParams({
     checklistKey: GBIF_CHECKLIST_KEY,
     hasCoordinate: "true",
     hasGeospatialIssue: "false",
     ...extra,
   });
-  INCLUDED_BASIS_OF_RECORD.forEach((b) => params.append("basisOfRecord", b));
+  includedBasisOfRecord(includePreservedSpecimens).forEach((b) =>
+    params.append("basisOfRecord", b),
+  );
   return params;
 }
 

@@ -4,7 +4,7 @@ import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import dynamic from "next/dynamic";
 import type { MapRef, ViewStateChangeEvent, MapLayerMouseEvent } from "react-map-gl/maplibre";
 import type maplibregl from "maplibre-gl";
-import { mapTaxonId } from "@/lib/data/taxonomy-constants";
+import { taxonGroupCountsPreservedSpecimens } from "@/lib/gbif";
 import { InatObservation, getThumbUrl, InatPhotoWithPreview } from "./InatPhotoCard";
 import { QualityFlag, QUALITY_FLAG_LABELS, QUALITY_FLAG_DESCRIPTIONS, QUALITY_FLAG_SOURCES } from "@/lib/coordinate-cleaning";
 import { CATEGORY_COLORS, normalizeCategory } from "@/config/taxa";
@@ -316,13 +316,12 @@ interface OccurrenceMapRowProps {
 
 /**
  * Plants & fungi rely heavily on herbarium/fungarium specimens in GBIF, so
- * preserved specimens should be ON by default for those kingdoms.
+ * preserved specimens are ON by default for those kingdoms — the same rule the
+ * counts behind this map are now fetched under, so the checkbox a species opens
+ * with matches the number that got the user here. Re-exported rather than
+ * redefined so the two cannot drift.
  */
-export function isPlantOrFungiTaxonGroup(taxonGroup: string | undefined): boolean {
-  if (!taxonGroup) return false;
-  const kingdom = mapTaxonId(taxonGroup);
-  return kingdom === "plantae" || kingdom === "fungi";
-}
+export const isPlantOrFungiTaxonGroup = taxonGroupCountsPreservedSpecimens;
 
 /**
  * Vascular plants only — the taxonomic scope WCVP/POWO actually covers (not

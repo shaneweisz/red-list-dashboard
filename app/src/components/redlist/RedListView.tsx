@@ -5,7 +5,7 @@ import { createPortal } from "react-dom";
 import dynamic from "next/dynamic";
 import TaxaSummary from "./TaxaSummary";
 import NewLiteratureSinceAssessment from "../LiteratureSearch";
-import { GBIF_CHECKLIST_KEY, gbifOccurrenceParams } from "@/lib/gbif";
+import { GBIF_CHECKLIST_KEY, gbifOccurrenceParams, taxonGroupCountsPreservedSpecimens } from "@/lib/gbif";
 import RedListAssessments from "../RedListAssessments";
 import CitesSummary from "../CitesSummary";
 import WikipediaSummary from "../WikipediaSummary";
@@ -2841,6 +2841,12 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
   // Built from the shared module so the links and the queries behind the numbers
   // they sit next to can never name different checklists.
   const GBIF_FILTERS = gbifOccurrenceParams().toString();
+  // Plants and fungi count preserved specimens and animals do not, so the filter
+  // string follows the species: a herbarium-heavy plant linking to the animal
+  // filter set lands on a search holding a fraction of the number clicked on.
+  const GBIF_FILTERS_WITH_SPECIMENS = gbifOccurrenceParams({}, { includePreservedSpecimens: true }).toString();
+  const gbifFiltersFor = (taxonGroup: string | undefined) =>
+    taxonGroupCountsPreservedSpecimens(taxonGroup) ? GBIF_FILTERS_WITH_SPECIMENS : GBIF_FILTERS;
   const isNE = (s: Species) => s.category === "NE";
 
   // GBIF occurrence counts aren't filterable per-country/category/etc. — only show
@@ -5093,7 +5099,7 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
                     <td className="px-4 py-3 text-right text-zinc-600 dark:text-zinc-400 text-sm tabular-nums whitespace-nowrap">
                       {details?.gbifOccurrences != null && details?.gbifUrl ? (
                         <a
-                          href={`https://www.gbif.org/occurrence/search?taxonKey=${details.gbifUrl.split('/').pop()}&${GBIF_FILTERS}`}
+                          href={`https://www.gbif.org/occurrence/search?taxonKey=${details.gbifUrl.split('/').pop()}&${gbifFiltersFor(s.taxon_group)}`}
                           target="_blank"
                           rel="noopener noreferrer"
                           className="text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 underline decoration-dotted hover:decoration-solid"
@@ -5103,7 +5109,7 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
                         </a>
                       ) : s.gbif_occurrence_count != null && s.gbif_species_key ? (
                         <a
-                          href={`https://www.gbif.org/occurrence/search?taxonKey=${s.gbif_species_key}&${GBIF_FILTERS}`}
+                          href={`https://www.gbif.org/occurrence/search?taxonKey=${s.gbif_species_key}&${gbifFiltersFor(s.taxon_group)}`}
                           target="_blank"
                           rel="noopener noreferrer"
                           className="text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 underline decoration-dotted hover:decoration-solid"
@@ -5136,7 +5142,7 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
                         if (key && assessmentYear && assessmentYear < currentYear) {
                           return (
                             <a
-                              href={`https://www.gbif.org/occurrence/search?taxonKey=${key}&year=${assessmentYear + 1},${currentYear}&${GBIF_FILTERS}`}
+                              href={`https://www.gbif.org/occurrence/search?taxonKey=${key}&year=${assessmentYear + 1},${currentYear}&${gbifFiltersFor(s.taxon_group)}`}
                               target="_blank"
                               rel="noopener noreferrer"
                               className="text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 underline decoration-dotted hover:decoration-solid"
