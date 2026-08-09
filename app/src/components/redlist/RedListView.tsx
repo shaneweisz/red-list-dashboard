@@ -2043,13 +2043,16 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
 
   // Criteria counts: apply all filters EXCEPT criteria (count species per code — at every
   // depth: letter, number, sub-clause, roman numeral — deduplicated per species) — mirrors
-  // threatCounts/threatTotal above. parseCriteriaCodes already returns the full set of codes
-  // a species satisfies at every level (e.g. ["B1","B1a","B1b","B1b(iii)"]); the top-level
-  // letter's own count is derived separately here (via `letters`) rather than reusing a
-  // same-named code, since D/E's bare letter ("D") is otherwise indistinguishable from a
-  // "number" level entry and would double-count.
-  const criteriaCounts = useMemo(() => {
+  // threatCounts/threatTotal above, including the `criteriaTotal` denominator (every in-view
+  // species, whether or not it has criteria data) used for the bar chart's percentage label.
+  // parseCriteriaCodes already returns the full set of codes a species satisfies at every
+  // level (e.g. ["B1","B1a","B1b","B1b(iii)"]); the top-level letter's own count is derived
+  // separately here (via `letters`) rather than reusing a same-named code, since D/E's bare
+  // letter ("D") is otherwise indistinguishable from a "number" level entry and would
+  // double-count.
+  const { criteriaCounts, criteriaTotal } = useMemo(() => {
     const counts: Record<string, number> = {};
+    let total = 0;
     taxaFilteredSpecies.forEach(s => {
       if (!matchesSearch(s)) return;
       if (selectedCategories.size > 0 && !selectedCategories.has(s.category)) return;
@@ -2065,6 +2068,7 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
       if (!matchesAssessorsFilter(s)) return;
       if (!matchesHabitatFilter(s)) return;
       if (!matchesReviewersFilter(s)) return;
+      total++;
       const codes = parseCriteriaCodes(s.criteria);
       const letters = new Set(codes.map(c => c[0]));
       // Bare-letter codes (D, E — no trailing digit) ARE the top-level letter, so
@@ -2072,7 +2076,7 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
       for (const code of codes) if (code.length > 1) counts[code] = (counts[code] || 0) + 1;
       for (const letter of letters) counts[letter] = (counts[letter] || 0) + 1;
     });
-    return counts;
+    return { criteriaCounts: counts, criteriaTotal: total };
   }, [taxaFilteredSpecies, selectedCategories, selectedCountries, selectedYearRanges, selectedObsRanges, selectedSystems, selectedPopulationTrends, selectedMovementPatterns, selectedThreats, matchesHabitatFilter, matchesSearch, matchesAssessorsFilter, matchesReviewersFilter, matchesObsRangeFilter, selectedAssessmentCounts, matchesAssessmentCountFilter, matchesYearRangeFilter, selectedAssessmentYears, matchesAssessmentYearFilter]);
 
   // Habitat counts: apply all filters EXCEPT habitat (all 4 dimensions — code
@@ -3573,8 +3577,12 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
     // Assessments' bare short labels so the two charts' bar geometry lines up
     // when they sit side by side; the full description moves to the tooltip
     // via labelFormatter below instead of living on the axis.
+    // Bar label: count + share of all in-view species (see criteriaTotal),
+    // same convention as threatsCard's threatBarLabel.
+    const criteriaBarLabel = (count: number) =>
+      `${count.toLocaleString()} (${criteriaTotal > 0 ? Math.round((count / criteriaTotal) * 100) : 0}%)`;
     const criteriaBarData: DrilldownBarDatum[] = CRITERIA_CATEGORIES
-      .map(({ code }) => ({ code, rawCode: code, count: criteriaCounts[code] ?? 0, label: (criteriaCounts[code] ?? 0).toLocaleString() }))
+      .map(({ code }) => ({ code, rawCode: code, count: criteriaCounts[code] ?? 0, label: criteriaBarLabel(criteriaCounts[code] ?? 0) }))
       .filter(d => d.count > 0 || selectedCriteria.has(d.rawCode));
     // A top-level letter counts as "selected" (and so isn't muted) if it OR
     // any of its selected descendants (e.g. "B1b" under "B") is selected.
