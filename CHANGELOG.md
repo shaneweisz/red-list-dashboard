@@ -2,6 +2,10 @@
 
 All notable changes to the IUCN Red List Assessments Dashboard.
 
+## [Unreleased]
+
+- Fixed GBIF counts for plants and fungi excluding preserved specimens. Herbarium and fungarium sheets are the primary — often the only — georeferenced record of a plant or fungus, so counting field observations alone showed *Parkinsonia peruviana* (CR) as having 1 record when it has 31. The sync now counts preserved specimens for Plantae, Fungi and Chromista, matching what the occurrence map has defaulted to for those kingdoms all along; animals are unchanged
+
 ## [v2.19.0] — 2026-07-24 – 2026-07-30 — Sign-in, Compare Mode & Filter Charts
 
 - Added sign-in — GitHub, Google and Microsoft accounts via Supabase Auth, backed by a generic `user_roles` table so permissions aren't hardcoded per user. Signing in returns you to the page and query string you were on, and works across all the custom domains (Microsoft is wired up and working, but its button is hidden for now)

@@ -29,7 +29,11 @@ import {
   readGbifCsv,
   writeGbifCsv,
 } from "./fetch-gbif-species";
-import { GBIF_CHECKLIST_KEY, INCLUDED_BASIS_OF_RECORD } from "../src/lib/gbif";
+import {
+  GBIF_CHECKLIST_KEY,
+  includedBasisOfRecord,
+  kingdomCountsPreservedSpecimens,
+} from "../src/lib/gbif";
 
 // =============================================================================
 // CONFIGURATION
@@ -106,7 +110,9 @@ async function fetchCountriesForKingdom(kingdomKey: string): Promise<string[]> {
     limit: "0",
     taxonKey: kingdomKey,
   });
-  INCLUDED_BASIS_OF_RECORD.forEach((bor) => params.append("basisOfRecord", bor));
+  includedBasisOfRecord(kingdomCountsPreservedSpecimens(kingdomKey)).forEach((bor) =>
+    params.append("basisOfRecord", bor),
+  );
 
   const data = await gbifGet(params);
   if (!data) return [];
@@ -140,7 +146,9 @@ async function fetchSpeciesInKingdomCountry(
       country,
       taxonKey: kingdomKey,
     });
-    INCLUDED_BASIS_OF_RECORD.forEach((bor) => params.append("basisOfRecord", bor));
+    includedBasisOfRecord(kingdomCountsPreservedSpecimens(kingdomKey)).forEach((bor) =>
+      params.append("basisOfRecord", bor),
+    );
 
     const data = await gbifGet(params);
     if (!data) break;

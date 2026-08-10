@@ -1,6 +1,15 @@
 import { describe, it, expect } from "vitest";
-import { gbifTaxonKeysForGroup, GBIF_CHECKLIST_KEY, COL_XR_CHECKLIST_KEY, gbifOccurrenceParams } from "../gbif";
+import {
+  gbifTaxonKeysForGroup,
+  GBIF_CHECKLIST_KEY,
+  COL_XR_CHECKLIST_KEY,
+  gbifOccurrenceParams,
+  includedBasisOfRecord,
+  kingdomCountsPreservedSpecimens,
+  taxonGroupCountsPreservedSpecimens,
+} from "../gbif";
 import { TAXA } from "@/config/taxa";
+import { TAXA_DEFINITIONS } from "../../../scripts/taxa";
 import DERIVED_TAXON_KEYS from "@/config/gbif-taxon-keys.json";
 
 describe("gbifTaxonKeysForGroup", () => {
@@ -52,5 +61,50 @@ describe("gbifOccurrenceParams", () => {
     // be serving, and the two taxonomies answer each other with silence.
     expect(gbifOccurrenceParams().get("checklistKey")).toBe(GBIF_CHECKLIST_KEY);
     expect(GBIF_CHECKLIST_KEY).toBe(COL_XR_CHECKLIST_KEY);
+  });
+
+  it("counts preserved specimens only when asked to", () => {
+    expect(gbifOccurrenceParams().getAll("basisOfRecord")).not.toContain("PRESERVED_SPECIMEN");
+    expect(
+      gbifOccurrenceParams({}, { includePreservedSpecimens: true }).getAll("basisOfRecord"),
+    ).toContain("PRESERVED_SPECIMEN");
+  });
+});
+
+describe("preserved specimens", () => {
+  it("adds them to the animal set rather than replacing it", () => {
+    // A plant's total has to stay a superset of what it was: the change is meant
+    // to add herbarium material, not swap one universe of records for another.
+    const animals = includedBasisOfRecord(false);
+    const plants = includedBasisOfRecord(true);
+    for (const bor of animals) expect(plants).toContain(bor);
+    expect(plants).toContain("PRESERVED_SPECIMEN");
+    expect(plants).toHaveLength(animals.length + 1);
+  });
+
+  it("is off for animals and on for plants, fungi and algae", () => {
+    expect(taxonGroupCountsPreservedSpecimens("mammals")).toBe(false);
+    expect(taxonGroupCountsPreservedSpecimens("beetles")).toBe(false);
+    expect(taxonGroupCountsPreservedSpecimens("flowering_plants")).toBe(true);
+    expect(taxonGroupCountsPreservedSpecimens("mushrooms")).toBe(true);
+    expect(taxonGroupCountsPreservedSpecimens("brown_algae")).toBe(true);
+    // Dashboard taxon ids, which is what the country-stats route is given.
+    expect(taxonGroupCountsPreservedSpecimens("plantae")).toBe(true);
+    expect(taxonGroupCountsPreservedSpecimens("fungi")).toBe(true);
+    expect(taxonGroupCountsPreservedSpecimens("invertebrates")).toBe(false);
+    expect(taxonGroupCountsPreservedSpecimens(undefined)).toBe(false);
+  });
+
+  it("says the same thing by kingdom as by group, for every Table 1a group", () => {
+    // The sync scripts decide by kingdom (they query GBIF per group and know the
+    // kingdom); the runtime decides by group (it knows a species' group, not its
+    // kingdom). Two expressions of one rule, so a group that answers differently
+    // depending on which side asks is a plant whose count and whose map disagree.
+    for (const taxon of TAXA_DEFINITIONS) {
+      expect(
+        kingdomCountsPreservedSpecimens(taxon.kingdomKey),
+        `"${taxon.id}" (kingdom ${taxon.kingdomKey}) disagrees between the kingdom and group rules`,
+      ).toBe(taxonGroupCountsPreservedSpecimens(taxon.id));
+    }
   });
 });

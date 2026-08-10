@@ -118,7 +118,7 @@ Live external APIs:
 The key innovation — linking assessment data to real-world observations:
 
 1. **Species matching**: each IUCN species is matched to GBIF via their species-matching API (exact, fuzzy, and variant matches). Results stored in `data/mapping.csv`.
-2. **Observation counts**: **Total GBIF** (all geo-referenced records), **New GBIF** (records added after the assessment year), and **% New GBIF**.
+2. **Observation counts**: **Total GBIF** (all geo-referenced records), **New GBIF** (records added after the assessment year), and **% New GBIF**. Which record types count depends on the kingdom: animals count observations in the wild, while plants and fungi also count preserved specimens, since a herbarium or fungarium sheet is often the only georeferenced record a species has.
 3. **Record-type breakdown**: human observations (incl. iNaturalist), preserved specimens, machine observations.
 4. **Quality filters**: only geo-referenced records without coordinate issues.
 

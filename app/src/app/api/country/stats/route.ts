@@ -1,6 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { CACHE_1H } from "@/lib/cache-headers";
-import { gbifOccurrenceParams, gbifTaxonKeysForGroup } from "@/lib/gbif";
+import {
+  gbifOccurrenceParams,
+  gbifTaxonKeysForGroup,
+  taxonGroupCountsPreservedSpecimens,
+} from "@/lib/gbif";
 
 interface CountryStats {
   [countryCode: string]: {
@@ -40,6 +44,10 @@ export async function GET(request: NextRequest) {
     // was doing.
     const taxonKeys = gbifTaxonKeysForGroup(taxonId);
     const stats: CountryStats = {};
+    // Plants and fungi count herbarium/fungarium material, matching the totals
+    // the sync writes — otherwise the map's per-country occurrence layer
+    // disagrees with every plant count shown next to it.
+    const includePreservedSpecimens = taxonGroupCountsPreservedSpecimens(taxonId);
 
     const results = await Promise.all(
       taxonKeys.map(async (taxonKey) => {
@@ -48,7 +56,7 @@ export async function GET(request: NextRequest) {
           facet: "country",
           facetLimit: "300",
           limit: "0",
-        });
+        }, { includePreservedSpecimens });
         const response = await fetch(`https://api.gbif.org/v1/occurrence/search?${params}`);
         if (!response.ok) return null;
         return response.json();

@@ -29,6 +29,7 @@ import {
 } from "./fetch-gbif-species";
 import { readRedlistCsv } from "./fetch-redlist-species";
 import { readMappingCsv } from "./match-redlist-species-to-gbif";
+import { kingdomCountsPreservedSpecimens } from "../src/lib/gbif";
 
 // =============================================================================
 // CONFIGURATION
@@ -107,13 +108,18 @@ export async function fetchCountsSinceAssessment(
 
   console.log(`  ${yearBuckets.length} year buckets x ${taxon.gbif.length} queries`);
 
+  // Same record types the total was counted over, or "new records since the
+  // assessment" would be a subset of a different universe than the total it sits
+  // beside — and for a plant, the smaller of the two.
+  const includePreservedSpecimens = kingdomCountsPreservedSpecimens(taxon.kingdomKey);
+
   for (let qi = 0; qi < taxon.gbif.length; qi++) {
     const q = taxon.gbif[qi];
     let completedBuckets = 0;
 
     await mapConcurrent(yearBuckets, YEAR_BUCKET_CONCURRENCY, async (assessmentYear) => {
       const yearRange = `${assessmentYear + 1},${CURRENT_YEAR}`;
-      const results = await fetchFacets(q.taxonKey, yearRange);
+      const results = await fetchFacets(q.taxonKey, { yearRange, includePreservedSpecimens });
       const bucketSpecies = speciesByYear.get(assessmentYear);
 
       if (bucketSpecies) {
