@@ -21,7 +21,7 @@ export interface SearchResult {
   class_name: string | null;
   order_name: string | null;
   family: string | null;
-  // The node whose species list holds this species (NE results only) — see selectResult.
+  // The node this species sits in — its family where known — see selectResult.
   node_id: string | null;
   matched_synonym?: string | null;
 }
@@ -124,14 +124,14 @@ export function SpeciesSearchBar() {
       lastSelectedResult = result;
       const viewMode: ViewMode = result.category === "NE" ? "new-assessments" : "reassessments";
 
-      // A not-evaluated species opens in the new-assessments view, which loads ONE node's
-      // NE list — and its top-level taxon can be far over the load cap (Invertebrates has
-      // ~1.3M NE species), in which case that view can only offer a "too many to load at
-      // once" drill-down prompt and never shows the species (#453). So select the node the
-      // species actually sits in (node_id, resolved server-side to something loadable),
-      // split into display-root + sub-group exactly like selectTaxon does — which is also
-      // what populates the ancestor-breadcrumb rows above the table. Assessed results keep
-      // browsing the whole top-level taxon (reassessments is assessed-only, always small).
+      // Open on the node the species actually sits in — its family where CoL knows one
+      // (node_id, resolved server-side) — split into display-root + sub-group exactly like
+      // selectTaxon does. That is what puts its lineage on screen as the taxa table's
+      // ancestor rows (Invertebrates → Insects → Lepidoptera → Nymphalidae) instead of
+      // dropping the user at the bare top-level taxon, and on the not-evaluated side it is
+      // also what makes the species listable at all: that view loads one node's NE list and
+      // an aggregate like Invertebrates (~1.3M NE) is over the cap, so it could only ever
+      // show the "too many to load at once" prompt there (#453).
       const viewRoot = result.node_id ? getViewRootForNode(result.node_id) : null;
       const subgroup = viewRoot && result.node_id !== viewRoot ? result.node_id : null;
 

@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { resolveWhere, toSpeciesRow, colIdToSearchId, neNodeIdForSpecies } from "@/lib/data/species-duckdb";
+import { resolveWhere, toSpeciesRow, colIdToSearchId, nodeIdForSpecies } from "@/lib/data/species-duckdb";
 
 // Unit tests for the parity-critical pure logic of the DuckDB read layer (#261):
 // the taxon→SQL resolver and the row→SpeciesRow mapping. (Full v1-vs-v2 parity is
@@ -132,24 +132,45 @@ describe("toSpeciesRow", () => {
   });
 });
 
-// Which node a not-evaluated search result opens in. The new-assessments view loads exactly
-// ONE node's NE list and refuses anything over NE_CAP, so picking the wrong node means the
-// species is never shown — either the "too many to load at once" prompt (#453: every insect
-// resolved to the ~1.3M-species Invertebrates aggregate) or a list it isn't part of (a
-// ladybird resolving to the Dung Beetle Specialist Group).
-describe("neNodeIdForSpecies", () => {
-  const insect = { class_name: "insecta", order_name: "lepidoptera", family: "nymphalidae" };
+// Which node a search result opens in. The taxa table renders the ancestor chain of
+// whatever is selected, so this is what puts a species' lineage on screen — and on the
+// not-evaluated side it also decides whether the species can be listed at all, since that
+// view loads exactly ONE node's NE list and refuses anything over NE_CAP (#453).
+describe("nodeIdForSpecies", () => {
+  const butterfly = { class_name: "insecta", order_name: "lepidoptera", family: "nymphalidae" };
 
-  it("drills an insect down to its family — Insects itself is over the load cap", () => {
-    expect(neNodeIdForSpecies("butterflies_and_moths", insect))
+  it("drills to the species' family", () => {
+    expect(nodeIdForSpecies("butterflies_and_moths", butterfly))
       .toBe("inv-insects~order:lepidoptera~family:nymphalidae");
+    expect(nodeIdForSpecies("mammals", { class_name: "mammalia", order_name: "carnivora", family: "felidae" }))
+      .toBe("mammals~order:carnivora~family:felidae");
   });
 
-  it("keeps the group's own node when that node is small enough to load", () => {
-    expect(neNodeIdForSpecies("velvet_worms", { class_name: "udeonychophora", order_name: "euonychophora", family: "peripatidae" }))
+  it("starts at class for a class-first root, skipping no rank", () => {
+    expect(nodeIdForSpecies("molluscs", { class_name: "gastropoda", order_name: "littorinimorpha", family: "cypraeidae" }))
+      .toBe("inv-molluscs~class:gastropoda~order:littorinimorpha~family:cypraeidae");
+  });
+
+  it("stops above a gap rather than showing an Unclassified rung", () => {
+    // Velvet worms have no order in CoL; drilling to the family anyway would read
+    // "Velvet Worms → Unclassified Order → Peripatidae".
+    expect(nodeIdForSpecies("velvet_worms", { class_name: null, order_name: null, family: "peripatidae" }))
       .toBe("inv-velvet_worms");
-    expect(neNodeIdForSpecies("mammals", { class_name: "mammalia", order_name: "primates", family: "aotidae" }))
-      .toBe("mammals");
+    // A bivalve keeps the class it does have, and stops before the missing order.
+    expect(nodeIdForSpecies("molluscs", { class_name: "bivalvia", order_name: null, family: "astartidae" }))
+      .toBe("inv-molluscs~class:bivalvia");
+  });
+
+  it("accepts an Unclassified rung when the group's own node can't list the species", () => {
+    // Insects is over NE_CAP, so stopping short would land on the drill-down prompt —
+    // a gap is worth wearing to reach a node that can actually show the species.
+    expect(nodeIdForSpecies("beetles", { class_name: "insecta", order_name: null, family: "coccinellidae" }))
+      .toBe("inv-insects~order:~family:coccinellidae");
+  });
+
+  it("falls back to the group's own node when the species has no lineage at all", () => {
+    expect(nodeIdForSpecies("beetles", {})).toBe("inv-insects");
+    expect(nodeIdForSpecies("velvet_worms", {})).toBe("inv-velvet_worms");
   });
 
   it("never routes to a Specialist Group node — they hold a curated subset, not the group", () => {
@@ -158,24 +179,13 @@ describe("neNodeIdForSpecies", () => {
       ["dragonflies_and_damselflies", { class_name: "insecta", order_name: "odonata", family: "aeshnidae" }],
       ["reptiles", { class_name: "reptilia", order_name: "squamata", family: "dactyloidae" }],
     ] as const) {
-      const id = neNodeIdForSpecies(group, lineage);
+      const id = nodeIdForSpecies(group, lineage);
       expect(id).not.toBeNull();
       expect(id!.startsWith("ssc-")).toBe(false); // "ssc-" is the id convention for them
     }
   });
 
-  it("stops at the deepest rank it knows, coalescing a missing one above it", () => {
-    expect(neNodeIdForSpecies("beetles", { class_name: "insecta", order_name: "coleoptera", family: null }))
-      .toBe("inv-insects~order:coleoptera");
-    expect(neNodeIdForSpecies("beetles", { class_name: "insecta", order_name: null, family: "coccinellidae" }))
-      .toBe("inv-insects~order:~family:coccinellidae");
-  });
-
-  it("falls back to the group's own node when the species has no lineage at all", () => {
-    expect(neNodeIdForSpecies("beetles", {})).toBe("inv-insects");
-  });
-
   it("returns null for a group no taxonomy node covers", () => {
-    expect(neNodeIdForSpecies("not_a_real_group", insect)).toBeNull();
+    expect(nodeIdForSpecies("not_a_real_group", butterfly)).toBeNull();
   });
 });
