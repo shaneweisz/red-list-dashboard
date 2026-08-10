@@ -218,6 +218,13 @@ const EXCLUDED_COL_IDS_SQL = `('6MB3T')`; // Homo sapiens
 // taxa like "mammals"), which bypasses filterToSql entirely.
 const NOT_DOMESTIC_SQL = `coalesce(lower(scientific_name), '') NOT IN (${sqlStrList(COL_DOMESTIC_EXCLUDE_NAMES)})`;
 
+// Cap on how many Not-Evaluated species one query may return. A giant aggregate
+// (insects ~935k, invertebrates ~1.3M) can't be serialized in one response (it 500s /
+// times out), so a taxon over the cap returns no rows with tooLarge=true and the UI
+// prompts a drill-down instead. Also read by neNodeIdForSpecies, which uses it to pick
+// a node a search result can actually be shown in.
+const NE_CAP = 400_000;
+
 // Per-taxon_group not-evaluated counts from the precomputed taxa-summary (in memory),
 // used to decide tooLarge instantly without scanning species/ on R2.
 let neByGroupCache: Map<string, number> | null = null;
@@ -245,7 +252,6 @@ export async function querySpecies(opts: {
   // ~1.3M) can't be serialized in one response (it 500s / times out). Return up to
   // NE_CAP, flag `truncated`, and report `neTotal` so the UI can say "showing N of M
   // — drill into a sub-group". Every species stays reachable via its leaf node.
-  const NE_CAP = 400_000;
   // The NE list is never partially truncated now: a group over the cap returns no rows
   // with tooLarge=true (UI prompts a drill-down); groups under the cap load in full.
   const truncated = false;
@@ -377,29 +383,60 @@ export interface SearchResult {
   taxon_group: string;
   category: string;
   gbif_species_key: string | null;
+  // Carried so the single-species preview the dashboard renders from this result (before
+  // — or instead of — the taxon's own list arriving) shows the species' real occurrence
+  // count rather than a blank cell.
+  gbif_occurrence_count: number | null;
   assessment_id: number | null;
   assessment_date: string | null;
   countries: string[];
+  class_name: string | null;
+  order_name: string | null;
+  family: string | null;
+  // The taxonomy node this species should be browsed in — the sub-group the dashboard
+  // selects alongside taxon_id (see neNodeIdForSpecies). Only set for NE results, which
+  // are the ones whose view has to load a single node's not-evaluated list.
+  node_id: string | null;
   // Set when the result was matched via a synonym (the old name the user typed) rather than
   // its accepted name — the dropdown shows "(syn. <name>)". scientific_name is the accepted name.
   matched_synonym?: string | null;
 }
 
-// taxon_group → its representative *leaf* display node (csvGroups===[group], no class/order
-// sub-filter). mapTaxonId maps to the top-level taxon (e.g. invertebrates), which is too
-// large to load in new-assessments; a CoL-only search result must navigate to the leaf node
-// (e.g. dragonflies-damselflies) so its NE list actually loads.
-const GROUP_TO_LEAF_NODE: Map<string, string> = (() => {
-  const m = new Map<string, string>();
-  for (const [id, node] of NODE_INDEX) {
-    const f = node.filter;
-    if (f.csvGroups?.length === 1 && !f.classNames && !f.orderNames && !f.excludeClasses &&
-        !f.excludeOrders && !f.families && !f.excludeFamilies && !m.has(f.csvGroups[0])) {
-      m.set(f.csvGroups[0], id);
-    }
-  }
-  return m;
-})();
+interface Lineage { class_name?: string | null; order_name?: string | null; family?: string | null }
+
+// The node an NE search result should open in. Its view (new-assessments) loads exactly
+// one node's not-evaluated list, and mapTaxonId's top-level taxon (invertebrates, ~1.3M NE)
+// is far over NE_CAP — so picking it means the species is never shown, just the "too many
+// to load at once" drill-down prompt (#453).
+//
+// findViewLeafForGroup gives the group's own "By Taxon" container node, which is loadable
+// for most groups (Arachnids, Velvet Worms, Mammals…). For the eight insect groups it is
+// the whole Insects aggregate (~935k NE) — their static per-order nodes were retired in
+// favour of live drilldown — so when the container is over the cap, drill down to the
+// species' own family via a dynamic node id (e.g. inv-insects~order:lepidoptera~family:
+// nymphalidae). That is both small enough to load and a real tree position, so the
+// ancestor-breadcrumb rows and per-taxon stat card resolve exactly as they do when the
+// user drills there by hand. Every rank above the deepest known one must be present in
+// the id (dynamicNodeAncestors/nextDynamicRank read depth positionally) — a null one
+// becomes "", the same Unclassified-bucket convention resolveTaxonSuggestionNode uses.
+export function neNodeIdForSpecies(taxonGroup: string, lineage: Lineage): string | null {
+  const leafRoot = findViewLeafForGroup(taxonGroup);
+  if (!leafRoot) return null;
+  const rootNe = getCsvGroupsForNode(leafRoot).reduce((sum, g) => sum + (neByGroup().get(g) ?? 0), 0);
+  if (rootNe <= NE_CAP) return leafRoot;
+  const valueFor: Partial<Record<DynamicSegment["rank"], string | null | undefined>> = {
+    class: lineage.class_name, order: lineage.order_name, family: lineage.family,
+  };
+  // genus is never enumerated here: the species itself is the target, and a genus node
+  // buys nothing over its family while being one more level the user has to climb out of.
+  const ranks = rankOrderFor(leafRoot).filter((r) => r !== "genus");
+  let deepest = -1;
+  ranks.forEach((r, i) => { if (valueFor[r]) deepest = i; });
+  if (deepest === -1) return leafRoot; // no lineage at all — nothing more precise to offer
+  return buildDynamicNodeId(leafRoot, ranks.slice(0, deepest + 1).map((rank) => ({
+    rank, value: (valueFor[rank] ?? "").toLowerCase(),
+  })));
+}
 
 // Stable negative int id for a CoL-only species (no IUCN sis id / GBIF key). Used as the
 // search result's id — the URL `species=` param + the cached-preview key — and never
@@ -422,9 +459,9 @@ export async function searchSpecies(query: string, limit = 10): Promise<SearchRe
   const conn = await getConn();
   const lim = Math.min(Math.max(limit, 1), 50);
   const proj = (src: string, assessed: boolean) => `
-    SELECT id, scientific_name, common_name, taxon_group, iucn_category AS category, gbif_species_key,
+    SELECT id, scientific_name, common_name, taxon_group, iucn_category AS category, gbif_species_key, gbif_occurrence_count,
            ${assessed ? "assessment_id, CAST(assessment_date AS VARCHAR) AS assessment_date" : "NULL AS assessment_id, NULL AS assessment_date"},
-           countries
+           countries, class_name, order_name, family
     FROM '${parquetUri(src)}'
     WHERE scientific_name ILIKE '%' || $q || '%'
        OR (common_name IS NOT NULL AND common_name ILIKE '%' || $q || '%')`;
@@ -440,20 +477,24 @@ export async function searchSpecies(query: string, limit = 10): Promise<SearchRe
   const fast: SearchResult[] = rows.map((r) => {
     const tg = String(r.taxon_group);
     const cat = String(r.category ?? "");
-    // NE results navigate to the new-assessments view, which can't load a giant aggregate
-    // (mapTaxonId's top-level taxon) — send them to the leaf node so the list loads. Assessed
-    // results go to reassessments (assessed-only, always loadable) via the top-level taxon.
+    const lineage = { class_name: str(r.class_name), order_name: str(r.order_name), family: str(r.family) };
+    // Both views browse via the top-level taxon; an NE result additionally carries the
+    // sub-group node its (new-assessments) view has to load — see neNodeIdForSpecies.
+    // Assessed results go to reassessments, which is assessed-only and always loadable.
     return {
       id: Number(r.id),
       scientific_name: String(r.scientific_name ?? ""),
       common_name: (r.common_name as string) ?? null,
-      taxon_id: cat === "NE" ? (GROUP_TO_LEAF_NODE.get(tg) ?? mapTaxonId(tg)) : mapTaxonId(tg),
+      taxon_id: mapTaxonId(tg),
       taxon_group: tg,
       category: cat,
       gbif_species_key: str(r.gbif_species_key),
+      gbif_occurrence_count: num(r.gbif_occurrence_count),
       assessment_id: num(r.assessment_id),
       assessment_date: (r.assessment_date as string) ?? null,
       countries: splitList(r.countries),
+      ...lineage,
+      node_id: cat === "NE" ? neNodeIdForSpecies(tg, lineage) : null,
     };
   });
   // Return as soon as the direct search (assessed ∪ unassessed, ~16MB) finds anything.
@@ -472,7 +513,7 @@ export async function searchSpecies(query: string, limit = 10): Promise<SearchRe
   // (name-dedup suffices, no species_link anti-join needed). Render as NE → leaf taxon.
   const seen = new Set(fast.map((r) => r.scientific_name.toLowerCase()));
   const colSql = `
-    SELECT col_id, scientific_name, taxon_group
+    SELECT col_id, scientific_name, taxon_group, class_name, order_name, family
     FROM read_parquet('${parquetUri("species/**/*.parquet")}', hive_partitioning=true)
     WHERE scientific_name ILIKE '%' || $q || '%' AND in_base AND extinct IS NOT TRUE
       AND col_id NOT IN ${EXCLUDED_COL_IDS_SQL}
@@ -484,17 +525,21 @@ export async function searchSpecies(query: string, limit = 10): Promise<SearchRe
     if (seen.has(name.toLowerCase())) continue;
     seen.add(name.toLowerCase());
     const tg = String(r.taxon_group);
+    const lineage = { class_name: str(r.class_name), order_name: str(r.order_name), family: str(r.family) };
     fast.push({
       id: colIdToSearchId(String(r.col_id)),
       scientific_name: name,
       common_name: null,
-      taxon_id: GROUP_TO_LEAF_NODE.get(tg) ?? mapTaxonId(tg),
+      taxon_id: mapTaxonId(tg),
       taxon_group: tg,
       category: "NE",
       gbif_species_key: null,
+      gbif_occurrence_count: null,
       assessment_id: null,
       assessment_date: null,
       countries: [],
+      ...lineage,
+      node_id: neNodeIdForSpecies(tg, lineage),
     });
     if (fast.length >= lim) break;
   }
@@ -503,7 +548,7 @@ export async function searchSpecies(query: string, limit = 10): Promise<SearchRe
   // Synonym tier: resolve an old/synonym name to its accepted species via synonym-index.parquet
   // (name-sorted → prefix-range prunes to ~1 row group). Reached only when the direct search
   // found nothing (gated above). The accepted species routes like a direct hit — assessed →
-  // reassessments (sis id), NE → new-assessments/leaf node — and carries the matched synonym
+  // reassessments (sis id), NE → new-assessments/its own node — and carries the matched synonym
   // for the UI. Graceful no-op if the index isn't in this sync prefix.
   const synUri = parquetUri("synonym-index.parquet");
   const synLo = `'${query.toLowerCase().replace(/'/g, "''")}'`;
@@ -523,6 +568,9 @@ export async function searchSpecies(query: string, limit = 10): Promise<SearchRe
          WHERE synonym_name_lower LIKE '%' || ${synLo} || '%' AND synonym_name_lower NOT LIKE ${synLo} || '%'
          ORDER BY synonym_name_lower LIMIT ${need * 3 + 5}`, {})).getRowObjects();
     }
+    // synonym-index.parquet carries no lineage columns, so NE hits get theirs (and with it
+    // their node_id) from one follow-up lookup below rather than a per-row query.
+    const needLineage: { result: SearchResult; colId: string }[] = [];
     for (const r of synRows) {
       const accName = String(r.accepted_name ?? "");
       if (seen.has(accName.toLowerCase())) continue; // accepted already listed (direct hit, or another synonym of it)
@@ -530,20 +578,49 @@ export async function searchSpecies(query: string, limit = 10): Promise<SearchRe
       const tg = String(r.taxon_group);
       const cat = String(r.category ?? "NE");
       const sis = r.sis_id == null ? null : Number(r.sis_id);
-      fast.push({
+      const result: SearchResult = {
         id: sis ?? colIdToSearchId(String(r.accepted_col_id)),
         scientific_name: accName,
         common_name: null,
-        taxon_id: cat === "NE" ? (GROUP_TO_LEAF_NODE.get(tg) ?? mapTaxonId(tg)) : mapTaxonId(tg),
+        taxon_id: mapTaxonId(tg),
         taxon_group: tg,
         category: cat,
         gbif_species_key: null,
+        gbif_occurrence_count: null,
         assessment_id: null,
         assessment_date: null,
         countries: [],
+        class_name: null,
+        order_name: null,
+        family: null,
+        node_id: cat === "NE" ? neNodeIdForSpecies(tg, {}) : null,
         matched_synonym: String(r.synonym_name ?? ""),
-      });
+      };
+      fast.push(result);
+      if (cat === "NE" && r.accepted_col_id != null) {
+        needLineage.push({ result, colId: String(r.accepted_col_id) });
+      }
       if (fast.length >= lim) break;
+    }
+    if (needLineage.length > 0) {
+      // Exact col_id match, partition-pruned to the hits' own taxon_groups — cheap next to
+      // the index scan that got us here. Best-effort: a miss just leaves the group-level
+      // node_id already set above.
+      const lineageRows = (await conn.runAndReadAll(
+        `SELECT col_id, class_name, order_name, family
+         FROM read_parquet('${parquetUri("species/**/*.parquet")}', hive_partitioning=true)
+         WHERE taxon_group = ANY(string_split($tg, '|')) AND col_id = ANY(string_split($ids, '|'))`,
+        { tg: needLineage.map((n) => n.result.taxon_group).join("|"),
+          ids: needLineage.map((n) => n.colId).join("|") })).getRowObjects();
+      const byColId = new Map(lineageRows.map((r) => [String(r.col_id), r]));
+      for (const { result, colId } of needLineage) {
+        const row = byColId.get(colId);
+        if (!row) continue;
+        result.class_name = str(row.class_name);
+        result.order_name = str(row.order_name);
+        result.family = str(row.family);
+        result.node_id = neNodeIdForSpecies(result.taxon_group, result);
+      }
     }
   } catch { /* synonym index not in this sync prefix — skip */ }
   return fast;
@@ -706,7 +783,7 @@ function isSscGroupNode(id: string): boolean {
 // dimension (a single value, no other filters/exclusions), excluding SSC Specialist Group
 // nodes — the same node a user reaches by clicking through the default tree, so a search
 // jump to it gets full ancestor breadcrumbs and curated labels for free. Mirrors
-// GROUP_TO_LEAF_NODE's single-dimension-match pattern above.
+// findViewLeafForGroup's single-dimension-match pattern below.
 const RANK_VALUE_TO_NODE: Map<string, string> = (() => {
   const m = new Map<string, string>();
   const DIMS = ["classNames", "orderNames", "families"] as const;

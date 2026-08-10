@@ -6,7 +6,7 @@ import { CATEGORY_COLORS } from "../config/taxa";
 import { findNode, getViewRootForNode } from "../lib/taxonomy-utils";
 import { ALL_HABITAT_SEASONS, ALL_HABITAT_IMPORTANCE, ALL_HABITAT_SUITABILITY } from "../lib/habitat-filter";
 
-interface SearchResult {
+export interface SearchResult {
   id: number;
   scientific_name: string;
   common_name: string | null;
@@ -14,9 +14,15 @@ interface SearchResult {
   taxon_group: string;
   category: string;
   gbif_species_key: string | null;
+  gbif_occurrence_count: number | null;
   assessment_id: number | null;
   assessment_date: string | null;
   countries: string[];
+  class_name: string | null;
+  order_name: string | null;
+  family: string | null;
+  // The node whose species list holds this species (NE results only) — see selectResult.
+  node_id: string | null;
   matched_synonym?: string | null;
 }
 
@@ -118,11 +124,22 @@ export function SpeciesSearchBar() {
       lastSelectedResult = result;
       const viewMode: ViewMode = result.category === "NE" ? "new-assessments" : "reassessments";
 
+      // A not-evaluated species opens in the new-assessments view, which loads ONE node's
+      // NE list — and its top-level taxon can be far over the load cap (Invertebrates has
+      // ~1.3M NE species), in which case that view can only offer a "too many to load at
+      // once" drill-down prompt and never shows the species (#453). So select the node the
+      // species actually sits in (node_id, resolved server-side to something loadable),
+      // split into display-root + sub-group exactly like selectTaxon does — which is also
+      // what populates the ancestor-breadcrumb rows above the table. Assessed results keep
+      // browsing the whole top-level taxon (reassessments is assessed-only, always small).
+      const viewRoot = result.node_id ? getViewRootForNode(result.node_id) : null;
+      const subgroup = viewRoot && result.node_id !== viewRoot ? result.node_id : null;
+
       // Build URL with species selected — all filter state is driven from the URL
       const qs = buildQs({
         viewMode,
-        taxa: new Set([result.taxon_id]),
-        subgroups: new Set(),
+        taxa: new Set([viewRoot ?? result.taxon_id]),
+        subgroups: subgroup ? new Set([subgroup]) : new Set(),
         categories: new Set(),
         yearRanges: new Set(),
         assessmentYears: new Set(),
