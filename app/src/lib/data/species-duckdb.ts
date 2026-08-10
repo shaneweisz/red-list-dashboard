@@ -15,7 +15,7 @@ import { DuckDBInstance, type DuckDBConnection } from "@duckdb/node-api";
 import { NODE_INDEX, getCsvGroupsForNode, getAncestors, stripNodePrefix } from "@/lib/taxonomy-utils";
 import { canonicalizeTaxonId, mapTaxonId } from "@/lib/data/taxonomy-constants";
 import { getTaxaSummary } from "@/lib/data/species-store";
-import { isDynamicNodeId, dynamicNodeFilter, buildDynamicNodeId, rankOrderFor, type DynamicSegment } from "@/lib/dynamic-taxon";
+import { isDynamicNodeId, dynamicNodeFilter, buildDynamicNodeId, rankOrderFor, isLiveDrilldownNode, type DynamicSegment } from "@/lib/dynamic-taxon";
 import { filterToSql, sqlStrList } from "@/lib/taxonomy-sql";
 import { COL_DOMESTIC_EXCLUDE_NAMES } from "@/config/col-described-overrides";
 
@@ -221,8 +221,8 @@ const NOT_DOMESTIC_SQL = `coalesce(lower(scientific_name), '') NOT IN (${sqlStrL
 // Cap on how many Not-Evaluated species one query may return. A giant aggregate
 // (insects ~935k, invertebrates ~1.3M) can't be serialized in one response (it 500s /
 // times out), so a taxon over the cap returns no rows with tooLarge=true and the UI
-// prompts a drill-down instead. Also read by neNodeIdForSpecies, which uses it to pick
-// a node a search result can actually be shown in.
+// prompts a drill-down instead. Also read by nodeIdForSpecies, which uses it to decide
+// whether a group's own node can list a search result at all.
 const NE_CAP = 400_000;
 
 // Per-taxon_group not-evaluated counts from the precomputed taxa-summary (in memory),
@@ -394,8 +394,8 @@ export interface SearchResult {
   order_name: string | null;
   family: string | null;
   // The taxonomy node this species should be browsed in — the sub-group the dashboard
-  // selects alongside taxon_id (see neNodeIdForSpecies). Only set for NE results, which
-  // are the ones whose view has to load a single node's not-evaluated list.
+  // selects alongside taxon_id, so the view opens on the species' own lineage rather than
+  // the whole top-level taxon. See nodeIdForSpecies.
   node_id: string | null;
   // Set when the result was matched via a synonym (the old name the user typed) rather than
   // its accepted name — the dropdown shows "(syn. <name>)". scientific_name is the accepted name.
@@ -404,38 +404,54 @@ export interface SearchResult {
 
 interface Lineage { class_name?: string | null; order_name?: string | null; family?: string | null }
 
-// The node an NE search result should open in. Its view (new-assessments) loads exactly
-// one node's not-evaluated list, and mapTaxonId's top-level taxon (invertebrates, ~1.3M NE)
-// is far over NE_CAP — so picking it means the species is never shown, just the "too many
-// to load at once" drill-down prompt (#453).
+// The node a search result should open in — the deepest one the species demonstrably
+// belongs to, down to its family. Selecting that instead of the bare top-level taxon is
+// what puts the species' whole lineage on screen (Invertebrates → Insects → Lepidoptera →
+// Nymphalidae), since the taxa table renders the ancestor chain of whatever is selected.
 //
-// findViewLeafForGroup gives the group's own "By Taxon" container node, which is loadable
-// for most groups (Arachnids, Velvet Worms, Mammals…). For the eight insect groups it is
-// the whole Insects aggregate (~935k NE) — their static per-order nodes were retired in
-// favour of live drilldown — so when the container is over the cap, drill down to the
-// species' own family via a dynamic node id (e.g. inv-insects~order:lepidoptera~family:
-// nymphalidae). That is both small enough to load and a real tree position, so the
-// ancestor-breadcrumb rows and per-taxon stat card resolve exactly as they do when the
-// user drills there by hand. Every rank above the deepest known one must be present in
-// the id (dynamicNodeAncestors/nextDynamicRank read depth positionally) — a null one
-// becomes "", the same Unclassified-bucket convention resolveTaxonSuggestionNode uses.
-export function neNodeIdForSpecies(taxonGroup: string, lineage: Lineage): string | null {
+// findViewLeafForGroup gives the group's own "By Taxon" container node (Arachnids, Velvet
+// Worms, Mammals…), never a Specialist Group; below that, a dynamic drilldown id names the
+// class/order/family the species sits in. Every rank above the deepest segment has to be
+// present in the id — dynamicNodeAncestors/nextDynamicRank read depth positionally — so a
+// gap in the lineage forces a choice, and the two cases want opposite answers:
+//
+//   • Optional depth (the group's own node is loadable). Stop at the last CONTIGUOUS known
+//     rank. A velvet worm has no order in CoL, so drilling to its family would render
+//     "Velvet Worms → Unclassified Order → Peripatidae" — a worse landing spot than the
+//     Velvet Worms node it would otherwise get. Better to show less than to show a hole.
+//   • Required depth (the group's own node is over NE_CAP — Insects, ~935k NE — so the
+//     view can only offer the "too many to load at once" prompt there, #453). Then a gap
+//     is worth wearing: fill it with "", the same Unclassified-bucket convention
+//     resolveTaxonSuggestionNode uses, and reach a node that can actually list the species.
+//
+// genus is never enumerated: the species itself is the target, so a genus node buys nothing
+// over its family while being one more level to climb out of — and querySpecies can't filter
+// by genus outside a dynamic id anyway (see resolveWhere's arbitrary-rank branch).
+export function nodeIdForSpecies(taxonGroup: string, lineage: Lineage): string | null {
   const leafRoot = findViewLeafForGroup(taxonGroup);
   if (!leafRoot) return null;
-  const rootNe = getCsvGroupsForNode(leafRoot).reduce((sum, g) => sum + (neByGroup().get(g) ?? 0), 0);
-  if (rootNe <= NE_CAP) return leafRoot;
+  // A root with no live drilldown has no dynamic ids to offer — its own node is the answer.
+  if (!isLiveDrilldownNode(leafRoot)) return leafRoot;
+
   const valueFor: Partial<Record<DynamicSegment["rank"], string | null | undefined>> = {
     class: lineage.class_name, order: lineage.order_name, family: lineage.family,
   };
-  // genus is never enumerated here: the species itself is the target, and a genus node
-  // buys nothing over its family while being one more level the user has to climb out of.
   const ranks = rankOrderFor(leafRoot).filter((r) => r !== "genus");
-  let deepest = -1;
-  ranks.forEach((r, i) => { if (valueFor[r]) deepest = i; });
-  if (deepest === -1) return leafRoot; // no lineage at all — nothing more precise to offer
-  return buildDynamicNodeId(leafRoot, ranks.slice(0, deepest + 1).map((rank) => ({
+  const idFor = (depth: number) => buildDynamicNodeId(leafRoot, ranks.slice(0, depth).map((rank) => ({
     rank, value: (valueFor[rank] ?? "").toLowerCase(),
   })));
+
+  let contiguous = 0;
+  while (contiguous < ranks.length && valueFor[ranks[contiguous]]) contiguous++;
+  if (contiguous > 0) return idFor(contiguous);
+
+  // Nothing known from the top rank down. Fall back to the group's own node unless it's
+  // unlistable, in which case take the deepest known rank with the gaps coalesced.
+  const rootNe = getCsvGroupsForNode(leafRoot).reduce((sum, g) => sum + (neByGroup().get(g) ?? 0), 0);
+  if (rootNe <= NE_CAP) return leafRoot;
+  let deepest = -1;
+  ranks.forEach((r, i) => { if (valueFor[r]) deepest = i; });
+  return deepest === -1 ? leafRoot : idFor(deepest + 1);
 }
 
 // Stable negative int id for a CoL-only species (no IUCN sis id / GBIF key). Used as the
@@ -478,9 +494,8 @@ export async function searchSpecies(query: string, limit = 10): Promise<SearchRe
     const tg = String(r.taxon_group);
     const cat = String(r.category ?? "");
     const lineage = { class_name: str(r.class_name), order_name: str(r.order_name), family: str(r.family) };
-    // Both views browse via the top-level taxon; an NE result additionally carries the
-    // sub-group node its (new-assessments) view has to load — see neNodeIdForSpecies.
-    // Assessed results go to reassessments, which is assessed-only and always loadable.
+    // Both views browse via the top-level taxon, plus the sub-group node the species
+    // itself sits in — see nodeIdForSpecies.
     return {
       id: Number(r.id),
       scientific_name: String(r.scientific_name ?? ""),
@@ -494,7 +509,7 @@ export async function searchSpecies(query: string, limit = 10): Promise<SearchRe
       assessment_date: (r.assessment_date as string) ?? null,
       countries: splitList(r.countries),
       ...lineage,
-      node_id: cat === "NE" ? neNodeIdForSpecies(tg, lineage) : null,
+      node_id: nodeIdForSpecies(tg, lineage),
     };
   });
   // Return as soon as the direct search (assessed ∪ unassessed, ~16MB) finds anything.
@@ -539,7 +554,7 @@ export async function searchSpecies(query: string, limit = 10): Promise<SearchRe
       assessment_date: null,
       countries: [],
       ...lineage,
-      node_id: neNodeIdForSpecies(tg, lineage),
+      node_id: nodeIdForSpecies(tg, lineage),
     });
     if (fast.length >= lim) break;
   }
@@ -593,7 +608,7 @@ export async function searchSpecies(query: string, limit = 10): Promise<SearchRe
         class_name: null,
         order_name: null,
         family: null,
-        node_id: cat === "NE" ? neNodeIdForSpecies(tg, {}) : null,
+        node_id: nodeIdForSpecies(tg, {}),
         matched_synonym: String(r.synonym_name ?? ""),
       };
       fast.push(result);
@@ -619,7 +634,7 @@ export async function searchSpecies(query: string, limit = 10): Promise<SearchRe
         result.class_name = str(row.class_name);
         result.order_name = str(row.order_name);
         result.family = str(row.family);
-        result.node_id = neNodeIdForSpecies(result.taxon_group, result);
+        result.node_id = nodeIdForSpecies(result.taxon_group, result);
       }
     }
   } catch { /* synonym index not in this sync prefix — skip */ }
