@@ -3585,7 +3585,7 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
     // criteriaTotal) — not all in-view species, so these can sum past 100%
     // for species listed under multiple letters (e.g. B1+B2).
     const criteriaBarLabel = (count: number) =>
-      `${count.toLocaleString()} (${criteriaTotal > 0 ? Math.round((count / criteriaTotal) * 100) : 0}%)`;
+      `${count.toLocaleString()} (${criteriaTotal > 0 ? ((count / criteriaTotal) * 100).toFixed(1) : "0.0"}%)`;
     const criteriaBarData: DrilldownBarDatum[] = CRITERIA_CATEGORIES
       .map(({ code }) => ({ code, rawCode: code, count: criteriaCounts[code] ?? 0, label: criteriaBarLabel(criteriaCounts[code] ?? 0) }))
       .filter(d => d.count > 0 || selectedCriteria.has(d.rawCode));
