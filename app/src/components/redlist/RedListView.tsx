@@ -1651,8 +1651,8 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
       name: code,
       count: counts[code] || 0,
       color: CATEGORY_COLORS[code] || "#999",
-      percent: total > 0 ? (((counts[code] || 0) / total) * 100).toFixed(1) : "0",
-      label: `${(counts[code] || 0).toLocaleString()} (${total > 0 ? (((counts[code] || 0) / total) * 100).toFixed(1) : 0}%)`,
+      percent: total > 0 ? Math.round(((counts[code] || 0) / total) * 100) : 0,
+      label: `${(counts[code] || 0).toLocaleString()} (${total > 0 ? Math.round(((counts[code] || 0) / total) * 100) : 0}%)`,
     }));
   }, [taxaFilteredSpecies, selectedCountries, selectedYearRanges, selectedObsRanges, selectedSystems, selectedPopulationTrends, selectedMovementPatterns, selectedThreats, selectedCriteria, matchesHabitatFilter, endemicsOnly, selectedGrowthForms, matchesSearch, matchesAssessorsFilter, matchesReviewersFilter, matchesObsRangeFilter, selectedAssessmentCounts, matchesAssessmentCountFilter, matchesYearRangeFilter, selectedAssessmentYears, matchesAssessmentYearFilter]);
 
@@ -1697,7 +1697,7 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
     const total = ranges.reduce((sum, r) => sum + r.count, 0);
     return ranges.map(r => ({
       ...r,
-      label: `${r.count.toLocaleString()} (${total > 0 ? ((r.count / total) * 100).toFixed(1) : 0}%)`,
+      label: `${r.count.toLocaleString()} (${total > 0 ? Math.round((r.count / total) * 100) : 0}%)`,
     }));
   }, [taxaFilteredSpeciesExceptOutdated, selectedCategories, selectedCountries, selectedObsRanges, selectedSystems, selectedPopulationTrends, selectedMovementPatterns, selectedThreats, selectedCriteria, matchesHabitatFilter, endemicsOnly, selectedGrowthForms, matchesSearch, matchesAssessorsFilter, matchesReviewersFilter, matchesObsRangeFilter, selectedAssessmentCounts, matchesAssessmentCountFilter]);
 
@@ -1738,7 +1738,7 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
       .map(([year, count]) => ({
         code: year,
         count,
-        label: `${count.toLocaleString()} (${total > 0 ? ((count / total) * 100).toFixed(1) : 0}%)`,
+        label: `${count.toLocaleString()} (${total > 0 ? Math.round((count / total) * 100) : 0}%)`,
       }));
   }, [taxaFilteredSpeciesExceptOutdated, selectedCategories, selectedCountries, selectedObsRanges, selectedSystems, selectedPopulationTrends, selectedMovementPatterns, selectedThreats, selectedCriteria, matchesHabitatFilter, endemicsOnly, selectedGrowthForms, matchesSearch, matchesAssessorsFilter, matchesReviewersFilter, matchesObsRangeFilter, selectedAssessmentCounts, matchesAssessmentCountFilter]);
 
@@ -1812,7 +1812,7 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
     const total = ranges.reduce((sum, r) => sum + r.count, 0);
     return ranges.map(r => ({
       ...r,
-      label: `${r.count.toLocaleString()} (${total > 0 ? ((r.count / total) * 100).toFixed(1) : 0}%)`,
+      label: `${r.count.toLocaleString()} (${total > 0 ? Math.round((r.count / total) * 100) : 0}%)`,
     }));
   }, [taxaFilteredSpecies, selectedCategories, selectedCountries, selectedYearRanges, selectedSystems, selectedPopulationTrends, selectedMovementPatterns, selectedThreats, selectedCriteria, matchesHabitatFilter, endemicsOnly, selectedGrowthForms, matchesSearch, matchesAssessorsFilter, matchesReviewersFilter, matchesYearRangeFilter, selectedAssessmentYears, matchesAssessmentYearFilter]);
 
@@ -1852,7 +1852,7 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
     const total = buckets.reduce((sum, r) => sum + r.count, 0);
     return buckets.map(r => ({
       ...r,
-      label: `${r.count.toLocaleString()} (${total > 0 ? ((r.count / total) * 100).toFixed(1) : 0}%)`,
+      label: `${r.count.toLocaleString()} (${total > 0 ? Math.round((r.count / total) * 100) : 0}%)`,
     }));
   }, [taxaFilteredSpecies, selectedCategories, selectedCountries, selectedYearRanges, selectedAssessmentYears, selectedObsRanges, selectedSystems, selectedPopulationTrends, selectedMovementPatterns, selectedThreats, selectedCriteria, matchesHabitatFilter, endemicsOnly, selectedGrowthForms, matchesSearch, matchesAssessorsFilter, matchesReviewersFilter, matchesYearRangeFilter, matchesAssessmentYearFilter, matchesObsRangeFilter, assessmentCountBucket]);
 
@@ -1875,7 +1875,7 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
         range: b,
         shortRange: b,
         count: counts[b],
-        label: `${counts[b].toLocaleString()} (${total > 0 ? ((counts[b] / total) * 100).toFixed(1) : 0}%)`,
+        label: `${counts[b].toLocaleString()} (${total > 0 ? Math.round((counts[b] / total) * 100) : 0}%)`,
       }))
       .filter(d => d.count > 0);
   }, [taxaFilteredSpecies, selectedCountries, matchesSearch, matchesObsRangeFilter, describedYearBucket]);
@@ -2069,13 +2069,19 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
 
   // Criteria counts: apply all filters EXCEPT criteria (count species per code — at every
   // depth: letter, number, sub-clause, roman numeral — deduplicated per species) — mirrors
-  // threatCounts/threatTotal above. parseCriteriaCodes already returns the full set of codes
-  // a species satisfies at every level (e.g. ["B1","B1a","B1b","B1b(iii)"]); the top-level
-  // letter's own count is derived separately here (via `letters`) rather than reusing a
-  // same-named code, since D/E's bare letter ("D") is otherwise indistinguishable from a
-  // "number" level entry and would double-count.
-  const criteriaCounts = useMemo(() => {
+  // threatCounts/threatTotal above, including a `criteriaTotal` denominator used for the bar
+  // chart's percentage label. Unlike threatTotal (every in-view species), criteriaTotal only
+  // counts species that HAVE criteria data — species can and often do satisfy more than one
+  // top-level letter (e.g. B1+B2 both listed), so percentages are share-of-species-with-
+  // criteria and are expected to sum to over 100%, not a partition of all in-view species.
+  // parseCriteriaCodes already returns the full set of codes a species satisfies at every
+  // level (e.g. ["B1","B1a","B1b","B1b(iii)"]); the top-level letter's own count is derived
+  // separately here (via `letters`) rather than reusing a same-named code, since D/E's bare
+  // letter ("D") is otherwise indistinguishable from a "number" level entry and would
+  // double-count.
+  const { criteriaCounts, criteriaTotal } = useMemo(() => {
     const counts: Record<string, number> = {};
+    let total = 0;
     taxaFilteredSpecies.forEach(s => {
       if (!matchesSearch(s)) return;
       if (selectedCategories.size > 0 && !selectedCategories.has(s.category)) return;
@@ -2092,13 +2098,15 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
       if (!matchesHabitatFilter(s)) return;
       if (!matchesReviewersFilter(s)) return;
       const codes = parseCriteriaCodes(s.criteria);
+      if (codes.length === 0) return;
+      total++;
       const letters = new Set(codes.map(c => c[0]));
       // Bare-letter codes (D, E — no trailing digit) ARE the top-level letter, so
       // skip them here to avoid double-counting against the `letters` loop below.
       for (const code of codes) if (code.length > 1) counts[code] = (counts[code] || 0) + 1;
       for (const letter of letters) counts[letter] = (counts[letter] || 0) + 1;
     });
-    return counts;
+    return { criteriaCounts: counts, criteriaTotal: total };
   }, [taxaFilteredSpecies, selectedCategories, selectedCountries, selectedYearRanges, selectedObsRanges, selectedSystems, selectedPopulationTrends, selectedMovementPatterns, selectedThreats, matchesHabitatFilter, matchesSearch, matchesAssessorsFilter, matchesReviewersFilter, matchesObsRangeFilter, selectedAssessmentCounts, matchesAssessmentCountFilter, matchesYearRangeFilter, selectedAssessmentYears, matchesAssessmentYearFilter]);
 
   // Habitat counts: apply all filters EXCEPT habitat (all 4 dimensions — code
@@ -2106,9 +2114,14 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
   // toggle buttons show what WOULD match if clicked, not what already does).
   // Distinct codes per species are prefix-counted the same way threatCounts does
   // (both are "." hierarchical), deduplicated so a species with both "1.1" and
-  // "1.2" only counts once toward top-level "1".
-  const habitatCounts = useMemo(() => {
+  // "1.2" only counts once toward top-level "1". `habitatTotal` (species with
+  // habitat data, after the breadth refinement) is the percentage denominator —
+  // like criteriaTotal, not threatTotal: a species with 2+ habitats is a
+  // "generalist" by definition, so percentages here are expected to sum past
+  // 100% too.
+  const { habitatCounts, habitatTotal } = useMemo(() => {
     const counts: Record<string, number> = {};
+    let total = 0;
     taxaFilteredSpecies.forEach(s => {
       if (!matchesSearch(s)) return;
       if (selectedCategories.size > 0 && !selectedCategories.has(s.category)) return;
@@ -2136,6 +2149,7 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
         if (habitatBreadth === "specialist" && known.size !== 1) return;
         if (habitatBreadth === "generalist" && known.size < 2) return;
       }
+      total++;
       const counted = new Set<string>();
       for (const code of codes) {
         const parts = code.split(".");
@@ -2157,7 +2171,7 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
         }
       }
     });
-    return counts;
+    return { habitatCounts: counts, habitatTotal: total };
   }, [taxaFilteredSpecies, selectedCategories, selectedCountries, selectedYearRanges, selectedObsRanges, selectedSystems, selectedPopulationTrends, selectedMovementPatterns, selectedThreats, selectedCriteria, matchesSearch, matchesAssessorsFilter, matchesReviewersFilter, matchesObsRangeFilter, selectedAssessmentCounts, matchesAssessmentCountFilter, matchesYearRangeFilter, selectedAssessmentYears, matchesAssessmentYearFilter, habitatBreadth, selectedHabitatImportance, selectedHabitatSeasons, selectedHabitatSuitability, habitatImportanceActive, habitatSeasonsActive, habitatSuitabilityActive]);
 
   // Handle region filter — select all countries in the chosen region
@@ -2169,9 +2183,13 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
     setSelectedCountries(new Set(iucnRegionCountries(region)));
   }, [setSelectedCountries]);
 
-  // Assessor chart: apply all filters EXCEPT assessors (include reviewers)
+  // Assessor chart: apply all filters EXCEPT assessors (include reviewers).
+  // `total` (species with at least one listed assessor) is the percentage
+  // denominator — like criteriaTotal/habitatTotal, since an assessment can
+  // list multiple assessors, percentages are expected to sum past 100%.
   const assessorChartData = useMemo(() => {
     const counts: Record<string, number> = {};
+    let total = 0;
     taxaFilteredSpecies.forEach(s => {
       if (!matchesSearch(s)) return;
       if (selectedCategories.size > 0 && !selectedCategories.has(s.category)) return;
@@ -2190,6 +2208,8 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
       if (selectedGrowthForms.size > 0 && !s.growth_forms?.some(gf => selectedGrowthForms.has(gf))) return;
       if (!matchesReviewersFilter(s)) return;
       const assessors = getSpeciesAssessors(s);
+      if (assessors.length === 0) return;
+      total++;
       for (const a of assessors) {
         counts[a] = (counts[a] || 0) + 1;
       }
@@ -2199,13 +2219,16 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
       .map(([name, count]) => ({
         code: name,
         count,
-        label: count.toLocaleString(),
+        label: `${count.toLocaleString()} (${total > 0 ? Math.round((count / total) * 100) : 0}%)`,
       }));
   }, [taxaFilteredSpecies, selectedCategories, selectedCountries, selectedYearRanges, selectedObsRanges, selectedSystems, selectedPopulationTrends, selectedMovementPatterns, selectedThreats, selectedCriteria, matchesHabitatFilter, endemicsOnly, selectedGrowthForms, matchesSearch, matchesReviewersFilter, getSpeciesAssessors, matchesObsRangeFilter, selectedAssessmentCounts, matchesAssessmentCountFilter, matchesYearRangeFilter, selectedAssessmentYears, matchesAssessmentYearFilter]);
 
-  // Reviewer chart: apply all filters EXCEPT reviewers (include assessors)
+  // Reviewer chart: apply all filters EXCEPT reviewers (include assessors).
+  // `total` mirrors assessorChartData's — species with at least one listed
+  // reviewer — so these percentages are also expected to sum past 100%.
   const reviewerChartData = useMemo(() => {
     const counts: Record<string, number> = {};
+    let total = 0;
     taxaFilteredSpecies.forEach(s => {
       if (!matchesSearch(s)) return;
       if (selectedCategories.size > 0 && !selectedCategories.has(s.category)) return;
@@ -2224,6 +2247,8 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
       if (!matchesAssessorsFilter(s)) return;
       if (!matchesHabitatFilter(s)) return;
       const reviewers = getSpeciesReviewers(s);
+      if (reviewers.length === 0) return;
+      total++;
       for (const r of reviewers) {
         counts[r] = (counts[r] || 0) + 1;
       }
@@ -2233,7 +2258,7 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
       .map(([name, count]) => ({
         code: name,
         count,
-        label: count.toLocaleString(),
+        label: `${count.toLocaleString()} (${total > 0 ? Math.round((count / total) * 100) : 0}%)`,
       }));
   }, [taxaFilteredSpecies, selectedCategories, selectedCountries, selectedYearRanges, selectedObsRanges, selectedSystems, selectedPopulationTrends, selectedMovementPatterns, selectedThreats, selectedCriteria, matchesHabitatFilter, endemicsOnly, selectedGrowthForms, matchesSearch, matchesAssessorsFilter, getSpeciesReviewers, matchesObsRangeFilter, selectedAssessmentCounts, matchesAssessmentCountFilter, matchesYearRangeFilter, selectedAssessmentYears, matchesAssessmentYearFilter]);
 
@@ -3203,7 +3228,7 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
                     : "bg-zinc-100 text-zinc-600 hover:bg-zinc-200 dark:bg-zinc-800 dark:text-zinc-400 dark:hover:bg-zinc-700"
                 }`}
               >
-                {child.label} ({count.toLocaleString()})
+                {child.label} ({count.toLocaleString()}, {threatTotal > 0 ? Math.round((count / threatTotal) * 100) : 0}%)
               </button>
             );
           })}
@@ -3259,8 +3284,11 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
   // multi-select dimension, since each is a binary refinement, not a category.
   const habitatCard = (() => {
     const habitatLabelToCode = new Map(HABITAT_CATEGORIES.map(c => [c.label, c.code]));
+    // Bar label: count + share of species with habitat data (see habitatTotal).
+    const habitatBarLabel = (count: number) =>
+      `${count.toLocaleString()} (${habitatTotal > 0 ? Math.round((count / habitatTotal) * 100) : 0}%)`;
     const habitatBarData: DrilldownBarDatum[] = HABITAT_CATEGORIES
-      .map(({ code, label }) => ({ code: label, rawCode: code, count: habitatCounts[code] ?? 0, label: (habitatCounts[code] ?? 0).toLocaleString() }))
+      .map(({ code, label }) => ({ code: label, rawCode: code, count: habitatCounts[code] ?? 0, label: habitatBarLabel(habitatCounts[code] ?? 0) }))
       .filter(d => d.count > 0)
       .sort((a, b) => b.count - a.count);
     const habitatTotalPages = Math.max(1, Math.ceil(habitatBarData.length / HABITAT_PAGE_SIZE));
@@ -3298,7 +3326,7 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
                     : "bg-zinc-100 text-zinc-600 hover:bg-zinc-200 dark:bg-zinc-800 dark:text-zinc-400 dark:hover:bg-zinc-700"
                 }`}
               >
-                {child.label} ({count.toLocaleString()})
+                {child.label} ({count.toLocaleString()}, {habitatTotal > 0 ? Math.round((count / habitatTotal) * 100) : 0}%)
               </button>
             );
           })}
@@ -3570,7 +3598,7 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
             }`}
             title={node.label}
           >
-            {node.code} ({count.toLocaleString()})
+            {node.code} ({count.toLocaleString()}, {criteriaTotal > 0 ? Math.round((count / criteriaTotal) * 100) : 0}%)
           </button>
         );
       })}
@@ -3605,8 +3633,13 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
     // Assessments' bare short labels so the two charts' bar geometry lines up
     // when they sit side by side; the full description moves to the tooltip
     // via labelFormatter below instead of living on the axis.
+    // Bar label: count + share of species that have criteria data (see
+    // criteriaTotal) — not all in-view species, so these can sum past 100%
+    // for species listed under multiple letters (e.g. B1+B2).
+    const criteriaBarLabel = (count: number) =>
+      `${count.toLocaleString()} (${criteriaTotal > 0 ? Math.round((count / criteriaTotal) * 100) : 0}%)`;
     const criteriaBarData: DrilldownBarDatum[] = CRITERIA_CATEGORIES
-      .map(({ code }) => ({ code, rawCode: code, count: criteriaCounts[code] ?? 0, label: (criteriaCounts[code] ?? 0).toLocaleString() }))
+      .map(({ code }) => ({ code, rawCode: code, count: criteriaCounts[code] ?? 0, label: criteriaBarLabel(criteriaCounts[code] ?? 0) }))
       .filter(d => d.count > 0 || selectedCriteria.has(d.rawCode));
     // A top-level letter counts as "selected" (and so isn't muted) if it OR
     // any of its selected descendants (e.g. "B1b" under "B") is selected.
