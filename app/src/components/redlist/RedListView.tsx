@@ -648,11 +648,6 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
     ro.observe(el);
     tableScrollCleanupRef.current = () => ro.disconnect();
   }, []);
-  // Scroll target for the auto-focus effect below — the TaxaSummary table's
-  // wrapper, not a dedicated stat-card row (there isn't one; the tree's own
-  // selected-row + breadcrumb carries that context, and the toolbar's
-  // species count covers the rest).
-  const taxaSummaryScrollRef = useRef<HTMLDivElement>(null);
   // Filters synced with URL search params for shareable links
   const {
     layoutMode, setLayoutMode,
@@ -696,23 +691,6 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
     setSpeciesParam, setTabParam,
     fromPopstateRef,
   } = useFilterParams(paramSuffix);
-
-  // Auto-scroll to the top of the TaxaSummary table whenever the focused
-  // taxon changes (any tree click — top-level taxon, subgroup drill-down, or
-  // navigating both at once). That table's own selected row + breadcrumb is
-  // what carries "which taxon am I looking at" context (see TaxaSummary),
-  // so scrolling it into view puts the tree row, the filters panel, and the
-  // table toolbar all in frame together — the table that got you here stays
-  // just one scroll above. Skips the very first render (a direct/bookmarked
-  // taxon URL shouldn't jump-scroll on load) via isFirstTaxonFocusRef, then
-  // fires on every subsequent identity change, including landing-page →
-  // first taxon.
-  const taxonFocusKey = `${[...selectedTaxa].sort().join(",")}|${[...selectedSubgroups].sort().join(",")}`;
-  const isFirstTaxonFocusRef = useRef(true);
-  useEffect(() => {
-    if (isFirstTaxonFocusRef.current) { isFirstTaxonFocusRef.current = false; return; }
-    taxaSummaryScrollRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
-  }, [taxonFocusKey]);
 
   // Both habitat checkbox-dropdowns default to "everything checked" (see
   // useFilterParams.ts) — only a proper subset actually restricts anything,
@@ -3693,7 +3671,7 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
           page.tsx's min-h-screen box, through <main>, through this component's
           root, down to TaxaSummary's own `flex-1 min-h-0` map wrapper — each
           link has to be a flex container that passes the slack down. This
-          scroll-target wrapper is a plain block box, so it collapsed to the
+          wrapper is a plain block box, so it collapsed to the
           map's intrinsic height and the landing map rendered at roughly half
           height with dead space below it. Re-join the chain here, but only for
           the landing state: once a country's picked the map lives in a 2-col
@@ -3701,7 +3679,6 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
           non-country layout this wrapper holds the full taxa table, which
           should keep sizing to its own content. */}
       <div
-        ref={taxaSummaryScrollRef}
         className={layoutMode === "country" && !countryScope ? "flex-1 min-h-0 flex flex-col" : undefined}
       >
       <TaxaSummary
