@@ -2043,8 +2043,11 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
 
   // Criteria counts: apply all filters EXCEPT criteria (count species per code — at every
   // depth: letter, number, sub-clause, roman numeral — deduplicated per species) — mirrors
-  // threatCounts/threatTotal above, including the `criteriaTotal` denominator (every in-view
-  // species, whether or not it has criteria data) used for the bar chart's percentage label.
+  // threatCounts/threatTotal above, including a `criteriaTotal` denominator used for the bar
+  // chart's percentage label. Unlike threatTotal (every in-view species), criteriaTotal only
+  // counts species that HAVE criteria data — species can and often do satisfy more than one
+  // top-level letter (e.g. B1+B2 both listed), so percentages are share-of-species-with-
+  // criteria and are expected to sum to over 100%, not a partition of all in-view species.
   // parseCriteriaCodes already returns the full set of codes a species satisfies at every
   // level (e.g. ["B1","B1a","B1b","B1b(iii)"]); the top-level letter's own count is derived
   // separately here (via `letters`) rather than reusing a same-named code, since D/E's bare
@@ -2068,8 +2071,9 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
       if (!matchesAssessorsFilter(s)) return;
       if (!matchesHabitatFilter(s)) return;
       if (!matchesReviewersFilter(s)) return;
-      total++;
       const codes = parseCriteriaCodes(s.criteria);
+      if (codes.length === 0) return;
+      total++;
       const letters = new Set(codes.map(c => c[0]));
       // Bare-letter codes (D, E — no trailing digit) ARE the top-level letter, so
       // skip them here to avoid double-counting against the `letters` loop below.
@@ -3577,8 +3581,9 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
     // Assessments' bare short labels so the two charts' bar geometry lines up
     // when they sit side by side; the full description moves to the tooltip
     // via labelFormatter below instead of living on the axis.
-    // Bar label: count + share of all in-view species (see criteriaTotal),
-    // same convention as threatsCard's threatBarLabel.
+    // Bar label: count + share of species that have criteria data (see
+    // criteriaTotal) — not all in-view species, so these can sum past 100%
+    // for species listed under multiple letters (e.g. B1+B2).
     const criteriaBarLabel = (count: number) =>
       `${count.toLocaleString()} (${criteriaTotal > 0 ? Math.round((count / criteriaTotal) * 100) : 0}%)`;
     const criteriaBarData: DrilldownBarDatum[] = CRITERIA_CATEGORIES
