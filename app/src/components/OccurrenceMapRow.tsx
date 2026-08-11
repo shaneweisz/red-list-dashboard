@@ -12,6 +12,13 @@ import { FaInfoCircle } from "react-icons/fa";
 import booleanPointInPolygon from "@turf/boolean-point-in-polygon";
 import type { Feature, Polygon, MultiPolygon } from "geojson";
 import type { OccurrenceFeature as OccurrenceFeatureType } from "./OccurrenceListTable";
+import {
+  loadGeoreferences,
+  saveGeoreferences,
+  csvToGeoreferences,
+  uncertaintyCircle,
+  type Georeference,
+} from "@/lib/georeferences";
 
 // Fixed page size for iNat photo grid (2 columns x 5 rows)
 const INAT_PAGE_SIZE = 10;
@@ -57,6 +64,10 @@ const AohMapLayer = dynamic(
 // actually switches to it.
 const OccurrenceListTable = dynamic(
   () => import("./OccurrenceListTable"),
+  { ssr: false }
+);
+const GeoreferenceEditor = dynamic(
+  () => import("./GeoreferenceEditor"),
   { ssr: false }
 );
 
@@ -468,19 +479,23 @@ export default function OccurrenceMapRow({
   // actually load. Triggered on either assessmentId or sisTaxonId since AOH
   // availability keys off sisTaxonId, not assessmentId.
   const [canViewRangeMap, setCanViewRangeMap] = useState(false);
+  // The signed-in account, if any. Beyond the range-map gate it's what the
+  // georeference export is restricted to, and what fills georeferencedBy.
+  const [accountEmail, setAccountEmail] = useState<string | null>(null);
   useEffect(() => {
-    if (!assessmentId && !sisTaxonId) return;
     let cancelled = false;
     fetch("/api/auth/me")
-      .then((res) => (res.ok ? res.json() : { canViewRangeMap: false }))
-      .then((data: { canViewRangeMap?: boolean }) => {
-        if (!cancelled) setCanViewRangeMap(!!data.canViewRangeMap);
+      .then((res) => (res.ok ? res.json() : { canViewRangeMap: false, email: null }))
+      .then((data: { canViewRangeMap?: boolean; email?: string | null }) => {
+        if (cancelled) return;
+        setCanViewRangeMap(!!data.canViewRangeMap);
+        setAccountEmail(data.email ?? null);
       })
       .catch(() => {});
     return () => {
       cancelled = true;
     };
-  }, [assessmentId, sisTaxonId]);
+  }, []);
 
   // Range map layer state
   const [showRange, setShowRange] = useState(false);
@@ -642,6 +657,35 @@ export default function OccurrenceMapRow({
   const [includeMissing, setIncludeMissing] = useState(false);
   const [includeIssues, setIncludeIssues] = useState(false);
   const [recordSetTotals, setRecordSetTotals] = useState<{ mapped: number; issue: number; missing: number } | null>(null);
+
+  // The assessor's own georeferences for this species, keyed by gbifID. Held in
+  // the browser (see lib/georeferences.ts) and never sent to GBIF: they are one
+  // person's working interpretation of a locality description, not a correction
+  // anyone has vouched for.
+  const [georeferences, setGeoreferences] = useState<Record<number, Georeference>>({});
+  const [editingFeature, setEditingFeature] = useState<OccurrenceFeature | null>(null);
+  const [georefMessage, setGeorefMessage] = useState<{ kind: "ok" | "error"; text: string } | null>(null);
+  const importInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    setGeoreferences(loadGeoreferences(speciesKey));
+  }, [speciesKey]);
+
+  // Every write goes through here so the in-memory copy and the stored copy
+  // can't drift, and so a failed write (quota, private window) is reported
+  // rather than silently losing an afternoon's work.
+  const persistGeoreferences = useCallback(
+    (next: Record<number, Georeference>) => {
+      setGeoreferences(next);
+      if (!saveGeoreferences(speciesKey, next)) {
+        setGeorefMessage({
+          kind: "error",
+          text: "Couldn't save to this browser's storage — export before you close the tab.",
+        });
+      }
+    },
+    [speciesKey]
+  );
 
   // Fetch occurrences (re-fetches when the requested record sets change)
   useEffect(() => {
@@ -899,6 +943,129 @@ export default function OccurrenceMapRow({
   const mappableFilteredCount = useMemo(
     () => filteredOccurrences.filter(hasPosition).length,
     [filteredOccurrences]
+  );
+
+  // Georeferences for records currently passing the filters — what the map
+  // draws and what an export covers. A stored georeference whose record isn't
+  // in the loaded sample stays in storage untouched.
+  const visibleGeoreferences = useMemo(() => {
+    const shown = new Set(filteredOccurrences.map((o) => o.properties.gbifID));
+    return Object.values(georeferences).filter((g) => shown.has(g.gbifID));
+  }, [georeferences, filteredOccurrences]);
+
+  const georeferencePointsGeoJson = useMemo<GeoJSON.FeatureCollection>(
+    () => ({
+      type: "FeatureCollection",
+      features: visibleGeoreferences.map((g) => ({
+        type: "Feature" as const,
+        properties: { gbifID: g.gbifID },
+        geometry: { type: "Point" as const, coordinates: [g.decimalLongitude, g.decimalLatitude] },
+      })),
+    }),
+    [visibleGeoreferences]
+  );
+
+  // The uncertainty radius, drawn to scale on the ground. A georeferenced
+  // locality is an area, not a pinpoint, and showing it as a bare dot would
+  // overstate it exactly the way the radius exists to prevent.
+  const georeferenceCirclesGeoJson = useMemo<GeoJSON.FeatureCollection>(
+    () => ({
+      type: "FeatureCollection",
+      features: visibleGeoreferences.map((g) => ({
+        type: "Feature" as const,
+        properties: { gbifID: g.gbifID },
+        geometry: uncertaintyCircle(
+          g.decimalLatitude,
+          g.decimalLongitude,
+          g.coordinateUncertaintyInMeters
+        ),
+      })),
+    }),
+    [visibleGeoreferences]
+  );
+
+  const handleSaveGeoreference = useCallback(
+    (georeference: Georeference) => {
+      persistGeoreferences({ ...georeferences, [georeference.gbifID]: georeference });
+      setEditingFeature(null);
+      setGeorefMessage(null);
+    },
+    [georeferences, persistGeoreferences]
+  );
+
+  const handleDeleteGeoreference = useCallback(() => {
+    if (!editingFeature) return;
+    const next = { ...georeferences };
+    delete next[editingFeature.properties.gbifID];
+    persistGeoreferences(next);
+    setEditingFeature(null);
+  }, [editingFeature, georeferences, persistGeoreferences]);
+
+  const [exporting, setExporting] = useState(false);
+  const georeferenceCount = Object.keys(georeferences).length;
+
+  /**
+   * Export goes through the server rather than being built here, because the
+   * gate has to be real: /api/georeferences/export refuses a signed-out request
+   * and logs who took which file. Hiding the button would only hide it.
+   */
+  const handleExport = useCallback(async () => {
+    const rows = Object.values(georeferences);
+    if (rows.length === 0) return;
+    setExporting(true);
+    setGeorefMessage(null);
+    try {
+      const response = await fetch("/api/georeferences/export", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ speciesKey, scientificName, georeferences: rows }),
+      });
+      if (!response.ok) {
+        const detail = await response.json().catch(() => ({}));
+        setGeorefMessage({
+          kind: "error",
+          text: response.status === 401
+            ? "Sign in to export georeferences."
+            : detail.error || "Export failed.",
+        });
+        return;
+      }
+      const blob = await response.blob();
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `${(scientificName ?? speciesKey).toLowerCase().replace(/[^a-z0-9]+/g, "-")}-georeferences.csv`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+      setGeorefMessage({ kind: "ok", text: `Exported ${rows.length} georeference${rows.length === 1 ? "" : "s"}.` });
+    } catch {
+      setGeorefMessage({ kind: "error", text: "Export failed." });
+    } finally {
+      setExporting(false);
+    }
+  }, [georeferences, speciesKey, scientificName]);
+
+  const handleImportFile = useCallback(
+    async (file: File) => {
+      setGeorefMessage(null);
+      const text = await file.text();
+      const { georeferences: imported, errors } = csvToGeoreferences(text);
+      if (imported.length > 0) {
+        const next = { ...georeferences };
+        for (const g of imported) next[g.gbifID] = g;
+        persistGeoreferences(next);
+      }
+      const parts: string[] = [];
+      if (imported.length > 0) parts.push(`Imported ${imported.length} georeference${imported.length === 1 ? "" : "s"}.`);
+      if (errors.length > 0) parts.push(`${errors.length} row${errors.length === 1 ? "" : "s"} skipped: ${errors[0]}${errors.length > 1 ? " …" : ""}`);
+      setGeorefMessage({
+        kind: imported.length > 0 ? "ok" : "error",
+        text: parts.join(" ") || "Nothing to import.",
+      });
+    },
+    [georeferences, persistGeoreferences]
   );
 
   // Per opt-in record set: how many are loaded, and how many survive every other
@@ -1431,6 +1598,39 @@ export default function OccurrenceMapRow({
                   <Layer {...circleLayerStyle} />
                 </Source>
               )}
+              {/* The assessor's own georeferences — drawn above the GBIF points
+                  in a colour used nowhere else, with the uncertainty radius to
+                  scale. They are never merged into the GBIF layer or into any
+                  GBIF count: one person's reading of a locality description
+                  shouldn't become indistinguishable from a published record. */}
+              {visibleGeoreferences.length > 0 && (
+                <>
+                  <Source id={`georef-circles-${panelId}`} type="geojson" data={georeferenceCirclesGeoJson}>
+                    <Layer
+                      id={`georef-circle-fill-${panelId}`}
+                      type="fill"
+                      paint={{ "fill-color": "#7c3aed", "fill-opacity": 0.12 }}
+                    />
+                    <Layer
+                      id={`georef-circle-line-${panelId}`}
+                      type="line"
+                      paint={{ "line-color": "#7c3aed", "line-width": 1, "line-dasharray": [2, 2] }}
+                    />
+                  </Source>
+                  <Source id={`georef-points-${panelId}`} type="geojson" data={georeferencePointsGeoJson}>
+                    <Layer
+                      id={`georef-point-${panelId}`}
+                      type="circle"
+                      paint={{
+                        "circle-radius": 6,
+                        "circle-color": "#7c3aed",
+                        "circle-stroke-color": "#ffffff",
+                        "circle-stroke-width": 2,
+                      }}
+                    />
+                  </Source>
+                </>
+              )}
               {/* Highlighted dot when hovering an iNat thumbnail (only in the correct split panel) */}
               {hoveredObs && hoveredObs.decimalLatitude != null && hoveredObs.decimalLongitude != null && (
                 !splitView || (
@@ -1665,6 +1865,17 @@ export default function OccurrenceMapRow({
 
   return (
     <div className="bg-zinc-50 dark:bg-zinc-800/50">
+      {editingFeature && (
+        <GeoreferenceEditor
+          feature={editingFeature}
+          existing={georeferences[editingFeature.properties.gbifID]}
+          georeferencedBy={accountEmail}
+          scientificName={scientificName}
+          onSave={handleSaveGeoreference}
+          onDelete={handleDeleteGeoreference}
+          onClose={() => setEditingFeature(null)}
+        />
+      )}
       <div className="p-2">
         <div className="flex flex-col gap-2">
           {/* Filter dropdowns + sample-size summary, merged into one row (summary on
@@ -2362,6 +2573,76 @@ export default function OccurrenceMapRow({
                         records for this species; {recordSetTotals.mapped.toLocaleString()} can be mapped.
                       </div>
                     )}
+                    {/* The assessor's own georeferences: what's stored, and the
+                        only way to get it out of this browser. */}
+                    <div className="mt-1 pt-1.5 border-t border-zinc-100 dark:border-zinc-800">
+                      <div className="px-3 pb-1 flex items-center gap-2">
+                        <span className="w-2 h-2 rounded-full bg-violet-600 shrink-0" />
+                        <span className="text-xs text-zinc-700 dark:text-zinc-200">Your georeferences</span>
+                        <span className="ml-auto tabular-nums text-[11px] font-medium text-zinc-600 dark:text-zinc-300">
+                          {georeferenceCount.toLocaleString()}
+                        </span>
+                      </div>
+                      <div className="px-3 pb-1 text-[10px] text-zinc-400">
+                        {georeferenceCount === 0
+                          ? "Add coordinates from the list view — the Georeference column."
+                          : "Stored in this browser only. Export to keep them."}
+                      </div>
+                      <div className="px-3 pb-1.5 flex items-center gap-1.5">
+                        <button
+                          onClick={handleExport}
+                          disabled={!accountEmail || georeferenceCount === 0 || exporting}
+                          title={
+                            accountEmail
+                              ? "Download your georeferences as a Darwin Core CSV"
+                              : "Sign in to export georeferences"
+                          }
+                          className="px-2 py-0.5 rounded border border-zinc-300 dark:border-zinc-600 text-[11px] text-zinc-600 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-800 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                        >
+                          {exporting ? "Exporting…" : "Export CSV"}
+                        </button>
+                        <button
+                          onClick={() => importInputRef.current?.click()}
+                          disabled={!accountEmail}
+                          title={
+                            accountEmail
+                              ? "Load georeferences from a CSV exported here"
+                              : "Sign in to import georeferences"
+                          }
+                          className="px-2 py-0.5 rounded border border-zinc-300 dark:border-zinc-600 text-[11px] text-zinc-600 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-800 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                        >
+                          Import CSV
+                        </button>
+                        <input
+                          ref={importInputRef}
+                          type="file"
+                          accept=".csv,text/csv"
+                          className="hidden"
+                          onChange={(e) => {
+                            const file = e.target.files?.[0];
+                            if (file) handleImportFile(file);
+                            e.target.value = "";
+                          }}
+                        />
+                      </div>
+                      {!accountEmail && (
+                        <div className="px-3 pb-1.5 text-[10px] text-zinc-400">
+                          Sign in to export or import — CSV files leaving the dashboard are
+                          restricted to signed-in users.
+                        </div>
+                      )}
+                      {georefMessage && (
+                        <div
+                          className={`px-3 pb-1.5 text-[10px] ${
+                            georefMessage.kind === "ok"
+                              ? "text-emerald-600 dark:text-emerald-400"
+                              : "text-red-600 dark:text-red-400"
+                          }`}
+                        >
+                          {georefMessage.text}
+                        </div>
+                      )}
+                    </div>
                   </div>
                 )}
               </div>
@@ -2754,6 +3035,8 @@ export default function OccurrenceMapRow({
                       occurrences={filteredOccurrences}
                       loading={loadingOccurrences}
                       isOutsideNativeRange={isOutsideNativeRangeForList}
+                      georeferences={georeferences}
+                      onEditGeoreference={setEditingFeature}
                     />
                   </div>
                 ) : splitView && splitDate ? (

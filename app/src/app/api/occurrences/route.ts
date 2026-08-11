@@ -41,6 +41,8 @@ type GbifRecord = {
   // Herbarium sheets very often record elevation only as transcribed text
   // ("1900 m", "ca. 2200 msnm"), which GBIF leaves in verbatimElevation.
   verbatimElevation?: string;
+  /** The publisher's own record id — outlives a GBIF re-key. */
+  occurrenceID?: string;
   issues?: string[];
 };
 
@@ -287,6 +289,7 @@ export async function GET(request: NextRequest) {
         collectionCode: r.collectionCode,
         catalogNumber: r.catalogNumber,
         establishmentMeans: r.establishmentMeans,
+        occurrenceID: r.occurrenceID,
         coordinateStatus: classify(r, geospatialIssuesByKey.get(r.key) ?? []),
         gbifIssues: geospatialIssuesByKey.get(r.key) ?? [],
       },

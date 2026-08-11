@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 import { QUALITY_FLAG_LABELS, type QualityFlag } from "@/lib/coordinate-cleaning";
 import { formatGbifIssue } from "@/lib/gbif";
+import type { Georeference } from "@/lib/georeferences";
 
 /**
  * A single GBIF occurrence, as returned by /api/occurrences. Shared with
@@ -38,6 +39,8 @@ export interface OccurrenceFeature {
     catalogNumber?: string;
     establishmentMeans?: string;
     verbatimElevation?: string;
+    /** The publisher's own record id — outlives a GBIF re-key. */
+    occurrenceID?: string;
     /** Which record set this came from — see CoordinateStatus in the API route. */
     coordinateStatus?: "mapped" | "issue" | "missing";
     /** GBIF's own geospatial issues with this record's coordinates. */
@@ -124,12 +127,28 @@ interface OccurrenceListTableProps {
    *  "outside native range" flag shown in the Flags column (same signal the map
    *  tooltip shows). */
   isOutsideNativeRange: (countryCode: string | null | undefined) => boolean;
+  /** The assessor's own georeferences, keyed by gbifID. */
+  georeferences?: Record<number, Georeference>;
+  /** Opens the georeference editor for a record. Absent = feature unavailable. */
+  onEditGeoreference?: (feature: OccurrenceFeature) => void;
+}
+
+/**
+ * Which records offer a georeference affordance: those GBIF has no coordinates
+ * for, and those whose coordinates GBIF flags. Records GBIF is happy with are
+ * left alone — overriding a good coordinate is a different act from supplying a
+ * missing one, and inviting it here would quietly fork the source data.
+ */
+export function isGeoreferenceable(p: OccurrenceFeature["properties"]): boolean {
+  return p.coordinateStatus === "missing" || p.coordinateStatus === "issue";
 }
 
 export default function OccurrenceListTable({
   occurrences,
   loading,
   isOutsideNativeRange,
+  georeferences,
+  onEditGeoreference,
 }: OccurrenceListTableProps) {
   // Default sort: newest first, matching GBIF's own default result order.
   const [sortKey, setSortKey] = useState<string>("date");
@@ -187,8 +206,23 @@ export default function OccurrenceListTable({
         label: "Coordinates",
         title: "decimalLatitude, decimalLongitude — blank when GBIF has no coordinates for the record",
         className: "whitespace-nowrap tabular-nums",
-        value: (_p, f) => f.geometry?.coordinates[1] ?? null,
+        // Sorted by the position actually being shown, so a record you've
+        // georeferenced sorts where you put it, not where GBIF left a hole.
+        value: (p, f) => georeferences?.[p.gbifID]?.decimalLatitude ?? f.geometry?.coordinates[1] ?? null,
         render: (p, f) => {
+          const mine = georeferences?.[p.gbifID];
+          if (mine) {
+            return (
+              <span
+                className="text-violet-600 dark:text-violet-400"
+                title={`Your georeference: ${mine.decimalLatitude}, ${mine.decimalLongitude} ± ${mine.coordinateUncertaintyInMeters} m${
+                  mine.georeferenceProtocol ? ` (${mine.georeferenceProtocol})` : ""
+                }`}
+              >
+                ◆ {mine.decimalLatitude.toFixed(4)}, {mine.decimalLongitude.toFixed(4)}
+              </span>
+            );
+          }
           if (!f.geometry) {
             return (
               <span className="text-amber-600 dark:text-amber-400" title="GBIF has no coordinates for this record — only a locality description">
@@ -322,6 +356,39 @@ export default function OccurrenceListTable({
           );
         },
       },
+      ...(onEditGeoreference
+        ? [
+            {
+              key: "georeference",
+              label: "Georeference",
+              title:
+                "Your own coordinates for records GBIF can't place — stored in this browser, never sent to GBIF",
+              className: "whitespace-nowrap",
+              // Sorts the records still needing work to one end.
+              value: (p: OccurrenceFeature["properties"]) =>
+                georeferences?.[p.gbifID] ? 1 : isGeoreferenceable(p) ? 0 : null,
+              render: (p: OccurrenceFeature["properties"], f: OccurrenceFeature) => {
+                if (!isGeoreferenceable(p)) return null;
+                const mine = georeferences?.[p.gbifID];
+                return (
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onEditGeoreference(f);
+                    }}
+                    className={`px-1.5 py-0.5 rounded border text-[11px] transition-colors ${
+                      mine
+                        ? "border-violet-300 dark:border-violet-700 text-violet-700 dark:text-violet-300 hover:bg-violet-50 dark:hover:bg-violet-950"
+                        : "border-zinc-300 dark:border-zinc-600 text-zinc-600 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-700"
+                    }`}
+                  >
+                    {mine ? "Edit" : "Add"}
+                  </button>
+                );
+              },
+            } as ColumnDef,
+          ]
+        : []),
       {
         key: "gbifID",
         label: "GBIF",
@@ -341,7 +408,7 @@ export default function OccurrenceListTable({
         ),
       },
     ],
-    [isOutsideNativeRange]
+    [isOutsideNativeRange, georeferences, onEditGeoreference]
   );
 
   const sorted = useMemo(() => {
