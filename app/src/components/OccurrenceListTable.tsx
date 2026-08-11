@@ -54,9 +54,7 @@ export interface OccurrenceFeature {
   } | null;
 }
 
-// Ten at a time: the list sits beside the map, so a page should be scannable
-// against it without scrolling the table away from the points it describes.
-const ROWS_PER_PAGE = 10;
+const DEFAULT_ROWS_PER_PAGE = 10;
 
 const BASIS_LABELS: Record<string, string> = {
   HUMAN_OBSERVATION: "Human observation",
@@ -137,6 +135,14 @@ interface OccurrenceListTableProps {
   hoveredGbifId?: number | null;
   /** Pointer entered/left a row — the map highlights the matching record. */
   onHoverRow?: (feature: OccurrenceFeature | null) => void;
+  /** Rows per page. Ignored when expanded. */
+  rowsPerPage?: number;
+  /** Show every record in one scrollable table instead of paging. */
+  expanded?: boolean;
+  /** Renders the expand/collapse control when provided. */
+  onToggleExpanded?: () => void;
+  /** Fill the height of the column the table is in. */
+  fillHeight?: boolean;
 }
 
 /**
@@ -157,11 +163,19 @@ export default function OccurrenceListTable({
   onEditGeoreference,
   hoveredGbifId,
   onHoverRow,
+  rowsPerPage: rowsPerPageProp = DEFAULT_ROWS_PER_PAGE,
+  expanded = false,
+  onToggleExpanded,
+  fillHeight = false,
 }: OccurrenceListTableProps) {
   // Default sort: newest first, matching GBIF's own default result order.
   const [sortKey, setSortKey] = useState<string>("date");
   const [sortAsc, setSortAsc] = useState(false);
   const [rawPage, setPage] = useState(0);
+
+  // Expanded means the whole result set in one scrollable table — no paging at
+  // all, for when you'd rather read down the list than step through it.
+  const rowsPerPage = expanded ? Number.MAX_SAFE_INTEGER : rowsPerPageProp;
 
   const columns = useMemo<ColumnDef[]>(
     () => [
@@ -436,12 +450,12 @@ export default function OccurrenceListTable({
     });
   }, [occurrences, columns, sortKey, sortAsc]);
 
-  const pageCount = Math.max(1, Math.ceil(sorted.length / ROWS_PER_PAGE));
+  const pageCount = Math.max(1, Math.ceil(sorted.length / rowsPerPage));
   // Clamped during render rather than reset in an effect: tightening a filter
   // can shrink the result set out from under the current page, and re-rendering
   // an empty page first (then correcting it) is a visible flash.
   const page = Math.min(rawPage, pageCount - 1);
-  const pageRows = sorted.slice(page * ROWS_PER_PAGE, (page + 1) * ROWS_PER_PAGE);
+  const pageRows = sorted.slice(page * rowsPerPage, (page + 1) * rowsPerPage);
 
   const toggleSort = (key: string) => {
     if (key === sortKey) {
@@ -469,10 +483,13 @@ export default function OccurrenceListTable({
   }
 
   return (
-    <div className="flex flex-col rounded-lg border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 overflow-hidden">
-      {/* Horizontal scroll only: there are more Darwin Core fields than fit
-          beside a map, but ten rows need no vertical scroller of their own. */}
-      <div className="overflow-x-auto">
+    <div className={`flex flex-col rounded-lg border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 overflow-hidden${
+      fillHeight ? " flex-1 min-h-0" : ""
+    }`}>
+      {/* Always scrolls horizontally — there are more Darwin Core fields than
+          fit under a map. Vertically it only scrolls when expanded, since a
+          page is otherwise sized to be read whole. */}
+      <div className={`overflow-x-auto${fillHeight ? " flex-1 min-h-0 overflow-y-auto" : ""}`}>
         <table className="min-w-full text-xs border-collapse">
           <thead className="sticky top-0 z-10 bg-zinc-50 dark:bg-zinc-800">
             <tr>
@@ -544,10 +561,32 @@ export default function OccurrenceListTable({
         <span className="tabular-nums">
           {sorted.length === 0
             ? "0 records"
-            : `${(page * ROWS_PER_PAGE + 1).toLocaleString()}–${Math.min((page + 1) * ROWS_PER_PAGE, sorted.length).toLocaleString()} of ${sorted.length.toLocaleString()} records`}
+            : expanded
+              ? `${sorted.length.toLocaleString()} records`
+              : `${(page * rowsPerPage + 1).toLocaleString()}–${Math.min((page + 1) * rowsPerPage, sorted.length).toLocaleString()} of ${sorted.length.toLocaleString()} records`}
         </span>
-        {pageCount > 1 && (
-          <div className="ml-auto flex items-center gap-1">
+        {onToggleExpanded && (
+          <button
+            onClick={onToggleExpanded}
+            title={
+              expanded
+                ? "Back to a paged list, with more room for the map"
+                : "Show every record in one scrollable list, with more room for the list"
+            }
+            className="ml-auto inline-flex items-center gap-1 px-1.5 py-0.5 rounded border border-zinc-300 dark:border-zinc-600 text-[10px] text-zinc-500 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors"
+          >
+            <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                d={expanded ? "M19 15l-7-7-7 7" : "M19 9l-7 7-7-7"}
+              />
+            </svg>
+            {expanded ? "Collapse" : "Expand full list"}
+          </button>
+        )}
+        {!expanded && pageCount > 1 && (
+          <div className={`flex items-center gap-1${onToggleExpanded ? "" : " ml-auto"}`}>
             <button
               onClick={() => setPage(Math.max(0, page - 1))}
               disabled={page === 0}

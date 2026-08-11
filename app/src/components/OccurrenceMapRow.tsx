@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef, useCallback, useMemo } from "react";
+import { createPortal } from "react-dom";
 import dynamic from "next/dynamic";
 import type { MapRef, ViewStateChangeEvent, MapLayerMouseEvent } from "react-map-gl/maplibre";
 import type maplibregl from "maplibre-gl";
@@ -275,6 +276,11 @@ const GBIF_BASIS_OF_RECORD: Record<string, string> = {
 // How many additional records to fetch per "Load more" click on a Basis of Record row.
 const BASIS_OF_RECORD_LOAD_MORE_BATCH = 200;
 
+// A short page in fullscreen: the list sits under the map, and five rows is
+// what reads comfortably there without the table becoming the whole screen.
+// "Expand full list" drops paging altogether for when you'd rather scroll.
+const FULLSCREEN_ROWS_PER_PAGE = 5;
+
 // How many additional records to fetch per click of the general "Load N more" button
 // next to the "Loaded X of Y" badge (all basis-of-record categories together).
 const OVERALL_LOAD_MORE_BATCH = 200;
@@ -457,12 +463,14 @@ export default function OccurrenceMapRow({
   const [showProtectedAreas, setShowProtectedAreas] = useState(false);
   const [showPowoRangeOverlay, setShowPowoRangeOverlay] = useState(false);
   const [showIucnRangeOverlay, setShowIucnRangeOverlay] = useState(false);
-  // The record list sits beside the map rather than replacing it — the two are
-  // meant to be read against each other, so hovering a row highlights that
-  // record's point. It shows the same (filtered) records as a table of the
-  // GBIF/Darwin Core fields a map dot can't carry: locality, collector,
+  // Fullscreen: map on the left, record list on the right, and nothing else.
+  // The two are meant to be read against each other — hover a row and its
+  // point lights up — which needs room the inline panel doesn't have. The list
+  // carries the GBIF/Darwin Core fields a map dot can't: locality, collector,
   // catalogue number, and so on.
-  const [showList, setShowList] = useState(false);
+  const [fullscreen, setFullscreen] = useState(false);
+  // Expanded trades map height for list height and drops paging entirely.
+  const [listExpanded, setListExpanded] = useState(false);
   const [splitView, setSplitView] = useState(false);
   const [splitDate, setSplitDate] = useState<string>(assessmentDate?.split("T")[0] || "");
   const [sharedViewState, setSharedViewState] = useState({ longitude: 0, latitude: 20, zoom: 1.5 });
@@ -533,10 +541,6 @@ export default function OccurrenceMapRow({
   const [cleaningFilterOpen, setCleaningFilterOpen] = useState(false);
   const cleaningFilterRef = useRef<HTMLDivElement>(null);
 
-  // Georeferencing dropdown state (the opt-in unmapped/flagged record sets)
-  const [georefOpen, setGeorefOpen] = useState(false);
-  const georefRef = useRef<HTMLDivElement>(null);
-
   // Date-range filter dropdown state
   const [dateRangeOpen, setDateRangeOpen] = useState(false);
   const dateRangeRef = useRef<HTMLDivElement>(null);
@@ -569,18 +573,6 @@ export default function OccurrenceMapRow({
     document.addEventListener("mousedown", handler);
     return () => document.removeEventListener("mousedown", handler);
   }, [filtersOpen]);
-
-  // Close georeferencing popover on outside click
-  useEffect(() => {
-    if (!georefOpen) return;
-    const handler = (e: MouseEvent) => {
-      if (georefRef.current && !georefRef.current.contains(e.target as Node)) {
-        setGeorefOpen(false);
-      }
-    };
-    document.addEventListener("mousedown", handler);
-    return () => document.removeEventListener("mousedown", handler);
-  }, [georefOpen]);
 
   // Close coordinate-cleaning popover on outside click
   useEffect(() => {
@@ -1424,21 +1416,36 @@ export default function OccurrenceMapRow({
     }
   }, [splitView, bbox]);
 
-  // Opening or closing the record list changes how wide the map is, and the
-  // map keeps its centre and zoom when it resizes — so on a species whose
-  // records sit off to one side, opening the list can slide them straight out
-  // of view. Re-fit to the data once the new layout has settled.
-  const prevShowListRef = useRef(showList);
   useEffect(() => {
-    if (prevShowListRef.current === showList) return;
-    prevShowListRef.current = showList;
+    if (!fullscreen) return;
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setFullscreen(false);
+    };
+    document.addEventListener("keydown", handler);
+    // Stop the page behind the overlay scrolling under it.
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.removeEventListener("keydown", handler);
+      document.body.style.overflow = previousOverflow;
+    };
+  }, [fullscreen]);
+
+  // Entering or leaving fullscreen changes the map's size dramatically, and a
+  // map keeps its centre and zoom when it resizes — so on a species whose
+  // records sit off to one side, the change can slide them straight out of
+  // view. Re-fit to the data once the new layout has settled.
+  const prevFullscreenRef = useRef(`${fullscreen}:${listExpanded}`);
+  useEffect(() => {
+    if (prevFullscreenRef.current === `${fullscreen}:${listExpanded}`) return;
+    prevFullscreenRef.current = `${fullscreen}:${listExpanded}`;
     if (!bbox) return;
     const timer = window.setTimeout(() => {
       mapRef.current?.resize();
       if (!fitMapToBbox(bbox)) pendingBboxRef.current = bbox;
     }, 80);
     return () => window.clearTimeout(timer);
-  }, [showList, bbox, fitMapToBbox]);
+  }, [fullscreen, listExpanded, bbox, fitMapToBbox]);
 
   // Fit bounds when the (unfiltered) bbox changes (may need to wait for map to
   // be ready) — deliberately keyed on `bbox` (the server-computed extent of
@@ -1578,8 +1585,14 @@ export default function OccurrenceMapRow({
         };
 
     return (
-      <div className="flex-1 flex flex-col rounded-lg overflow-hidden border border-zinc-200 dark:border-zinc-700 relative isolate z-0">
-        <div className={`${splitView ? "h-[250px] sm:h-auto sm:min-h-[400px]" : "h-[300px] sm:h-auto sm:min-h-[450px]"} sm:flex-1 relative`}>
+      <div className={`flex-1 flex flex-col rounded-lg overflow-hidden border border-zinc-200 dark:border-zinc-700 relative isolate z-0${fullscreen ? " min-h-0" : ""}`}>
+        <div className={`${
+          fullscreen
+            ? "flex-1 min-h-[240px]"
+            : splitView
+              ? "h-[250px] sm:h-auto sm:min-h-[400px]"
+              : "h-[300px] sm:h-auto sm:min-h-[450px]"
+        } sm:flex-1 relative`}>
           {loadingOccurrences ? (
             <div className="flex items-center justify-center h-full bg-zinc-100 dark:bg-zinc-800">
               <div className="flex items-center gap-2 text-zinc-400 text-sm">
@@ -1904,8 +1917,14 @@ export default function OccurrenceMapRow({
     showIucnRangeOverlay,
   ];
 
-  return (
-    <div className="bg-zinc-50 dark:bg-zinc-800/50">
+  const panel = (
+    <div
+      className={
+        fullscreen
+          ? "fixed inset-0 z-[9998] flex flex-col bg-white dark:bg-zinc-900"
+          : "bg-zinc-50 dark:bg-zinc-800/50"
+      }
+    >
       {editingFeature && (
         <GeoreferenceEditor
           feature={editingFeature}
@@ -1917,8 +1936,26 @@ export default function OccurrenceMapRow({
           onClose={() => setEditingFeature(null)}
         />
       )}
-      <div className="p-2">
-        <div className="flex flex-col gap-2">
+      {fullscreen && (
+        <div className="flex items-center gap-2 px-3 py-2 border-b border-zinc-200 dark:border-zinc-700 shrink-0">
+          <span className="text-sm font-medium italic text-zinc-800 dark:text-zinc-100 truncate">
+            {scientificName ?? "GBIF occurrences"}
+          </span>
+          <span className="text-[11px] text-zinc-400 truncate">GBIF occurrences and record list</span>
+          <button
+            onClick={() => setFullscreen(false)}
+            title="Exit fullscreen (Esc)"
+            className="ml-auto inline-flex items-center gap-1.5 px-2 py-1 rounded border border-zinc-300 dark:border-zinc-600 text-xs text-zinc-600 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800 transition-colors shrink-0"
+          >
+            <svg className="w-3.5 h-3.5 text-zinc-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M9 4H6a2 2 0 00-2 2v3m0 6v3a2 2 0 002 2h3m6 0h3a2 2 0 002-2v-3m0-6V6a2 2 0 00-2-2h-3" />
+            </svg>
+            Exit fullscreen
+          </button>
+        </div>
+      )}
+      <div className={fullscreen ? "p-2 flex-1 min-h-0 flex flex-col" : "p-2"}>
+        <div className={`flex flex-col gap-2${fullscreen ? " flex-1 min-h-0" : ""}`}>
           {/* Filter dropdowns + sample-size summary, merged into one row (summary on
               the left) — sit above the map itself, not a separate header bar */}
           <div className="p-2 bg-white dark:bg-zinc-900 rounded-lg border border-zinc-200 dark:border-zinc-700">
@@ -2225,6 +2262,68 @@ export default function OccurrenceMapRow({
                         )}
                       </>
                     )}
+                    {/* The two record sets the viewer normally never asks GBIF
+                        for. Every other row here hides records; these two add
+                        them back, so they sit in their own segment and say so.
+                        Both are only really readable in the list view — one
+                        can't be drawn at all, the other shouldn't be trusted
+                        where it's drawn. */}
+                    {recordSetTotals && (recordSetTotals.missing > 0 || recordSetTotals.issue > 0) && (
+                      <>
+                        <div className="my-1 border-t border-zinc-100 dark:border-zinc-800" />
+                        <div className="px-3 pb-0.5 text-[10px] font-medium text-zinc-400 dark:text-zinc-500">
+                          Records GBIF can&apos;t place — normally excluded
+                        </div>
+                        <label
+                          className={`flex items-center gap-2 px-3 py-1.5 text-xs ${
+                            recordSetTotals.missing > 0
+                              ? "hover:bg-zinc-50 dark:hover:bg-zinc-800 cursor-pointer"
+                              : "opacity-50 cursor-not-allowed"
+                          }`}
+                          title="GBIF has no decimalLatitude/decimalLongitude for these records — typically herbarium sheets whose locality text was never georeferenced. They appear in the record list with their locality description."
+                        >
+                          <input
+                            type="checkbox"
+                            checked={includeMissing}
+                            disabled={recordSetTotals.missing === 0}
+                            onChange={() => setIncludeMissing((v) => !v)}
+                            className="w-3 h-3 rounded accent-emerald-500 shrink-0"
+                          />
+                          <span className={`flex-1 min-w-0 ${includeMissing ? "text-zinc-700 dark:text-zinc-200" : "text-zinc-400 dark:text-zinc-500"}`}>
+                            Include records without coordinates
+                          </span>
+                          <span className="ml-auto tabular-nums shrink-0 text-[11px] font-medium text-zinc-600 dark:text-zinc-300">
+                            {includeMissing
+                              ? georefSetShownLabel(georefSetCounts.missing)
+                              : `Add ${recordSetTotals.missing.toLocaleString()} record${recordSetTotals.missing === 1 ? "" : "s"}`}
+                          </span>
+                        </label>
+                        <label
+                          className={`flex items-center gap-2 px-3 py-1.5 text-xs ${
+                            recordSetTotals.issue > 0
+                              ? "hover:bg-zinc-50 dark:hover:bg-zinc-800 cursor-pointer"
+                              : "opacity-50 cursor-not-allowed"
+                          }`}
+                          title="GBIF flags these coordinates as suspect (zero coordinates, country mismatch, swapped or negated lat/lon, …). They're drawn on the map in amber and listed with the issue named."
+                        >
+                          <input
+                            type="checkbox"
+                            checked={includeIssues}
+                            disabled={recordSetTotals.issue === 0}
+                            onChange={() => setIncludeIssues((v) => !v)}
+                            className="w-3 h-3 rounded accent-amber-500 shrink-0"
+                          />
+                          <span className={`flex-1 min-w-0 ${includeIssues ? "text-zinc-700 dark:text-zinc-200" : "text-zinc-400 dark:text-zinc-500"}`}>
+                            Include records GBIF flags
+                          </span>
+                          <span className="ml-auto tabular-nums shrink-0 text-[11px] font-medium text-zinc-600 dark:text-zinc-300">
+                            {includeIssues
+                              ? georefSetShownLabel(georefSetCounts.issue)
+                              : `Add ${recordSetTotals.issue.toLocaleString()} record${recordSetTotals.issue === 1 ? "" : "s"}`}
+                          </span>
+                        </label>
+                      </>
+                    )}
                     <div className="my-1 border-t border-zinc-100 dark:border-zinc-800" />
                     <div className="flex items-center gap-2 px-3 py-1.5 text-xs" title="Only show records with a GPS uncertainty at or below this radius">
                       <span className="w-3 shrink-0" />
@@ -2512,182 +2611,6 @@ export default function OccurrenceMapRow({
                   </div>
                 )}
               </div>
-              {/* Georeferencing — the two record sets GBIF returns that the map
-                  can't honestly draw, and that the viewer therefore filtered out
-                  entirely until now: records with no coordinates, and records
-                  whose coordinates GBIF flags. Opt-in, because for most species
-                  they're noise; for a poorly-collected one they can be most of
-                  what's known. Both are best read in the list view. */}
-              <div className="relative" ref={georefRef}>
-                <button
-                  onClick={() => setGeorefOpen(!georefOpen)}
-                  className={`inline-flex items-center gap-1.5 px-2 py-1 rounded border text-xs transition-colors ${
-                    georefOpen
-                      ? "bg-zinc-100 dark:bg-zinc-800 border-zinc-400 dark:border-zinc-500"
-                      : "border-zinc-300 dark:border-zinc-600 hover:bg-zinc-50 dark:hover:bg-zinc-800"
-                  } text-zinc-700 dark:text-zinc-300`}
-                  title="Include GBIF records the map can't place: those with no coordinates, and those whose coordinates GBIF flags"
-                >
-                  <svg className="w-3.5 h-3.5 text-zinc-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M17.657 16.657L13.414 20.9a2 2 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
-                    <circle cx="12" cy="11" r="2.5" />
-                  </svg>
-                  Georeferencing
-                  <span className="text-[10px] text-zinc-400 tabular-nums">
-                    {(() => {
-                      const extra = (recordSetTotals?.missing ?? 0) + (recordSetTotals?.issue ?? 0);
-                      if (extra === 0) return "None hidden";
-                      const included = (includeMissing ? recordSetTotals?.missing ?? 0 : 0) + (includeIssues ? recordSetTotals?.issue ?? 0 : 0);
-                      return included > 0 ? `+${included.toLocaleString()} of ${extra.toLocaleString()}` : `${extra.toLocaleString()} hidden`;
-                    })()}
-                  </span>
-                  <svg className={`w-3 h-3 text-zinc-400 transition-transform ${georefOpen ? "rotate-180" : ""}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
-                  </svg>
-                </button>
-                {georefOpen && (
-                  <div className="absolute left-0 top-full mt-1 z-50 w-[22rem] bg-white dark:bg-zinc-900 rounded-lg border border-zinc-200 dark:border-zinc-700 shadow-lg py-1">
-                    <div className="px-3 py-1 text-[10px] text-zinc-400 dark:text-zinc-500">
-                      GBIF records the map can&apos;t place. Shown in the list view, with
-                      their locality description to georeference from.
-                    </div>
-                    <label
-                      className={`flex items-start gap-2 px-3 py-1.5 text-xs ${
-                        (recordSetTotals?.missing ?? 0) > 0
-                          ? "hover:bg-zinc-50 dark:hover:bg-zinc-800 cursor-pointer"
-                          : "opacity-50 cursor-not-allowed"
-                      }`}
-                      title="GBIF has no decimalLatitude/decimalLongitude for these records — typically herbarium sheets whose locality text was never georeferenced"
-                    >
-                      <input
-                        type="checkbox"
-                        checked={includeMissing}
-                        disabled={(recordSetTotals?.missing ?? 0) === 0}
-                        onChange={() => setIncludeMissing((v) => !v)}
-                        className="w-3 h-3 mt-0.5 rounded accent-emerald-500 shrink-0"
-                      />
-                      <span className="flex-1 min-w-0">
-                        <span className="block text-zinc-700 dark:text-zinc-200">Without coordinates</span>
-                        <span className="block text-[10px] text-zinc-400">
-                          {includeMissing
-                            ? georefSetShownLabel(georefSetCounts.missing)
-                            : "Locality text only — nothing to draw"}
-                        </span>
-                      </span>
-                      <span className="shrink-0 tabular-nums text-[11px] font-medium text-zinc-600 dark:text-zinc-300">
-                        {(recordSetTotals?.missing ?? 0).toLocaleString()}
-                      </span>
-                    </label>
-                    <label
-                      className={`flex items-start gap-2 px-3 py-1.5 text-xs ${
-                        (recordSetTotals?.issue ?? 0) > 0
-                          ? "hover:bg-zinc-50 dark:hover:bg-zinc-800 cursor-pointer"
-                          : "opacity-50 cursor-not-allowed"
-                      }`}
-                      title="GBIF flags these coordinates as suspect (zero coordinates, country mismatch, swapped or negated lat/lon, …). They are drawn on the map in amber and listed with the issue named."
-                    >
-                      <input
-                        type="checkbox"
-                        checked={includeIssues}
-                        disabled={(recordSetTotals?.issue ?? 0) === 0}
-                        onChange={() => setIncludeIssues((v) => !v)}
-                        className="w-3 h-3 mt-0.5 rounded accent-amber-500 shrink-0"
-                      />
-                      <span className="flex-1 min-w-0">
-                        <span className="block text-zinc-700 dark:text-zinc-200">With GBIF geospatial issues</span>
-                        <span className="block text-[10px] text-zinc-400">
-                          {includeIssues
-                            ? georefSetShownLabel(georefSetCounts.issue)
-                            : "Has coordinates, but GBIF distrusts them"}
-                        </span>
-                      </span>
-                      <span className="shrink-0 tabular-nums text-[11px] font-medium text-zinc-600 dark:text-zinc-300">
-                        {(recordSetTotals?.issue ?? 0).toLocaleString()}
-                      </span>
-                    </label>
-                    {recordSetTotals && (recordSetTotals.missing > 0 || recordSetTotals.issue > 0) && (
-                      <div className="mt-1 px-3 py-1.5 border-t border-zinc-100 dark:border-zinc-800 text-[10px] text-zinc-400">
-                        GBIF holds{" "}
-                        <strong className="text-zinc-600 dark:text-zinc-300">
-                          {(recordSetTotals.mapped + recordSetTotals.missing + recordSetTotals.issue).toLocaleString()}
-                        </strong>{" "}
-                        records for this species; {recordSetTotals.mapped.toLocaleString()} can be mapped.
-                      </div>
-                    )}
-                    {/* The assessor's own georeferences: what's stored, and the
-                        only way to get it out of this browser. */}
-                    <div className="mt-1 pt-1.5 border-t border-zinc-100 dark:border-zinc-800">
-                      <div className="px-3 pb-1 flex items-center gap-2">
-                        <span className="w-2 h-2 rounded-full bg-violet-600 shrink-0" />
-                        <span className="text-xs text-zinc-700 dark:text-zinc-200">Your georeferences</span>
-                        <span className="ml-auto tabular-nums text-[11px] font-medium text-zinc-600 dark:text-zinc-300">
-                          {georeferenceCount.toLocaleString()}
-                        </span>
-                      </div>
-                      <div className="px-3 pb-1 text-[10px] text-zinc-400">
-                        {georeferenceCount === 0
-                          ? "Add coordinates from the list view — the Georeference column."
-                          : "Stored in this browser only. Export to keep them."}
-                      </div>
-                      <div className="px-3 pb-1.5 flex items-center gap-1.5">
-                        <button
-                          onClick={handleExport}
-                          disabled={!isAdminAccount || georeferenceCount === 0 || exporting}
-                          title={
-                            isAdminAccount
-                              ? "Download your georeferences as a Darwin Core CSV"
-                              : "Admin access is required to export georeferences"
-                          }
-                          className="px-2 py-0.5 rounded border border-zinc-300 dark:border-zinc-600 text-[11px] text-zinc-600 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-800 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
-                        >
-                          {exporting ? "Exporting…" : "Export CSV"}
-                        </button>
-                        <button
-                          onClick={() => importInputRef.current?.click()}
-                          disabled={!isAdminAccount}
-                          title={
-                            isAdminAccount
-                              ? "Load georeferences from a CSV exported here"
-                              : "Admin access is required to import georeferences"
-                          }
-                          className="px-2 py-0.5 rounded border border-zinc-300 dark:border-zinc-600 text-[11px] text-zinc-600 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-800 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
-                        >
-                          Import CSV
-                        </button>
-                        <input
-                          ref={importInputRef}
-                          type="file"
-                          accept=".csv,text/csv"
-                          className="hidden"
-                          onChange={(e) => {
-                            const file = e.target.files?.[0];
-                            if (file) handleImportFile(file);
-                            e.target.value = "";
-                          }}
-                        />
-                      </div>
-                      {!isAdminAccount && (
-                        <div className="px-3 pb-1.5 text-[10px] text-zinc-400">
-                          {accountEmail
-                            ? "Your account doesn't have export access. CSV files leaving the dashboard are restricted to admins."
-                            : "Sign in with an admin account to export or import — CSV files leaving the dashboard are restricted to admins."}
-                        </div>
-                      )}
-                      {georefMessage && (
-                        <div
-                          className={`px-3 pb-1.5 text-[10px] ${
-                            georefMessage.kind === "ok"
-                              ? "text-emerald-600 dark:text-emerald-400"
-                              : "text-red-600 dark:text-red-400"
-                          }`}
-                        >
-                          {georefMessage.text}
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                )}
-              </div>
               {/* Overlays — every toggleable map layer lives here: GBIF points/
                   IUCN range map/AOH (species-specific data layers) plus
                   Protected areas/POWO native range/IUCN native countries
@@ -2914,43 +2837,99 @@ export default function OccurrenceMapRow({
                   </div>
                 )}
               </div>
-              {/* Opens the record list beside the map rather than instead of it:
-                  the two are meant to be read together, and hovering a row
-                  highlights that record's point (same idea as the iNat
-                  thumbnails). Same filtered records in both, so every filter
-                  above applies to what you see either way. */}
+              {/* Georeference export/import — admins only, and hidden outright
+                  otherwise rather than shown disabled: a CSV leaving the
+                  dashboard is the step that needs approval, so for everyone
+                  else it simply isn't part of the tool. On the toolbar rather
+                  than inside a dropdown because it's an action, not a filter. */}
+              {isAdminAccount && (
+                <div className="ml-auto flex items-center gap-1.5 shrink-0">
+                  {georefMessage && (
+                    <span
+                      className={`max-w-[16rem] truncate text-[10px] ${
+                        georefMessage.kind === "ok"
+                          ? "text-emerald-600 dark:text-emerald-400"
+                          : "text-red-600 dark:text-red-400"
+                      }`}
+                      title={georefMessage.text}
+                    >
+                      {georefMessage.text}
+                    </span>
+                  )}
+                  <button
+                    onClick={handleExport}
+                    disabled={georeferenceCount === 0 || exporting}
+                    title={
+                      georeferenceCount === 0
+                        ? "No georeferences yet — add coordinates from the record list"
+                        : `Download your ${georeferenceCount} georeference${georeferenceCount === 1 ? "" : "s"} as a Darwin Core CSV. They're stored in this browser only, so this is how you keep them.`
+                    }
+                    className="inline-flex items-center gap-1 px-2 py-1 rounded border border-zinc-300 dark:border-zinc-600 text-xs text-zinc-600 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                  >
+                    <svg className="w-3.5 h-3.5 text-zinc-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M4 16v2a2 2 0 002 2h12a2 2 0 002-2v-2M7 10l5 5 5-5M12 15V3" />
+                    </svg>
+                    {exporting ? "Exporting…" : "Export CSV"}
+                    {georeferenceCount > 0 && (
+                      <span className="tabular-nums text-[10px] text-violet-600 dark:text-violet-400">
+                        {georeferenceCount}
+                      </span>
+                    )}
+                  </button>
+                  <button
+                    onClick={() => importInputRef.current?.click()}
+                    title="Load georeferences from a CSV exported here"
+                    className="inline-flex items-center gap-1 px-2 py-1 rounded border border-zinc-300 dark:border-zinc-600 text-xs text-zinc-600 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800 transition-colors"
+                  >
+                    <svg className="w-3.5 h-3.5 text-zinc-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M4 16v2a2 2 0 002 2h12a2 2 0 002-2v-2M7 8l5-5 5 5M12 3v12" />
+                    </svg>
+                    Import CSV
+                  </button>
+                  <input
+                    ref={importInputRef}
+                    type="file"
+                    accept=".csv,text/csv"
+                    className="hidden"
+                    onChange={(e) => {
+                      const file = e.target.files?.[0];
+                      if (file) handleImportFile(file);
+                      e.target.value = "";
+                    }}
+                  />
+                </div>
+              )}
+              {/* Fullscreen — map on the left, record list on the right, with
+                  none of the surrounding page. The two are meant to be read
+                  against each other (hover a row, its point lights up), and
+                  that only works with room for both. */}
               <button
-                onClick={() => setShowList((v) => !v)}
-                aria-pressed={showList}
-                title={
-                  showList
-                    ? "Hide the record list"
-                    : "Show the record list beside the map — locality, collector, catalogue number and more, with each row linked to its point"
-                }
-                className={`ml-auto inline-flex items-center gap-1.5 px-2 py-1 rounded border text-xs transition-colors shrink-0 ${
-                  showList
-                    ? "bg-zinc-200 dark:bg-zinc-700 border-zinc-400 dark:border-zinc-500 text-zinc-800 dark:text-zinc-100 font-medium"
-                    : "border-zinc-300 dark:border-zinc-600 text-zinc-600 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800"
-                }`}
+                onClick={() => setFullscreen(true)}
+                title="Open the map and record list fullscreen"
+                className={`${isAdminAccount ? "" : "ml-auto "}inline-flex items-center gap-1.5 px-2 py-1 rounded border border-zinc-300 dark:border-zinc-600 text-xs text-zinc-600 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800 transition-colors shrink-0`}
               >
-                <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M4 6h16M4 10h16M4 14h16M4 18h16" />
+                <svg className="w-3.5 h-3.5 text-zinc-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M4 8V5a1 1 0 011-1h3m8 0h3a1 1 0 011 1v3m0 8v3a1 1 0 01-1 1h-3m-8 0H5a1 1 0 01-1-1v-3" />
                 </svg>
-                Record list
+                Fullscreen
               </button>
             </div>
           </div>
 
           {/* ── Left sidebar (iNat photos + contributors) + Map (right) ── */}
-          <div className="flex flex-col sm:flex-row sm:items-stretch gap-2">
+          <div className={
+            fullscreen
+              ? "flex flex-col gap-2 flex-1 min-h-0"
+              : "flex flex-col sm:flex-row sm:items-stretch gap-2"
+          }>
             {/* Left column — iNat photo gallery only (hidden if no iNat data); narrow
                 since it's just a 2-col thumbnail grid now, leaving more room for the map.
                 Ordered after the map on mobile (order-2) since the map is the primary
                 content there; back to its normal DOM order (first, on the left) at sm+. */}
-            {/* Hidden while the record list is open — map and list side by side
-                already fill the row, and the photo grid plays the same
-                hover-to-highlight role the list now does. */}
-            {!showList && (!breakdown || breakdown.iNaturalist > 0) && (
+            {/* Hidden in fullscreen — that view is the map and the record list
+                and nothing else, and the photo grid plays the same
+                hover-to-highlight role the list does there. */}
+            {!fullscreen && (!breakdown || breakdown.iNaturalist > 0) && (
             <div className="order-2 sm:order-none sm:w-44 shrink-0 flex flex-col gap-2">
               {/* iNat photo grid — only shown when photos exist or loading */}
               {(inatPhotos.length > 0 || loadingInatPhotos) && (
@@ -3026,7 +3005,16 @@ export default function OccurrenceMapRow({
             )}
 
             {/* Map(s) — takes remaining width, stretches to match left column */}
-            <div className="order-1 sm:order-none flex-1 min-w-0 flex flex-col gap-2">
+            <div
+              className={`order-1 sm:order-none flex-1 min-w-0 flex flex-col gap-2${
+                // The map takes everything the list doesn't need — five rows
+                // is a fixed, small height, so pinning the list to a literal
+                // third would just leave dead space under it. Expanding flips
+                // the emphasis without hiding the map, since hovering a row is
+                // meant to light up its point.
+                fullscreen ? (listExpanded ? " min-h-0 basis-1/3" : " min-h-0") : ""
+              }`}
+            >
                 {splitView && splitDate ? (
                   <div className="flex flex-col gap-2">
                     {/* Split view control bar */}
@@ -3126,13 +3114,15 @@ export default function OccurrenceMapRow({
                 )}
             </div>
 
-            {/* Record list — beside the map, not instead of it. Hovering a row
-                highlights that record on the map (and vice versa), which is the
-                whole point of showing them together: the table carries the
-                locality and collection detail, the map carries the position.
-                Stacks below the map on narrow screens. */}
-            {showList && (
-              <div className="order-3 sm:order-none w-full sm:w-[46%] sm:max-w-[46%] shrink-0 flex flex-col gap-2 min-w-0">
+            {/* Record list — only in fullscreen, where there's room to read it
+                against the map. Hovering a row highlights that record's point
+                and vice versa: the table carries the locality and collection
+                detail, the map carries the position. Stacks below the map on
+                narrow screens. */}
+            {fullscreen && (
+              <div className={`order-3 sm:order-none w-full flex flex-col gap-2 min-w-0 ${
+                listExpanded ? "basis-2/3 flex-1 min-h-0" : "shrink-0"
+              }`}>
                 <OccurrenceListTable
                   occurrences={filteredOccurrences}
                   loading={loadingOccurrences}
@@ -3141,6 +3131,10 @@ export default function OccurrenceMapRow({
                   onEditGeoreference={setEditingFeature}
                   hoveredGbifId={hoveredFeature?.properties.gbifID ?? null}
                   onHoverRow={handleHoverRow}
+                  rowsPerPage={FULLSCREEN_ROWS_PER_PAGE}
+                  expanded={listExpanded}
+                  onToggleExpanded={() => setListExpanded((v) => !v)}
+                  fillHeight={listExpanded}
                 />
               </div>
             )}
@@ -3149,4 +3143,9 @@ export default function OccurrenceMapRow({
       </div>
     </div>
   );
+
+  // Portalled in fullscreen: the occurrence panel is nested inside the species
+  // table, whose ancestors clip overflow, so a fixed-position child would be
+  // trapped by them. Same element either way, so no state is lost on toggle.
+  return fullscreen && mounted ? createPortal(panel, document.body) : panel;
 }
