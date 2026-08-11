@@ -1560,12 +1560,28 @@ export default function OccurrenceMapRow({
     }
   }, []);
 
+  // Loaded records by gbifID — the map hands back only what it stored on a
+  // feature, which for the assessor-georeference layer is just an id.
+  const occurrencesByGbifId = useMemo(
+    () => new Map(occurrences.map((o) => [o.properties.gbifID, o])),
+    [occurrences]
+  );
+
   const handleMapMouseMove = useCallback((e: MapLayerMouseEvent, panelId: string) => {
     if (isTouchDevice) return;
     const features = e.features;
     if (features && features.length > 0) {
       const props = features[0].properties;
       if (props) {
+        // Prefer the record we already hold: the assessor-georeference layer
+        // carries nothing but a gbifID, and even the occurrence layer's own
+        // properties arrive flattened (arrays stringified) through MapLibre.
+        const known = occurrencesByGbifId.get(Number(props.gbifID));
+        if (known) {
+          setHoveredFeature(known);
+          setHoveredPanel(panelId);
+          return;
+        }
         // Reconstruct the OccurrenceFeature from the queried feature
         const coords = (features[0].geometry as GeoJSON.Point).coordinates as [number, number];
         setHoveredFeature({
@@ -1594,7 +1610,7 @@ export default function OccurrenceMapRow({
       setHoveredFeature(null);
       setHoveredPanel(null);
     }
-  }, [isTouchDevice]);
+  }, [isTouchDevice, occurrencesByGbifId]);
 
   const handleMapMouseLeave = useCallback(() => {
     setHoveredFeature(null);
@@ -1661,6 +1677,16 @@ export default function OccurrenceMapRow({
     });
   }, []);
 
+  // Where a hovered record sits on the map: the assessor's own coordinates
+  // when they've supplied any, otherwise GBIF's. Null for a record with
+  // neither, which is the one case with nothing to point at.
+  const hoveredPosition = useMemo<[number, number] | null>(() => {
+    if (!hoveredFeature) return null;
+    const mine = georeferences[hoveredFeature.properties.gbifID];
+    if (mine) return [mine.decimalLongitude, mine.decimalLatitude];
+    return hoveredFeature.geometry?.coordinates ?? null;
+  }, [hoveredFeature, georeferences]);
+
   // Reusable map panel renderer (used once in normal mode, twice in split view)
   const renderMapPanel = (
     panelOccurrences: OccurrenceFeature[],
@@ -1720,7 +1746,7 @@ export default function OccurrenceMapRow({
               {...mapProps}
               style={{ width: "100%", height: "100%" }}
               mapStyle={BASEMAP_STYLES[basemap].style}
-              interactiveLayerIds={[`occ-circles-${panelId}`]}
+              interactiveLayerIds={[`occ-circles-${panelId}`, `georef-point-${panelId}`]}
               onClick={handleMapClick}
               onMouseMove={(e: MapLayerMouseEvent) => handleMapMouseMove(e, panelId)}
               onMouseLeave={handleMapMouseLeave}
@@ -1825,10 +1851,16 @@ export default function OccurrenceMapRow({
                   )}
                 </>
               )}
-              {/* Hover tooltip for map markers */}
-              {hoveredFeature && hasPosition(hoveredFeature) && !hoveredObs && hoveredPanel === panelId && (() => {
-                const [hLon, hLat] = hoveredFeature.geometry.coordinates;
+              {/* Hover tooltip for map markers. A record you've georeferenced
+                  yourself gets one too, anchored to your point — it's on the
+                  map, so hovering its row should say something. Your
+                  coordinates win over GBIF's where you've supplied both (you
+                  only ever georeference a record GBIF got wrong or left
+                  blank). */}
+              {hoveredFeature && hoveredPosition && !hoveredObs && hoveredPanel === panelId && (() => {
+                const [hLon, hLat] = hoveredPosition;
                 const hInat = inatPhotosByGbifId.get(hoveredFeature.properties.gbifID);
+                const mine = georeferences[hoveredFeature.properties.gbifID];
                 return (
                   <MapOccurrenceTooltip
                     lat={hLat}
@@ -1837,12 +1869,14 @@ export default function OccurrenceMapRow({
                     basisOfRecord={hoveredFeature.properties.basisOfRecord}
                     datasetName={hoveredFeature.properties.datasetName}
                     eventDate={hoveredFeature.properties.eventDate}
-                    coordinateUncertaintyInMeters={hoveredFeature.properties.coordinateUncertaintyInMeters}
+                    coordinateUncertaintyInMeters={mine?.coordinateUncertaintyInMeters ?? hoveredFeature.properties.coordinateUncertaintyInMeters}
                     imageUrl={hInat?.imageUrl ?? null}
                     observer={hInat?.observer ?? null}
-                    qualityFlags={hoveredFeature.properties.qualityFlags}
+                    qualityFlags={mine ? undefined : hoveredFeature.properties.qualityFlags}
                     outsideNativeRange={isOutsideNativeRange(hoveredFeature.properties.countryCode, effectiveNativeCountries)}
                     country={hoveredFeature.properties.country}
+                    locality={hoveredFeature.properties.locality || hoveredFeature.properties.verbatimLocality}
+                    yourGeoreference={mine ? { protocol: mine.georeferenceProtocol } : undefined}
                   />
                 );
               })()}

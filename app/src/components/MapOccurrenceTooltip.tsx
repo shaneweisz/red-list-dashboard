@@ -18,6 +18,10 @@ interface MapOccurrenceTooltipProps {
   qualityFlags?: string[];
   outsideNativeRange?: boolean;
   country?: string;
+  /** The record's locality text — the only thing an ungeoreferenced record has. */
+  locality?: string;
+  /** Present when these coordinates are the assessor's own, not GBIF's. */
+  yourGeoreference?: { protocol?: string };
 }
 
 // Format basisOfRecord to human-readable string
@@ -123,6 +127,9 @@ export default function MapOccurrenceTooltip(props: MapOccurrenceTooltipProps) {
           <div className="font-medium italic text-zinc-900 dark:text-zinc-100">
             {props.species}
           </div>
+          {props.locality && (
+            <div className="text-zinc-600 dark:text-zinc-300">{props.locality}</div>
+          )}
           {props.basisOfRecord && (
             <div className="text-zinc-500 dark:text-zinc-400">
               {formatBasis(props.basisOfRecord)}
@@ -138,7 +145,7 @@ export default function MapOccurrenceTooltip(props: MapOccurrenceTooltipProps) {
           )}
           {uncertainty != null && (
             <div className="text-zinc-400">
-              GPS Uncertainty: {uncertainty >= 1000
+              {props.yourGeoreference ? "Radius" : "GPS Uncertainty"}: {uncertainty >= 1000
                 ? `${(uncertainty / 1000).toFixed(1)}km`
                 : `${uncertainty}m`}
             </div>
@@ -146,9 +153,17 @@ export default function MapOccurrenceTooltip(props: MapOccurrenceTooltipProps) {
           {props.observer && (
             <div className="text-zinc-500 dark:text-zinc-400">by {props.observer}</div>
           )}
-          <div className="text-zinc-400 tabular-nums">
+          <div className={`tabular-nums ${props.yourGeoreference ? "text-violet-600 dark:text-violet-400" : "text-zinc-400"}`}>
             {props.lat.toFixed(4)}, {props.lng.toFixed(4)}
           </div>
+          {/* Says whose coordinates these are, so an assessor's own reading of
+              a locality can never be mistaken for a published position. */}
+          {props.yourGeoreference && (
+            <div className="text-violet-600 dark:text-violet-400 font-medium pt-0.5">
+              ◆ Your georeference
+              {props.yourGeoreference.protocol ? ` · ${props.yourGeoreference.protocol}` : ""}
+            </div>
+          )}
           {props.qualityFlags && props.qualityFlags.length > 0 && (
             <div className="text-amber-600 dark:text-amber-400 font-medium pt-0.5">
               ⚠ Flagged: {props.qualityFlags.map((f) => QUALITY_FLAG_LABELS[f as QualityFlag] || f).join(", ")}
