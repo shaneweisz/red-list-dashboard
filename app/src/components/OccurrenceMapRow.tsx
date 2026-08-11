@@ -73,6 +73,25 @@ interface CountryPolygon {
 // nowhere to show), so it lives there.
 type OccurrenceFeature = OccurrenceFeatureType;
 
+/**
+ * What an opt-in record set is contributing right now: how many of the loaded
+ * records reach the map/list once every other filter has had its say. "0 of 3
+ * shown" is the useful case — it says the records arrived and something else is
+ * hiding them, rather than leaving the checkbox looking broken.
+ */
+function georefSetShownLabel({ loaded, shown }: { loaded: number; shown: number }): string {
+  if (loaded === 0) return "None in the loaded sample";
+  if (shown === 0) return `${loaded.toLocaleString()} loaded, all hidden by other filters`;
+  if (shown < loaded) return `${shown.toLocaleString()} of ${loaded.toLocaleString()} shown — rest hidden by other filters`;
+  return `${shown.toLocaleString()} shown`;
+}
+
+/** A record GBIF has coordinates for, i.e. one the map can actually draw. */
+type PositionedOccurrence = OccurrenceFeature & { geometry: NonNullable<OccurrenceFeature["geometry"]> };
+function hasPosition(o: OccurrenceFeature): o is PositionedOccurrence {
+  return o.geometry != null;
+}
+
 // Uncertainty filter options (meters)
 const UNCERTAINTY_OPTIONS = [
   { label: "Any", value: null },
@@ -494,6 +513,10 @@ export default function OccurrenceMapRow({
   const [cleaningFilterOpen, setCleaningFilterOpen] = useState(false);
   const cleaningFilterRef = useRef<HTMLDivElement>(null);
 
+  // Georeferencing dropdown state (the opt-in unmapped/flagged record sets)
+  const [georefOpen, setGeorefOpen] = useState(false);
+  const georefRef = useRef<HTMLDivElement>(null);
+
   // Date-range filter dropdown state
   const [dateRangeOpen, setDateRangeOpen] = useState(false);
   const dateRangeRef = useRef<HTMLDivElement>(null);
@@ -526,6 +549,18 @@ export default function OccurrenceMapRow({
     document.addEventListener("mousedown", handler);
     return () => document.removeEventListener("mousedown", handler);
   }, [filtersOpen]);
+
+  // Close georeferencing popover on outside click
+  useEffect(() => {
+    if (!georefOpen) return;
+    const handler = (e: MouseEvent) => {
+      if (georefRef.current && !georefRef.current.contains(e.target as Node)) {
+        setGeorefOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [georefOpen]);
 
   // Close coordinate-cleaning popover on outside click
   useEffect(() => {
@@ -598,7 +633,17 @@ export default function OccurrenceMapRow({
   // unfiltered ordering actually considers "next" if reused here.
   const [generalOffset, setGeneralOffset] = useState(0);
 
-  // Fetch occurrences (re-fetches when sample size changes)
+  // Opt-in record sets the viewer has always filtered out: records GBIF has no
+  // coordinates for, and records whose coordinates GBIF flags. Both are only
+  // useful in the list (one can't be drawn at all, the other shouldn't be
+  // trusted where it's drawn), and both are what an assessor georeferences by
+  // hand — so they're off until asked for, and their totals are always fetched
+  // so the toggles can name what's being hidden.
+  const [includeMissing, setIncludeMissing] = useState(false);
+  const [includeIssues, setIncludeIssues] = useState(false);
+  const [recordSetTotals, setRecordSetTotals] = useState<{ mapped: number; issue: number; missing: number } | null>(null);
+
+  // Fetch occurrences (re-fetches when the requested record sets change)
   useEffect(() => {
     setLoadingOccurrences(true);
     const params = new URLSearchParams({
@@ -608,6 +653,8 @@ export default function OccurrenceMapRow({
     if (countryCode) {
       params.set("country", countryCode);
     }
+    if (includeMissing) params.set("includeMissing", "true");
+    if (includeIssues) params.set("includeIssues", "true");
     fetch(`/api/occurrences?${params}`)
       .then((res) => res.json())
       .then((data) => {
@@ -615,11 +662,12 @@ export default function OccurrenceMapRow({
         setOccurrences(features);
         setTotalOccurrences(data.metadata?.total ?? null);
         setBbox(data.metadata?.bbox ?? null);
+        setRecordSetTotals(data.metadata?.totals ?? null);
         setGeneralOffset(features.length);
       })
       .catch(console.error)
       .finally(() => setLoadingOccurrences(false));
-  }, [speciesKey, countryCode, sampleSize]);
+  }, [speciesKey, countryCode, sampleSize, includeMissing, includeIssues]);
 
   // Basis-of-record category currently fetching more records, if any (drives the
   // per-row "Load more" spinner/disabled state in the dropdown).
@@ -678,6 +726,10 @@ export default function OccurrenceMapRow({
     if (countryCode) {
       params.set("country", countryCode);
     }
+    // Keep paging the same record sets the user asked for, or the extra sets
+    // would silently drop out of the sample on the first "load more".
+    if (includeMissing) params.set("includeMissing", "true");
+    if (includeIssues) params.set("includeIssues", "true");
     fetch(`/api/occurrences?${params}`)
       .then((res) => res.json())
       .then((data) => {
@@ -692,7 +744,7 @@ export default function OccurrenceMapRow({
       })
       .catch(console.error)
       .finally(() => setLoadingMoreOverall(false));
-  }, [generalOffset, speciesKey, countryCode]);
+  }, [generalOffset, speciesKey, countryCode, includeMissing, includeIssues]);
 
   // Fetch breakdown data
   useEffect(() => {
@@ -841,6 +893,26 @@ export default function OccurrenceMapRow({
       return true;
     });
   }, [dateFilterableOccurrences, dateRangeFrom, dateRangeTo]);
+
+  // The subset the map actually draws — the list shows all of filteredOccurrences,
+  // including records with no coordinates.
+  const mappableFilteredCount = useMemo(
+    () => filteredOccurrences.filter(hasPosition).length,
+    [filteredOccurrences]
+  );
+
+  // Per opt-in record set: how many are loaded, and how many survive every other
+  // active filter. Without this, switching a set on can look like it did nothing
+  // — this species' one flagged record is basis-of-record OCCURRENCE (unchecked
+  // by default) and a zero coordinate (a cleaning check that's on by default),
+  // so two unrelated filters hide it the moment it arrives.
+  const georefSetCounts = useMemo(() => {
+    const countFor = (status: "missing" | "issue") => ({
+      loaded: occurrences.filter((o) => o.properties.coordinateStatus === status).length,
+      shown: filteredOccurrences.filter((o) => o.properties.coordinateStatus === status).length,
+    });
+    return { missing: countFor("missing"), issue: countFor("issue") };
+  }, [occurrences, filteredOccurrences]);
 
   // Of the loaded occurrences that pass every other active filter, how many are
   // outside the species' native range — i.e. how many the "Native range only"
@@ -998,7 +1070,9 @@ export default function OccurrenceMapRow({
   const rangeCoverageStats = useMemo(() => {
     if (!rangePolygons || rangePolygons.length === 0) return null;
     const polygons = rangePolygons as Feature<Polygon | MultiPolygon>[];
-    const computeFor = (occs: OccurrenceFeature[]) => {
+    const computeFor = (allOccs: OccurrenceFeature[]) => {
+      // In/out of the range polygons is only answerable for positioned records.
+      const occs = allOccs.filter(hasPosition);
       let inRange = 0;
       for (const o of occs) {
         const point: Feature<GeoJSON.Point> = { type: "Feature", properties: {}, geometry: o.geometry };
@@ -1092,12 +1166,20 @@ export default function OccurrenceMapRow({
   const buildStyledFeatureCollection = useCallback((
     panelOccurrences: OccurrenceFeature[],
   ): GeoJSON.FeatureCollection => {
-    const features = panelOccurrences.map((feature) => {
+    // Records with no coordinates can't be drawn — they're carried through the
+    // same filter pipeline so the list can show them, and dropped here.
+    const features = panelOccurrences.filter(hasPosition).map((feature) => {
       const isFeatureHovered = hoveredFeature?.properties.gbifID === feature.properties.gbifID;
 
       let strokeColor: string;
       let fillColor: string;
-      if (colorByDate) {
+      if (feature.properties.coordinateStatus === "issue") {
+        // Amber regardless of the colour mode: a record GBIF flags shouldn't be
+        // indistinguishable from one it vouches for just because it happens to
+        // be recent.
+        strokeColor = "#b45309";
+        fillColor = "#fbbf24";
+      } else if (colorByDate) {
         const dNum = dateToNumeric(feature.properties.eventDate, feature.properties.year);
         if (dNum != null) {
           const colors = dateToColor(dNum);
@@ -1379,7 +1461,7 @@ export default function OccurrenceMapRow({
                 </>
               )}
               {/* Hover tooltip for map markers */}
-              {hoveredFeature && !hoveredObs && hoveredPanel === panelId && (() => {
+              {hoveredFeature && hasPosition(hoveredFeature) && !hoveredObs && hoveredPanel === panelId && (() => {
                 const [hLon, hLat] = hoveredFeature.geometry.coordinates;
                 const hInat = inatPhotosByGbifId.get(hoveredFeature.properties.gbifID);
                 return (
@@ -1523,9 +1605,9 @@ export default function OccurrenceMapRow({
           {!splitView && !loadingOccurrences && totalOccurrences != null && (
             <div className="absolute top-2 right-2 z-[1000] max-w-[85%] px-2 py-1 rounded-lg shadow-md bg-emerald-50 dark:bg-emerald-900 border border-emerald-200 dark:border-emerald-700 text-[11px] text-emerald-700 dark:text-emerald-300">
               {isFullSample ? (
-                <>All <strong>{totalOccurrences.toLocaleString()}</strong> GBIF records loaded.</>
+                <>All <strong>{totalOccurrences.toLocaleString()}</strong> mappable GBIF records loaded.</>
               ) : (
-                <>Loaded <strong>{occurrences.length.toLocaleString()}</strong> of <strong>{totalOccurrences.toLocaleString()}</strong> total GBIF records.</>
+                <>Loaded <strong>{mappedLoadedCount.toLocaleString()}</strong> of <strong>{totalOccurrences.toLocaleString()}</strong> mappable GBIF records.</>
               )}
               {!isFullSample && (
                 <>
@@ -1537,12 +1619,15 @@ export default function OccurrenceMapRow({
                   >
                     {loadingMoreOverall
                       ? "Loading…"
-                      : `Click to load ${Math.min(OVERALL_LOAD_MORE_BATCH, totalOccurrences - occurrences.length).toLocaleString()} more`}
+                      : `Click to load ${Math.min(OVERALL_LOAD_MORE_BATCH, totalOccurrences - mappedLoadedCount).toLocaleString()} more`}
                   </button>
                 </>
               )}
-              {filteredOccurrences.length < occurrences.length && (
-                <> Showing <strong>{filteredOccurrences.length.toLocaleString()}</strong> after filters.</>
+              {unmappedLoadedCount > 0 && (
+                <> Plus <strong>{unmappedLoadedCount.toLocaleString()}</strong> without coordinates — see the list.</>
+              )}
+              {mappableFilteredCount < occurrences.filter(hasPosition).length && (
+                <> Showing <strong>{mappableFilteredCount.toLocaleString()}</strong> after filters.</>
               )}
             </div>
           )}
@@ -1551,10 +1636,21 @@ export default function OccurrenceMapRow({
     );
   };
 
+  // Loaded records from the mapped set only — `occurrences` can also hold the
+  // opt-in unmapped/flagged sets, which are counted separately and would
+  // otherwise make a partial sample look complete (27 mapped of 27, plus 31
+  // others, reads as "all 58 loaded" if you just take the array length).
+  const mappedLoadedCount = useMemo(
+    () => occurrences.filter((o) => (o.properties.coordinateStatus ?? "mapped") === "mapped").length,
+    [occurrences]
+  );
+  // How many loaded records the map can't draw at all, for the badge.
+  const unmappedLoadedCount = occurrences.length - occurrences.filter(hasPosition).length;
+
   // Once every GBIF record for this species is loaded (no more to page in), the
   // basis-of-record dropdown's "total" and "loaded" columns are always identical —
   // collapse them into one column rather than showing the same number twice.
-  const isFullSample = totalOccurrences == null || totalOccurrences <= occurrences.length;
+  const isFullSample = totalOccurrences == null || totalOccurrences <= mappedLoadedCount;
 
   // All toggleable map layers in the Overlays dropdown, for its "N of M" badge —
   // GBIF/range/AOH only count when actually available for this species.
@@ -2164,6 +2260,111 @@ export default function OccurrenceMapRow({
                   </div>
                 )}
               </div>
+              {/* Georeferencing — the two record sets GBIF returns that the map
+                  can't honestly draw, and that the viewer therefore filtered out
+                  entirely until now: records with no coordinates, and records
+                  whose coordinates GBIF flags. Opt-in, because for most species
+                  they're noise; for a poorly-collected one they can be most of
+                  what's known. Both are best read in the list view. */}
+              <div className="relative" ref={georefRef}>
+                <button
+                  onClick={() => setGeorefOpen(!georefOpen)}
+                  className={`inline-flex items-center gap-1.5 px-2 py-1 rounded border text-xs transition-colors ${
+                    georefOpen
+                      ? "bg-zinc-100 dark:bg-zinc-800 border-zinc-400 dark:border-zinc-500"
+                      : "border-zinc-300 dark:border-zinc-600 hover:bg-zinc-50 dark:hover:bg-zinc-800"
+                  } text-zinc-700 dark:text-zinc-300`}
+                  title="Include GBIF records the map can't place: those with no coordinates, and those whose coordinates GBIF flags"
+                >
+                  <svg className="w-3.5 h-3.5 text-zinc-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M17.657 16.657L13.414 20.9a2 2 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
+                    <circle cx="12" cy="11" r="2.5" />
+                  </svg>
+                  Georeferencing
+                  <span className="text-[10px] text-zinc-400 tabular-nums">
+                    {(() => {
+                      const extra = (recordSetTotals?.missing ?? 0) + (recordSetTotals?.issue ?? 0);
+                      if (extra === 0) return "None hidden";
+                      const included = (includeMissing ? recordSetTotals?.missing ?? 0 : 0) + (includeIssues ? recordSetTotals?.issue ?? 0 : 0);
+                      return included > 0 ? `+${included.toLocaleString()} of ${extra.toLocaleString()}` : `${extra.toLocaleString()} hidden`;
+                    })()}
+                  </span>
+                  <svg className={`w-3 h-3 text-zinc-400 transition-transform ${georefOpen ? "rotate-180" : ""}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+                  </svg>
+                </button>
+                {georefOpen && (
+                  <div className="absolute left-0 top-full mt-1 z-50 w-[22rem] bg-white dark:bg-zinc-900 rounded-lg border border-zinc-200 dark:border-zinc-700 shadow-lg py-1">
+                    <div className="px-3 py-1 text-[10px] text-zinc-400 dark:text-zinc-500">
+                      GBIF records the map can&apos;t place. Shown in the list view, with
+                      their locality description to georeference from.
+                    </div>
+                    <label
+                      className={`flex items-start gap-2 px-3 py-1.5 text-xs ${
+                        (recordSetTotals?.missing ?? 0) > 0
+                          ? "hover:bg-zinc-50 dark:hover:bg-zinc-800 cursor-pointer"
+                          : "opacity-50 cursor-not-allowed"
+                      }`}
+                      title="GBIF has no decimalLatitude/decimalLongitude for these records — typically herbarium sheets whose locality text was never georeferenced"
+                    >
+                      <input
+                        type="checkbox"
+                        checked={includeMissing}
+                        disabled={(recordSetTotals?.missing ?? 0) === 0}
+                        onChange={() => setIncludeMissing((v) => !v)}
+                        className="w-3 h-3 mt-0.5 rounded accent-emerald-500 shrink-0"
+                      />
+                      <span className="flex-1 min-w-0">
+                        <span className="block text-zinc-700 dark:text-zinc-200">Without coordinates</span>
+                        <span className="block text-[10px] text-zinc-400">
+                          {includeMissing
+                            ? georefSetShownLabel(georefSetCounts.missing)
+                            : "Locality text only — nothing to draw"}
+                        </span>
+                      </span>
+                      <span className="shrink-0 tabular-nums text-[11px] font-medium text-zinc-600 dark:text-zinc-300">
+                        {(recordSetTotals?.missing ?? 0).toLocaleString()}
+                      </span>
+                    </label>
+                    <label
+                      className={`flex items-start gap-2 px-3 py-1.5 text-xs ${
+                        (recordSetTotals?.issue ?? 0) > 0
+                          ? "hover:bg-zinc-50 dark:hover:bg-zinc-800 cursor-pointer"
+                          : "opacity-50 cursor-not-allowed"
+                      }`}
+                      title="GBIF flags these coordinates as suspect (zero coordinates, country mismatch, swapped or negated lat/lon, …). They are drawn on the map in amber and listed with the issue named."
+                    >
+                      <input
+                        type="checkbox"
+                        checked={includeIssues}
+                        disabled={(recordSetTotals?.issue ?? 0) === 0}
+                        onChange={() => setIncludeIssues((v) => !v)}
+                        className="w-3 h-3 mt-0.5 rounded accent-amber-500 shrink-0"
+                      />
+                      <span className="flex-1 min-w-0">
+                        <span className="block text-zinc-700 dark:text-zinc-200">With GBIF geospatial issues</span>
+                        <span className="block text-[10px] text-zinc-400">
+                          {includeIssues
+                            ? georefSetShownLabel(georefSetCounts.issue)
+                            : "Has coordinates, but GBIF distrusts them"}
+                        </span>
+                      </span>
+                      <span className="shrink-0 tabular-nums text-[11px] font-medium text-zinc-600 dark:text-zinc-300">
+                        {(recordSetTotals?.issue ?? 0).toLocaleString()}
+                      </span>
+                    </label>
+                    {recordSetTotals && (recordSetTotals.missing > 0 || recordSetTotals.issue > 0) && (
+                      <div className="mt-1 px-3 py-1.5 border-t border-zinc-100 dark:border-zinc-800 text-[10px] text-zinc-400">
+                        GBIF holds{" "}
+                        <strong className="text-zinc-600 dark:text-zinc-300">
+                          {(recordSetTotals.mapped + recordSetTotals.missing + recordSetTotals.issue).toLocaleString()}
+                        </strong>{" "}
+                        records for this species; {recordSetTotals.mapped.toLocaleString()} can be mapped.
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
               {/* Overlays — every toggleable map layer lives here: GBIF points/
                   IUCN range map/AOH (species-specific data layers) plus
                   Protected areas/POWO native range/IUCN native countries
@@ -2523,9 +2724,9 @@ export default function OccurrenceMapRow({
                     {!loadingOccurrences && totalOccurrences != null && (
                       <div className="px-2 py-1 rounded-lg bg-emerald-50 dark:bg-emerald-900 border border-emerald-200 dark:border-emerald-700 text-[11px] text-emerald-700 dark:text-emerald-300">
                         {isFullSample ? (
-                          <>All <strong>{totalOccurrences.toLocaleString()}</strong> GBIF records loaded.</>
+                          <>All <strong>{totalOccurrences.toLocaleString()}</strong> mappable GBIF records loaded.</>
                         ) : (
-                          <>Loaded <strong>{occurrences.length.toLocaleString()}</strong> of <strong>{totalOccurrences.toLocaleString()}</strong> total GBIF records.</>
+                          <>Loaded <strong>{mappedLoadedCount.toLocaleString()}</strong> of <strong>{totalOccurrences.toLocaleString()}</strong> mappable GBIF records.</>
                         )}
                         {!isFullSample && (
                           <>
@@ -2537,9 +2738,12 @@ export default function OccurrenceMapRow({
                             >
                               {loadingMoreOverall
                                 ? "Loading…"
-                                : `Click to load ${Math.min(OVERALL_LOAD_MORE_BATCH, totalOccurrences - occurrences.length).toLocaleString()} more`}
+                                : `Click to load ${Math.min(OVERALL_LOAD_MORE_BATCH, totalOccurrences - mappedLoadedCount).toLocaleString()} more`}
                             </button>
                           </>
+                        )}
+                        {unmappedLoadedCount > 0 && (
+                          <> Plus <strong>{unmappedLoadedCount.toLocaleString()}</strong> without coordinates.</>
                         )}
                         {filteredOccurrences.length < occurrences.length && (
                           <> Showing <strong>{filteredOccurrences.length.toLocaleString()}</strong> after filters.</>

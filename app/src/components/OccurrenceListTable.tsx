@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { QUALITY_FLAG_LABELS, type QualityFlag } from "@/lib/coordinate-cleaning";
+import { formatGbifIssue } from "@/lib/gbif";
 
 /**
  * A single GBIF occurrence, as returned by /api/occurrences. Shared with
@@ -36,11 +37,18 @@ export interface OccurrenceFeature {
     collectionCode?: string;
     catalogNumber?: string;
     establishmentMeans?: string;
+    verbatimElevation?: string;
+    /** Which record set this came from — see CoordinateStatus in the API route. */
+    coordinateStatus?: "mapped" | "issue" | "missing";
+    /** GBIF's own geospatial issues with this record's coordinates. */
+    gbifIssues?: string[];
   };
+  /** null when GBIF has no coordinates for the record — it exists as a locality
+   *  string only, which is what makes it a georeferencing candidate. */
   geometry: {
     type: "Point";
     coordinates: [number, number];
-  };
+  } | null;
 }
 
 const ROWS_PER_PAGE = 50;
@@ -78,6 +86,13 @@ function localityOf(p: OccurrenceFeature["properties"]): string {
 function elevationOf(p: OccurrenceFeature["properties"]): number | null {
   if (p.elevation != null) return p.elevation;
   if (p.depth != null) return -p.depth;
+  // Herbarium sheets often only have the transcribed string ("1900", "ca. 2200 m"),
+  // which is worth showing: elevation is one of the strongest constraints when
+  // georeferencing a historical locality by hand.
+  if (p.verbatimElevation) {
+    const n = parseFloat(p.verbatimElevation.replace(/[^0-9.\-]/g, ""));
+    if (!Number.isNaN(n)) return n;
+  }
   return null;
 }
 
@@ -170,12 +185,26 @@ export default function OccurrenceListTable({
       {
         key: "coordinates",
         label: "Coordinates",
-        title: "decimalLatitude, decimalLongitude",
+        title: "decimalLatitude, decimalLongitude — blank when GBIF has no coordinates for the record",
         className: "whitespace-nowrap tabular-nums",
-        value: (_p, f) => f.geometry.coordinates[1],
-        render: (_p, f) => {
+        value: (_p, f) => f.geometry?.coordinates[1] ?? null,
+        render: (p, f) => {
+          if (!f.geometry) {
+            return (
+              <span className="text-amber-600 dark:text-amber-400" title="GBIF has no coordinates for this record — only a locality description">
+                Not georeferenced
+              </span>
+            );
+          }
           const [lon, lat] = f.geometry.coordinates;
-          return `${lat.toFixed(4)}, ${lon.toFixed(4)}`;
+          const text = `${lat.toFixed(4)}, ${lon.toFixed(4)}`;
+          // Flagged coordinates are shown, not hidden — seeing that a record sits
+          // at (0.0000, 0.0000) is the point.
+          return p.coordinateStatus === "issue" ? (
+            <span className="text-amber-600 dark:text-amber-400">{text}</span>
+          ) : (
+            text
+          );
         },
       },
       {
@@ -276,9 +305,13 @@ export default function OccurrenceListTable({
         className: "max-w-[16rem]",
         // Sort by how many flags a record trips, so the questionable records
         // group together at one end.
-        value: (p) => (p.qualityFlags?.length ?? 0) + (isOutsideNativeRange(p.countryCode) ? 1 : 0),
+        value: (p) =>
+          (p.qualityFlags?.length ?? 0) +
+          (p.gbifIssues?.length ?? 0) +
+          (isOutsideNativeRange(p.countryCode) ? 1 : 0),
         render: (p) => {
-          const flags = (p.qualityFlags ?? []).map((f) => QUALITY_FLAG_LABELS[f as QualityFlag] ?? f);
+          const flags = (p.gbifIssues ?? []).map((i) => `GBIF: ${formatGbifIssue(i)}`);
+          flags.push(...(p.qualityFlags ?? []).map((f) => QUALITY_FLAG_LABELS[f as QualityFlag] ?? f));
           if (isOutsideNativeRange(p.countryCode)) flags.push("Outside native range");
           if (flags.length === 0) return null;
           const text = flags.join(", ");
