@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { isAdmin } from "@/lib/auth/roles";
 import {
   georeferencesToCsv,
   validateGeoreference,
@@ -13,11 +14,11 @@ export const dynamic = "force-dynamic";
  *
  * The rows are posted from the browser, since that is where they live (see
  * lib/georeferences.ts) — so this route exists for the gate, not the data.
- * Exporting is restricted to signed-in users: a CSV leaving the dashboard is
- * the step IUCN has to approve, and "no anonymous export" is the condition.
- * The check is here, server-side, rather than only hiding the button, so it
- * holds however the endpoint is reached, and so every export leaves an audit
- * line naming who took it.
+ * Exporting is restricted to admins: a CSV leaving the dashboard is the step
+ * IUCN has to approve, and a signed-in account alone isn't the bar — anyone can
+ * sign in with a Google address. The check is here, server-side, rather than
+ * only hiding the button, so it holds however the endpoint is reached, and so
+ * every export leaves an audit line naming who took it.
  *
  * What this deliberately does NOT claim: the underlying GBIF fields are public
  * and already in the page. The gate is on the app producing a file, not on the
@@ -33,6 +34,13 @@ export async function POST(request: NextRequest) {
     return NextResponse.json(
       { error: "Sign in to export georeferences" },
       { status: 401 }
+    );
+  }
+
+  if (!(await isAdmin(supabase, user.id))) {
+    return NextResponse.json(
+      { error: "Not authorized to export georeferences" },
+      { status: 403 }
     );
   }
 

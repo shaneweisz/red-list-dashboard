@@ -457,10 +457,12 @@ export default function OccurrenceMapRow({
   const [showProtectedAreas, setShowProtectedAreas] = useState(false);
   const [showPowoRangeOverlay, setShowPowoRangeOverlay] = useState(false);
   const [showIucnRangeOverlay, setShowIucnRangeOverlay] = useState(false);
-  // Map or list: the list shows the same (filtered) records as a table of the
-  // GBIF/Darwin Core fields a map dot can't carry — locality, collector,
+  // The record list sits beside the map rather than replacing it — the two are
+  // meant to be read against each other, so hovering a row highlights that
+  // record's point. It shows the same (filtered) records as a table of the
+  // GBIF/Darwin Core fields a map dot can't carry: locality, collector,
   // catalogue number, and so on.
-  const [viewMode, setViewMode] = useState<"map" | "list">("map");
+  const [showList, setShowList] = useState(false);
   const [splitView, setSplitView] = useState(false);
   const [splitDate, setSplitDate] = useState<string>(assessmentDate?.split("T")[0] || "");
   const [sharedViewState, setSharedViewState] = useState({ longitude: 0, latitude: 20, zoom: 1.5 });
@@ -479,17 +481,20 @@ export default function OccurrenceMapRow({
   // actually load. Triggered on either assessmentId or sisTaxonId since AOH
   // availability keys off sisTaxonId, not assessmentId.
   const [canViewRangeMap, setCanViewRangeMap] = useState(false);
-  // The signed-in account, if any. Beyond the range-map gate it's what the
-  // georeference export is restricted to, and what fills georeferencedBy.
+  // The signed-in account, if any, and whether it's an admin. The email fills
+  // georeferencedBy; the admin flag is what georeference export/import is gated
+  // on (the export route enforces the same check server-side).
   const [accountEmail, setAccountEmail] = useState<string | null>(null);
+  const [isAdminAccount, setIsAdminAccount] = useState(false);
   useEffect(() => {
     let cancelled = false;
     fetch("/api/auth/me")
-      .then((res) => (res.ok ? res.json() : { canViewRangeMap: false, email: null }))
-      .then((data: { canViewRangeMap?: boolean; email?: string | null }) => {
+      .then((res) => (res.ok ? res.json() : { canViewRangeMap: false, email: null, isAdmin: false }))
+      .then((data: { canViewRangeMap?: boolean; email?: string | null; isAdmin?: boolean }) => {
         if (cancelled) return;
         setCanViewRangeMap(!!data.canViewRangeMap);
         setAccountEmail(data.email ?? null);
+        setIsAdminAccount(!!data.isAdmin);
       })
       .catch(() => {});
     return () => {
@@ -958,11 +963,16 @@ export default function OccurrenceMapRow({
       type: "FeatureCollection",
       features: visibleGeoreferences.map((g) => ({
         type: "Feature" as const,
-        properties: { gbifID: g.gbifID },
+        properties: {
+          gbifID: g.gbifID,
+          // Grows when its row is hovered in the list, so an assessor point
+          // answers to the list the same way a GBIF point does.
+          _radius: hoveredFeature?.properties.gbifID === g.gbifID ? 9 : 6,
+        },
         geometry: { type: "Point" as const, coordinates: [g.decimalLongitude, g.decimalLatitude] },
       })),
     }),
-    [visibleGeoreferences]
+    [visibleGeoreferences, hoveredFeature]
   );
 
   // The uncertainty radius, drawn to scale on the ground. A georeferenced
@@ -1024,9 +1034,12 @@ export default function OccurrenceMapRow({
         const detail = await response.json().catch(() => ({}));
         setGeorefMessage({
           kind: "error",
-          text: response.status === 401
-            ? "Sign in to export georeferences."
-            : detail.error || "Export failed.",
+          text:
+            response.status === 401
+              ? "Sign in to export georeferences."
+              : response.status === 403
+                ? "Your account doesn't have export access."
+                : detail.error || "Export failed.",
         });
         return;
       }
@@ -1411,6 +1424,22 @@ export default function OccurrenceMapRow({
     }
   }, [splitView, bbox]);
 
+  // Opening or closing the record list changes how wide the map is, and the
+  // map keeps its centre and zoom when it resizes — so on a species whose
+  // records sit off to one side, opening the list can slide them straight out
+  // of view. Re-fit to the data once the new layout has settled.
+  const prevShowListRef = useRef(showList);
+  useEffect(() => {
+    if (prevShowListRef.current === showList) return;
+    prevShowListRef.current = showList;
+    if (!bbox) return;
+    const timer = window.setTimeout(() => {
+      mapRef.current?.resize();
+      if (!fitMapToBbox(bbox)) pendingBboxRef.current = bbox;
+    }, 80);
+    return () => window.clearTimeout(timer);
+  }, [showList, bbox, fitMapToBbox]);
+
   // Fit bounds when the (unfiltered) bbox changes (may need to wait for map to
   // be ready) — deliberately keyed on `bbox` (the server-computed extent of
   // every loaded record), not a filtered subset: re-fitting to whatever's left
@@ -1491,6 +1520,18 @@ export default function OccurrenceMapRow({
   const handleMapMouseLeave = useCallback(() => {
     setHoveredFeature(null);
     setHoveredPanel(null);
+  }, []);
+
+  /**
+   * Hovering a row in the record list highlights that record on the map, using
+   * the same hoveredFeature the map's own hover sets — so the link works in
+   * both directions, and the map's tooltip appears for a row you're only
+   * pointing at in the table. Rows GBIF has no coordinates for still set it
+   * (the list highlights), there's simply nothing on the map to grow.
+   */
+  const handleHoverRow = useCallback((feature: OccurrenceFeature | null) => {
+    setHoveredFeature(feature);
+    setHoveredPanel(feature ? "main" : null);
   }, []);
 
   // Handle view state change for split view sync
@@ -1622,7 +1663,7 @@ export default function OccurrenceMapRow({
                       id={`georef-point-${panelId}`}
                       type="circle"
                       paint={{
-                        "circle-radius": 6,
+                        "circle-radius": ["get", "_radius"] as unknown as number,
                         "circle-color": "#7c3aed",
                         "circle-stroke-color": "#ffffff",
                         "circle-stroke-width": 2,
@@ -2591,11 +2632,11 @@ export default function OccurrenceMapRow({
                       <div className="px-3 pb-1.5 flex items-center gap-1.5">
                         <button
                           onClick={handleExport}
-                          disabled={!accountEmail || georeferenceCount === 0 || exporting}
+                          disabled={!isAdminAccount || georeferenceCount === 0 || exporting}
                           title={
-                            accountEmail
+                            isAdminAccount
                               ? "Download your georeferences as a Darwin Core CSV"
-                              : "Sign in to export georeferences"
+                              : "Admin access is required to export georeferences"
                           }
                           className="px-2 py-0.5 rounded border border-zinc-300 dark:border-zinc-600 text-[11px] text-zinc-600 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-800 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
                         >
@@ -2603,11 +2644,11 @@ export default function OccurrenceMapRow({
                         </button>
                         <button
                           onClick={() => importInputRef.current?.click()}
-                          disabled={!accountEmail}
+                          disabled={!isAdminAccount}
                           title={
-                            accountEmail
+                            isAdminAccount
                               ? "Load georeferences from a CSV exported here"
-                              : "Sign in to import georeferences"
+                              : "Admin access is required to import georeferences"
                           }
                           className="px-2 py-0.5 rounded border border-zinc-300 dark:border-zinc-600 text-[11px] text-zinc-600 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-800 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
                         >
@@ -2625,10 +2666,11 @@ export default function OccurrenceMapRow({
                           }}
                         />
                       </div>
-                      {!accountEmail && (
+                      {!isAdminAccount && (
                         <div className="px-3 pb-1.5 text-[10px] text-zinc-400">
-                          Sign in to export or import — CSV files leaving the dashboard are
-                          restricted to signed-in users.
+                          {accountEmail
+                            ? "Your account doesn't have export access. CSV files leaving the dashboard are restricted to admins."
+                            : "Sign in with an admin account to export or import — CSV files leaving the dashboard are restricted to admins."}
                         </div>
                       )}
                       {georefMessage && (
@@ -2872,42 +2914,30 @@ export default function OccurrenceMapRow({
                   </div>
                 )}
               </div>
-              {/* Map / list switch — both views show exactly the same filtered
-                  records, so every filter above applies unchanged to either. */}
-              <div className="ml-auto flex items-center rounded border border-zinc-300 dark:border-zinc-600 overflow-hidden text-xs shrink-0">
-                {([
-                  {
-                    key: "map" as const,
-                    label: "Map",
-                    title: "Show the occurrences as points on a map",
-                    icon: "M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7",
-                  },
-                  {
-                    key: "list" as const,
-                    label: "List",
-                    title: "Show the occurrences as a table of GBIF record fields — locality, collector, catalogue number, dataset and more",
-                    icon: "M4 6h16M4 10h16M4 14h16M4 18h16",
-                  },
-                ]).map((opt) => (
-                  <button
-                    key={opt.key}
-                    onClick={() => setViewMode(opt.key)}
-                    title={opt.title}
-                    className={`inline-flex items-center gap-1 px-2 py-1 transition-colors ${
-                      opt.key === "list" ? "border-l border-zinc-300 dark:border-zinc-600" : ""
-                    } ${
-                      viewMode === opt.key
-                        ? "bg-zinc-200 dark:bg-zinc-700 text-zinc-800 dark:text-zinc-100 font-medium"
-                        : "text-zinc-500 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800"
-                    }`}
-                  >
-                    <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                      <path strokeLinecap="round" strokeLinejoin="round" d={opt.icon} />
-                    </svg>
-                    {opt.label}
-                  </button>
-                ))}
-              </div>
+              {/* Opens the record list beside the map rather than instead of it:
+                  the two are meant to be read together, and hovering a row
+                  highlights that record's point (same idea as the iNat
+                  thumbnails). Same filtered records in both, so every filter
+                  above applies to what you see either way. */}
+              <button
+                onClick={() => setShowList((v) => !v)}
+                aria-pressed={showList}
+                title={
+                  showList
+                    ? "Hide the record list"
+                    : "Show the record list beside the map — locality, collector, catalogue number and more, with each row linked to its point"
+                }
+                className={`ml-auto inline-flex items-center gap-1.5 px-2 py-1 rounded border text-xs transition-colors shrink-0 ${
+                  showList
+                    ? "bg-zinc-200 dark:bg-zinc-700 border-zinc-400 dark:border-zinc-500 text-zinc-800 dark:text-zinc-100 font-medium"
+                    : "border-zinc-300 dark:border-zinc-600 text-zinc-600 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800"
+                }`}
+              >
+                <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M4 6h16M4 10h16M4 14h16M4 18h16" />
+                </svg>
+                Record list
+              </button>
             </div>
           </div>
 
@@ -2917,10 +2947,10 @@ export default function OccurrenceMapRow({
                 since it's just a 2-col thumbnail grid now, leaving more room for the map.
                 Ordered after the map on mobile (order-2) since the map is the primary
                 content there; back to its normal DOM order (first, on the left) at sm+. */}
-            {/* Hidden in list view — the table needs the full width, and the
-                photo grid is a map-side companion (hovering a thumbnail
-                highlights its dot). */}
-            {viewMode === "map" && (!breakdown || breakdown.iNaturalist > 0) && (
+            {/* Hidden while the record list is open — map and list side by side
+                already fill the row, and the photo grid plays the same
+                hover-to-highlight role the list now does. */}
+            {!showList && (!breakdown || breakdown.iNaturalist > 0) && (
             <div className="order-2 sm:order-none sm:w-44 shrink-0 flex flex-col gap-2">
               {/* iNat photo grid — only shown when photos exist or loading */}
               {(inatPhotos.length > 0 || loadingInatPhotos) && (
@@ -2997,49 +3027,7 @@ export default function OccurrenceMapRow({
 
             {/* Map(s) — takes remaining width, stretches to match left column */}
             <div className="order-1 sm:order-none flex-1 min-w-0 flex flex-col gap-2">
-                {viewMode === "list" ? (
-                  <div className="flex flex-col gap-2">
-                    {/* Same "loaded X of Y" summary the map shows as a floating
-                        badge — in the list it's a plain strip above the table,
-                        since there are no tiles for it to float over. */}
-                    {!loadingOccurrences && totalOccurrences != null && (
-                      <div className="px-2 py-1 rounded-lg bg-emerald-50 dark:bg-emerald-900 border border-emerald-200 dark:border-emerald-700 text-[11px] text-emerald-700 dark:text-emerald-300">
-                        {isFullSample ? (
-                          <>All <strong>{totalOccurrences.toLocaleString()}</strong> mappable GBIF records loaded.</>
-                        ) : (
-                          <>Loaded <strong>{mappedLoadedCount.toLocaleString()}</strong> of <strong>{totalOccurrences.toLocaleString()}</strong> mappable GBIF records.</>
-                        )}
-                        {!isFullSample && (
-                          <>
-                            {" "}
-                            <button
-                              onClick={loadMoreOverall}
-                              disabled={loadingMoreOverall}
-                              className="underline decoration-dotted hover:decoration-solid disabled:opacity-50 disabled:cursor-not-allowed"
-                            >
-                              {loadingMoreOverall
-                                ? "Loading…"
-                                : `Click to load ${Math.min(OVERALL_LOAD_MORE_BATCH, totalOccurrences - mappedLoadedCount).toLocaleString()} more`}
-                            </button>
-                          </>
-                        )}
-                        {unmappedLoadedCount > 0 && (
-                          <> Plus <strong>{unmappedLoadedCount.toLocaleString()}</strong> without coordinates.</>
-                        )}
-                        {filteredOccurrences.length < occurrences.length && (
-                          <> Showing <strong>{filteredOccurrences.length.toLocaleString()}</strong> after filters.</>
-                        )}
-                      </div>
-                    )}
-                    <OccurrenceListTable
-                      occurrences={filteredOccurrences}
-                      loading={loadingOccurrences}
-                      isOutsideNativeRange={isOutsideNativeRangeForList}
-                      georeferences={georeferences}
-                      onEditGeoreference={setEditingFeature}
-                    />
-                  </div>
-                ) : splitView && splitDate ? (
+                {splitView && splitDate ? (
                   <div className="flex flex-col gap-2">
                     {/* Split view control bar */}
                     <div className="flex flex-wrap items-center gap-2 px-2 py-1.5 bg-zinc-100 dark:bg-zinc-800 rounded-lg text-xs text-zinc-600 dark:text-zinc-300">
@@ -3095,7 +3083,7 @@ export default function OccurrenceMapRow({
                     floated over them) — it collides with the bottom legend/
                     toolbar row when floated, since that row can grow wide
                     enough to reach the corner. */}
-                {viewMode === "map" && showRange && rangeCoverageStats && rangeCoverageStats.total.total > 0 && (
+                {showRange && rangeCoverageStats && rangeCoverageStats.total.total > 0 && (
                   <div className="w-full px-3 py-2 rounded-lg shadow-md bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 text-xs text-zinc-600 dark:text-zinc-300">
                     <table className="w-full border-collapse">
                       <thead>
@@ -3137,6 +3125,25 @@ export default function OccurrenceMapRow({
                   </div>
                 )}
             </div>
+
+            {/* Record list — beside the map, not instead of it. Hovering a row
+                highlights that record on the map (and vice versa), which is the
+                whole point of showing them together: the table carries the
+                locality and collection detail, the map carries the position.
+                Stacks below the map on narrow screens. */}
+            {showList && (
+              <div className="order-3 sm:order-none w-full sm:w-[46%] sm:max-w-[46%] shrink-0 flex flex-col gap-2 min-w-0">
+                <OccurrenceListTable
+                  occurrences={filteredOccurrences}
+                  loading={loadingOccurrences}
+                  isOutsideNativeRange={isOutsideNativeRangeForList}
+                  georeferences={georeferences}
+                  onEditGeoreference={setEditingFeature}
+                  hoveredGbifId={hoveredFeature?.properties.gbifID ?? null}
+                  onHoverRow={handleHoverRow}
+                />
+              </div>
+            )}
           </div>
         </div>
       </div>

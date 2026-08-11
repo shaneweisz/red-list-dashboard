@@ -54,7 +54,9 @@ export interface OccurrenceFeature {
   } | null;
 }
 
-const ROWS_PER_PAGE = 50;
+// Ten at a time: the list sits beside the map, so a page should be scannable
+// against it without scrolling the table away from the points it describes.
+const ROWS_PER_PAGE = 10;
 
 const BASIS_LABELS: Record<string, string> = {
   HUMAN_OBSERVATION: "Human observation",
@@ -131,6 +133,10 @@ interface OccurrenceListTableProps {
   georeferences?: Record<number, Georeference>;
   /** Opens the georeference editor for a record. Absent = feature unavailable. */
   onEditGeoreference?: (feature: OccurrenceFeature) => void;
+  /** The record currently highlighted on the map, so its row can match. */
+  hoveredGbifId?: number | null;
+  /** Pointer entered/left a row — the map highlights the matching record. */
+  onHoverRow?: (feature: OccurrenceFeature | null) => void;
 }
 
 /**
@@ -149,6 +155,8 @@ export default function OccurrenceListTable({
   isOutsideNativeRange,
   georeferences,
   onEditGeoreference,
+  hoveredGbifId,
+  onHoverRow,
 }: OccurrenceListTableProps) {
   // Default sort: newest first, matching GBIF's own default result order.
   const [sortKey, setSortKey] = useState<string>("date");
@@ -462,10 +470,9 @@ export default function OccurrenceListTable({
 
   return (
     <div className="flex flex-col rounded-lg border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 overflow-hidden">
-      {/* Scrolls in both axes: horizontally because there are more Darwin Core
-          fields than fit any sensible width, vertically so the panel stays
-          roughly map-height instead of pushing the rest of the page down. */}
-      <div className="overflow-auto max-h-[520px]">
+      {/* Horizontal scroll only: there are more Darwin Core fields than fit
+          beside a map, but ten rows need no vertical scroller of their own. */}
+      <div className="overflow-x-auto">
         <table className="min-w-full text-xs border-collapse">
           <thead className="sticky top-0 z-10 bg-zinc-50 dark:bg-zinc-800">
             <tr>
@@ -495,7 +502,13 @@ export default function OccurrenceListTable({
               <tr
                 key={f.properties.gbifID}
                 onClick={() => window.open(`https://www.gbif.org/occurrence/${f.properties.gbifID}`, "_blank", "noopener,noreferrer")}
-                className="cursor-pointer border-b border-zinc-100 dark:border-zinc-800 hover:bg-zinc-50 dark:hover:bg-zinc-800/60"
+                onMouseEnter={() => onHoverRow?.(f)}
+                onMouseLeave={() => onHoverRow?.(null)}
+                className={`cursor-pointer border-b border-zinc-100 dark:border-zinc-800 ${
+                  hoveredGbifId === f.properties.gbifID
+                    ? "bg-blue-50 dark:bg-blue-950/40"
+                    : "hover:bg-zinc-50 dark:hover:bg-zinc-800/60"
+                }`}
               >
                 {columns.map((col) => {
                   const content = col.render ? col.render(f.properties, f) : col.value(f.properties, f);
