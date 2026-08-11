@@ -27,6 +27,17 @@ type GbifRecord = {
   year?: number;
   month?: number;
   institutionCode?: string;
+  // Extra Darwin Core fields — only surfaced in the list (table) view, which
+  // shows one row per record rather than one dot per record.
+  locality?: string;
+  verbatimLocality?: string;
+  stateProvince?: string;
+  elevation?: number;
+  depth?: number;
+  identifiedBy?: string;
+  collectionCode?: string;
+  catalogNumber?: string;
+  establishmentMeans?: string;
 };
 
 /**
@@ -157,6 +168,18 @@ export async function GET(request: NextRequest) {
         month: r.month ?? null,
         institutionCode: r.institutionCode,
         qualityFlags: qualityFlags[i],
+        // List-view-only fields. `locality` is often empty on aggregator records
+        // (iNaturalist, for one, only ships verbatimLocality), so both are sent
+        // and the client falls back.
+        locality: r.locality,
+        verbatimLocality: r.verbatimLocality,
+        stateProvince: r.stateProvince,
+        elevation: r.elevation ?? null,
+        depth: r.depth ?? null,
+        identifiedBy: r.identifiedBy,
+        collectionCode: r.collectionCode,
+        catalogNumber: r.catalogNumber,
+        establishmentMeans: r.establishmentMeans,
       },
       geometry: {
         type: "Point",

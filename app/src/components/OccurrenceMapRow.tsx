@@ -11,6 +11,7 @@ import { CATEGORY_COLORS, normalizeCategory } from "@/config/taxa";
 import { FaInfoCircle } from "react-icons/fa";
 import booleanPointInPolygon from "@turf/boolean-point-in-polygon";
 import type { Feature, Polygon, MultiPolygon } from "geojson";
+import type { OccurrenceFeature as OccurrenceFeatureType } from "./OccurrenceListTable";
 
 // Fixed page size for iNat photo grid (2 columns x 5 rows)
 const INAT_PAGE_SIZE = 10;
@@ -52,6 +53,12 @@ const AohMapLayer = dynamic(
   () => import("./AohMapLayer"),
   { ssr: false }
 );
+// The list (table) view of the same occurrences — only pulled in when the user
+// actually switches to it.
+const OccurrenceListTable = dynamic(
+  () => import("./OccurrenceListTable"),
+  { ssr: false }
+);
 
 // Shape of coordinate-cleaning-refdata/countries.json (Natural Earth admin-0
 // country polygons, keyed by ISO 3166-1 alpha-2), dynamically imported for the
@@ -61,29 +68,10 @@ interface CountryPolygon {
   polygon: GeoJSON.Polygon;
 }
 
-interface OccurrenceFeature {
-  type: "Feature";
-  properties: {
-    gbifID: number;
-    species: string;
-    eventDate?: string;
-    country?: string;
-    countryCode?: string;
-    basisOfRecord?: string;
-    datasetKey?: string;
-    datasetName?: string;
-    publishingOrgKey?: string;
-    coordinateUncertaintyInMeters?: number | null;
-    year?: number | null;
-    month?: number | null;
-    institutionCode?: string;
-    qualityFlags?: string[];
-  };
-  geometry: {
-    type: "Point";
-    coordinates: [number, number];
-  };
-}
+// The occurrence record shape is shared with the list view (which renders the
+// same records as table rows, including the Darwin Core fields a map dot has
+// nowhere to show), so it lives there.
+type OccurrenceFeature = OccurrenceFeatureType;
 
 // Uncertainty filter options (meters)
 const UNCERTAINTY_OPTIONS = [
@@ -439,6 +427,10 @@ export default function OccurrenceMapRow({
   const [showProtectedAreas, setShowProtectedAreas] = useState(false);
   const [showPowoRangeOverlay, setShowPowoRangeOverlay] = useState(false);
   const [showIucnRangeOverlay, setShowIucnRangeOverlay] = useState(false);
+  // Map or list: the list shows the same (filtered) records as a table of the
+  // GBIF/Darwin Core fields a map dot can't carry — locality, collector,
+  // catalogue number, and so on.
+  const [viewMode, setViewMode] = useState<"map" | "list">("map");
   const [splitView, setSplitView] = useState(false);
   const [splitDate, setSplitDate] = useState<string>(assessmentDate?.split("T")[0] || "");
   const [sharedViewState, setSharedViewState] = useState({ longitude: 0, latitude: 20, zoom: 1.5 });
@@ -782,6 +774,12 @@ export default function OccurrenceMapRow({
   // (below) is only ever shown once nativeCountriesWcvp is known to be non-empty.
   const effectiveNativeCountries = nativeRangeSource === "wcvp" ? (nativeCountriesWcvp ?? undefined) : nativeCountriesRedList;
   const hasNativeRangeData = (nativeCountriesRedList?.length ?? 0) > 0 || (nativeCountriesWcvp?.length ?? 0) > 0;
+  // Same "outside native range" signal the map tooltip shows, bound to the
+  // currently selected source, for the list view's Flags column.
+  const isOutsideNativeRangeForList = useCallback(
+    (countryCode: string | null | undefined) => isOutsideNativeRange(countryCode, effectiveNativeCountries),
+    [effectiveNativeCountries]
+  );
   const hasBothNativeRangeSources = (nativeCountriesRedList?.length ?? 0) > 0 && (nativeCountriesWcvp?.length ?? 0) > 0;
 
   // Country border polygons for the POWO/IUCN native-range overlays — loaded
@@ -2392,6 +2390,42 @@ export default function OccurrenceMapRow({
                   </div>
                 )}
               </div>
+              {/* Map / list switch — both views show exactly the same filtered
+                  records, so every filter above applies unchanged to either. */}
+              <div className="ml-auto flex items-center rounded border border-zinc-300 dark:border-zinc-600 overflow-hidden text-xs shrink-0">
+                {([
+                  {
+                    key: "map" as const,
+                    label: "Map",
+                    title: "Show the occurrences as points on a map",
+                    icon: "M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7",
+                  },
+                  {
+                    key: "list" as const,
+                    label: "List",
+                    title: "Show the occurrences as a table of GBIF record fields — locality, collector, catalogue number, dataset and more",
+                    icon: "M4 6h16M4 10h16M4 14h16M4 18h16",
+                  },
+                ]).map((opt) => (
+                  <button
+                    key={opt.key}
+                    onClick={() => setViewMode(opt.key)}
+                    title={opt.title}
+                    className={`inline-flex items-center gap-1 px-2 py-1 transition-colors ${
+                      opt.key === "list" ? "border-l border-zinc-300 dark:border-zinc-600" : ""
+                    } ${
+                      viewMode === opt.key
+                        ? "bg-zinc-200 dark:bg-zinc-700 text-zinc-800 dark:text-zinc-100 font-medium"
+                        : "text-zinc-500 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800"
+                    }`}
+                  >
+                    <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d={opt.icon} />
+                    </svg>
+                    {opt.label}
+                  </button>
+                ))}
+              </div>
             </div>
           </div>
 
@@ -2401,7 +2435,10 @@ export default function OccurrenceMapRow({
                 since it's just a 2-col thumbnail grid now, leaving more room for the map.
                 Ordered after the map on mobile (order-2) since the map is the primary
                 content there; back to its normal DOM order (first, on the left) at sm+. */}
-            {(!breakdown || breakdown.iNaturalist > 0) && (
+            {/* Hidden in list view — the table needs the full width, and the
+                photo grid is a map-side companion (hovering a thumbnail
+                highlights its dot). */}
+            {viewMode === "map" && (!breakdown || breakdown.iNaturalist > 0) && (
             <div className="order-2 sm:order-none sm:w-44 shrink-0 flex flex-col gap-2">
               {/* iNat photo grid — only shown when photos exist or loading */}
               {(inatPhotos.length > 0 || loadingInatPhotos) && (
@@ -2478,7 +2515,44 @@ export default function OccurrenceMapRow({
 
             {/* Map(s) — takes remaining width, stretches to match left column */}
             <div className="order-1 sm:order-none flex-1 min-w-0 flex flex-col gap-2">
-                {splitView && splitDate ? (
+                {viewMode === "list" ? (
+                  <div className="flex flex-col gap-2">
+                    {/* Same "loaded X of Y" summary the map shows as a floating
+                        badge — in the list it's a plain strip above the table,
+                        since there are no tiles for it to float over. */}
+                    {!loadingOccurrences && totalOccurrences != null && (
+                      <div className="px-2 py-1 rounded-lg bg-emerald-50 dark:bg-emerald-900 border border-emerald-200 dark:border-emerald-700 text-[11px] text-emerald-700 dark:text-emerald-300">
+                        {isFullSample ? (
+                          <>All <strong>{totalOccurrences.toLocaleString()}</strong> GBIF records loaded.</>
+                        ) : (
+                          <>Loaded <strong>{occurrences.length.toLocaleString()}</strong> of <strong>{totalOccurrences.toLocaleString()}</strong> total GBIF records.</>
+                        )}
+                        {!isFullSample && (
+                          <>
+                            {" "}
+                            <button
+                              onClick={loadMoreOverall}
+                              disabled={loadingMoreOverall}
+                              className="underline decoration-dotted hover:decoration-solid disabled:opacity-50 disabled:cursor-not-allowed"
+                            >
+                              {loadingMoreOverall
+                                ? "Loading…"
+                                : `Click to load ${Math.min(OVERALL_LOAD_MORE_BATCH, totalOccurrences - occurrences.length).toLocaleString()} more`}
+                            </button>
+                          </>
+                        )}
+                        {filteredOccurrences.length < occurrences.length && (
+                          <> Showing <strong>{filteredOccurrences.length.toLocaleString()}</strong> after filters.</>
+                        )}
+                      </div>
+                    )}
+                    <OccurrenceListTable
+                      occurrences={filteredOccurrences}
+                      loading={loadingOccurrences}
+                      isOutsideNativeRange={isOutsideNativeRangeForList}
+                    />
+                  </div>
+                ) : splitView && splitDate ? (
                   <div className="flex flex-col gap-2">
                     {/* Split view control bar */}
                     <div className="flex flex-wrap items-center gap-2 px-2 py-1.5 bg-zinc-100 dark:bg-zinc-800 rounded-lg text-xs text-zinc-600 dark:text-zinc-300">
@@ -2534,7 +2608,7 @@ export default function OccurrenceMapRow({
                     floated over them) — it collides with the bottom legend/
                     toolbar row when floated, since that row can grow wide
                     enough to reach the corner. */}
-                {showRange && rangeCoverageStats && rangeCoverageStats.total.total > 0 && (
+                {viewMode === "map" && showRange && rangeCoverageStats && rangeCoverageStats.total.total > 0 && (
                   <div className="w-full px-3 py-2 rounded-lg shadow-md bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 text-xs text-zinc-600 dark:text-zinc-300">
                     <table className="w-full border-collapse">
                       <thead>
