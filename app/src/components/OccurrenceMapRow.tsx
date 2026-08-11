@@ -1531,15 +1531,23 @@ export default function OccurrenceMapRow({
   }, [bbox, fitMapToBbox]);
 
   // Called when the MapGL component finishes loading
+  /**
+   * Fit whenever a map instance loads, not only when a fit was left pending.
+   *
+   * The panel swaps the map out for a spinner while occurrences are fetching,
+   * so every refetch — fetching the records without coordinates, loading more —
+   * mounts a brand new map at its default world view. The fit-once-per-bbox
+   * guard then skips it, because that bbox was already fitted on the previous
+   * instance, and the species' records end up as specks somewhere off-centre.
+   */
   const handleMapLoad = useCallback(() => {
-    if (pendingBboxRef.current) {
-      const bbox = pendingBboxRef.current;
-      if (fitMapToBbox(bbox)) {
-        fittedBboxRef.current = bbox.join(",");
-        pendingBboxRef.current = null;
-      }
+    const target = pendingBboxRef.current ?? bbox;
+    if (!target) return;
+    if (fitMapToBbox(target)) {
+      fittedBboxRef.current = target.join(",");
+      pendingBboxRef.current = null;
     }
-  }, [fitMapToBbox]);
+  }, [bbox, fitMapToBbox]);
 
   // Map event handlers
   const handleMapClick = useCallback((e: MapLayerMouseEvent) => {
@@ -2209,7 +2217,8 @@ export default function OccurrenceMapRow({
                   </svg>
                   Coordinate cleaning
                   <span className="text-[10px] text-zinc-400 tabular-nums">
-                    Applied {flagDefs.filter((d) => appliedChecks[d.key]).length + (hasNativeRangeData && nativeRangeOnly ? 1 : 0)} of {flagDefs.length + (hasNativeRangeData ? 1 : 0)}
+                    {/* Counts every row in the dropdown, GBIF's own verdict included */}
+                    Applied {flagDefs.filter((d) => appliedChecks[d.key]).length + (hideGbifFlagged ? 1 : 0) + (hasNativeRangeData && nativeRangeOnly ? 1 : 0)} of {flagDefs.length + 1 + (hasNativeRangeData ? 1 : 0)}
                     {maxUncertainty != null && ` · ≤ ${formatUncertainty(maxUncertainty)}`}
                   </span>
                   <svg className={`w-3 h-3 text-zinc-400 transition-transform ${cleaningFilterOpen ? "rotate-180" : ""}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -2226,6 +2235,7 @@ export default function OccurrenceMapRow({
                             for (const d of flagDefs) next[d.key] = true;
                             return next;
                           });
+                          setHideGbifFlagged(true);
                           if (hasNativeRangeData) setNativeRangeOnly(true);
                         }}
                         className="hover:text-zinc-600 dark:hover:text-zinc-300 hover:underline"
@@ -2240,6 +2250,7 @@ export default function OccurrenceMapRow({
                             for (const d of flagDefs) next[d.key] = false;
                             return next;
                           });
+                          setHideGbifFlagged(false);
                           if (hasNativeRangeData) setNativeRangeOnly(false);
                         }}
                         className="hover:text-zinc-600 dark:hover:text-zinc-300 hover:underline"
