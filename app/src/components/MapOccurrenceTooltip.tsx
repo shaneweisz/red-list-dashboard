@@ -65,38 +65,53 @@ export default function MapOccurrenceTooltip(props: MapOccurrenceTooltipProps) {
   const fixedX = containerRect.left + pos.x;
   const fixedY = containerRect.top + pos.y;
 
-  // Clamp horizontal position so tooltip stays within the map container
   const tooltipWidth = 220;
-  const halfWidth = tooltipWidth / 2;
-  const clampedX = Math.max(containerRect.left + halfWidth + 4, Math.min(fixedX, containerRect.right - halfWidth - 4));
+  // Beside the point rather than above it: the map is far wider than it is
+  // tall, so horizontal room is what there is plenty of — and a tooltip above
+  // the point covers the very area you're comparing it against. Flips to the
+  // left when there isn't room on the right.
+  const showLeft = fixedX + tooltipWidth + 24 > containerRect.right;
+  // Keep it inside the map vertically; the estimate is deliberately generous
+  // since the height depends on which fields the record has.
+  const estimatedHeight = props.imageUrl ? 260 : 150;
+  const halfHeight = estimatedHeight / 2;
+  const clampedY = Math.max(
+    containerRect.top + halfHeight + 4,
+    Math.min(fixedY, containerRect.bottom - halfHeight - 4)
+  );
 
-  // If tooltip would be cut off at the top of the viewport, show it below the point instead
-  const showBelow = fixedY < 200;
+  // A rotated square rather than a CSS-border triangle, so it can carry the
+  // panel's own background and border in both themes (the old triangle was
+  // hardcoded white and vanished into dark mode).
+  const arrow = (
+    <div
+      className="absolute w-2.5 h-2.5 bg-white dark:bg-zinc-900 border-zinc-200 dark:border-zinc-700"
+      style={{
+        top: "50%",
+        [showLeft ? "right" : "left"]: -5,
+        transform: "translateY(-50%) rotate(45deg)",
+        borderRightWidth: showLeft ? 1 : 0,
+        borderTopWidth: showLeft ? 1 : 0,
+        borderLeftWidth: showLeft ? 0 : 1,
+        borderBottomWidth: showLeft ? 0 : 1,
+      }}
+    />
+  );
 
   return createPortal(
     <div
       style={{
         position: "fixed",
-        left: clampedX,
-        top: showBelow ? fixedY + 12 : fixedY - 12,
-        transform: showBelow ? "translate(-50%, 0%)" : "translate(-50%, -100%)",
+        left: showLeft ? fixedX - 12 : fixedX + 12,
+        top: clampedY,
+        transform: showLeft ? "translate(-100%, -50%)" : "translate(0, -50%)",
         zIndex: 10000,
         pointerEvents: "none",
       }}
     >
-      {showBelow && (
-        <div
-          className="mx-auto"
-          style={{
-            width: 0,
-            height: 0,
-            borderLeft: "6px solid transparent",
-            borderRight: "6px solid transparent",
-            borderBottom: "6px solid white",
-          }}
-        />
-      )}
-      <div className="bg-white dark:bg-zinc-900 rounded-lg shadow-lg border border-zinc-200 dark:border-zinc-700 overflow-hidden" style={{ maxWidth: 220 }}>
+      <div className="relative bg-white dark:bg-zinc-900 rounded-lg shadow-lg border border-zinc-200 dark:border-zinc-700" style={{ maxWidth: 220 }}>
+        {arrow}
+        <div className="rounded-lg overflow-hidden">
         {props.imageUrl && (
           <img
             src={props.imageUrl}
@@ -145,20 +160,8 @@ export default function MapOccurrenceTooltip(props: MapOccurrenceTooltipProps) {
             </div>
           )}
         </div>
+        </div>
       </div>
-      {/* Arrow */}
-      {!showBelow && (
-        <div
-          className="mx-auto"
-          style={{
-            width: 0,
-            height: 0,
-            borderLeft: "6px solid transparent",
-            borderRight: "6px solid transparent",
-            borderTop: "6px solid white",
-          }}
-        />
-      )}
     </div>,
     document.body
   );

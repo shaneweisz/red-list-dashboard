@@ -281,6 +281,12 @@ const BASIS_OF_RECORD_LOAD_MORE_BATCH = 200;
 // "Expand full list" drops paging altogether for when you'd rather scroll.
 const FULLSCREEN_ROWS_PER_PAGE = 5;
 
+// Two thirds of the fullscreen height to the map, and the bounds the divider
+// can be dragged between — enough map to stay a map, enough list to stay a list.
+const FULLSCREEN_DEFAULT_MAP_PCT = 66;
+const FULLSCREEN_MIN_MAP_PCT = 20;
+const FULLSCREEN_MAX_MAP_PCT = 85;
+
 // How many additional records to fetch per click of the general "Load N more" button
 // next to the "Loaded X of Y" badge (all basis-of-record categories together).
 const OVERALL_LOAD_MORE_BATCH = 200;
@@ -469,8 +475,14 @@ export default function OccurrenceMapRow({
   // carries the GBIF/Darwin Core fields a map dot can't: locality, collector,
   // catalogue number, and so on.
   const [fullscreen, setFullscreen] = useState(false);
-  // Expanded trades map height for list height and drops paging entirely.
+  // Expanded drops paging: the whole result set in one list you scroll. It
+  // doesn't touch the split — the divider below is how you give the list room.
   const [listExpanded, setListExpanded] = useState(false);
+  // Share of the fullscreen height given to the map, as a percentage. Two
+  // thirds by default, dragged from the divider between map and list.
+  const [mapHeightPct, setMapHeightPct] = useState(FULLSCREEN_DEFAULT_MAP_PCT);
+  const [draggingDivider, setDraggingDivider] = useState(false);
+  const splitRef = useRef<HTMLDivElement>(null);
   const [splitView, setSplitView] = useState(false);
   const [splitDate, setSplitDate] = useState<string>(assessmentDate?.split("T")[0] || "");
   const [sharedViewState, setSharedViewState] = useState({ longitude: 0, latitude: 20, zoom: 1.5 });
@@ -1435,17 +1447,17 @@ export default function OccurrenceMapRow({
   // map keeps its centre and zoom when it resizes — so on a species whose
   // records sit off to one side, the change can slide them straight out of
   // view. Re-fit to the data once the new layout has settled.
-  const prevFullscreenRef = useRef(`${fullscreen}:${listExpanded}`);
+  const prevFullscreenRef = useRef(fullscreen);
   useEffect(() => {
-    if (prevFullscreenRef.current === `${fullscreen}:${listExpanded}`) return;
-    prevFullscreenRef.current = `${fullscreen}:${listExpanded}`;
+    if (prevFullscreenRef.current === fullscreen) return;
+    prevFullscreenRef.current = fullscreen;
     if (!bbox) return;
     const timer = window.setTimeout(() => {
       mapRef.current?.resize();
       if (!fitMapToBbox(bbox)) pendingBboxRef.current = bbox;
     }, 80);
     return () => window.clearTimeout(timer);
-  }, [fullscreen, listExpanded, bbox, fitMapToBbox]);
+  }, [fullscreen, bbox, fitMapToBbox]);
 
   // Fit bounds when the (unfiltered) bbox changes (may need to wait for map to
   // be ready) — deliberately keyed on `bbox` (the server-computed extent of
@@ -1527,6 +1539,45 @@ export default function OccurrenceMapRow({
   const handleMapMouseLeave = useCallback(() => {
     setHoveredFeature(null);
     setHoveredPanel(null);
+  }, []);
+
+  // Dragging the divider between map and list. Pointer capture keeps the drag
+  // alive when the pointer outruns the handle, which it will — the handle is
+  // only a few pixels tall.
+  const handleDividerPointerDown = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    e.currentTarget.setPointerCapture(e.pointerId);
+    setDraggingDivider(true);
+  }, []);
+
+  const handleDividerPointerMove = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
+    if (!draggingDivider) return;
+    const container = splitRef.current;
+    if (!container) return;
+    const rect = container.getBoundingClientRect();
+    if (rect.height === 0) return;
+    const pct = ((e.clientY - rect.top) / rect.height) * 100;
+    setMapHeightPct(Math.min(FULLSCREEN_MAX_MAP_PCT, Math.max(FULLSCREEN_MIN_MAP_PCT, pct)));
+  }, [draggingDivider]);
+
+  const handleDividerPointerUp = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
+    if (e.currentTarget.hasPointerCapture(e.pointerId)) {
+      e.currentTarget.releasePointerCapture(e.pointerId);
+    }
+    setDraggingDivider(false);
+    // MapLibre tracks its container's size itself, but ask once at the end so
+    // the final frame is definitely drawn at the size it settled on.
+    mapRef.current?.resize();
+  }, []);
+
+  // Arrow keys move the divider too, so it isn't mouse-only.
+  const handleDividerKeyDown = useCallback((e: React.KeyboardEvent<HTMLDivElement>) => {
+    const step = e.key === "ArrowUp" ? -5 : e.key === "ArrowDown" ? 5 : 0;
+    if (step === 0) return;
+    e.preventDefault();
+    setMapHeightPct((pct) =>
+      Math.min(FULLSCREEN_MAX_MAP_PCT, Math.max(FULLSCREEN_MIN_MAP_PCT, pct + step))
+    );
   }, []);
 
   /**
@@ -2917,11 +2968,14 @@ export default function OccurrenceMapRow({
           </div>
 
           {/* ── Left sidebar (iNat photos + contributors) + Map (right) ── */}
-          <div className={
-            fullscreen
-              ? "flex flex-col gap-2 flex-1 min-h-0"
-              : "flex flex-col sm:flex-row sm:items-stretch gap-2"
-          }>
+          <div
+            ref={splitRef}
+            className={
+              fullscreen
+                ? "flex flex-col flex-1 min-h-0"
+                : "flex flex-col sm:flex-row sm:items-stretch gap-2"
+            }
+          >
             {/* Left column — iNat photo gallery only (hidden if no iNat data); narrow
                 since it's just a 2-col thumbnail grid now, leaving more room for the map.
                 Ordered after the map on mobile (order-2) since the map is the primary
@@ -3006,14 +3060,10 @@ export default function OccurrenceMapRow({
 
             {/* Map(s) — takes remaining width, stretches to match left column */}
             <div
-              className={`order-1 sm:order-none flex-1 min-w-0 flex flex-col gap-2${
-                // The map takes everything the list doesn't need — five rows
-                // is a fixed, small height, so pinning the list to a literal
-                // third would just leave dead space under it. Expanding flips
-                // the emphasis without hiding the map, since hovering a row is
-                // meant to light up its point.
-                fullscreen ? (listExpanded ? " min-h-0 basis-1/3" : " min-h-0") : ""
-              }`}
+              className={`order-1 sm:order-none flex-1 min-w-0 flex flex-col gap-2${fullscreen ? " min-h-0" : ""}`}
+              // Two thirds by default, and whatever the divider has been
+              // dragged to after that.
+              style={fullscreen ? { flex: `0 0 ${mapHeightPct}%` } : undefined}
             >
                 {splitView && splitDate ? (
                   <div className="flex flex-col gap-2">
@@ -3120,9 +3170,35 @@ export default function OccurrenceMapRow({
                 detail, the map carries the position. Stacks below the map on
                 narrow screens. */}
             {fullscreen && (
-              <div className={`order-3 sm:order-none w-full flex flex-col gap-2 min-w-0 ${
-                listExpanded ? "basis-2/3 flex-1 min-h-0" : "shrink-0"
-              }`}>
+              <div
+                role="separator"
+                aria-orientation="horizontal"
+                aria-label="Resize map and record list"
+                aria-valuenow={Math.round(mapHeightPct)}
+                aria-valuemin={FULLSCREEN_MIN_MAP_PCT}
+                aria-valuemax={FULLSCREEN_MAX_MAP_PCT}
+                tabIndex={0}
+                onPointerDown={handleDividerPointerDown}
+                onPointerMove={handleDividerPointerMove}
+                onPointerUp={handleDividerPointerUp}
+                onPointerCancel={handleDividerPointerUp}
+                onKeyDown={handleDividerKeyDown}
+                title="Drag to resize the map and the list"
+                className={`order-2 sm:order-none group relative w-full h-3 shrink-0 cursor-row-resize touch-none flex items-center justify-center ${
+                  draggingDivider ? "bg-blue-100 dark:bg-blue-900/40" : "hover:bg-zinc-100 dark:hover:bg-zinc-800"
+                } focus:outline-none focus-visible:ring-1 focus-visible:ring-blue-500 rounded`}
+              >
+                <div
+                  className={`h-0.5 w-10 rounded-full transition-colors ${
+                    draggingDivider
+                      ? "bg-blue-500"
+                      : "bg-zinc-300 dark:bg-zinc-600 group-hover:bg-zinc-400 dark:group-hover:bg-zinc-500"
+                  }`}
+                />
+              </div>
+            )}
+            {fullscreen && (
+              <div className="order-3 sm:order-none w-full flex flex-col gap-2 min-w-0 flex-1 min-h-0">
                 <OccurrenceListTable
                   occurrences={filteredOccurrences}
                   loading={loadingOccurrences}
@@ -3134,6 +3210,9 @@ export default function OccurrenceMapRow({
                   rowsPerPage={FULLSCREEN_ROWS_PER_PAGE}
                   expanded={listExpanded}
                   onToggleExpanded={() => setListExpanded((v) => !v)}
+                  // Only the expanded list fills its pane and scrolls; a
+                  // five-row page hugs its rows instead, so dragging the
+                  // divider can't leave a mostly-empty bordered box.
                   fillHeight={listExpanded}
                 />
               </div>
