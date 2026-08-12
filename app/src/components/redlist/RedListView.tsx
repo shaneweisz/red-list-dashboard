@@ -5304,6 +5304,12 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
                           {gbifSpeciesKey ? (
                             (visitedTabs.has("gbif")) && (
                             <div style={{ display: activeDetailTab === "gbif" ? undefined : "none" }}>
+                              {/* nativeCountriesRedList is withheld for Not
+                                  Evaluated species: there is no assessment, so
+                                  `countries` there is derived from the GBIF
+                                  occurrences themselves, and offering it as the
+                                  "IUCN native range" would check the occurrence
+                                  data against itself. */}
                               <OccurrenceMapRow
                                 speciesKey={gbifSpeciesKey}
                                 mounted={mounted}
@@ -5315,7 +5321,7 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
                                 criteria={s.criteria}
                                 taxonGroup={s.taxon_group}
                                 scientificName={s.scientific_name}
-                                nativeCountriesRedList={s.countries}
+                                nativeCountriesRedList={s.category === "NE" ? undefined : s.countries}
                                 previousAssessments={(s.sis_taxon_id ? assessmentHistory[s.sis_taxon_id] : null) ?? s.previous_assessments}
                                 onEmpty={s.category === "NE" ? handleOccurrenceEmpty : undefined}
                               />

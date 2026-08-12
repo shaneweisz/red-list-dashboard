@@ -1,6 +1,7 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { QUALITY_FLAG_LABELS, type QualityFlag } from "@/lib/coordinate-cleaning";
 import { formatGbifIssue } from "@/lib/gbif";
 import type { Georeference } from "@/lib/georeferences";
@@ -54,7 +55,119 @@ export interface OccurrenceFeature {
   } | null;
 }
 
-const DEFAULT_ROWS_PER_PAGE = 10;
+/**
+ * The rest of the Darwin Core a GBIF occurrence carries, available from the
+ * column picker and off by default. The visible set below is what an assessor
+ * reads first; these are what they reach for when a particular question comes
+ * up — a name's type status, an eDNA record's sampling protocol, somebody
+ * else's georeferenceRemarks on the same locality.
+ */
+const EXTRA_COLUMNS: { key: string; label: string; title: string; numeric?: boolean }[] = [
+  // Taxonomy
+  { key: "acceptedScientificName", label: "Accepted name", title: "acceptedScientificName" },
+  { key: "scientificNameAuthorship", label: "Authorship", title: "scientificNameAuthorship" },
+  { key: "verbatimScientificName", label: "Verbatim name", title: "verbatimScientificName — the name as the publisher wrote it" },
+  { key: "taxonRank", label: "Rank", title: "taxonRank" },
+  { key: "taxonomicStatus", label: "Taxonomic status", title: "taxonomicStatus" },
+  { key: "iucnRedListCategory", label: "IUCN category", title: "iucnRedListCategory, as GBIF holds it" },
+  { key: "kingdom", label: "Kingdom", title: "kingdom" },
+  { key: "phylum", label: "Phylum", title: "phylum" },
+  { key: "class", label: "Class", title: "class" },
+  { key: "order", label: "Order", title: "order" },
+  { key: "family", label: "Family", title: "family" },
+  { key: "genus", label: "Genus", title: "genus" },
+  // The record
+  { key: "occurrenceStatus", label: "Occurrence status", title: "occurrenceStatus — present or absent" },
+  { key: "individualCount", label: "Individuals", title: "individualCount", numeric: true },
+  { key: "organismQuantity", label: "Quantity", title: "organismQuantity", numeric: true },
+  { key: "organismQuantityType", label: "Quantity type", title: "organismQuantityType" },
+  { key: "sex", label: "Sex", title: "sex" },
+  { key: "lifeStage", label: "Life stage", title: "lifeStage" },
+  { key: "behavior", label: "Behaviour", title: "behavior" },
+  { key: "degreeOfEstablishment", label: "Degree of establishment", title: "degreeOfEstablishment" },
+  { key: "pathway", label: "Pathway", title: "pathway — how it got there, for introductions" },
+  { key: "typeStatus", label: "Type status", title: "typeStatus — holotype, paratype, …" },
+  { key: "preparations", label: "Preparations", title: "preparations — how the specimen is preserved" },
+  { key: "recordNumber", label: "Record number", title: "recordNumber — the collector's own number" },
+  { key: "fieldNumber", label: "Field number", title: "fieldNumber" },
+  { key: "occurrenceRemarks", label: "Occurrence remarks", title: "occurrenceRemarks" },
+  { key: "occurrenceID", label: "Occurrence ID", title: "occurrenceID — the publisher's own identifier" },
+  // The event
+  { key: "day", label: "Day", title: "day", numeric: true },
+  { key: "eventTime", label: "Time", title: "eventTime" },
+  { key: "verbatimEventDate", label: "Verbatim date", title: "verbatimEventDate — the date as written on the label" },
+  { key: "dateIdentified", label: "Date identified", title: "dateIdentified" },
+  { key: "identificationRemarks", label: "Identification remarks", title: "identificationRemarks" },
+  { key: "samplingProtocol", label: "Sampling protocol", title: "samplingProtocol" },
+  { key: "samplingEffort", label: "Sampling effort", title: "samplingEffort" },
+  { key: "habitat", label: "Habitat", title: "habitat" },
+  // The place
+  { key: "continent", label: "Continent", title: "continent" },
+  { key: "county", label: "County", title: "county" },
+  { key: "municipality", label: "Municipality", title: "municipality" },
+  { key: "waterBody", label: "Water body", title: "waterBody" },
+  { key: "island", label: "Island", title: "island" },
+  { key: "islandGroup", label: "Island group", title: "islandGroup" },
+  { key: "higherGeography", label: "Higher geography", title: "higherGeography" },
+  { key: "verbatimLocality", label: "Verbatim locality", title: "verbatimLocality — the locality as written on the label" },
+  { key: "locationRemarks", label: "Location remarks", title: "locationRemarks" },
+  { key: "coordinatePrecision", label: "Coordinate precision", title: "coordinatePrecision", numeric: true },
+  { key: "geodeticDatum", label: "Datum", title: "geodeticDatum" },
+  { key: "elevationAccuracy", label: "Elevation accuracy", title: "elevationAccuracy", numeric: true },
+  { key: "depth", label: "Depth", title: "depth in metres", numeric: true },
+  { key: "depthAccuracy", label: "Depth accuracy", title: "depthAccuracy", numeric: true },
+  { key: "georeferencedBy", label: "Georeferenced by", title: "georeferencedBy — who placed the published coordinates" },
+  { key: "georeferenceProtocol", label: "Georeference protocol", title: "georeferenceProtocol" },
+  { key: "georeferenceSources", label: "Georeference sources", title: "georeferenceSources" },
+  { key: "georeferenceRemarks", label: "Georeference remarks", title: "georeferenceRemarks" },
+  // Dataset and rights
+  { key: "publishingCountry", label: "Publishing country", title: "publishingCountry" },
+  { key: "protocol", label: "Protocol", title: "protocol — how GBIF ingested the record" },
+  { key: "license", label: "Licence", title: "license" },
+  { key: "rightsHolder", label: "Rights holder", title: "rightsHolder" },
+  { key: "references", label: "References", title: "references — the publisher's page for this record" },
+  { key: "lastInterpreted", label: "Last interpreted", title: "lastInterpreted — when GBIF last processed it" },
+  { key: "isSequenced", label: "Sequenced", title: "isSequenced — has associated sequence data" },
+  { key: "isInCluster", label: "In cluster", title: "isInCluster — GBIF thinks this duplicates another record" },
+];
+
+/** Shown until someone changes it: the fields an assessor reads first. */
+const DEFAULT_VISIBLE_COLUMNS = [
+  "date", "basisOfRecord", "locality", "stateProvince", "country", "coordinates",
+  "uncertainty", "elevation", "recordedBy", "identifiedBy", "dataset", "catalog",
+  "establishmentMeans", "flags", "georeference", "gbifID",
+];
+
+const COLUMN_PREFS_KEY = "redlist-occurrence-columns:v1";
+
+interface ColumnPrefs {
+  /** Column ids in display order; anything unknown is ignored on read. */
+  order: string[];
+  visible: string[];
+}
+
+function loadColumnPrefs(): ColumnPrefs | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const raw = window.localStorage.getItem(COLUMN_PREFS_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed?.order) || !Array.isArray(parsed?.visible)) return null;
+    return parsed as ColumnPrefs;
+  } catch {
+    return null;
+  }
+}
+
+function saveColumnPrefs(prefs: ColumnPrefs) {
+  if (typeof window === "undefined") return;
+  try {
+    window.localStorage.setItem(COLUMN_PREFS_KEY, JSON.stringify(prefs));
+  } catch {
+    // A browser refusing storage shouldn't cost you the table.
+  }
+}
+
 
 const BASIS_LABELS: Record<string, string> = {
   HUMAN_OBSERVATION: "Human observation",
@@ -135,12 +248,6 @@ interface OccurrenceListTableProps {
   hoveredGbifId?: number | null;
   /** Pointer entered/left a row — the map highlights the matching record. */
   onHoverRow?: (feature: OccurrenceFeature | null) => void;
-  /** Rows per page. Ignored when expanded. */
-  rowsPerPage?: number;
-  /** Show every record in one scrollable table instead of paging. */
-  expanded?: boolean;
-  /** Renders the expand/collapse control when provided. */
-  onToggleExpanded?: () => void;
   /** Fill the height of the column the table is in. */
   fillHeight?: boolean;
 }
@@ -163,19 +270,48 @@ export default function OccurrenceListTable({
   onEditGeoreference,
   hoveredGbifId,
   onHoverRow,
-  rowsPerPage: rowsPerPageProp = DEFAULT_ROWS_PER_PAGE,
-  expanded = false,
-  onToggleExpanded,
   fillHeight = false,
 }: OccurrenceListTableProps) {
   // Default sort: newest first, matching GBIF's own default result order.
   const [sortKey, setSortKey] = useState<string>("date");
   const [sortAsc, setSortAsc] = useState(false);
-  const [rawPage, setPage] = useState(0);
 
-  // Expanded means the whole result set in one scrollable table — no paging at
-  // all, for when you'd rather read down the list than step through it.
-  const rowsPerPage = expanded ? Number.MAX_SAFE_INTEGER : rowsPerPageProp;
+  // Which columns are shown and in what order, remembered per browser. Read
+  // lazily so the first paint is already the reader's own layout rather than
+  // the default flashing past.
+  const [columnPrefs, setColumnPrefs] = useState<ColumnPrefs | null>(() => loadColumnPrefs());
+  const [columnPickerOpen, setColumnPickerOpen] = useState(false);
+  const columnPickerRef = useRef<HTMLDivElement>(null);
+  const columnButtonRef = useRef<HTMLButtonElement>(null);
+  // The picker is portalled and positioned from the button: the list panel
+  // clips its own overflow (it has to — the table scrolls inside it), so an
+  // absolutely-positioned dropdown gets cut off at the panel's edge.
+  const [pickerAnchor, setPickerAnchor] = useState<{ right: number; bottom: number } | null>(null);
+
+  useEffect(() => {
+    if (!columnPickerOpen) return;
+    const place = () => {
+      const rect = columnButtonRef.current?.getBoundingClientRect();
+      if (rect) setPickerAnchor({ right: window.innerWidth - rect.right, bottom: window.innerHeight - rect.top + 6 });
+    };
+    place();
+    const handler = (e: MouseEvent) => {
+      const target = e.target as Node;
+      if (columnPickerRef.current?.contains(target) || columnButtonRef.current?.contains(target)) return;
+      setColumnPickerOpen(false);
+    };
+    document.addEventListener("mousedown", handler);
+    window.addEventListener("resize", place);
+    return () => {
+      document.removeEventListener("mousedown", handler);
+      window.removeEventListener("resize", place);
+    };
+  }, [columnPickerOpen]);
+
+  const updatePrefs = (next: ColumnPrefs) => {
+    setColumnPrefs(next);
+    saveColumnPrefs(next);
+  };
 
   const columns = useMemo<ColumnDef[]>(
     () => [
@@ -411,6 +547,33 @@ export default function OccurrenceListTable({
             } as ColumnDef,
           ]
         : []),
+      // Everything else GBIF carries, off by default and available from the
+      // column picker. Grouped roughly as GBIF groups them: taxonomy, the
+      // record itself, the event, the place, the people, the dataset.
+      ...EXTRA_COLUMNS.map((c) => ({
+        key: c.key,
+        label: c.label,
+        title: c.title,
+        className: c.numeric ? "whitespace-nowrap tabular-nums" : "max-w-[16rem]",
+        align: c.numeric ? ("right" as const) : undefined,
+        value: (p: OccurrenceFeature["properties"]) => {
+          const raw = (p as Record<string, unknown>)[c.key];
+          if (raw == null || raw === "") return null;
+          if (Array.isArray(raw)) return raw.join(", ");
+          if (typeof raw === "boolean") return raw ? "Yes" : "No";
+          return typeof raw === "number" ? raw : String(raw);
+        },
+        render: (p: OccurrenceFeature["properties"]) => {
+          const raw = (p as Record<string, unknown>)[c.key];
+          if (raw == null || raw === "") return null;
+          const text = Array.isArray(raw)
+            ? raw.join(", ")
+            : typeof raw === "boolean"
+              ? (raw ? "Yes" : "No")
+              : String(raw);
+          return c.numeric ? text : <span className="block truncate" title={text}>{text}</span>;
+        },
+      })),
       {
         key: "gbifID",
         label: "GBIF",
@@ -433,6 +596,47 @@ export default function OccurrenceListTable({
     [isOutsideNativeRange, georeferences, onEditGeoreference]
   );
 
+  // The catalogue in the reader's own order, then the subset actually drawn.
+  // Unknown ids in stored prefs are ignored and new columns fall in at the end,
+  // so a saved layout survives this table gaining fields.
+  const orderedColumns = useMemo(() => {
+    if (!columnPrefs) return columns;
+    const byKey = new Map(columns.map((c) => [c.key, c]));
+    const ordered = columnPrefs.order.map((key) => byKey.get(key)).filter((c): c is ColumnDef => !!c);
+    const seen = new Set(ordered.map((c) => c.key));
+    return [...ordered, ...columns.filter((c) => !seen.has(c.key))];
+  }, [columns, columnPrefs]);
+
+  const visibleKeys = useMemo(
+    () => new Set(columnPrefs ? columnPrefs.visible : DEFAULT_VISIBLE_COLUMNS),
+    [columnPrefs]
+  );
+  const visibleColumns = useMemo(
+    () => orderedColumns.filter((c) => visibleKeys.has(c.key)),
+    [orderedColumns, visibleKeys]
+  );
+
+  const setVisible = (keys: string[]) => {
+    // Store in catalogue order so the visible list can't imply an order that
+    // contradicts the column order itself.
+    const wanted = new Set(keys);
+    updatePrefs({
+      order: orderedColumns.map((c) => c.key),
+      visible: orderedColumns.filter((c) => wanted.has(c.key)).map((c) => c.key),
+    });
+  };
+
+  const moveColumn = (index: number, delta: number) => {
+    const next = [...orderedColumns];
+    const target = index + delta;
+    if (target < 0 || target >= next.length) return;
+    [next[index], next[target]] = [next[target], next[index]];
+    updatePrefs({
+      order: next.map((c) => c.key),
+      visible: next.filter((c) => visibleKeys.has(c.key)).map((c) => c.key),
+    });
+  };
+
   const sorted = useMemo(() => {
     const col = columns.find((c) => c.key === sortKey);
     if (!col) return occurrences;
@@ -450,13 +654,6 @@ export default function OccurrenceListTable({
     });
   }, [occurrences, columns, sortKey, sortAsc]);
 
-  const pageCount = Math.max(1, Math.ceil(sorted.length / rowsPerPage));
-  // Clamped during render rather than reset in an effect: tightening a filter
-  // can shrink the result set out from under the current page, and re-rendering
-  // an empty page first (then correcting it) is a visible flash.
-  const page = Math.min(rawPage, pageCount - 1);
-  const pageRows = sorted.slice(page * rowsPerPage, (page + 1) * rowsPerPage);
-
   const toggleSort = (key: string) => {
     if (key === sortKey) {
       setSortAsc((v) => !v);
@@ -465,7 +662,6 @@ export default function OccurrenceListTable({
       // Text columns read best A→Z first; dates and counts most-recent/largest first.
       setSortAsc(!["date", "uncertainty", "elevation", "gbifID", "flags", "coordinates"].includes(key));
     }
-    setPage(0);
   };
 
   if (loading) {
@@ -493,7 +689,7 @@ export default function OccurrenceListTable({
         <table className="min-w-full text-xs border-collapse">
           <thead className="sticky top-0 z-10 bg-zinc-50 dark:bg-zinc-800">
             <tr>
-              {columns.map((col) => {
+              {visibleColumns.map((col) => {
                 const active = sortKey === col.key;
                 return (
                   <th
@@ -515,7 +711,7 @@ export default function OccurrenceListTable({
             </tr>
           </thead>
           <tbody>
-            {pageRows.map((f) => (
+            {sorted.map((f) => (
               <tr
                 key={f.properties.gbifID}
                 onClick={() => window.open(`https://www.gbif.org/occurrence/${f.properties.gbifID}`, "_blank", "noopener,noreferrer")}
@@ -527,7 +723,7 @@ export default function OccurrenceListTable({
                     : "hover:bg-zinc-50 dark:hover:bg-zinc-800/60"
                 }`}
               >
-                {columns.map((col) => {
+                {visibleColumns.map((col) => {
                   const content = col.render ? col.render(f.properties, f) : col.value(f.properties, f);
                   return (
                     <td
@@ -546,9 +742,9 @@ export default function OccurrenceListTable({
                 })}
               </tr>
             ))}
-            {pageRows.length === 0 && (
+            {sorted.length === 0 && (
               <tr>
-                <td colSpan={columns.length} className="px-3 py-8 text-center text-zinc-400 text-sm">
+                <td colSpan={visibleColumns.length} className="px-3 py-8 text-center text-zinc-400 text-sm">
                   No occurrences match the current filters.
                 </td>
               </tr>
@@ -556,62 +752,91 @@ export default function OccurrenceListTable({
           </tbody>
         </table>
       </div>
-      {/* Footer: how many rows the filters left, plus paging */}
+      {/* Footer: how many rows the filters left, and which columns are shown */}
       <div className="flex items-center gap-2 px-2 py-1.5 border-t border-zinc-100 dark:border-zinc-800 text-[11px] text-zinc-500 dark:text-zinc-400">
         <span className="tabular-nums">
-          {sorted.length === 0
-            ? "0 records"
-            : expanded
-              ? `${sorted.length.toLocaleString()} records`
-              : `${(page * rowsPerPage + 1).toLocaleString()}–${Math.min((page + 1) * rowsPerPage, sorted.length).toLocaleString()} of ${sorted.length.toLocaleString()} records`}
+          {sorted.length === 0 ? "0 records" : `${sorted.length.toLocaleString()} records`}
         </span>
-        {onToggleExpanded && (
+        <div className="ml-auto">
           <button
-            onClick={onToggleExpanded}
-            title={
-              expanded
-                ? "Back to a paged list, with more room for the map"
-                : "Show every record in one scrollable list, with more room for the list"
-            }
-            className="ml-auto inline-flex items-center gap-1 px-1.5 py-0.5 rounded border border-zinc-300 dark:border-zinc-600 text-[10px] text-zinc-500 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors"
+            ref={columnButtonRef}
+            onClick={() => setColumnPickerOpen((v) => !v)}
+            title="Choose which GBIF fields to show, and in what order. Remembered in this browser."
+            className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded border border-zinc-300 dark:border-zinc-600 text-[10px] text-zinc-500 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors"
           >
             <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                d={expanded ? "M19 15l-7-7-7 7" : "M19 9l-7 7-7-7"}
-              />
+              <path strokeLinecap="round" strokeLinejoin="round" d="M4 6h16M4 12h10M4 18h6" />
             </svg>
-            {expanded ? "Collapse" : "Expand full list"}
+            Columns
+            <span className="tabular-nums">{visibleColumns.length}/{orderedColumns.length}</span>
           </button>
-        )}
-        {!expanded && pageCount > 1 && (
-          <div className={`flex items-center gap-1${onToggleExpanded ? "" : " ml-auto"}`}>
-            <button
-              onClick={() => setPage(Math.max(0, page - 1))}
-              disabled={page === 0}
-              title="Previous page"
-              className="p-1 sm:p-0.5 text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300 disabled:opacity-30 disabled:cursor-not-allowed"
-            >
-              <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
-              </svg>
-            </button>
-            <span className="tabular-nums">
-              {page + 1}/{pageCount}
-            </span>
-            <button
-              onClick={() => setPage(Math.min(pageCount - 1, page + 1))}
-              disabled={page >= pageCount - 1}
-              title="Next page"
-              className="p-1 sm:p-0.5 text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300 disabled:opacity-30 disabled:cursor-not-allowed"
-            >
-              <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
-              </svg>
-            </button>
-          </div>
-        )}
+          {columnPickerOpen && pickerAnchor && createPortal(
+            <div
+              ref={columnPickerRef}
+              style={{ position: "fixed", right: pickerAnchor.right, bottom: pickerAnchor.bottom, zIndex: 10002 }}
+              className="w-80 max-h-[70vh] overflow-y-auto bg-white dark:bg-zinc-900 rounded-lg border border-zinc-200 dark:border-zinc-700 shadow-xl py-1 text-[11px] text-zinc-500 dark:text-zinc-400">
+              <div className="flex items-center gap-2 px-3 py-1 text-[10px] text-zinc-400 dark:text-zinc-500 sticky top-0 bg-white dark:bg-zinc-900">
+                <button onClick={() => setVisible(orderedColumns.map((c) => c.key))} className="hover:underline">
+                  Show all
+                </button>
+                <span className="text-zinc-300 dark:text-zinc-600">·</span>
+                <button onClick={() => setVisible(DEFAULT_VISIBLE_COLUMNS)} className="hover:underline">
+                  Reset to default
+                </button>
+                <span className="ml-auto">Drag with ▲▼ to reorder</span>
+              </div>
+              {orderedColumns.map((col, index) => {
+                const shown = visibleKeys.has(col.key);
+                return (
+                  <div
+                    key={col.key}
+                    className="flex items-center gap-2 px-3 py-1 hover:bg-zinc-50 dark:hover:bg-zinc-800 text-xs"
+                  >
+                    <input
+                      type="checkbox"
+                      checked={shown}
+                      onChange={() =>
+                        setVisible(
+                          shown
+                            ? visibleColumns.filter((c) => c.key !== col.key).map((c) => c.key)
+                            : [...visibleColumns.map((c) => c.key), col.key]
+                        )
+                      }
+                      className="w-3 h-3 rounded accent-emerald-500 shrink-0"
+                    />
+                    <span
+                      className={`flex-1 min-w-0 truncate ${shown ? "text-zinc-700 dark:text-zinc-200" : "text-zinc-400 dark:text-zinc-500"}`}
+                      title={col.title}
+                    >
+                      {col.label}
+                    </span>
+                    <button
+                      onClick={() => moveColumn(index, -1)}
+                      disabled={index === 0}
+                      title="Move left"
+                      className="p-0.5 text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300 disabled:opacity-25 disabled:cursor-not-allowed"
+                    >
+                      <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M5 15l7-7 7 7" />
+                      </svg>
+                    </button>
+                    <button
+                      onClick={() => moveColumn(index, 1)}
+                      disabled={index === orderedColumns.length - 1}
+                      title="Move right"
+                      className="p-0.5 text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300 disabled:opacity-25 disabled:cursor-not-allowed"
+                    >
+                      <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+                      </svg>
+                    </button>
+                  </div>
+                );
+              })}
+            </div>,
+            document.body
+          )}
+        </div>
       </div>
     </div>
   );

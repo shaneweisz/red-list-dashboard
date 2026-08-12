@@ -44,7 +44,98 @@ type GbifRecord = {
   /** The publisher's own record id — outlives a GBIF re-key. */
   occurrenceID?: string;
   issues?: string[];
+  // The rest of the Darwin Core an occurrence carries. None of it is on by
+  // default in the list — it's there for the column picker, so an assessor
+  // can pull up the field their question actually turns on (type status for a
+  // name, sampling protocol for an eDNA record, georeferenceRemarks for
+  // someone else's reading of the same locality) without leaving for GBIF.
+  acceptedScientificName?: string;
+  scientificNameAuthorship?: string;
+  verbatimScientificName?: string;
+  taxonRank?: string;
+  taxonomicStatus?: string;
+  iucnRedListCategory?: string;
+  kingdom?: string;
+  phylum?: string;
+  class?: string;
+  order?: string;
+  family?: string;
+  genus?: string;
+  occurrenceStatus?: string;
+  individualCount?: number;
+  organismQuantity?: number;
+  organismQuantityType?: string;
+  sex?: string;
+  lifeStage?: string;
+  behavior?: string;
+  degreeOfEstablishment?: string;
+  pathway?: string;
+  occurrenceRemarks?: string;
+  preparations?: string[];
+  typeStatus?: string;
+  recordNumber?: string;
+  fieldNumber?: string;
+  day?: number;
+  eventTime?: string;
+  verbatimEventDate?: string;
+  dateIdentified?: string;
+  identificationRemarks?: string;
+  samplingProtocol?: string[];
+  samplingEffort?: string;
+  habitat?: string;
+  continent?: string;
+  county?: string;
+  municipality?: string;
+  waterBody?: string;
+  island?: string;
+  islandGroup?: string;
+  higherGeography?: string;
+  locationRemarks?: string;
+  coordinatePrecision?: number;
+  geodeticDatum?: string;
+  elevationAccuracy?: number;
+  depthAccuracy?: number;
+  georeferencedBy?: string;
+  georeferenceProtocol?: string;
+  georeferenceSources?: string;
+  georeferenceRemarks?: string;
+  publishingCountry?: string;
+  protocol?: string;
+  license?: string;
+  rightsHolder?: string;
+  references?: string;
+  lastInterpreted?: string;
+  isSequenced?: boolean;
+  isInCluster?: boolean;
 };
+
+/**
+ * Darwin Core fields passed through untouched for the list's column picker.
+ * Listed rather than spread wholesale so the response stays a known shape —
+ * a GBIF record carries a lot that means nothing here (crawl ids, internal
+ * keys, the verbatim block).
+ */
+const PASS_THROUGH_FIELDS = [
+  "acceptedScientificName", "scientificNameAuthorship", "verbatimScientificName", "taxonRank",
+  "taxonomicStatus", "iucnRedListCategory", "kingdom", "phylum", "class", "order", "family", "genus",
+  "occurrenceStatus", "individualCount", "organismQuantity", "organismQuantityType", "sex", "lifeStage",
+  "behavior", "degreeOfEstablishment", "pathway", "occurrenceRemarks", "preparations", "typeStatus",
+  "recordNumber", "fieldNumber", "day", "eventTime", "verbatimEventDate", "dateIdentified",
+  "identificationRemarks", "samplingProtocol", "samplingEffort", "habitat", "continent", "county",
+  "municipality", "waterBody", "island", "islandGroup", "higherGeography", "locationRemarks",
+  "coordinatePrecision", "geodeticDatum", "elevationAccuracy", "depthAccuracy", "georeferencedBy",
+  "georeferenceProtocol", "georeferenceSources", "georeferenceRemarks", "publishingCountry",
+  "protocol", "license", "rightsHolder", "references", "lastInterpreted", "isSequenced", "isInCluster",
+] as const satisfies readonly (keyof GbifRecord)[];
+
+function passThrough(r: GbifRecord): Record<string, unknown> {
+  const out: Record<string, unknown> = {};
+  for (const field of PASS_THROUGH_FIELDS) {
+    const value = r[field];
+    if (value !== undefined && value !== null && value !== "") out[field] = value;
+  }
+  return out;
+}
 
 /**
  * Which of the three record sets an occurrence belongs to.
@@ -292,6 +383,7 @@ export async function GET(request: NextRequest) {
         occurrenceID: r.occurrenceID,
         coordinateStatus: classify(r, geospatialIssuesByKey.get(r.key) ?? []),
         gbifIssues: geospatialIssuesByKey.get(r.key) ?? [],
+        ...passThrough(r),
       },
       // null for records with no coordinates — valid GeoJSON, and the signal the
       // map uses to skip them while the list still shows their locality.

@@ -655,6 +655,59 @@ export interface SpeciesSynonyms {
 // via species_link), then one scan of backbone for `col_id = c` (the accepted) OR
 // `parent_id = c` (its synonyms). backbone isn't indexed on these, so it full-scans — fine
 // for a deliberate, cached detail-tab open (not the search hot path).
+/**
+ * One species by its GBIF/CoL key, with just what the standalone occurrence
+ * page needs to render — name, taxon group, and the assessment context the map
+ * colours and filters by. Deliberately narrow: that page exists to load fast,
+ * and the dashboard's own species query reads far more than it needs.
+ *
+ * `assessed` distinguishes a real Red List assessment from an unassessed
+ * species: the countries on an unassessed row are derived from GBIF, so they
+ * must not be presented as an IUCN native range.
+ */
+export async function getSpeciesByGbifKey(gbifSpeciesKey: string): Promise<{
+  scientific_name: string;
+  common_name: string | null;
+  taxon_group: string;
+  category: string;
+  gbif_species_key: string;
+  assessment_id: number | null;
+  assessment_date: string | null;
+  sis_taxon_id: number | null;
+  criteria: string | null;
+  countries: string[];
+  assessed: boolean;
+} | null> {
+  const conn = await getConn();
+  // sis_taxon_id isn't a column: assessed rows carry it as their positive `id`,
+  // while unassessed rows get a synthetic negative one (see toSpeciesRow).
+  const proj = (src: string, assessed: boolean) => `
+    SELECT id, scientific_name, common_name, taxon_group, iucn_category AS category, gbif_species_key,
+           ${assessed
+             ? "assessment_id, CAST(assessment_date AS VARCHAR) AS assessment_date, criteria"
+             : "NULL AS assessment_id, NULL AS assessment_date, NULL AS criteria"},
+           countries, ${assessed} AS assessed
+    FROM '${parquetUri(src)}'
+    WHERE gbif_species_key = $key`;
+  const sql = `${proj("assessed.parquet", true)} UNION ALL ${proj("unassessed.parquet", false)} LIMIT 1`;
+  const rows = (await conn.runAndReadAll(sql, { key: gbifSpeciesKey })).getRowObjects();
+  const r = rows[0];
+  if (!r) return null;
+  return {
+    scientific_name: String(r.scientific_name ?? ""),
+    common_name: (r.common_name as string) ?? null,
+    taxon_group: String(r.taxon_group ?? ""),
+    category: String(r.category ?? ""),
+    gbif_species_key: str(r.gbif_species_key) ?? gbifSpeciesKey,
+    assessment_id: num(r.assessment_id),
+    assessment_date: (r.assessment_date as string) ?? null,
+    sis_taxon_id: Number(r.id) > 0 ? Number(r.id) : null,
+    criteria: (r.criteria as string) ?? null,
+    countries: splitList(r.countries),
+    assessed: !!r.assessed,
+  };
+}
+
 export async function getSynonyms(opts: { col?: string | null; sis?: number | null }): Promise<SpeciesSynonyms> {
   const conn = await getConn();
   let colId = opts.col ?? null;

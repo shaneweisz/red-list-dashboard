@@ -1,8 +1,8 @@
 "use client";
 
 import { useState, useEffect, useRef, useCallback, useMemo } from "react";
-import { createPortal } from "react-dom";
 import dynamic from "next/dynamic";
+import Link from "next/link";
 import type { MapRef, ViewStateChangeEvent, MapLayerMouseEvent } from "react-map-gl/maplibre";
 import type maplibregl from "maplibre-gl";
 import { taxonGroupCountsPreservedSpecimens } from "@/lib/gbif";
@@ -263,11 +263,6 @@ const GBIF_BASIS_OF_RECORD: Record<string, string> = {
 // How many additional records to fetch per "Load more" click on a Basis of Record row.
 const BASIS_OF_RECORD_LOAD_MORE_BATCH = 200;
 
-// A short page in fullscreen: the list sits under the map, and five rows is
-// what reads comfortably there without the table becoming the whole screen.
-// "Expand full list" drops paging altogether for when you'd rather scroll.
-const FULLSCREEN_ROWS_PER_PAGE = 5;
-
 // Two thirds of the fullscreen height to the map, and the bounds the divider
 // can be dragged between — enough map to stay a map, enough list to stay a list.
 const FULLSCREEN_DEFAULT_MAP_PCT = 66;
@@ -326,6 +321,9 @@ interface OccurrenceMapRowProps {
    * RedListView's own history fetch, so may still be empty/stale on first render
    * of this tab — markers just don't appear yet in that case. */
   previousAssessments?: { year: string; date: string | null; category?: string; criteria?: string | null }[];
+  /** Render as the fullscreen page: map above, record list below, filling the
+   *  height given to it. Driven by the /occurrences/<key> route. */
+  fullscreen?: boolean;
   /** Called once the occurrence data has loaded and there are no records to show,
    * letting the parent fall back to another tab (e.g. Catalogue of Life). */
   onEmpty?: () => void;
@@ -428,6 +426,7 @@ export default function OccurrenceMapRow({
   scientificName,
   nativeCountriesRedList,
   previousAssessments,
+  fullscreen: fullscreenProp,
   onEmpty,
 }: OccurrenceMapRowProps) {
   const [occurrences, setOccurrences] = useState<OccurrenceFeature[]>([]);
@@ -485,15 +484,11 @@ export default function OccurrenceMapRow({
   const [showProtectedAreas, setShowProtectedAreas] = useState(false);
   const [showPowoRangeOverlay, setShowPowoRangeOverlay] = useState(false);
   const [showIucnRangeOverlay, setShowIucnRangeOverlay] = useState(false);
-  // Fullscreen: map on the left, record list on the right, and nothing else.
-  // The two are meant to be read against each other — hover a row and its
-  // point lights up — which needs room the inline panel doesn't have. The list
-  // carries the GBIF/Darwin Core fields a map dot can't: locality, collector,
-  // catalogue number, and so on.
-  const [fullscreen, setFullscreen] = useState(false);
-  // Expanded drops paging: the whole result set in one list you scroll. It
-  // doesn't touch the split — the divider below is how you give the list room.
-  const [listExpanded, setListExpanded] = useState(false);
+  // Fullscreen — map above, record list below, and nothing else on the page —
+  // is a route of its own (/occurrences/<key>), so it can be linked, shared,
+  // and loaded without the dashboard's own queries. The component just renders
+  // that way when told to.
+  const fullscreen = !!fullscreenProp;
   // Share of the fullscreen height given to the map, as a percentage. Two
   // thirds by default, dragged from the divider between map and list.
   const [mapHeightPct, setMapHeightPct] = useState(FULLSCREEN_DEFAULT_MAP_PCT);
@@ -679,7 +674,10 @@ export default function OccurrenceMapRow({
   // trusted where it's drawn), and both are what an assessor georeferences by
   // hand — so they're off until asked for, and their totals are always fetched
   // so the toggles can name what's being hidden.
-  const [includeMissing, setIncludeMissing] = useState(false);
+  // Fetched automatically in fullscreen — the list is the only place they can
+  // be read, and it's the whole point of that page. Off elsewhere, where
+  // there's no list to put them in.
+  const [includeMissing, setIncludeMissing] = useState(!!fullscreenProp);
   // Records GBIF flags are always fetched now: they have coordinates, so they
   // belong with the rest and are hidden (or not) by a coordinate-cleaning check
   // like any other suspect point, rather than by a separate opt-in.
@@ -899,7 +897,12 @@ export default function OccurrenceMapRow({
   // there's nothing to fall back to silently, since the source picker itself
   // (below) is only ever shown once nativeCountriesWcvp is known to be non-empty.
   const effectiveNativeCountries = nativeRangeSource === "wcvp" ? (nativeCountriesWcvp ?? undefined) : nativeCountriesRedList;
-  const hasNativeRangeData = (nativeCountriesRedList?.length ?? 0) > 0 || (nativeCountriesWcvp?.length ?? 0) > 0;
+  // Only a species with a Red List assessment has an IUCN native range. An
+  // unassessed species arrives here with no list at all (the dashboard withholds
+  // its GBIF-derived countries), and an overlay offered but permanently disabled
+  // reads as "we couldn't load it" rather than "there is no such thing".
+  const hasIucnNativeRange = (nativeCountriesRedList?.length ?? 0) > 0;
+  const hasNativeRangeData = hasIucnNativeRange || (nativeCountriesWcvp?.length ?? 0) > 0;
   // Same "outside native range" signal the map tooltip shows, bound to the
   // currently selected source, for the list view's Flags column.
   const isOutsideNativeRangeForList = useCallback(
@@ -1480,21 +1483,6 @@ export default function OccurrenceMapRow({
     }
   }, [splitView, bbox]);
 
-  useEffect(() => {
-    if (!fullscreen) return;
-    const handler = (e: KeyboardEvent) => {
-      if (e.key === "Escape") setFullscreen(false);
-    };
-    document.addEventListener("keydown", handler);
-    // Stop the page behind the overlay scrolling under it.
-    const previousOverflow = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
-    return () => {
-      document.removeEventListener("keydown", handler);
-      document.body.style.overflow = previousOverflow;
-    };
-  }, [fullscreen]);
-
   // Entering or leaving fullscreen changes the map's size dramatically, and a
   // map keeps its centre and zoom when it resizes — so on a species whose
   // records sit off to one side, the change can slide them straight out of
@@ -2060,14 +2048,14 @@ export default function OccurrenceMapRow({
     ...(isAohAvailable ? [showAoh] : []),
     showProtectedAreas,
     showPowoRangeOverlay,
-    showIucnRangeOverlay,
+    ...(hasIucnNativeRange ? [showIucnRangeOverlay] : []),
   ];
 
-  const panel = (
+  return (
     <div
       className={
         fullscreen
-          ? "fixed inset-0 z-[9998] flex flex-col bg-white dark:bg-zinc-900"
+          ? "flex flex-col h-full min-h-0 bg-white dark:bg-zinc-900"
           : "bg-zinc-50 dark:bg-zinc-800/50"
       }
     >
@@ -2081,24 +2069,6 @@ export default function OccurrenceMapRow({
           onDelete={handleDeleteGeoreference}
           onClose={() => setEditingFeature(null)}
         />
-      )}
-      {fullscreen && (
-        <div className="flex items-center gap-2 px-3 py-2 border-b border-zinc-200 dark:border-zinc-700 shrink-0">
-          <span className="text-sm font-medium italic text-zinc-800 dark:text-zinc-100 truncate">
-            {scientificName ?? "GBIF occurrences"}
-          </span>
-          <span className="text-[11px] text-zinc-400 truncate">GBIF occurrences and record list</span>
-          <button
-            onClick={() => setFullscreen(false)}
-            title="Exit fullscreen (Esc)"
-            className="ml-auto inline-flex items-center gap-1.5 px-2 py-1 rounded border border-zinc-300 dark:border-zinc-600 text-xs text-zinc-600 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800 transition-colors shrink-0"
-          >
-            <svg className="w-3.5 h-3.5 text-zinc-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M9 4H6a2 2 0 00-2 2v3m0 6v3a2 2 0 002 2h3m6 0h3a2 2 0 002-2v-3m0-6V6a2 2 0 00-2-2h-3" />
-            </svg>
-            Exit fullscreen
-          </button>
-        </div>
       )}
       <div className={fullscreen ? "p-2 flex-1 min-h-0 flex flex-col" : "p-2"}>
         <div className={`flex flex-col gap-2${fullscreen ? " flex-1 min-h-0" : ""}`}>
@@ -2949,23 +2919,20 @@ export default function OccurrenceMapRow({
                         </a>
                       )}
                     </label>
+{hasIucnNativeRange && (
                     <label
-                      className={`flex items-center gap-2 px-3 py-1.5 text-xs ${
-                        nativeCountriesRedList && nativeCountriesRedList.length > 0
-                          ? "hover:bg-zinc-50 dark:hover:bg-zinc-800 cursor-pointer"
-                          : "opacity-50 cursor-not-allowed"
-                      }`}
+                      className="flex items-center gap-2 px-3 py-1.5 text-xs hover:bg-zinc-50 dark:hover:bg-zinc-800 cursor-pointer"
                       title="Shade the countries this species' IUCN Red List assessment lists as native range"
                     >
                       <input
                         type="checkbox"
                         checked={showIucnRangeOverlay}
-                        disabled={!(nativeCountriesRedList && nativeCountriesRedList.length > 0)}
                         onChange={() => setShowIucnRangeOverlay((v) => !v)}
                         className="w-3 h-3 rounded accent-amber-500 shrink-0"
                       />
                       <span className="flex-1 min-w-0 text-zinc-700 dark:text-zinc-200">IUCN native countries</span>
                     </label>
+                    )}
                   </div>
                 )}
               </div>
@@ -3066,20 +3033,33 @@ export default function OccurrenceMapRow({
                     />
                   </div>
                 )}
-                {/* Fullscreen — map on the left, record list on the right, with
-                    none of the surrounding page. The two are meant to be read
-                    against each other (hover a row, its point lights up), and
-                    that only works with room for both. */}
-                <button
-                  onClick={() => setFullscreen(true)}
-                  title="Open the map and record list fullscreen"
-                  className="inline-flex items-center gap-1.5 px-2 py-1 rounded border border-zinc-300 dark:border-zinc-600 text-xs text-zinc-600 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800 transition-colors shrink-0" 
-                >
-                  <svg className="w-3.5 h-3.5 text-zinc-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M4 8V5a1 1 0 011-1h3m8 0h3a1 1 0 011 1v3m0 8v3a1 1 0 01-1 1h-3m-8 0H5a1 1 0 01-1-1v-3" />
-                  </svg>
-                  Fullscreen
-                </button>
+                  {/* Fullscreen is a page of its own, so this is a real link:
+                    it can be copied, opened in a new tab, and shared, and the
+                    page it opens skips every dashboard query. In fullscreen the
+                    same slot becomes the way out — one button, not two. */}
+                {fullscreen ? (
+                  <Link
+                    href="/"
+                    title="Back to the dashboard"
+                    className="inline-flex items-center gap-1.5 px-2 py-1 rounded border border-zinc-300 dark:border-zinc-600 text-xs text-zinc-600 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800 transition-colors shrink-0"
+                  >
+                    <svg className="w-3.5 h-3.5 text-zinc-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M9 4H6a2 2 0 00-2 2v3m0 6v3a2 2 0 002 2h3m6 0h3a2 2 0 002-2v-3m0-6V6a2 2 0 00-2-2h-3" />
+                    </svg>
+                    Exit fullscreen
+                  </Link>
+                ) : (
+                  <Link
+                    href={`/occurrences/${encodeURIComponent(speciesKey)}`}
+                    title="Open the map and record list fullscreen, on their own shareable page"
+                    className="inline-flex items-center gap-1.5 px-2 py-1 rounded border border-zinc-300 dark:border-zinc-600 text-xs text-zinc-600 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800 transition-colors shrink-0"
+                  >
+                    <svg className="w-3.5 h-3.5 text-zinc-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M4 8V5a1 1 0 011-1h3m8 0h3a1 1 0 011 1v3m0 8v3a1 1 0 01-1 1h-3m-8 0H5a1 1 0 01-1-1v-3" />
+                    </svg>
+                    Fullscreen
+                  </Link>
+                )}
               </div>
             </div>
           </div>
@@ -3324,13 +3304,7 @@ export default function OccurrenceMapRow({
                   onEditGeoreference={setEditingFeature}
                   hoveredGbifId={hoveredFeature?.properties.gbifID ?? null}
                   onHoverRow={handleHoverRow}
-                  rowsPerPage={FULLSCREEN_ROWS_PER_PAGE}
-                  expanded={listExpanded}
-                  onToggleExpanded={() => setListExpanded((v) => !v)}
-                  // Only the expanded list fills its pane and scrolls; a
-                  // five-row page hugs its rows instead, so dragging the
-                  // divider can't leave a mostly-empty bordered box.
-                  fillHeight={listExpanded}
+                  fillHeight
                 />
               </div>
             )}
@@ -3339,9 +3313,4 @@ export default function OccurrenceMapRow({
       </div>
     </div>
   );
-
-  // Portalled in fullscreen: the occurrence panel is nested inside the species
-  // table, whose ancestors clip overflow, so a fixed-position child would be
-  // trapped by them. Same element either way, so no state is lost on toggle.
-  return fullscreen && mounted ? createPortal(panel, document.body) : panel;
 }
