@@ -17,6 +17,7 @@ import {
   loadGeoreferences,
   saveGeoreferences,
   csvToGeoreferences,
+  georeferencesToCsv,
   uncertaintyCircle,
   type Georeference,
 } from "@/lib/georeferences";
@@ -512,20 +513,17 @@ export default function OccurrenceMapRow({
   // actually load. Triggered on either assessmentId or sisTaxonId since AOH
   // availability keys off sisTaxonId, not assessmentId.
   const [canViewRangeMap, setCanViewRangeMap] = useState(false);
-  // The signed-in account, if any, and whether it's an admin. The email fills
-  // georeferencedBy; the admin flag is what georeference export/import is gated
-  // on (the export route enforces the same check server-side).
+  // The signed-in account, if any — used to fill georeferencedBy on a saved
+  // georeference. Nothing here is gated on it.
   const [accountEmail, setAccountEmail] = useState<string | null>(null);
-  const [isAdminAccount, setIsAdminAccount] = useState(false);
   useEffect(() => {
     let cancelled = false;
     fetch("/api/auth/me")
-      .then((res) => (res.ok ? res.json() : { canViewRangeMap: false, email: null, isAdmin: false }))
-      .then((data: { canViewRangeMap?: boolean; email?: string | null; isAdmin?: boolean }) => {
+      .then((res) => (res.ok ? res.json() : { canViewRangeMap: false, email: null }))
+      .then((data: { canViewRangeMap?: boolean; email?: string | null }) => {
         if (cancelled) return;
         setCanViewRangeMap(!!data.canViewRangeMap);
         setAccountEmail(data.email ?? null);
-        setIsAdminAccount(!!data.isAdmin);
       })
       .catch(() => {});
     return () => {
@@ -1043,39 +1041,24 @@ export default function OccurrenceMapRow({
     setEditingFeature(null);
   }, [editingFeature, georeferences, persistGeoreferences]);
 
-  const [exporting, setExporting] = useState(false);
   const georeferenceCount = Object.keys(georeferences).length;
 
   /**
-   * Export goes through the server rather than being built here, because the
-   * gate has to be real: /api/georeferences/export refuses a signed-out request
-   * and logs who took which file. Hiding the button would only hide it.
+   * Built in the browser: these are the assessor's own coordinates plus public
+   * GBIF fields, so there's nothing here to gate and no reason to round-trip
+   * through a server to make a file.
    */
-  const handleExport = useCallback(async () => {
+  const handleExport = useCallback(() => {
     const rows = Object.values(georeferences);
     if (rows.length === 0) return;
-    setExporting(true);
     setGeorefMessage(null);
     try {
-      const response = await fetch("/api/georeferences/export", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ speciesKey, scientificName, georeferences: rows }),
-      });
-      if (!response.ok) {
-        const detail = await response.json().catch(() => ({}));
-        setGeorefMessage({
-          kind: "error",
-          text:
-            response.status === 401
-              ? "Sign in to export georeferences."
-              : response.status === 403
-                ? "Your account doesn't have export access."
-                : detail.error || "Export failed.",
-        });
-        return;
-      }
-      const blob = await response.blob();
+      const stamped = rows.map((row) => ({
+        ...row,
+        georeferencedBy: row.georeferencedBy || accountEmail || undefined,
+        scientificName: row.scientificName || scientificName || undefined,
+      }));
+      const blob = new Blob([georeferencesToCsv(stamped)], { type: "text/csv;charset=utf-8;" });
       const url = URL.createObjectURL(blob);
       const link = document.createElement("a");
       link.href = url;
@@ -1087,10 +1070,8 @@ export default function OccurrenceMapRow({
       setGeorefMessage({ kind: "ok", text: `Exported ${rows.length} georeference${rows.length === 1 ? "" : "s"}.` });
     } catch {
       setGeorefMessage({ kind: "error", text: "Export failed." });
-    } finally {
-      setExporting(false);
     }
-  }, [georeferences, speciesKey, scientificName]);
+  }, [georeferences, speciesKey, scientificName, accountEmail]);
 
   const handleImportFile = useCallback(
     async (file: File) => {
@@ -2971,13 +2952,11 @@ export default function OccurrenceMapRow({
                       : `Fetch ${(recordSetTotals?.missing ?? 0).toLocaleString()} without coordinates`}
                   </button>
                 )}
-                {/* Georeference export/import — admins only, and hidden outright
-                    otherwise rather than shown disabled: a CSV leaving the
-                    dashboard is the step that needs approval, so for everyone
-                    else it simply isn't part of the tool. On the toolbar rather
-                    than inside a dropdown because it's an action, not a filter. */}
-                {isAdminAccount && (
-                  <div className="flex items-center gap-1.5 shrink-0">
+                {/* Georeference export/import. On the toolbar rather than in a
+                    dropdown because they're actions, not filters — and ungated:
+                    a georeference is the assessor's own work over public GBIF
+                    fields, with no Red List data in it. */}
+                <div className="flex items-center gap-1.5 shrink-0">
                     {georefMessage && (
                       <span
                         className={`max-w-[16rem] truncate text-[10px] ${
@@ -2992,7 +2971,7 @@ export default function OccurrenceMapRow({
                     )}
                     <button
                       onClick={handleExport}
-                      disabled={georeferenceCount === 0 || exporting}
+                      disabled={georeferenceCount === 0}
                       title={
                         georeferenceCount === 0
                           ? "No georeferences yet — add coordinates from the record list"
@@ -3003,7 +2982,7 @@ export default function OccurrenceMapRow({
                       <svg className="w-3.5 h-3.5 text-zinc-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                         <path strokeLinecap="round" strokeLinejoin="round" d="M4 16v2a2 2 0 002 2h12a2 2 0 002-2v-2M7 10l5 5 5-5M12 15V3" />
                       </svg>
-                      {exporting ? "Exporting…" : "Export CSV"}
+                      Export CSV
                       {georeferenceCount > 0 && (
                         <span className="tabular-nums text-[10px] text-violet-600 dark:text-violet-400">
                           {georeferenceCount}
@@ -3031,9 +3010,8 @@ export default function OccurrenceMapRow({
                         e.target.value = "";
                       }}
                     />
-                  </div>
-                )}
-                  {/* Fullscreen is a page of its own, so this is a real link:
+                </div>
+                {/* Fullscreen is a page of its own, so this is a real link:
                     it can be copied, opened in a new tab, and shared, and the
                     page it opens skips every dashboard query. In fullscreen the
                     same slot becomes the way out — one button, not two. */}
