@@ -31,6 +31,20 @@ import { getLastSearchResult, clearLastSearchResult, type SearchResult } from ".
 // Species list is served by the DuckDB/Parquet-backed /api/redlist/species route.
 const SPECIES_API = "/api/redlist/species";
 
+type DetailTab = "gbif" | "literature" | "redlist" | "wikipedia" | "cites" | "assessors" | "reviewers" | "col" | "eol";
+
+// Encyclopedia of Life tab is hidden for now. The tab, its panel and the
+// /api/eol routes are all still here — flip this back to true to bring it back.
+const SHOW_EOL_TAB = false;
+
+// A ?tab=eol link (or a stale one) shouldn't strand the user on a tab with no
+// button in the bar, so fall back to the default tab while EoL is hidden.
+function visibleTab(tab: DetailTab | null | undefined): DetailTab {
+  if (!tab) return "gbif";
+  if (tab === "eol" && !SHOW_EOL_TAB) return "gbif";
+  return tab;
+}
+
 // Dynamically import OccurrenceMapRow to avoid SSR issues with Leaflet
 const OccurrenceMapRow = dynamic(
   () => import("../OccurrenceMapRow"),
@@ -1381,9 +1395,9 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
 
   // Row expansion state (initialized from URL params if present)
   const [selectedSpeciesKey, setSelectedSpeciesKeyRaw] = useState<number | null>(urlSpecies != null && isNewAssessments ? Math.abs(urlSpecies) : urlSpecies);
-  const [activeDetailTab, setActiveDetailTabRaw] = useState<"gbif" | "literature" | "redlist" | "wikipedia" | "cites" | "assessors" | "reviewers" | "col" | "eol">(urlTab ?? "gbif");
+  const [activeDetailTab, setActiveDetailTabRaw] = useState<DetailTab>(visibleTab(urlTab));
   // Track which tabs have been visited so we only mount (and fetch data for) a tab on first click
-  const [visitedTabs, setVisitedTabs] = useState<Set<string>>(new Set([urlTab ?? "gbif"]));
+  const [visitedTabs, setVisitedTabs] = useState<Set<string>>(new Set([visibleTab(urlTab)]));
   const urlSpeciesHandledRef = useRef(false);
   // Track whether a tab change was initiated programmatically (click) vs URL navigation (popstate)
   const programmaticTabChangeRef = useRef(false);
@@ -1406,7 +1420,7 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
     }
   }, [setSpeciesParam]);
 
-  const setActiveDetailTab = useCallback((tab: "gbif" | "literature" | "redlist" | "wikipedia" | "cites" | "assessors" | "reviewers" | "col" | "eol", isManual = true) => {
+  const setActiveDetailTab = useCallback((tab: DetailTab, isManual = true) => {
     setActiveDetailTabRaw(tab);
     programmaticTabChangeRef.current = true;
     if (isManual) manualTabSelectionRef.current = true;
@@ -1437,10 +1451,10 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
         return;
       }
       setSelectedSpeciesKeyRaw(isNewAssessments ? Math.abs(urlSpecies) : urlSpecies);
-      setActiveDetailTabRaw(urlTab ?? "gbif");
-      setVisitedTabs(new Set([urlTab ?? "gbif"]));
+      setActiveDetailTabRaw(visibleTab(urlTab));
+      setVisitedTabs(new Set([visibleTab(urlTab)]));
       // A tab pinned in the URL counts as an explicit choice, so don't auto-switch.
-      manualTabSelectionRef.current = urlTab != null && urlTab !== "gbif";
+      manualTabSelectionRef.current = visibleTab(urlTab) !== "gbif";
       autoColSwitchedRef.current = false;
       urlSpeciesHandledRef.current = false; // allow auto-page-navigate for new species
     }
@@ -5270,12 +5284,14 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
                                 >
                                   Catalogue of Life
                                 </button>
-                                <button
-                                  className={`shrink-0 px-2 sm:px-4 py-2 text-sm font-medium whitespace-nowrap transition-colors ${activeDetailTab === "eol" ? "text-blue-600 dark:text-blue-400 border-b-2 border-blue-600 dark:border-blue-400" : "text-zinc-500 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-300"}`}
-                                  onClick={() => setActiveDetailTab("eol")}
-                                >
-                                  Encyclopedia of Life
-                                </button>
+                                {SHOW_EOL_TAB && (
+                                  <button
+                                    className={`shrink-0 px-2 sm:px-4 py-2 text-sm font-medium whitespace-nowrap transition-colors ${activeDetailTab === "eol" ? "text-blue-600 dark:text-blue-400 border-b-2 border-blue-600 dark:border-blue-400" : "text-zinc-500 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-300"}`}
+                                    onClick={() => setActiveDetailTab("eol")}
+                                  >
+                                    Encyclopedia of Life
+                                  </button>
+                                )}
                                 <button
                                   className={`shrink-0 px-2 sm:px-4 py-2 text-sm font-medium whitespace-nowrap transition-colors ${activeDetailTab === "wikipedia" ? "text-blue-600 dark:text-blue-400 border-b-2 border-blue-600 dark:border-blue-400" : "text-zinc-500 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-300"}`}
                                   onClick={() => setActiveDetailTab("wikipedia")}
@@ -5382,7 +5398,7 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
                             </div>
                             );
                           })()}
-                          {(visitedTabs.has("eol")) && (
+                          {SHOW_EOL_TAB && (visitedTabs.has("eol")) && (
                             <div style={{ display: activeDetailTab === "eol" ? undefined : "none" }}>
                               <EolSummary scientificName={s.scientific_name} />
                             </div>
