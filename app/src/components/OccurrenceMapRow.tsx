@@ -2320,82 +2320,100 @@ export default function OccurrenceMapRow({
               {label}
             </div>
           )}
-          {/* Basemap toggle */}
-          {!loadingOccurrences && mounted && (
-            <div className="absolute top-12 right-2 z-[1000] flex flex-col gap-0.5 bg-white dark:bg-zinc-800 rounded-lg shadow-md border border-zinc-200 dark:border-zinc-700 p-1">
-              {(Object.entries(BASEMAP_STYLES) as [BasemapKey, (typeof BASEMAP_STYLES)[BasemapKey]][]).map(([key, opt]) => (
-                <button
-                  key={key}
-                  onClick={() => setBasemap(key)}
-                  className={`px-2 py-0.5 rounded text-[10px] transition-colors ${
-                    basemap === key
-                      ? "bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300 font-medium"
-                      : "text-zinc-500 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-700"
-                  }`}
-                >
-                  {opt.label}
-                </button>
-              ))}
-            </div>
-          )}
-          {/* Loaded X of Y GBIF records — floating badge, single view only.
-              Solid background (not translucent) in both themes: it sits over
-              arbitrary map tiles, not a plain page background, so a tinted/
-              translucent fill (as used elsewhere in the toolbar) reads with
-              poor contrast in dark mode against light-colored tiles. */}
-          {!splitView && !loadingOccurrences && totalOccurrences != null && (
-            <div className="absolute top-2 right-2 z-[1000] max-w-[85%] px-2 py-1 rounded-lg shadow-md bg-emerald-50 dark:bg-emerald-900 border border-emerald-200 dark:border-emerald-700 text-[11px] text-emerald-700 dark:text-emerald-300">
-              {isFullSample ? (
-                <>All <strong>{(georeferencedTotal ?? 0).toLocaleString()}</strong> georeferenced GBIF records loaded.</>
-              ) : (
-                <>Loaded <strong>{georeferencedLoadedCount.toLocaleString()}</strong> of <strong>{(georeferencedTotal ?? 0).toLocaleString()}</strong> georeferenced GBIF records.</>
-              )}
-              {!isFullSample && (
-                <>
-                  {" "}
+          {/* Top-right stack: what's loaded, then the basemap choice. Stacked
+              in a flex column rather than each guessing the other's offset —
+              the counts panel grows a line when there are records without
+              coordinates, and at fixed offsets it covered the first basemap
+              button whenever it did. */}
+          <div className="absolute top-2 right-2 z-[1000] flex flex-col items-end gap-1.5 max-w-[85%]">
+            {/* What GBIF holds for this species and how much of it is here.
+                One panel, both record sets: they're two halves of the same
+                answer — the ones the map can draw, and the ones only the list
+                can show — and reading them as two badges made the second look
+                like a warning about the first.
+
+                Solid background (not translucent) in both themes: it sits over
+                arbitrary map tiles, not a plain page background, so a tinted/
+                translucent fill (as used elsewhere in the toolbar) reads with
+                poor contrast in dark mode against light-colored tiles. */}
+            {!loadingOccurrences &&
+              ((!splitView && totalOccurrences != null) ||
+                (fullscreen && (recordSetTotals?.missing ?? 0) > 0)) && (
+              <div className="px-2 py-1 rounded-lg shadow-md bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 text-[11px] space-y-0.5">
+                {!splitView && totalOccurrences != null && (
+                  <div className="text-emerald-700 dark:text-emerald-400">
+                    {isFullSample ? (
+                      <>All <strong>{(georeferencedTotal ?? 0).toLocaleString()}</strong> georeferenced GBIF records loaded.</>
+                    ) : (
+                      <>Loaded <strong>{georeferencedLoadedCount.toLocaleString()}</strong> of <strong>{(georeferencedTotal ?? 0).toLocaleString()}</strong> georeferenced GBIF records.</>
+                    )}
+                    {!isFullSample && (
+                      <>
+                        {" "}
+                        <button
+                          onClick={loadMoreOverall}
+                          disabled={loadingMoreOverall}
+                          className="underline decoration-dotted hover:decoration-solid disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                          {loadingMoreOverall
+                            ? "Loading…"
+                            : `Click to load ${Math.min(OVERALL_LOAD_MORE_BATCH, (georeferencedTotal ?? 0) - georeferencedLoadedCount).toLocaleString()} more`}
+                        </button>
+                      </>
+                    )}
+                    {visibleGeoreferences.length > 0 && (
+                      <> Plus <strong>{visibleGeoreferences.length.toLocaleString()}</strong> you georeferenced.</>
+                    )}
+                    {georeferencedFilteredCount < georeferencedLoadedCount && (
+                      <> Showing <strong>{georeferencedFilteredCount.toLocaleString()}</strong> after filters.</>
+                    )}
+                  </div>
+                )}
+                {/* Records with no coordinates keep their own line, and their
+                    own colour: they're counted, paged and read separately, and
+                    nothing about them appears on the map itself. */}
+                {fullscreen && (recordSetTotals?.missing ?? 0) > 0 && (
+                  <div className="text-amber-700 dark:text-amber-400">
+                    {missingLoadedCount >= (recordSetTotals?.missing ?? 0) ? (
+                      <>All <strong>{(recordSetTotals?.missing ?? 0).toLocaleString()}</strong> records without coordinates loaded.</>
+                    ) : (
+                      <>
+                        Loaded <strong>{missingLoadedCount.toLocaleString()}</strong> of{" "}
+                        <strong>{(recordSetTotals?.missing ?? 0).toLocaleString()}</strong> without coordinates.{" "}
+                        <button
+                          onClick={loadMoreMissing}
+                          disabled={loadingMoreMissing}
+                          className="underline decoration-dotted hover:decoration-solid disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                          {loadingMoreMissing
+                            ? "Loading…"
+                            : `Click to load ${Math.min(sampleSize, (recordSetTotals?.missing ?? 0) - missingLoadedCount).toLocaleString()} more`}
+                        </button>
+                      </>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
+            {/* Basemap toggle */}
+            {!loadingOccurrences && mounted && (
+              <div className="flex flex-col gap-0.5 bg-white dark:bg-zinc-800 rounded-lg shadow-md border border-zinc-200 dark:border-zinc-700 p-1">
+                {(Object.entries(BASEMAP_STYLES) as [BasemapKey, (typeof BASEMAP_STYLES)[BasemapKey]][]).map(([key, opt]) => (
                   <button
-                    onClick={loadMoreOverall}
-                    disabled={loadingMoreOverall}
-                    className="underline decoration-dotted hover:decoration-solid disabled:opacity-50 disabled:cursor-not-allowed"
+                    key={key}
+                    onClick={() => setBasemap(key)}
+                    className={`px-2 py-0.5 rounded text-[10px] transition-colors ${
+                      basemap === key
+                        ? "bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300 font-medium"
+                        : "text-zinc-500 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-700"
+                    }`}
                   >
-                    {loadingMoreOverall
-                      ? "Loading…"
-                      : `Click to load ${Math.min(OVERALL_LOAD_MORE_BATCH, (georeferencedTotal ?? 0) - georeferencedLoadedCount).toLocaleString()} more`}
+                    {opt.label}
                   </button>
-                </>
-              )}
-              {visibleGeoreferences.length > 0 && (
-                <> Plus <strong>{visibleGeoreferences.length.toLocaleString()}</strong> you georeferenced.</>
-              )}
-              {georeferencedFilteredCount < georeferencedLoadedCount && (
-                <> Showing <strong>{georeferencedFilteredCount.toLocaleString()}</strong> after filters.</>
-              )}
-            </div>
-          )}
-          {/* Records with no coordinates get their own badge, since they're
-              counted, paged and read separately — nothing about them appears on
-              the map itself. */}
-          {fullscreen && !loadingOccurrences && (recordSetTotals?.missing ?? 0) > 0 && (
-            <div className="absolute top-11 right-2 z-[1000] max-w-[85%] px-2 py-1 rounded-lg shadow-md bg-amber-50 dark:bg-amber-950 border border-amber-200 dark:border-amber-800 text-[11px] text-amber-800 dark:text-amber-300">
-              {missingLoadedCount >= (recordSetTotals?.missing ?? 0) ? (
-                <>All <strong>{(recordSetTotals?.missing ?? 0).toLocaleString()}</strong> records without coordinates loaded.</>
-              ) : (
-                <>
-                  Loaded <strong>{missingLoadedCount.toLocaleString()}</strong> of{" "}
-                  <strong>{(recordSetTotals?.missing ?? 0).toLocaleString()}</strong> without coordinates.{" "}
-                  <button
-                    onClick={loadMoreMissing}
-                    disabled={loadingMoreMissing}
-                    className="underline decoration-dotted hover:decoration-solid disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
-                    {loadingMoreMissing
-                      ? "Loading…"
-                      : `Click to load ${Math.min(sampleSize, (recordSetTotals?.missing ?? 0) - missingLoadedCount).toLocaleString()} more`}
-                  </button>
-                </>
-              )}
-            </div>
-          )}
+                ))}
+              </div>
+            )}
+          </div>
         </div>
       </div>
     );
