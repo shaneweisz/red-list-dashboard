@@ -3,7 +3,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
 import {
-  GEOREFERENCE_PROTOCOLS,
   parseCoordinatePair,
   validateGeoreference,
   type Georeference,
@@ -60,7 +59,6 @@ export default function GeoreferenceEditor({
   const [uncertainty, setUncertainty] = useState(
     existing ? String(existing.coordinateUncertaintyInMeters) : ""
   );
-  const [protocol, setProtocol] = useState(existing?.georeferenceProtocol ?? "");
   const [remarks, setRemarks] = useState(existing?.georeferenceRemarks ?? "");
   const [showErrors, setShowErrors] = useState(false);
 
@@ -113,7 +111,6 @@ export default function GeoreferenceEditor({
       decimalLatitude: parsed.decimalLatitude as number,
       decimalLongitude: parsed.decimalLongitude as number,
       coordinateUncertaintyInMeters: parsed.coordinateUncertaintyInMeters as number,
-      georeferenceProtocol: protocol.trim() || undefined,
       georeferenceRemarks: remarks.trim() || undefined,
       georeferencedBy: georeferencedBy || undefined,
       georeferencedDate: new Date().toISOString(),
@@ -235,36 +232,13 @@ export default function GeoreferenceEditor({
               />
             </label>
           </div>
-          <p className="text-[10px] text-zinc-400 -mt-1">
-            Paste &ldquo;lat, lon&rdquo; into the latitude box and both fields fill. The radius is
-            what makes the point usable for EOO/AOO — it should cover everywhere the
-            locality description could mean.
-          </p>
-
           <label className="block text-xs">
-            <span className="block mb-1 text-zinc-500 dark:text-zinc-400">Method</span>
-            <input
-              type="text"
-              list="georeference-protocols"
-              value={protocol}
-              onChange={(e) => setProtocol(e.target.value)}
-              placeholder="How did you resolve it?"
-              className="w-full px-2 py-1 rounded border border-zinc-300 dark:border-zinc-600 bg-white dark:bg-zinc-800 text-zinc-800 dark:text-zinc-100"
-            />
-            <datalist id="georeference-protocols">
-              {GEOREFERENCE_PROTOCOLS.map((option) => (
-                <option key={option} value={option} />
-              ))}
-            </datalist>
-          </label>
-
-          <label className="block text-xs">
-            <span className="block mb-1 text-zinc-500 dark:text-zinc-400">Remarks</span>
+            <span className="block mb-1 text-zinc-500 dark:text-zinc-400">Notes</span>
             <textarea
               value={remarks}
               onChange={(e) => setRemarks(e.target.value)}
               rows={2}
-              placeholder="What you assumed, and anything a reviewer would need to check it"
+              placeholder="How you resolved it, and anything a reviewer would need to check it"
               className="w-full px-2 py-1 rounded border border-zinc-300 dark:border-zinc-600 bg-white dark:bg-zinc-800 text-zinc-800 dark:text-zinc-100"
             />
           </label>

@@ -17,7 +17,7 @@ import {
   loadGeoreferences,
   saveGeoreferences,
   csvToGeoreferences,
-  georeferencesToCsv,
+  occurrencesToCsv,
   uncertaintyCircle,
   type Georeference,
 } from "@/lib/georeferences";
@@ -85,6 +85,61 @@ interface CountryPolygon {
 // same records as table rows, including the Darwin Core fields a map dot has
 // nowhere to show), so it lives there.
 type OccurrenceFeature = OccurrenceFeatureType;
+
+/**
+ * The assessor's own point on the map.
+ *
+ * Its hover handlers are attached natively rather than as React props: a
+ * MapLibre marker's children are portalled into the map's own DOM, and React's
+ * synthetic mouseenter/mouseleave (which it synthesises from delegated
+ * mouseover/mouseout) doesn't reach them there — onClick does, which is what
+ * makes the omission easy to miss.
+ */
+function GeoreferenceMarkerDot({
+  hovered,
+  onClick,
+  onEnter,
+  onLeave,
+}: {
+  hovered: boolean;
+  onClick: () => void;
+  onEnter: () => void;
+  onLeave: () => void;
+}) {
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    // A marker sits inside the map container, so its mousemoves bubble to
+    // MapLibre, which queries the layers underneath, finds nothing, and clears
+    // the hover this element just set. Keep those to ourselves.
+    const swallow = (e: Event) => e.stopPropagation();
+    el.addEventListener("mouseenter", onEnter);
+    el.addEventListener("mouseleave", onLeave);
+    el.addEventListener("mousemove", swallow);
+    return () => {
+      el.removeEventListener("mouseenter", onEnter);
+      el.removeEventListener("mouseleave", onLeave);
+      el.removeEventListener("mousemove", swallow);
+    };
+  }, [onEnter, onLeave]);
+  return (
+    <div
+      ref={ref}
+      onClick={onClick}
+      title="Drag to move · click to edit"
+      style={{
+        width: hovered ? 18 : 14,
+        height: hovered ? 18 : 14,
+        borderRadius: "50%",
+        background: "#7c3aed",
+        border: "2px solid #ffffff",
+        boxShadow: "0 1px 3px rgba(0,0,0,0.4)",
+        cursor: "grab",
+      }}
+    />
+  );
+}
 
 /** A record GBIF has coordinates for, i.e. one the map can actually draw. */
 type PositionedOccurrence = OccurrenceFeature & { geometry: NonNullable<OccurrenceFeature["geometry"]> };
@@ -322,8 +377,11 @@ interface OccurrenceMapRowProps {
    * RedListView's own history fetch, so may still be empty/stale on first render
    * of this tab — markers just don't appear yet in that case. */
   previousAssessments?: { year: string; date: string | null; category?: string; criteria?: string | null }[];
+  /** The species' node in the taxonomy, as the dashboard's `taxa` URL token —
+   *  needed to send someone back to a filtered dashboard rather than a bare one. */
+  dashboardTaxonToken?: string | null;
   /** Render as the fullscreen page: map above, record list below, filling the
-   *  height given to it. Driven by the /occurrences/<key> route. */
+   *  height given to it. Driven by the /mapping/<key> route. */
   fullscreen?: boolean;
   /** Called once the occurrence data has loaded and there are no records to show,
    * letting the parent fall back to another tab (e.g. Catalogue of Life). */
@@ -428,6 +486,7 @@ export default function OccurrenceMapRow({
   nativeCountriesRedList,
   previousAssessments,
   fullscreen: fullscreenProp,
+  dashboardTaxonToken,
   onEmpty,
 }: OccurrenceMapRowProps) {
   const [occurrences, setOccurrences] = useState<OccurrenceFeature[]>([]);
@@ -485,11 +544,46 @@ export default function OccurrenceMapRow({
   const [showProtectedAreas, setShowProtectedAreas] = useState(false);
   const [showPowoRangeOverlay, setShowPowoRangeOverlay] = useState(false);
   const [showIucnRangeOverlay, setShowIucnRangeOverlay] = useState(false);
+  // Records struck out by hand from the list's Excluded column. Distinct from a
+  // filter: the filters answer "which records match these rules", this answers
+  // "and I've looked at that one and it's wrong".
+  const [manuallyExcluded, setManuallyExcluded] = useState<Set<number>>(new Set());
+  const toggleExcluded = useCallback((gbifID: number) => {
+    setManuallyExcluded((prev) => {
+      const next = new Set(prev);
+      if (next.has(gbifID)) next.delete(gbifID);
+      else next.add(gbifID);
+      return next;
+    });
+  }, []);
+
+  // Whether the current hover started on the map — the list scrolls to meet a
+  // map hover, but must not yank itself around under the pointer for its own.
+  const [hoverFromMap, setHoverFromMap] = useState(false);
+
+  // Which way the two panels sit. Dragging the divider resizes them; this flips
+  // the axis, for when the list reads better beside the map than beneath it.
+  const [panelLayout, setPanelLayout] = useState<"rows" | "columns">("rows");
+
   // Fullscreen — map above, record list below, and nothing else on the page —
-  // is a route of its own (/occurrences/<key>), so it can be linked, shared,
+  // is a route of its own (/mapping/<key>), so it can be linked, shared,
   // and loaded without the dashboard's own queries. The component just renders
   // that way when told to.
   const fullscreen = !!fullscreenProp;
+
+  // Leaving fullscreen returns to this species on the dashboard, not the
+  // landing page — a shared link is usually the first thing someone sees, and
+  // dropping them into an unfiltered dashboard loses the species they came for.
+  // The taxon token matters as much as the search text: the Not Evaluated view
+  // won't list anything until the tree is narrowed (there are 1.8M unassessed
+  // species), so `search=` on its own arrives at an empty dashboard.
+  const dashboardHref = useMemo(() => {
+    if (!scientificName) return "/";
+    const params = new URLSearchParams({ search: scientificName });
+    if (category === "NE") params.set("view", "new-assessments");
+    if (dashboardTaxonToken) params.set("taxa", dashboardTaxonToken);
+    return `/?${params}`;
+  }, [scientificName, category, dashboardTaxonToken]);
   // Share of the fullscreen height given to the map, as a percentage. Two
   // thirds by default, dragged from the divider between map and list.
   const [mapHeightPct, setMapHeightPct] = useState(FULLSCREEN_DEFAULT_MAP_PCT);
@@ -675,7 +769,7 @@ export default function OccurrenceMapRow({
   // Fetched automatically in fullscreen — the list is the only place they can
   // be read, and it's the whole point of that page. Off elsewhere, where
   // there's no list to put them in.
-  const [includeMissing, setIncludeMissing] = useState(!!fullscreenProp);
+  const includeMissing = !!fullscreenProp;
   // Records GBIF flags are always fetched now: they have coordinates, so they
   // belong with the rest and are hidden (or not) by a coordinate-cleaning check
   // like any other suspect point, rather than by a separate opt-in.
@@ -746,6 +840,33 @@ export default function OccurrenceMapRow({
   // is fetching the next unfiltered batch — separate from loadingMoreCategory since
   // this isn't scoped to one basis-of-record category.
   const [loadingMoreOverall, setLoadingMoreOverall] = useState(false);
+  const [loadingMoreMissing, setLoadingMoreMissing] = useState(false);
+
+  // Records with no coordinates arrive as their own bounded sample, so a
+  // species with hundreds of unlocalised sheets doesn't stall the first paint.
+  // This pages that set alone, from however many are already loaded.
+  const loadMoreMissing = useCallback(() => {
+    setLoadingMoreMissing(true);
+    const loaded = occurrences.filter((o) => o.properties.coordinateStatus === "missing").length;
+    const params = new URLSearchParams({
+      speciesKey,
+      limit: sampleSize.toString(),
+      offset: loaded.toString(),
+      onlyMissing: "true",
+    });
+    if (countryCode) params.set("country", countryCode);
+    fetch(`/api/occurrences?${params}`)
+      .then((res) => res.json())
+      .then((data) => {
+        const next: OccurrenceFeature[] = data.features || [];
+        setOccurrences((prev) => {
+          const seen = new Set(prev.map((o) => o.properties.gbifID));
+          return [...prev, ...next.filter((f) => !seen.has(f.properties.gbifID))];
+        });
+      })
+      .catch(console.error)
+      .finally(() => setLoadingMoreMissing(false));
+  }, [occurrences, speciesKey, countryCode, sampleSize]);
 
   // Load another batch of just one basis-of-record category (e.g. "load 200 more
   // Preserved specimen records"), independent of the overall sample-size selector —
@@ -973,37 +1094,33 @@ export default function OccurrenceMapRow({
     });
   }, [dateFilterableOccurrences, dateRangeFrom, dateRangeTo]);
 
+  // What the map draws and the export writes: everything the filters allow,
+  // less anything struck out by hand. The list still shows all of it, greyed.
+  const includedOccurrences = useMemo(
+    () => filteredOccurrences.filter((o) => !manuallyExcluded.has(o.properties.gbifID)),
+    [filteredOccurrences, manuallyExcluded]
+  );
+
+  // Records the filters have removed, for the list's Excluded column.
+  const excludedIds = useMemo(() => {
+    const kept = new Set(filteredOccurrences.map((o) => o.properties.gbifID));
+    return new Set(occurrences.filter((o) => !kept.has(o.properties.gbifID)).map((o) => o.properties.gbifID));
+  }, [occurrences, filteredOccurrences]);
+
   // The subset the map actually draws — the list shows all of filteredOccurrences,
   // including any fetched with no coordinates.
   const georeferencedFilteredCount = useMemo(
-    () => filteredOccurrences.filter(hasPosition).length,
-    [filteredOccurrences]
+    () => includedOccurrences.filter(hasPosition).length,
+    [includedOccurrences]
   );
 
   // Georeferences for records currently passing the filters — what the map
   // draws and what an export covers. A stored georeference whose record isn't
   // in the loaded sample stays in storage untouched.
   const visibleGeoreferences = useMemo(() => {
-    const shown = new Set(filteredOccurrences.map((o) => o.properties.gbifID));
+    const shown = new Set(includedOccurrences.map((o) => o.properties.gbifID));
     return Object.values(georeferences).filter((g) => shown.has(g.gbifID));
-  }, [georeferences, filteredOccurrences]);
-
-  const georeferencePointsGeoJson = useMemo<GeoJSON.FeatureCollection>(
-    () => ({
-      type: "FeatureCollection",
-      features: visibleGeoreferences.map((g) => ({
-        type: "Feature" as const,
-        properties: {
-          gbifID: g.gbifID,
-          // Grows when its row is hovered in the list, so an assessor point
-          // answers to the list the same way a GBIF point does.
-          _radius: hoveredFeature?.properties.gbifID === g.gbifID ? 9 : 6,
-        },
-        geometry: { type: "Point" as const, coordinates: [g.decimalLongitude, g.decimalLatitude] },
-      })),
-    }),
-    [visibleGeoreferences, hoveredFeature]
-  );
+  }, [georeferences, includedOccurrences]);
 
   // The uncertainty radius, drawn to scale on the ground. A georeferenced
   // locality is an area, not a pinpoint, and showing it as a bare dot would
@@ -1033,6 +1150,44 @@ export default function OccurrenceMapRow({
     [georeferences, persistGeoreferences]
   );
 
+  // Dragging a marker moves the point and leaves everything else — radius,
+  // notes, the record it belongs to — alone.
+  const handleGeoreferenceDragged = useCallback(
+    (gbifID: number, lat: number, lon: number) => {
+      const existing = georeferences[gbifID];
+      if (!existing) return;
+      persistGeoreferences({
+        ...georeferences,
+        [gbifID]: {
+          ...existing,
+          decimalLatitude: Number(lat.toFixed(5)),
+          decimalLongitude: Number(lon.toFixed(5)),
+          georeferencedDate: new Date().toISOString(),
+        },
+      });
+    },
+    [georeferences, persistGeoreferences]
+  );
+
+  const openGeoreferenceEditor = useCallback(
+    (gbifID: number) => {
+      const record = occurrences.find((o) => o.properties.gbifID === gbifID);
+      if (record) setEditingFeature(record);
+    },
+    [occurrences]
+  );
+
+  const handleMarkerHover = useCallback(
+    (gbifID: number) => {
+      const record = occurrences.find((o) => o.properties.gbifID === gbifID);
+      if (!record) return;
+      setHoverFromMap(true);
+      setHoveredFeature(record);
+      setHoveredPanel("main");
+    },
+    [occurrences]
+  );
+
   const handleDeleteGeoreference = useCallback(() => {
     if (!editingFeature) return;
     const next = { ...georeferences };
@@ -1041,37 +1196,45 @@ export default function OccurrenceMapRow({
     setEditingFeature(null);
   }, [editingFeature, georeferences, persistGeoreferences]);
 
-  const georeferenceCount = Object.keys(georeferences).length;
 
   /**
-   * Built in the browser: these are the assessor's own coordinates plus public
-   * GBIF fields, so there's nothing here to gate and no reason to round-trip
-   * through a server to make a file.
+   * Exports the table as it stands: every record the filters left in, minus
+   * anything struck out by hand, with the assessor's coordinates in place of
+   * GBIF's where they supplied any. Exporting only the georeferenced handful
+   * would separate them from the evidence they were read against.
+   *
+   * Built in the browser — the assessor's own work over public GBIF fields,
+   * with no Red List data in it, so there's nothing to gate.
    */
   const handleExport = useCallback(() => {
-    const rows = Object.values(georeferences);
-    if (rows.length === 0) return;
+    if (includedOccurrences.length === 0) return;
     setGeorefMessage(null);
     try {
-      const stamped = rows.map((row) => ({
-        ...row,
-        georeferencedBy: row.georeferencedBy || accountEmail || undefined,
-        scientificName: row.scientificName || scientificName || undefined,
-      }));
-      const blob = new Blob([georeferencesToCsv(stamped)], { type: "text/csv;charset=utf-8;" });
+      const stamped: Record<number, Georeference> = Object.fromEntries(
+        Object.entries(georeferences).map(([id, g]) => [
+          Number(id),
+          { ...g, georeferencedBy: g.georeferencedBy || accountEmail || undefined },
+        ])
+      );
+      const csv = occurrencesToCsv(includedOccurrences, stamped);
+      const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
       const url = URL.createObjectURL(blob);
       const link = document.createElement("a");
       link.href = url;
-      link.download = `${(scientificName ?? speciesKey).toLowerCase().replace(/[^a-z0-9]+/g, "-")}-georeferences.csv`;
+      link.download = `${(scientificName ?? speciesKey).toLowerCase().replace(/[^a-z0-9]+/g, "-")}-occurrences.csv`;
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
       URL.revokeObjectURL(url);
-      setGeorefMessage({ kind: "ok", text: `Exported ${rows.length} georeference${rows.length === 1 ? "" : "s"}.` });
+      const mine = includedOccurrences.filter((o) => georeferences[o.properties.gbifID]).length;
+      setGeorefMessage({
+        kind: "ok",
+        text: `Exported ${includedOccurrences.length.toLocaleString()} record${includedOccurrences.length === 1 ? "" : "s"}${mine > 0 ? `, ${mine} with your coordinates` : ""}.`,
+      });
     } catch {
       setGeorefMessage({ kind: "error", text: "Export failed." });
     }
-  }, [georeferences, speciesKey, scientificName, accountEmail]);
+  }, [includedOccurrences, georeferences, speciesKey, scientificName, accountEmail]);
 
   const handleImportFile = useCallback(
     async (file: File) => {
@@ -1124,15 +1287,6 @@ export default function OccurrenceMapRow({
         : flagged.filter((o) => others.has(o.properties.gbifID)).length,
     };
   }, [occurrences, filteredOccurrences, hideGbifFlagged, passesFiltersIgnoringGbifFlag]);
-
-  // Of the fetched no-coordinate records, how many actually reach the list.
-  // Fetching them and then seeing fewer is confusing on its own — the other
-  // filters still apply, and a basis-of-record box can swallow them — so the
-  // button says so rather than leaving the count looking wrong.
-  const missingRecordCounts = useMemo(() => ({
-    loaded: occurrences.filter((o) => o.properties.coordinateStatus === "missing").length,
-    shown: filteredOccurrences.filter((o) => o.properties.coordinateStatus === "missing").length,
-  }), [occurrences, filteredOccurrences]);
 
   // Of the loaded occurrences that pass every other active filter, how many are
   // outside the species' native range — i.e. how many the "Native range only"
@@ -1547,6 +1701,7 @@ export default function OccurrenceMapRow({
         // properties arrive flattened (arrays stringified) through MapLibre.
         const known = occurrencesByGbifId.get(Number(props.gbifID));
         if (known) {
+          setHoverFromMap(true);
           setHoveredFeature(known);
           setHoveredPanel(panelId);
           return;
@@ -1600,10 +1755,13 @@ export default function OccurrenceMapRow({
     const container = splitRef.current;
     if (!container) return;
     const rect = container.getBoundingClientRect();
-    if (rect.height === 0) return;
-    const pct = ((e.clientY - rect.top) / rect.height) * 100;
+    const span = panelLayout === "rows" ? rect.height : rect.width;
+    if (span === 0) return;
+    const pct = panelLayout === "rows"
+      ? ((e.clientY - rect.top) / span) * 100
+      : ((e.clientX - rect.left) / span) * 100;
     setMapHeightPct(Math.min(FULLSCREEN_MAX_MAP_PCT, Math.max(FULLSCREEN_MIN_MAP_PCT, pct)));
-  }, [draggingDivider]);
+  }, [draggingDivider, panelLayout]);
 
   const handleDividerPointerUp = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
     if (e.currentTarget.hasPointerCapture(e.pointerId)) {
@@ -1633,6 +1791,7 @@ export default function OccurrenceMapRow({
    * (the list highlights), there's simply nothing on the map to grow.
    */
   const handleHoverRow = useCallback((feature: OccurrenceFeature | null) => {
+    setHoverFromMap(false);
     setHoveredFeature(feature);
     setHoveredPanel(feature ? "main" : null);
   }, []);
@@ -1777,18 +1936,25 @@ export default function OccurrenceMapRow({
                       paint={{ "line-color": "#7c3aed", "line-width": 1, "line-dasharray": [2, 2] }}
                     />
                   </Source>
-                  <Source id={`georef-points-${panelId}`} type="geojson" data={georeferencePointsGeoJson}>
-                    <Layer
-                      id={`georef-point-${panelId}`}
-                      type="circle"
-                      paint={{
-                        "circle-radius": ["get", "_radius"] as unknown as number,
-                        "circle-color": "#7c3aed",
-                        "circle-stroke-color": "#ffffff",
-                        "circle-stroke-width": 2,
-                      }}
-                    />
-                  </Source>
+                  {visibleGeoreferences.map((g) => (
+                    <MapLibreMarker
+                      key={g.gbifID}
+                      longitude={g.decimalLongitude}
+                      latitude={g.decimalLatitude}
+                      anchor="center"
+                      draggable
+                      onDragEnd={(e) => handleGeoreferenceDragged(g.gbifID, e.lngLat.lat, e.lngLat.lng)}
+                    >
+                      {/* Drag to correct the position, click to open the editor —
+                          the two things you do to a point you placed yourself. */}
+                      <GeoreferenceMarkerDot
+                        hovered={hoveredFeature?.properties.gbifID === g.gbifID}
+                        onClick={() => openGeoreferenceEditor(g.gbifID)}
+                        onEnter={() => handleMarkerHover(g.gbifID)}
+                        onLeave={() => handleHoverRow(null)}
+                      />
+                    </MapLibreMarker>
+                  ))}
                 </>
               )}
               {/* Highlighted dot when hovering an iNat thumbnail (only in the correct split panel) */}
@@ -1999,6 +2165,30 @@ export default function OccurrenceMapRow({
               )}
             </div>
           )}
+          {/* Records with no coordinates get their own badge, since they're
+              counted, paged and read separately — nothing about them appears on
+              the map itself. */}
+          {fullscreen && !loadingOccurrences && (recordSetTotals?.missing ?? 0) > 0 && (
+            <div className="absolute top-11 right-2 z-[1000] max-w-[85%] px-2 py-1 rounded-lg shadow-md bg-amber-50 dark:bg-amber-950 border border-amber-200 dark:border-amber-800 text-[11px] text-amber-800 dark:text-amber-300">
+              {missingLoadedCount >= (recordSetTotals?.missing ?? 0) ? (
+                <>All <strong>{(recordSetTotals?.missing ?? 0).toLocaleString()}</strong> records without coordinates loaded.</>
+              ) : (
+                <>
+                  Loaded <strong>{missingLoadedCount.toLocaleString()}</strong> of{" "}
+                  <strong>{(recordSetTotals?.missing ?? 0).toLocaleString()}</strong> without coordinates.{" "}
+                  <button
+                    onClick={loadMoreMissing}
+                    disabled={loadingMoreMissing}
+                    className="underline decoration-dotted hover:decoration-solid disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {loadingMoreMissing
+                      ? "Loading…"
+                      : `Click to load ${Math.min(sampleSize, (recordSetTotals?.missing ?? 0) - missingLoadedCount).toLocaleString()} more`}
+                  </button>
+                </>
+              )}
+            </div>
+          )}
         </div>
       </div>
     );
@@ -2010,6 +2200,10 @@ export default function OccurrenceMapRow({
   // partial sample look complete.
   const georeferencedLoadedCount = useMemo(
     () => occurrences.filter(hasPosition).length,
+    [occurrences]
+  );
+  const missingLoadedCount = useMemo(
+    () => occurrences.filter((o) => o.properties.coordinateStatus === "missing").length,
     [occurrences]
   );
   const georeferencedTotal = recordSetTotals
@@ -2921,38 +3115,7 @@ export default function OccurrenceMapRow({
                   than filters, kept together so they don't scatter when
                   some of them are hidden. */}
               <div className="ml-auto flex items-center gap-1.5 shrink-0">
-                {/* Records with no coordinates at all — fetched on demand, and
-                    only offered in fullscreen: they can't be drawn, so the only
-                    place they mean anything is the record list, which is only
-                    there. */}
-                {fullscreen && (recordSetTotals?.missing ?? 0) > 0 && (
-                  <button
-                    onClick={() => setIncludeMissing((v) => !v)}
-                    aria-pressed={includeMissing}
-                    disabled={loadingOccurrences}
-                    title={
-                      includeMissing
-                        ? missingRecordCounts.shown < missingRecordCounts.loaded
-                          ? `${missingRecordCounts.shown} of ${missingRecordCounts.loaded} shown — the rest are hidden by your other filters. Click to drop them again.`
-                          : "Click to drop these records from the list again"
-                        : "Fetch the records GBIF has no coordinates for — herbarium sheets and the like, whose locality text was never georeferenced. They appear in the list only."
-                    }
-                    className={`inline-flex items-center gap-1.5 px-2 py-1 rounded border text-xs transition-colors shrink-0 disabled:opacity-50 ${
-                      includeMissing
-                        ? "bg-zinc-200 dark:bg-zinc-700 border-zinc-400 dark:border-zinc-500 text-zinc-800 dark:text-zinc-100 font-medium"
-                        : "border-zinc-300 dark:border-zinc-600 text-zinc-600 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800"
-                    }`}
-                  >
-                    <svg className="w-3.5 h-3.5 text-zinc-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M17.657 16.657L13.414 20.9a2 2 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
-                      <circle cx="12" cy="11" r="2.5" />
-                    </svg>
-                    {includeMissing
-                      ? `${(recordSetTotals?.missing ?? 0).toLocaleString()} without coordinates`
-                      : `Fetch ${(recordSetTotals?.missing ?? 0).toLocaleString()} without coordinates`}
-                  </button>
-                )}
-                {/* Georeference export/import. On the toolbar rather than in a
+                                {/* Georeference export/import. On the toolbar rather than in a
                     dropdown because they're actions, not filters — and ungated:
                     a georeference is the assessor's own work over public GBIF
                     fields, with no Red List data in it. */}
@@ -2971,23 +3134,17 @@ export default function OccurrenceMapRow({
                     )}
                     <button
                       onClick={handleExport}
-                      disabled={georeferenceCount === 0}
-                      title={
-                        georeferenceCount === 0
-                          ? "No georeferences yet — add coordinates from the record list"
-                          : `Download your ${georeferenceCount} georeference${georeferenceCount === 1 ? "" : "s"} as a Darwin Core CSV. They're stored in this browser only, so this is how you keep them.`
-                      }
+                      disabled={includedOccurrences.length === 0}
+                      title={`Download the ${includedOccurrences.length.toLocaleString()} record${includedOccurrences.length === 1 ? "" : "s"} currently in the table as a Darwin Core CSV, with your own coordinates in place of GBIF's wherever you've added them.`}
                       className="inline-flex items-center gap-1 px-2 py-1 rounded border border-zinc-300 dark:border-zinc-600 text-xs text-zinc-600 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
                     >
                       <svg className="w-3.5 h-3.5 text-zinc-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                         <path strokeLinecap="round" strokeLinejoin="round" d="M4 16v2a2 2 0 002 2h12a2 2 0 002-2v-2M7 10l5 5 5-5M12 15V3" />
                       </svg>
                       Export CSV
-                      {georeferenceCount > 0 && (
-                        <span className="tabular-nums text-[10px] text-violet-600 dark:text-violet-400">
-                          {georeferenceCount}
-                        </span>
-                      )}
+                      <span className="tabular-nums text-[10px] text-zinc-400">
+                        {includedOccurrences.length.toLocaleString()}
+                      </span>
                     </button>
                     <button
                       onClick={() => importInputRef.current?.click()}
@@ -3011,14 +3168,35 @@ export default function OccurrenceMapRow({
                       }}
                     />
                 </div>
+                {fullscreen && (
+                  <button
+                    onClick={() => setPanelLayout((v) => (v === "rows" ? "columns" : "rows"))}
+                    title={
+                      panelLayout === "rows"
+                        ? "Put the list beside the map"
+                        : "Put the list below the map"
+                    }
+                    className="inline-flex items-center gap-1.5 px-2 py-1 rounded border border-zinc-300 dark:border-zinc-600 text-xs text-zinc-600 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800 transition-colors shrink-0"
+                  >
+                    <svg className="w-3.5 h-3.5 text-zinc-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                      <rect x="3" y="4" width="18" height="16" rx="1.5" />
+                      {panelLayout === "rows" ? (
+                        <path strokeLinecap="round" d="M3 13h18" />
+                      ) : (
+                        <path strokeLinecap="round" d="M13 4v16" />
+                      )}
+                    </svg>
+                    {panelLayout === "rows" ? "Side by side" : "Stacked"}
+                  </button>
+                )}
                 {/* Fullscreen is a page of its own, so this is a real link:
                     it can be copied, opened in a new tab, and shared, and the
                     page it opens skips every dashboard query. In fullscreen the
                     same slot becomes the way out — one button, not two. */}
                 {fullscreen ? (
                   <Link
-                    href="/"
-                    title="Back to the dashboard"
+                    href={dashboardHref}
+                    title="Back to this species on the dashboard"
                     className="inline-flex items-center gap-1.5 px-2 py-1 rounded border border-zinc-300 dark:border-zinc-600 text-xs text-zinc-600 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800 transition-colors shrink-0"
                   >
                     <svg className="w-3.5 h-3.5 text-zinc-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -3028,7 +3206,7 @@ export default function OccurrenceMapRow({
                   </Link>
                 ) : (
                   <Link
-                    href={`/occurrences/${encodeURIComponent(speciesKey)}`}
+                    href={`/mapping/${encodeURIComponent(speciesKey)}`}
                     title="Open the map and record list fullscreen, on their own shareable page"
                     className="inline-flex items-center gap-1.5 px-2 py-1 rounded border border-zinc-300 dark:border-zinc-600 text-xs text-zinc-600 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800 transition-colors shrink-0"
                   >
@@ -3047,7 +3225,7 @@ export default function OccurrenceMapRow({
             ref={splitRef}
             className={
               fullscreen
-                ? "flex flex-col flex-1 min-h-0"
+                ? `flex flex-1 min-h-0 ${panelLayout === "rows" ? "flex-col" : "flex-row"}`
                 : "flex flex-col sm:flex-row sm:items-stretch gap-2"
             }
           >
@@ -3184,7 +3362,7 @@ export default function OccurrenceMapRow({
                     </div>
                   </div>
                 ) : (
-                  renderMapPanel(filteredOccurrences, bbox, null)
+                  renderMapPanel(includedOccurrences, bbox, null)
                 )}
                 {/* In-range/out-of-range breakdown vs. the currently-visible IUCN
                     range polygons — one table covering Total plus (when a split
@@ -3259,12 +3437,14 @@ export default function OccurrenceMapRow({
                 onPointerCancel={handleDividerPointerUp}
                 onKeyDown={handleDividerKeyDown}
                 title="Drag to resize the map and the list"
-                className={`order-2 sm:order-none group relative w-full h-3 shrink-0 cursor-row-resize touch-none flex items-center justify-center ${
+                className={`order-2 sm:order-none group relative shrink-0 touch-none flex items-center justify-center ${
+                  panelLayout === "rows" ? "w-full h-3 cursor-row-resize" : "h-full w-3 cursor-col-resize"
+                } ${
                   draggingDivider ? "bg-blue-100 dark:bg-blue-900/40" : "hover:bg-zinc-100 dark:hover:bg-zinc-800"
                 } focus:outline-none focus-visible:ring-1 focus-visible:ring-blue-500 rounded`}
               >
                 <div
-                  className={`h-0.5 w-10 rounded-full transition-colors ${
+                  className={`rounded-full transition-colors ${panelLayout === "rows" ? "h-0.5 w-10" : "w-0.5 h-10"} ${
                     draggingDivider
                       ? "bg-blue-500"
                       : "bg-zinc-300 dark:bg-zinc-600 group-hover:bg-zinc-400 dark:group-hover:bg-zinc-500"
@@ -3273,15 +3453,19 @@ export default function OccurrenceMapRow({
               </div>
             )}
             {fullscreen && (
-              <div className="order-3 sm:order-none w-full flex flex-col gap-2 min-w-0 flex-1 min-h-0">
+              <div className="order-3 sm:order-none flex flex-col gap-2 min-w-0 flex-1 min-h-0">
                 <OccurrenceListTable
-                  occurrences={filteredOccurrences}
+                  occurrences={occurrences}
                   loading={loadingOccurrences}
                   isOutsideNativeRange={isOutsideNativeRangeForList}
                   georeferences={georeferences}
                   onEditGeoreference={setEditingFeature}
                   hoveredGbifId={hoveredFeature?.properties.gbifID ?? null}
                   onHoverRow={handleHoverRow}
+                  hoverFromMap={hoverFromMap}
+                  excludedIds={excludedIds}
+                  manuallyExcludedIds={manuallyExcluded}
+                  onToggleExcluded={toggleExcluded}
                   fillHeight
                 />
               </div>

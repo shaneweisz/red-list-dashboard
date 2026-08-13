@@ -133,7 +133,7 @@ const EXTRA_COLUMNS: { key: string; label: string; title: string; numeric?: bool
 
 /** Shown until someone changes it: the fields an assessor reads first. */
 const DEFAULT_VISIBLE_COLUMNS = [
-  "date", "basisOfRecord", "locality", "stateProvince", "country", "coordinates",
+  "excluded", "date", "basisOfRecord", "locality", "stateProvince", "country", "coordinates",
   "uncertainty", "elevation", "recordedBy", "identifiedBy", "dataset", "catalog",
   "establishmentMeans", "flags", "georeference", "gbifID",
 ];
@@ -233,6 +233,7 @@ interface ColumnDef {
 }
 
 interface OccurrenceListTableProps {
+  /** Every loaded record, filtered or not — see `excludedIds`. */
   occurrences: OccurrenceFeature[];
   /** Whether the initial /api/occurrences fetch is still in flight. */
   loading: boolean;
@@ -248,6 +249,14 @@ interface OccurrenceListTableProps {
   hoveredGbifId?: number | null;
   /** Pointer entered/left a row — the map highlights the matching record. */
   onHoverRow?: (feature: OccurrenceFeature | null) => void;
+  /** Records the filters have excluded. They stay in the table, greyed, rather
+   *  than vanishing — a record you can't see is a record you can't judge. */
+  excludedIds?: Set<number>;
+  /** Records excluded by hand from the Excluded column's tick box. */
+  manuallyExcludedIds?: Set<number>;
+  onToggleExcluded?: (gbifID: number) => void;
+  /** True when the hover came from the map, so the list scrolls to meet it. */
+  hoverFromMap?: boolean;
   /** Fill the height of the column the table is in. */
   fillHeight?: boolean;
 }
@@ -270,6 +279,10 @@ export default function OccurrenceListTable({
   onEditGeoreference,
   hoveredGbifId,
   onHoverRow,
+  excludedIds,
+  manuallyExcludedIds,
+  onToggleExcluded,
+  hoverFromMap = false,
   fillHeight = false,
 }: OccurrenceListTableProps) {
   // Default sort: newest first, matching GBIF's own default result order.
@@ -308,6 +321,15 @@ export default function OccurrenceListTable({
     };
   }, [columnPickerOpen]);
 
+  // Find-in-table: highlights every hit and steps through them, rather than
+  // filtering. Same reasoning as the Excluded column — you want to see the
+  // record in its context, not have the table rearrange itself under you.
+  const [search, setSearch] = useState("");
+  const [matchIndex, setMatchIndex] = useState(0);
+  const rowRefs = useRef(new Map<number, HTMLTableRowElement>());
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const [dragColumn, setDragColumn] = useState<string | null>(null);
+
   const updatePrefs = (next: ColumnPrefs) => {
     setColumnPrefs(next);
     saveColumnPrefs(next);
@@ -315,6 +337,37 @@ export default function OccurrenceListTable({
 
   const columns = useMemo<ColumnDef[]>(
     () => [
+      // Excluded first: it's the row's status, and it's what you scan down when
+      // deciding what a filter has actually done to your evidence.
+      {
+        key: "excluded",
+        label: "Excluded",
+        title:
+          "Whether this record is excluded — by your filters, or by hand. Excluded records stay in the table, greyed out, so you can see what you're leaving out.",
+        className: "whitespace-nowrap",
+        value: (p) => (excludedIds?.has(p.gbifID) || manuallyExcludedIds?.has(p.gbifID) ? 1 : 0),
+        render: (p) => {
+          const byFilter = excludedIds?.has(p.gbifID) ?? false;
+          const byHand = manuallyExcludedIds?.has(p.gbifID) ?? false;
+          return (
+            <input
+              type="checkbox"
+              checked={byFilter || byHand}
+              disabled={byFilter}
+              onClick={(e) => e.stopPropagation()}
+              onChange={() => onToggleExcluded?.(p.gbifID)}
+              title={
+                byFilter
+                  ? "Excluded by your filters"
+                  : byHand
+                    ? "Excluded by hand — click to put it back"
+                    : "Exclude this record by hand"
+              }
+              className="w-3 h-3 rounded accent-zinc-500 disabled:opacity-60 cursor-pointer"
+            />
+          );
+        },
+      },
       {
         key: "date",
         label: "Date",
@@ -593,7 +646,7 @@ export default function OccurrenceListTable({
         ),
       },
     ],
-    [isOutsideNativeRange, georeferences, onEditGeoreference]
+    [isOutsideNativeRange, georeferences, onEditGeoreference, excludedIds, manuallyExcludedIds, onToggleExcluded]
   );
 
   // The catalogue in the reader's own order, then the subset actually drawn.
@@ -654,6 +707,43 @@ export default function OccurrenceListTable({
     });
   }, [occurrences, columns, sortKey, sortAsc]);
 
+  // Which rows match the find box, in display order.
+  const matches = useMemo(() => {
+    const needle = search.trim().toLowerCase();
+    if (!needle) return [];
+    return sorted
+      .filter((f) =>
+        visibleColumns.some((col) => {
+          const v = col.value(f.properties, f);
+          return v != null && String(v).toLowerCase().includes(needle);
+        })
+      )
+      .map((f) => f.properties.gbifID);
+  }, [sorted, visibleColumns, search]);
+
+  const matchSet = useMemo(() => new Set(matches), [matches]);
+  const currentMatch = matches.length > 0 ? matches[Math.min(matchIndex, matches.length - 1)] : null;
+
+  const scrollToRow = (gbifID: number | null) => {
+    if (gbifID == null) return;
+    rowRefs.current.get(gbifID)?.scrollIntoView({ block: "nearest", behavior: "smooth" });
+  };
+
+  const stepMatch = (delta: number) => {
+    if (matches.length === 0) return;
+    const next = (matchIndex + delta + matches.length) % matches.length;
+    setMatchIndex(next);
+    scrollToRow(matches[next]);
+  };
+
+  // Hovering a point on the map brings its row into view. Only for map-side
+  // hover: doing it for the list's own hover would yank the table around under
+  // the pointer.
+  useEffect(() => {
+    if (!hoverFromMap || hoveredGbifId == null) return;
+    rowRefs.current.get(hoveredGbifId)?.scrollIntoView({ block: "nearest", behavior: "smooth" });
+  }, [hoverFromMap, hoveredGbifId]);
+
   const toggleSort = (key: string) => {
     if (key === sortKey) {
       setSortAsc((v) => !v);
@@ -685,7 +775,7 @@ export default function OccurrenceListTable({
       {/* Always scrolls horizontally — there are more Darwin Core fields than
           fit under a map. Vertically it only scrolls when expanded, since a
           page is otherwise sized to be read whole. */}
-      <div className={`overflow-x-auto${fillHeight ? " flex-1 min-h-0 overflow-y-auto" : ""}`}>
+      <div ref={scrollRef} className={`overflow-x-auto${fillHeight ? " flex-1 min-h-0 overflow-y-auto" : ""}`}>
         <table className="min-w-full text-xs border-collapse">
           <thead className="sticky top-0 z-10 bg-zinc-50 dark:bg-zinc-800">
             <tr>
@@ -695,11 +785,31 @@ export default function OccurrenceListTable({
                   <th
                     key={col.key}
                     scope="col"
-                    title={col.title}
+                    title={`${col.title ?? col.label} — click to sort, drag to reorder`}
+                    draggable
+                    onDragStart={(e) => {
+                      setDragColumn(col.key);
+                      e.dataTransfer.effectAllowed = "move";
+                    }}
+                    onDragOver={(e) => e.preventDefault()}
+                    onDrop={(e) => {
+                      e.preventDefault();
+                      if (!dragColumn || dragColumn === col.key) return;
+                      const order = orderedColumns.map((c) => c.key);
+                      const from = order.indexOf(dragColumn);
+                      const to = order.indexOf(col.key);
+                      if (from < 0 || to < 0) return;
+                      order.splice(to, 0, ...order.splice(from, 1));
+                      updatePrefs({ order, visible: order.filter((k) => visibleKeys.has(k)) });
+                      setDragColumn(null);
+                    }}
+                    onDragEnd={() => setDragColumn(null)}
                     onClick={() => toggleSort(col.key)}
                     className={`px-2 py-1.5 font-medium text-[11px] whitespace-nowrap cursor-pointer select-none border-b border-zinc-200 dark:border-zinc-700 hover:bg-zinc-100 dark:hover:bg-zinc-700 ${
                       col.align === "right" ? "text-right" : "text-left"
-                    } ${active ? "text-zinc-700 dark:text-zinc-200" : "text-zinc-500 dark:text-zinc-400"} ${col.className ?? ""}`}
+                    } ${active ? "text-zinc-700 dark:text-zinc-200" : "text-zinc-500 dark:text-zinc-400"} ${
+                      dragColumn === col.key ? "opacity-40" : ""
+                    } ${col.className ?? ""}`}
                   >
                     {col.label}
                     <span className={`ml-1 ${active ? "text-zinc-400" : "text-transparent"}`}>
@@ -711,17 +821,28 @@ export default function OccurrenceListTable({
             </tr>
           </thead>
           <tbody>
-            {sorted.map((f) => (
+            {sorted.map((f) => {
+              const id = f.properties.gbifID;
+              const excluded = (excludedIds?.has(id) ?? false) || (manuallyExcludedIds?.has(id) ?? false);
+              return (
               <tr
-                key={f.properties.gbifID}
-                onClick={() => window.open(`https://www.gbif.org/occurrence/${f.properties.gbifID}`, "_blank", "noopener,noreferrer")}
+                key={id}
+                ref={(el) => {
+                  if (el) rowRefs.current.set(id, el);
+                  else rowRefs.current.delete(id);
+                }}
+                onClick={() => window.open(`https://www.gbif.org/occurrence/${id}`, "_blank", "noopener,noreferrer")}
                 onMouseEnter={() => onHoverRow?.(f)}
                 onMouseLeave={() => onHoverRow?.(null)}
                 className={`cursor-pointer border-b border-zinc-100 dark:border-zinc-800 ${
-                  hoveredGbifId === f.properties.gbifID
+                  hoveredGbifId === id
                     ? "bg-blue-50 dark:bg-blue-950/40"
-                    : "hover:bg-zinc-50 dark:hover:bg-zinc-800/60"
-                }`}
+                    : currentMatch === id
+                      ? "bg-amber-100 dark:bg-amber-900/40"
+                      : matchSet.has(id)
+                        ? "bg-amber-50 dark:bg-amber-950/30"
+                        : "hover:bg-zinc-50 dark:hover:bg-zinc-800/60"
+                } ${excluded ? "opacity-40" : ""}`}
               >
                 {visibleColumns.map((col) => {
                   const content = col.render ? col.render(f.properties, f) : col.value(f.properties, f);
@@ -741,7 +862,8 @@ export default function OccurrenceListTable({
                   );
                 })}
               </tr>
-            ))}
+              );
+            })}
             {sorted.length === 0 && (
               <tr>
                 <td colSpan={visibleColumns.length} className="px-3 py-8 text-center text-zinc-400 text-sm">
@@ -756,7 +878,56 @@ export default function OccurrenceListTable({
       <div className="flex items-center gap-2 px-2 py-1.5 border-t border-zinc-100 dark:border-zinc-800 text-[11px] text-zinc-500 dark:text-zinc-400">
         <span className="tabular-nums">
           {sorted.length === 0 ? "0 records" : `${sorted.length.toLocaleString()} records`}
+          {excludedIds && excludedIds.size > 0 && (
+            <span className="text-zinc-400"> · {excludedIds.size.toLocaleString()} excluded</span>
+          )}
         </span>
+        <div className="flex items-center gap-1">
+          <input
+            type="search"
+            value={search}
+            onChange={(e) => {
+              setSearch(e.target.value);
+              setMatchIndex(0);
+            }}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") {
+                e.preventDefault();
+                stepMatch(e.shiftKey ? -1 : 1);
+              }
+            }}
+            placeholder="Find in table…"
+            title="Search every shown column. Matches are highlighted; Enter steps to the next one."
+            className="w-36 px-1.5 py-0.5 rounded border border-zinc-300 dark:border-zinc-600 bg-white dark:bg-zinc-800 text-[11px] text-zinc-700 dark:text-zinc-200"
+          />
+          {search.trim() !== "" && (
+            <>
+              <span className="tabular-nums">
+                {matches.length === 0 ? "none" : `${Math.min(matchIndex, matches.length - 1) + 1}/${matches.length}`}
+              </span>
+              <button
+                onClick={() => stepMatch(-1)}
+                disabled={matches.length === 0}
+                title="Previous match"
+                className="p-0.5 text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300 disabled:opacity-30"
+              >
+                <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M5 15l7-7 7 7" />
+                </svg>
+              </button>
+              <button
+                onClick={() => stepMatch(1)}
+                disabled={matches.length === 0}
+                title="Next match"
+                className="p-0.5 text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300 disabled:opacity-30"
+              >
+                <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+                </svg>
+              </button>
+            </>
+          )}
+        </div>
         <div className="ml-auto">
           <button
             ref={columnButtonRef}

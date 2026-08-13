@@ -475,7 +475,8 @@ export async function searchSpecies(query: string, limit = 10): Promise<SearchRe
   const conn = await getConn();
   const lim = Math.min(Math.max(limit, 1), 50);
   const proj = (src: string, assessed: boolean) => `
-    SELECT id, scientific_name, common_name, taxon_group, iucn_category AS category, gbif_species_key, gbif_occurrence_count,
+    SELECT id, scientific_name, common_name, taxon_group, iucn_category AS category, gbif_species_key,
+           class_name, order_name, family, gbif_occurrence_count,
            ${assessed ? "assessment_id, CAST(assessment_date AS VARCHAR) AS assessment_date" : "NULL AS assessment_id, NULL AS assessment_date"},
            countries, class_name, order_name, family
     FROM '${parquetUri(src)}'
@@ -677,12 +678,16 @@ export async function getSpeciesByGbifKey(gbifSpeciesKey: string): Promise<{
   criteria: string | null;
   countries: string[];
   assessed: boolean;
+  /** Taxonomic node this species sits under, as the dashboard's `taxa` URL
+   *  token — the Not Evaluated view can't list anything without one. */
+  node_id: string | null;
 } | null> {
   const conn = await getConn();
   // sis_taxon_id isn't a column: assessed rows carry it as their positive `id`,
   // while unassessed rows get a synthetic negative one (see toSpeciesRow).
   const proj = (src: string, assessed: boolean) => `
     SELECT id, scientific_name, common_name, taxon_group, iucn_category AS category, gbif_species_key,
+           class_name, order_name, family,
            ${assessed
              ? "assessment_id, CAST(assessment_date AS VARCHAR) AS assessment_date, criteria"
              : "NULL AS assessment_id, NULL AS assessment_date, NULL AS criteria"},
@@ -705,6 +710,11 @@ export async function getSpeciesByGbifKey(gbifSpeciesKey: string): Promise<{
     criteria: (r.criteria as string) ?? null,
     countries: splitList(r.countries),
     assessed: !!r.assessed,
+    node_id: nodeIdForSpecies(String(r.taxon_group ?? ""), {
+      class_name: str(r.class_name),
+      order_name: str(r.order_name),
+      family: str(r.family),
+    }),
   };
 }
 

@@ -1,6 +1,6 @@
 /**
  * The occurrence map and record list on their own page, addressed by GBIF
- * species key: /occurrences/6CX6F.
+ * species key: /mapping/6CX6F.
  *
  * It exists to be linked and shared, and to load quickly — the dashboard's own
  * queries (species lists, taxa summaries, country stats) aren't run at all
@@ -60,6 +60,7 @@ export default async function OccurrencesPage({ params }: { params: Promise<{ ke
           // species' countries are derived from GBIF itself, so passing them
           // would dress the occurrence data up as an independent source.
           nativeCountriesRedList={species.assessed ? species.countries : undefined}
+          dashboardTaxonToken={species.node_id}
         />
       </div>
     </div>

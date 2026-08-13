@@ -267,6 +267,9 @@ export async function GET(request: NextRequest) {
   // the mapped set the map is drawing.
   const includeMissing = searchParams.get("includeMissing") === "true" && !basisOfRecord;
   const includeIssues = searchParams.get("includeIssues") === "true" && !basisOfRecord;
+  // "Load more records without coordinates": pages that set alone, from its own
+  // offset, so it can't disturb where the mapped set has got to.
+  const onlyMissing = searchParams.get("onlyMissing") === "true";
 
   if (!speciesKey) {
     return NextResponse.json(
@@ -303,11 +306,13 @@ export async function GET(request: NextRequest) {
     // thousands of mapped records can't crowd out the handful of unmapped ones
     // (or the reverse) inside a single sample.
     const [mapped, issues, missing] = await Promise.all([
-      fetchPaginated(bucketParams(baseParams, "mapped"), limit, offset),
-      includeIssues
+      onlyMissing
+        ? Promise.resolve({ results: [] as GbifRecord[], totalCount: 0 })
+        : fetchPaginated(bucketParams(baseParams, "mapped"), limit, offset),
+      includeIssues && !onlyMissing
         ? fetchPaginated(bucketParams(baseParams, "issue"), limit, offset)
         : Promise.resolve(null),
-      includeMissing
+      includeMissing || onlyMissing
         ? fetchPaginated(bucketParams(baseParams, "missing"), limit, offset)
         : Promise.resolve(null),
     ]);
@@ -421,7 +426,7 @@ export async function GET(request: NextRequest) {
         count: features.length,
         // `total` stays the mapped set's total, which is what the "Loaded X of Y"
         // badge and every load-more control have always counted against.
-        total: mapped.totalCount,
+        total: onlyMissing ? (missing?.totalCount ?? 0) : mapped.totalCount,
         totals: {
           mapped: mapped.totalCount,
           issue: issueTotal,

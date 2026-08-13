@@ -90,14 +90,14 @@ const nextConfig: NextConfig = {
     "/browse": DUCKDB_TRACE,
     // /api/mcp runs the same query layer for the MCP tools.
     "/api/mcp": DUCKDB_TRACE,
-    // The standalone occurrence page resolves its species server-side with the
+    // The standalone mapping page resolves its species server-side with the
     // same DuckDB-over-R2 query (getSpeciesByGbifKey), so it needs the addon's
     // dlopen'd .so and the sync pointer like every route above. Written with a
     // wildcard because these keys are globs: "[key]" would be read as a
-    // character class matching /occurrences/k, /occurrences/e, /occurrences/y —
+    // character class matching /mapping/m, /mapping/a, /mapping/p… —
     // and silently match nothing real. Every other entry here is bracket-free,
     // so this is the first route where it bites.
-    "/occurrences/*": DUCKDB_TRACE,
+    "/mapping/*": DUCKDB_TRACE,
     // ?country= on these two routes queries assessed.parquet live via DuckDB
     // (country-taxa-summary-duckdb.ts) — same native addon as every route above,
     // so it needs the same trace. Without this the addon's dlopen'd libduckdb.so
@@ -183,7 +183,7 @@ const nextConfig: NextConfig = {
     // deployment fails the 250MB uncompressed limit. It builds fine locally,
     // where no such limit applies, so the only symptom is a failed deploy.
     // Wildcard, not "[key]" — see the note on the include above.
-    "/occurrences/*": ["**/data/**"],
+    "/mapping/*": ["**/data/**"],
   },
 };
 
