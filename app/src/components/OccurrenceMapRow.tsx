@@ -23,15 +23,6 @@ import {
 } from "@/lib/protected-areas";
 import { ELEVATION_ATTRIBUTION, elevationAt, formatElevation } from "@/lib/elevation";
 import {
-  FOREST_LOSS_ATTRIBUTION,
-  FOREST_LOSS_CAVEAT,
-  FOREST_LOSS_FIRST_YEAR,
-  FOREST_LOSS_LAST_YEAR,
-  FOREST_LOSS_MAX_ZOOM,
-  FOREST_LOSS_RAMP,
-  FOREST_LOSS_TILE_URL,
-} from "@/lib/forest-loss";
-import {
   HABITAT_ATTRIBUTION,
   HABITAT_LEGEND,
   HABITAT_SCHEME_URL,
@@ -584,7 +575,6 @@ export default function OccurrenceMapRow({
   // occurrence filter above: shading which countries a source considers native,
   // regardless of whether occurrences are being filtered by it.
   const [showProtectedAreas, setShowProtectedAreas] = useState(false);
-  const [showForestLoss, setShowForestLoss] = useState(false);
   const [showHabitat, setShowHabitat] = useState(false);
   const [habitatLegendOpen, setHabitatLegendOpen] = useState(false);
   /**
@@ -2185,21 +2175,6 @@ export default function OccurrenceMapRow({
                   <Layer id={`habitat-layer-${panelId}`} type="raster" paint={{ "raster-opacity": 0.55 }} />
                 </Source>
               )}
-              {/* Tree cover loss, year-coded. Above habitat, below everything
-                  else: the question is what happened inside a range, so it has
-                  to sit under the range and the records. */}
-              {showForestLoss && (
-                <Source
-                  id={`forest-loss-${panelId}`}
-                  type="raster"
-                  tiles={[FOREST_LOSS_TILE_URL]}
-                  tileSize={256}
-                  maxzoom={FOREST_LOSS_MAX_ZOOM}
-                  attribution={FOREST_LOSS_ATTRIBUTION}
-                >
-                  <Layer id={`forest-loss-layer-${panelId}`} type="raster" paint={{ "raster-opacity": 0.85 }} />
-                </Source>
-              )}
               {/* Protected areas overlay (WDPA) — rendered before the occurrence
                   circles so the points draw on top of the shaded PA polygons */}
               {showProtectedAreas && (
@@ -2543,23 +2518,6 @@ export default function OccurrenceMapRow({
               occurrence legend. Stacked in a column so a legend that only
               appears with its overlay can't land on top of another. */}
           <div className="absolute bottom-2 left-2 z-[1000] flex flex-col items-start gap-1.5 max-w-[90%]">
-          {/* Forest loss reads as a colour ramp, so it needs one: without the
-              years, recent clearance and twenty-year-old logging look the
-              same. It can't be filtered to a year — see lib/forest-loss.ts. */}
-          {showForestLoss && !loadingOccurrences && (
-            <div
-              className="bg-white dark:bg-zinc-800 px-2 py-1.5 rounded text-[11px] text-zinc-600 dark:text-zinc-300 shadow flex items-center gap-1.5"
-              title={FOREST_LOSS_CAVEAT}
-            >
-              <span className="text-zinc-500 dark:text-zinc-400">Tree cover loss</span>
-              <span className="tabular-nums">{FOREST_LOSS_FIRST_YEAR}</span>
-              <span
-                className="h-2 w-16 rounded-sm"
-                style={{ background: `linear-gradient(to right, ${FOREST_LOSS_RAMP[0]}, ${FOREST_LOSS_RAMP[1]})` }}
-              />
-              <span className="tabular-nums">{FOREST_LOSS_LAST_YEAR}</span>
-            </div>
-          )}
           {/* The habitat legend is 18 classes, which laid out flat covers a
               third of the map. Collapsed to its colours by default: the click
               popup names the class under a point, so the full list is a
@@ -2795,7 +2753,6 @@ export default function OccurrenceMapRow({
     ...(assessmentId && canViewRangeMap ? [showRange] : []),
     ...(isAohAvailable ? [showAoh] : []),
     showProtectedAreas,
-    showForestLoss,
     showHabitat,
     showPowoRangeOverlay,
     ...(hasIucnNativeRange ? [showIucnRangeOverlay] : []),
@@ -3635,34 +3592,6 @@ export default function OccurrenceMapRow({
                           e.preventDefault();
                           e.stopPropagation();
                           window.open("https://www.protectedplanet.net", "_blank", "noopener,noreferrer");
-                        }}
-                        className="shrink-0 text-zinc-300 hover:text-zinc-500 dark:text-zinc-600 dark:hover:text-zinc-400"
-                      >
-                        <FaInfoCircle className="w-3 h-3" />
-                      </a>
-                    </label>
-                    <label
-                      className="flex items-center gap-2 px-3 py-1.5 text-xs hover:bg-zinc-50 dark:hover:bg-zinc-800 cursor-pointer"
-                      title={`Tree cover loss ${FOREST_LOSS_FIRST_YEAR}\u2013${FOREST_LOSS_LAST_YEAR}, coloured by year. ${FOREST_LOSS_CAVEAT}`}
-                    >
-                      <input
-                        type="checkbox"
-                        checked={showForestLoss}
-                        onChange={() => setShowForestLoss((v) => !v)}
-                        className="w-3 h-3 rounded accent-emerald-500 shrink-0"
-                      />
-                      <span className="flex-1 min-w-0 text-zinc-700 dark:text-zinc-200">
-                        Forest loss {FOREST_LOSS_FIRST_YEAR}&ndash;{FOREST_LOSS_LAST_YEAR}
-                      </span>
-                      <a
-                        href="https://glad.earthengine.app/view/global-forest-change"
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        title="Global Forest Change — Hansen/UMD/Google/USGS/NASA"
-                        onClick={(e) => {
-                          e.preventDefault();
-                          e.stopPropagation();
-                          window.open("https://glad.earthengine.app/view/global-forest-change", "_blank", "noopener,noreferrer");
                         }}
                         className="shrink-0 text-zinc-300 hover:text-zinc-500 dark:text-zinc-600 dark:hover:text-zinc-400"
                       >
