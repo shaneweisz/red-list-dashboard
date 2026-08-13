@@ -46,6 +46,8 @@ export interface OccurrenceFeature {
     coordinateStatus?: "mapped" | "issue" | "missing";
     /** GBIF's own geospatial issues with this record's coordinates. */
     gbifIssues?: string[];
+    /** Images attached to the record — a herbarium sheet's own photograph. */
+    images?: { url: string; title?: string; creator?: string; license?: string; rightsHolder?: string }[];
   };
   /** null when GBIF has no coordinates for the record — it exists as a locality
    *  string only, which is what makes it a georeferencing candidate. */
@@ -133,9 +135,9 @@ const EXTRA_COLUMNS: { key: string; label: string; title: string; numeric?: bool
 
 /** Shown until someone changes it: the fields an assessor reads first. */
 const DEFAULT_VISIBLE_COLUMNS = [
-  "excluded", "date", "basisOfRecord", "locality", "stateProvince", "country", "coordinates",
+  "included", "date", "basisOfRecord", "locality", "stateProvince", "country", "coordinates",
   "uncertainty", "elevation", "recordedBy", "identifiedBy", "dataset", "catalog",
-  "establishmentMeans", "flags", "georeference", "gbifID",
+  "establishmentMeans", "flags", "gbifID",
 ];
 
 const COLUMN_PREFS_KEY = "redlist-occurrence-columns:v1";
@@ -144,7 +146,13 @@ interface ColumnPrefs {
   /** Column ids in display order; anything unknown is ignored on read. */
   order: string[];
   visible: string[];
+  /** Pixel widths, for columns whose edge has been dragged. */
+  widths?: Record<string, number>;
 }
+
+/** Narrow enough to still show something, wide enough to be worth dragging to. */
+const MIN_COLUMN_WIDTH = 60;
+const MAX_COLUMN_WIDTH = 900;
 
 function loadColumnPrefs(): ColumnPrefs | null {
   if (typeof window === "undefined") return null;
@@ -252,9 +260,12 @@ interface OccurrenceListTableProps {
   /** Records the filters have excluded. They stay in the table, greyed, rather
    *  than vanishing — a record you can't see is a record you can't judge. */
   excludedIds?: Set<number>;
-  /** Records excluded by hand from the Excluded column's tick box. */
-  manuallyExcludedIds?: Set<number>;
-  onToggleExcluded?: (gbifID: number) => void;
+  /** Records struck out by hand, with the reason given for each. */
+  exclusions?: Record<number, { justification: string }>;
+  /** Asks for a justification and excludes the given records. */
+  onExclude?: (gbifIDs: number[]) => void;
+  /** Puts a hand-excluded record back. */
+  onInclude?: (gbifID: number) => void;
   /** True when the hover came from the map, so the list scrolls to meet it. */
   hoverFromMap?: boolean;
   /** Fill the height of the column the table is in. */
@@ -280,8 +291,9 @@ export default function OccurrenceListTable({
   hoveredGbifId,
   onHoverRow,
   excludedIds,
-  manuallyExcludedIds,
-  onToggleExcluded,
+  exclusions,
+  onExclude,
+  onInclude,
   hoverFromMap = false,
   fillHeight = false,
 }: OccurrenceListTableProps) {
@@ -329,6 +341,26 @@ export default function OccurrenceListTable({
   const rowRefs = useRef(new Map<number, HTMLTableRowElement>());
   const scrollRef = useRef<HTMLDivElement>(null);
   const [dragColumn, setDragColumn] = useState<string | null>(null);
+  // Rows picked out by dragging down the Included column, resolved on mouse-up.
+  const [dragSelection, setDragSelection] = useState<Set<number> | null>(null);
+
+  useEffect(() => {
+    if (!dragSelection) return;
+    const finish = () => {
+      const ids = [...dragSelection];
+      setDragSelection(null);
+      if (ids.length === 0) return;
+      // Re-including needs no justification; excluding always does.
+      const excluded = ids.filter((id) => exclusions?.[id]);
+      if (excluded.length === ids.length) {
+        ids.forEach((id) => onInclude?.(id));
+      } else {
+        onExclude?.(ids.filter((id) => !exclusions?.[id]));
+      }
+    };
+    window.addEventListener("mouseup", finish);
+    return () => window.removeEventListener("mouseup", finish);
+  }, [dragSelection, exclusions, onExclude, onInclude]);
 
   const updatePrefs = (next: ColumnPrefs) => {
     setColumnPrefs(next);
@@ -337,34 +369,65 @@ export default function OccurrenceListTable({
 
   const columns = useMemo<ColumnDef[]>(
     () => [
-      // Excluded first: it's the row's status, and it's what you scan down when
-      // deciding what a filter has actually done to your evidence.
+      // Included first: it's the row's status, and it's what you scan down when
+      // deciding what a filter — or your own judgement — has done to the
+      // evidence. Checked by default, because a record counts until someone
+      // says why it shouldn't.
       {
-        key: "excluded",
-        label: "Excluded",
+        key: "included",
+        label: "Included",
         title:
-          "Whether this record is excluded — by your filters, or by hand. Excluded records stay in the table, greyed out, so you can see what you're leaving out.",
+          "Whether this record counts. Unchecking asks for a reason — drag down the column to exclude a run of records (duplicates, usually) in one go.",
         className: "whitespace-nowrap",
-        value: (p) => (excludedIds?.has(p.gbifID) || manuallyExcludedIds?.has(p.gbifID) ? 1 : 0),
+        value: (p) => (excludedIds?.has(p.gbifID) || exclusions?.[p.gbifID] ? 0 : 1),
         render: (p) => {
           const byFilter = excludedIds?.has(p.gbifID) ?? false;
-          const byHand = manuallyExcludedIds?.has(p.gbifID) ?? false;
+          const byHand = exclusions?.[p.gbifID];
+          const inSelection = dragSelection?.has(p.gbifID) ?? false;
           return (
-            <input
-              type="checkbox"
-              checked={byFilter || byHand}
-              disabled={byFilter}
-              onClick={(e) => e.stopPropagation()}
-              onChange={() => onToggleExcluded?.(p.gbifID)}
-              title={
-                byFilter
-                  ? "Excluded by your filters"
-                  : byHand
-                    ? "Excluded by hand — click to put it back"
-                    : "Exclude this record by hand"
-              }
-              className="w-3 h-3 rounded accent-zinc-500 disabled:opacity-60 cursor-pointer"
-            />
+            <span
+              className="inline-flex items-center gap-1"
+              // Dragging down the column selects a run: exclusions come in runs
+              // far more often than they come alone.
+              onMouseDown={(e) => {
+                if (byFilter) return;
+                e.preventDefault();
+                e.stopPropagation();
+                setDragSelection(new Set([p.gbifID]));
+              }}
+              onMouseEnter={() => {
+                if (byFilter || !dragSelection) return;
+                setDragSelection((prev) => {
+                  if (!prev) return prev;
+                  const next = new Set(prev);
+                  next.add(p.gbifID);
+                  return next;
+                });
+              }}
+            >
+              <input
+                type="checkbox"
+                checked={!byFilter && !byHand}
+                disabled={byFilter}
+                readOnly
+                onClick={(e) => e.stopPropagation()}
+                title={
+                  byFilter
+                    ? "Excluded by your filters"
+                    : byHand
+                      ? `Excluded: ${byHand.justification} — click to put it back`
+                      : "Counted. Uncheck to exclude it, with a reason."
+                }
+                className={`w-3 h-3 rounded accent-emerald-600 disabled:opacity-60 cursor-pointer ${
+                  inSelection ? "ring-2 ring-blue-400" : ""
+                }`}
+              />
+              {byHand && (
+                <span className="truncate text-[10px] text-zinc-400" title={byHand.justification}>
+                  {byHand.justification}
+                </span>
+              )}
+            </span>
           );
         },
       },
@@ -420,33 +483,56 @@ export default function OccurrenceListTable({
         // Sorted by the position actually being shown, so a record you've
         // georeferenced sorts where you put it, not where GBIF left a hole.
         value: (p, f) => georeferences?.[p.gbifID]?.decimalLatitude ?? f.geometry?.coordinates[1] ?? null,
+        // One column for where the record is, whoever placed it there: GBIF's
+        // coordinates, yours in violet where you've supplied them, and the
+        // affordance to add or change them in the same cell rather than a
+        // separate one to hunt for.
         render: (p, f) => {
           const mine = georeferences?.[p.gbifID];
+          const editable = isGeoreferenceable(p) && onEditGeoreference;
+          const open = (e: React.MouseEvent) => {
+            e.stopPropagation();
+            onEditGeoreference?.(f);
+          };
           if (mine) {
             return (
-              <span
-                className="text-violet-600 dark:text-violet-400"
+              <button
+                onClick={open}
                 title={`Your georeference: ${mine.decimalLatitude}, ${mine.decimalLongitude} ± ${mine.coordinateUncertaintyInMeters} m${
-                  mine.georeferenceProtocol ? ` (${mine.georeferenceProtocol})` : ""
-                }`}
+                  mine.georeferenceRemarks ? ` — ${mine.georeferenceRemarks}` : ""
+                }. Click to edit, or drag the point on the map.`}
+                className="text-violet-600 dark:text-violet-400 hover:underline"
               >
                 ◆ {mine.decimalLatitude.toFixed(4)}, {mine.decimalLongitude.toFixed(4)}
-              </span>
+              </button>
             );
           }
           if (!f.geometry) {
-            return (
-              <span className="text-amber-600 dark:text-amber-400" title="GBIF has no coordinates for this record — only a locality description">
-                Not georeferenced
-              </span>
+            return editable ? (
+              <button
+                onClick={open}
+                title="GBIF has no coordinates for this record — only a locality description. Click to georeference it yourself."
+                className="text-amber-600 dark:text-amber-400 hover:underline decoration-dotted"
+              >
+                Not georeferenced +
+              </button>
+            ) : (
+              <span className="text-amber-600 dark:text-amber-400">Not georeferenced</span>
             );
           }
           const [lon, lat] = f.geometry.coordinates;
           const text = `${lat.toFixed(4)}, ${lon.toFixed(4)}`;
           // Flagged coordinates are shown, not hidden — seeing that a record sits
-          // at (0.0000, 0.0000) is the point.
-          return p.coordinateStatus === "issue" ? (
-            <span className="text-amber-600 dark:text-amber-400">{text}</span>
+          // at (0.0000, 0.0000) is the point — and they're the other case worth
+          // correcting by hand.
+          return editable ? (
+            <button
+              onClick={open}
+              title="GBIF flags these coordinates. Click to supply your own."
+              className="text-amber-600 dark:text-amber-400 hover:underline decoration-dotted"
+            >
+              {text} +
+            </button>
           ) : (
             text
           );
@@ -567,39 +653,6 @@ export default function OccurrenceListTable({
           );
         },
       },
-      ...(onEditGeoreference
-        ? [
-            {
-              key: "georeference",
-              label: "Georeference",
-              title:
-                "Your own coordinates for records GBIF can't place — stored in this browser, never sent to GBIF",
-              className: "whitespace-nowrap",
-              // Sorts the records still needing work to one end.
-              value: (p: OccurrenceFeature["properties"]) =>
-                georeferences?.[p.gbifID] ? 1 : isGeoreferenceable(p) ? 0 : null,
-              render: (p: OccurrenceFeature["properties"], f: OccurrenceFeature) => {
-                if (!isGeoreferenceable(p)) return null;
-                const mine = georeferences?.[p.gbifID];
-                return (
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      onEditGeoreference(f);
-                    }}
-                    className={`px-1.5 py-0.5 rounded border text-[11px] transition-colors ${
-                      mine
-                        ? "border-violet-300 dark:border-violet-700 text-violet-700 dark:text-violet-300 hover:bg-violet-50 dark:hover:bg-violet-950"
-                        : "border-zinc-300 dark:border-zinc-600 text-zinc-600 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-700"
-                    }`}
-                  >
-                    {mine ? "Edit" : "Add"}
-                  </button>
-                );
-              },
-            } as ColumnDef,
-          ]
-        : []),
       // Everything else GBIF carries, off by default and available from the
       // column picker. Grouped roughly as GBIF groups them: taxonomy, the
       // record itself, the event, the place, the people, the dataset.
@@ -646,7 +699,7 @@ export default function OccurrenceListTable({
         ),
       },
     ],
-    [isOutsideNativeRange, georeferences, onEditGeoreference, excludedIds, manuallyExcludedIds, onToggleExcluded]
+    [isOutsideNativeRange, georeferences, onEditGeoreference, excludedIds, exclusions, dragSelection]
   );
 
   // The catalogue in the reader's own order, then the subset actually drawn.
@@ -669,6 +722,53 @@ export default function OccurrenceListTable({
     [orderedColumns, visibleKeys]
   );
 
+  const columnWidths = columnPrefs?.widths ?? {};
+
+  // Dragging the right edge of a header resizes that column. Tracked in a ref
+  // rather than state: this fires on every mousemove, and a re-render per pixel
+  // would make the drag feel like treacle on a long table.
+  const resizeRef = useRef<{ key: string; startX: number; startWidth: number } | null>(null);
+  const [resizingColumn, setResizingColumn] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!resizingColumn) return;
+    const onMove = (e: MouseEvent) => {
+      const drag = resizeRef.current;
+      if (!drag) return;
+      const width = Math.min(
+        MAX_COLUMN_WIDTH,
+        Math.max(MIN_COLUMN_WIDTH, drag.startWidth + (e.clientX - drag.startX))
+      );
+      const th = scrollRef.current?.querySelector<HTMLElement>(`th[data-column="${drag.key}"]`);
+      if (th) {
+        th.style.width = `${width}px`;
+        th.style.minWidth = `${width}px`;
+        th.style.maxWidth = `${width}px`;
+      }
+    };
+    const onUp = () => {
+      const drag = resizeRef.current;
+      resizeRef.current = null;
+      setResizingColumn(null);
+      if (!drag) return;
+      const th = scrollRef.current?.querySelector<HTMLElement>(`th[data-column="${drag.key}"]`);
+      const width = th ? parseInt(th.style.width, 10) : drag.startWidth;
+      if (!Number.isFinite(width)) return;
+      updatePrefs({
+        order: orderedColumns.map((c) => c.key),
+        visible: orderedColumns.filter((c) => visibleKeys.has(c.key)).map((c) => c.key),
+        widths: { ...columnWidths, [drag.key]: width },
+      });
+    };
+    window.addEventListener("mousemove", onMove);
+    window.addEventListener("mouseup", onUp);
+    return () => {
+      window.removeEventListener("mousemove", onMove);
+      window.removeEventListener("mouseup", onUp);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [resizingColumn]);
+
   const setVisible = (keys: string[]) => {
     // Store in catalogue order so the visible list can't imply an order that
     // contradicts the column order itself.
@@ -676,6 +776,7 @@ export default function OccurrenceListTable({
     updatePrefs({
       order: orderedColumns.map((c) => c.key),
       visible: orderedColumns.filter((c) => wanted.has(c.key)).map((c) => c.key),
+      widths: columnWidths,
     });
   };
 
@@ -687,6 +788,7 @@ export default function OccurrenceListTable({
     updatePrefs({
       order: next.map((c) => c.key),
       visible: next.filter((c) => visibleKeys.has(c.key)).map((c) => c.key),
+      widths: columnWidths,
     });
   };
 
@@ -801,6 +903,16 @@ export default function OccurrenceListTable({
                   <th
                     key={col.key}
                     scope="col"
+                    data-column={col.key}
+                    style={
+                      columnWidths[col.key]
+                        ? {
+                            width: columnWidths[col.key],
+                            minWidth: columnWidths[col.key],
+                            maxWidth: columnWidths[col.key],
+                          }
+                        : undefined
+                    }
                     title={`${col.title ?? col.label} — click to sort, drag to reorder`}
                     draggable
                     onDragStart={(e) => {
@@ -816,12 +928,12 @@ export default function OccurrenceListTable({
                       const to = order.indexOf(col.key);
                       if (from < 0 || to < 0) return;
                       order.splice(to, 0, ...order.splice(from, 1));
-                      updatePrefs({ order, visible: order.filter((k) => visibleKeys.has(k)) });
+                      updatePrefs({ order, visible: order.filter((k) => visibleKeys.has(k)), widths: columnWidths });
                       setDragColumn(null);
                     }}
                     onDragEnd={() => setDragColumn(null)}
                     onClick={() => toggleSort(col.key)}
-                    className={`px-2 py-1.5 font-medium text-[11px] whitespace-nowrap cursor-pointer select-none border-b border-zinc-200 dark:border-zinc-700 hover:bg-zinc-100 dark:hover:bg-zinc-700 ${
+                    className={`relative px-2 py-1.5 font-medium text-[11px] whitespace-nowrap cursor-pointer select-none border-b border-zinc-200 dark:border-zinc-700 hover:bg-zinc-100 dark:hover:bg-zinc-700 ${
                       col.align === "right" ? "text-right" : "text-left"
                     } ${active ? "text-zinc-700 dark:text-zinc-200" : "text-zinc-500 dark:text-zinc-400"} ${
                       dragColumn === col.key ? "opacity-40" : ""
@@ -831,6 +943,27 @@ export default function OccurrenceListTable({
                     <span className={`ml-1 ${active ? "text-zinc-400" : "text-transparent"}`}>
                       {active && !sortAsc ? "▼" : "▲"}
                     </span>
+                    {/* Grab the edge to resize. Its own mousedown stops the
+                        header's drag-to-reorder and click-to-sort from firing. */}
+                    <span
+                      onMouseDown={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        const th = e.currentTarget.parentElement as HTMLElement;
+                        resizeRef.current = {
+                          key: col.key,
+                          startX: e.clientX,
+                          startWidth: th.getBoundingClientRect().width,
+                        };
+                        setResizingColumn(col.key);
+                      }}
+                      onClick={(e) => e.stopPropagation()}
+                      onDragStart={(e) => e.preventDefault()}
+                      title="Drag to resize this column"
+                      className={`absolute top-0 right-0 h-full w-1.5 cursor-col-resize select-none ${
+                        resizingColumn === col.key ? "bg-blue-400" : "hover:bg-zinc-300 dark:hover:bg-zinc-600"
+                      }`}
+                    />
                   </th>
                 );
               })}
@@ -839,7 +972,7 @@ export default function OccurrenceListTable({
           <tbody>
             {sorted.map((f) => {
               const id = f.properties.gbifID;
-              const excluded = (excludedIds?.has(id) ?? false) || (manuallyExcludedIds?.has(id) ?? false);
+              const excluded = (excludedIds?.has(id) ?? false) || !!exclusions?.[id];
               return (
               <tr
                 key={id}
@@ -865,6 +998,15 @@ export default function OccurrenceListTable({
                   return (
                     <td
                       key={col.key}
+                      style={
+                        columnWidths[col.key]
+                          ? {
+                              width: columnWidths[col.key],
+                              minWidth: columnWidths[col.key],
+                              maxWidth: columnWidths[col.key],
+                            }
+                          : undefined
+                      }
                       className={`px-2 py-1.5 align-top text-zinc-600 dark:text-zinc-300 ${
                         col.align === "right" ? "text-right" : "text-left"
                       } ${col.className ?? ""}`}

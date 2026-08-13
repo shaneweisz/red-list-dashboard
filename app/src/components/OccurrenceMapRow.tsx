@@ -16,6 +16,9 @@ import type { OccurrenceFeature as OccurrenceFeatureType } from "./OccurrenceLis
 import {
   loadGeoreferences,
   saveGeoreferences,
+  loadExclusions,
+  saveExclusions,
+  type Exclusion,
   csvToGeoreferences,
   occurrencesToCsv,
   uncertaintyCircle,
@@ -70,6 +73,10 @@ const OccurrenceListTable = dynamic(
 );
 const GeoreferenceEditor = dynamic(
   () => import("./GeoreferenceEditor"),
+  { ssr: false }
+);
+const ExclusionDialog = dynamic(
+  () => import("./ExclusionDialog"),
   { ssr: false }
 );
 
@@ -548,19 +555,6 @@ export default function OccurrenceMapRow({
   const [showProtectedAreas, setShowProtectedAreas] = useState(false);
   const [showPowoRangeOverlay, setShowPowoRangeOverlay] = useState(false);
   const [showIucnRangeOverlay, setShowIucnRangeOverlay] = useState(false);
-  // Records struck out by hand from the list's Excluded column. Distinct from a
-  // filter: the filters answer "which records match these rules", this answers
-  // "and I've looked at that one and it's wrong".
-  const [manuallyExcluded, setManuallyExcluded] = useState<Set<number>>(new Set());
-  const toggleExcluded = useCallback((gbifID: number) => {
-    setManuallyExcluded((prev) => {
-      const next = new Set(prev);
-      if (next.has(gbifID)) next.delete(gbifID);
-      else next.add(gbifID);
-      return next;
-    });
-  }, []);
-
   // Whether the current hover started on the map — the list scrolls to meet a
   // map hover, but must not yank itself around under the pointer for its own.
   const [hoverFromMap, setHoverFromMap] = useState(false);
@@ -634,6 +628,54 @@ export default function OccurrenceMapRow({
       cancelled = true;
     };
   }, []);
+
+  // Records struck out by hand, each with the reason given. Distinct from a
+  // filter: the filters answer "which records match these rules", this answers
+  // "I have looked at that one and it shouldn't count" — and the reason is the
+  // part worth keeping, so it's stored alongside the georeferences.
+  const [exclusions, setExclusions] = useState<Record<number, Exclusion>>({});
+  const [pendingExclusion, setPendingExclusion] = useState<number[] | null>(null);
+
+  useEffect(() => {
+    setExclusions(loadExclusions(speciesKey));
+  }, [speciesKey]);
+
+  const persistExclusions = useCallback(
+    (next: Record<number, Exclusion>) => {
+      setExclusions(next);
+      if (!saveExclusions(speciesKey, next)) {
+        setGeorefMessage({ kind: "error", text: "Couldn't save to this browser's storage." });
+      }
+    },
+    [speciesKey]
+  );
+
+  const confirmExclusion = useCallback(
+    (justification: string) => {
+      if (!pendingExclusion) return;
+      const next = { ...exclusions };
+      for (const gbifID of pendingExclusion) {
+        next[gbifID] = {
+          gbifID,
+          justification,
+          excludedAt: new Date().toISOString(),
+          excludedBy: accountEmail || undefined,
+        };
+      }
+      persistExclusions(next);
+      setPendingExclusion(null);
+    },
+    [pendingExclusion, exclusions, persistExclusions, accountEmail]
+  );
+
+  const includeAgain = useCallback(
+    (gbifID: number) => {
+      const next = { ...exclusions };
+      delete next[gbifID];
+      persistExclusions(next);
+    },
+    [exclusions, persistExclusions]
+  );
 
   // Range map layer state
   const [showRange, setShowRange] = useState(false);
@@ -741,6 +783,32 @@ export default function OccurrenceMapRow({
   // Hovered occurrence on map (for hover tooltip)
   const [hoveredFeature, setHoveredFeature] = useState<OccurrenceFeature | null>(null);
   const [hoveredPanel, setHoveredPanel] = useState<string | null>(null);
+  // Which of the records sharing a point the tooltip is showing, and whether
+  // the pointer has moved onto the tooltip itself — without that, reaching for
+  // the pager takes the pointer off the point and dismisses the thing.
+  const [groupIndex, setGroupIndex] = useState(0);
+  const [tooltipHeld, setTooltipHeld] = useState(false);
+  /**
+   * Clearing the hover is delayed by a beat so the pointer can travel from the
+   * point (or the row) onto the tooltip itself. Without the gap the tooltip
+   * unmounts the instant you set off towards its pager, which makes paging
+   * between co-located records impossible to actually reach.
+   */
+  const hoverClearTimer = useRef<number | null>(null);
+  const cancelHoverClear = useCallback(() => {
+    if (hoverClearTimer.current != null) {
+      window.clearTimeout(hoverClearTimer.current);
+      hoverClearTimer.current = null;
+    }
+  }, []);
+  const clearHoverSoon = useCallback(() => {
+    cancelHoverClear();
+    hoverClearTimer.current = window.setTimeout(() => {
+      hoverClearTimer.current = null;
+      setHoveredFeature(null);
+      setHoveredPanel(null);
+    }, 220);
+  }, [cancelHoverClear]);
 
   // Touch-only device detection (no hover tooltips on touch-only devices)
   // Check for coarse pointer (phone/tablet) rather than maxTouchPoints which is true on Mac trackpads
@@ -1107,8 +1175,8 @@ export default function OccurrenceMapRow({
   // What the map draws and the export writes: everything the filters allow,
   // less anything struck out by hand. The list still shows all of it, greyed.
   const includedOccurrences = useMemo(
-    () => filteredOccurrences.filter((o) => !manuallyExcluded.has(o.properties.gbifID)),
-    [filteredOccurrences, manuallyExcluded]
+    () => filteredOccurrences.filter((o) => !exclusions[o.properties.gbifID]),
+    [filteredOccurrences, exclusions]
   );
 
   // Records the filters have removed, for the list's Excluded column.
@@ -1711,7 +1779,9 @@ export default function OccurrenceMapRow({
         // properties arrive flattened (arrays stringified) through MapLibre.
         const known = occurrencesByGbifId.get(Number(props.gbifID));
         if (known) {
+          cancelHoverClear();
           setHoverFromMap(true);
+          if (known.properties.gbifID !== hoveredFeature?.properties.gbifID) setGroupIndex(0);
           setHoveredFeature(known);
           setHoveredPanel(panelId);
           return;
@@ -1740,16 +1810,15 @@ export default function OccurrenceMapRow({
         });
         setHoveredPanel(panelId);
       }
-    } else {
-      setHoveredFeature(null);
-      setHoveredPanel(null);
+    } else if (!tooltipHeld) {
+      clearHoverSoon();
     }
-  }, [isTouchDevice, occurrencesByGbifId]);
+  }, [isTouchDevice, occurrencesByGbifId, tooltipHeld, hoveredFeature, clearHoverSoon, cancelHoverClear]);
 
   const handleMapMouseLeave = useCallback(() => {
-    setHoveredFeature(null);
-    setHoveredPanel(null);
-  }, []);
+    if (tooltipHeld) return;
+    clearHoverSoon();
+  }, [tooltipHeld, clearHoverSoon]);
 
   // Dragging the divider between map and list. Pointer capture keeps the drag
   // alive when the pointer outruns the handle, which it will — the handle is
@@ -1800,11 +1869,20 @@ export default function OccurrenceMapRow({
    * pointing at in the table. Rows GBIF has no coordinates for still set it
    * (the list highlights), there's simply nothing on the map to grow.
    */
-  const handleHoverRow = useCallback((feature: OccurrenceFeature | null) => {
-    setHoverFromMap(false);
-    setHoveredFeature(feature);
-    setHoveredPanel(feature ? "main" : null);
-  }, []);
+  const handleHoverRow = useCallback(
+    (feature: OccurrenceFeature | null) => {
+      setHoverFromMap(false);
+      if (!feature) {
+        clearHoverSoon();
+        return;
+      }
+      cancelHoverClear();
+      setGroupIndex(0);
+      setHoveredFeature(feature);
+      setHoveredPanel("main");
+    },
+    [clearHoverSoon, cancelHoverClear]
+  );
 
   // Handle view state change for split view sync
   const handleMoveForSync = useCallback((e: ViewStateChangeEvent) => {
@@ -1824,6 +1902,35 @@ export default function OccurrenceMapRow({
     if (mine) return [mine.decimalLongitude, mine.decimalLatitude];
     return hoveredFeature.geometry?.coordinates ?? null;
   }, [hoveredFeature, georeferences]);
+
+  /**
+   * Records sharing a position, keyed by rounded coordinates.
+   *
+   * Duplicate sheets from one collection, or a series collected at one camp,
+   * land on the same pixel and hide each other. Grouping them lets the tooltip
+   * page through what's actually under the cursor instead of showing whichever
+   * one happened to be on top.
+   */
+  const coLocatedByPosition = useMemo(() => {
+    const groups = new Map<string, OccurrenceFeature[]>();
+    for (const o of includedOccurrences) {
+      const position = georeferences[o.properties.gbifID]
+        ? [georeferences[o.properties.gbifID].decimalLongitude, georeferences[o.properties.gbifID].decimalLatitude]
+        : o.geometry?.coordinates;
+      if (!position) continue;
+      const key = `${position[0].toFixed(4)},${position[1].toFixed(4)}`;
+      const group = groups.get(key);
+      if (group) group.push(o);
+      else groups.set(key, [o]);
+    }
+    return groups;
+  }, [includedOccurrences, georeferences]);
+
+  const hoveredGroup = useMemo(() => {
+    if (!hoveredFeature || !hoveredPosition) return [];
+    const key = `${hoveredPosition[0].toFixed(4)},${hoveredPosition[1].toFixed(4)}`;
+    return coLocatedByPosition.get(key) ?? [hoveredFeature];
+  }, [hoveredFeature, hoveredPosition, coLocatedByPosition]);
 
   // Reusable map panel renderer (used once in normal mode, twice in split view)
   const renderMapPanel = (
@@ -2004,24 +2111,44 @@ export default function OccurrenceMapRow({
                   blank). */}
               {hoveredFeature && hoveredPosition && !hoveredObs && hoveredPanel === panelId && (() => {
                 const [hLon, hLat] = hoveredPosition;
-                const hInat = inatPhotosByGbifId.get(hoveredFeature.properties.gbifID);
-                const mine = georeferences[hoveredFeature.properties.gbifID];
+                const shown = hoveredGroup[Math.min(groupIndex, hoveredGroup.length - 1)] ?? hoveredFeature;
+                const hInat = inatPhotosByGbifId.get(shown.properties.gbifID);
+                const mine = georeferences[shown.properties.gbifID];
                 return (
                   <MapOccurrenceTooltip
                     lat={hLat}
                     lng={hLon}
-                    species={hoveredFeature.properties.species}
-                    basisOfRecord={hoveredFeature.properties.basisOfRecord}
-                    datasetName={hoveredFeature.properties.datasetName}
-                    eventDate={hoveredFeature.properties.eventDate}
-                    coordinateUncertaintyInMeters={mine?.coordinateUncertaintyInMeters ?? hoveredFeature.properties.coordinateUncertaintyInMeters}
+                    species={shown.properties.species}
+                    basisOfRecord={shown.properties.basisOfRecord}
+                    datasetName={shown.properties.datasetName}
+                    eventDate={shown.properties.eventDate}
+                    coordinateUncertaintyInMeters={mine?.coordinateUncertaintyInMeters ?? shown.properties.coordinateUncertaintyInMeters}
                     imageUrl={hInat?.imageUrl ?? null}
                     observer={hInat?.observer ?? null}
-                    qualityFlags={mine ? undefined : hoveredFeature.properties.qualityFlags}
-                    outsideNativeRange={isOutsideNativeRange(hoveredFeature.properties.countryCode, effectiveNativeCountries)}
-                    country={hoveredFeature.properties.country}
-                    locality={hoveredFeature.properties.locality || hoveredFeature.properties.verbatimLocality}
+                    qualityFlags={mine ? undefined : shown.properties.qualityFlags}
+                    outsideNativeRange={isOutsideNativeRange(shown.properties.countryCode, effectiveNativeCountries)}
+                    country={shown.properties.country}
+                    locality={shown.properties.locality || shown.properties.verbatimLocality}
                     yourGeoreference={mine ? { protocol: mine.georeferenceProtocol } : undefined}
+                    images={shown.properties.images}
+                    page={
+                      hoveredGroup.length > 1
+                        ? {
+                            index: Math.min(groupIndex, hoveredGroup.length - 1),
+                            total: hoveredGroup.length,
+                            onPrev: () => setGroupIndex((i) => (i - 1 + hoveredGroup.length) % hoveredGroup.length),
+                            onNext: () => setGroupIndex((i) => (i + 1) % hoveredGroup.length),
+                          }
+                        : undefined
+                    }
+                    onPointerEnter={() => {
+                      cancelHoverClear();
+                      setTooltipHeld(true);
+                    }}
+                    onPointerLeave={() => {
+                      setTooltipHeld(false);
+                      clearHoverSoon();
+                    }}
                   />
                 );
               })()}
@@ -2244,6 +2371,13 @@ export default function OccurrenceMapRow({
           : "bg-zinc-50 dark:bg-zinc-800/50"
       }
     >
+      {pendingExclusion && (
+        <ExclusionDialog
+          gbifIDs={pendingExclusion}
+          onConfirm={confirmExclusion}
+          onCancel={() => setPendingExclusion(null)}
+        />
+      )}
       {editingFeature && (
         <GeoreferenceEditor
           feature={editingFeature}
@@ -3474,8 +3608,9 @@ export default function OccurrenceMapRow({
                   onHoverRow={handleHoverRow}
                   hoverFromMap={hoverFromMap}
                   excludedIds={excludedIds}
-                  manuallyExcludedIds={manuallyExcluded}
-                  onToggleExcluded={toggleExcluded}
+                  exclusions={exclusions}
+                  onExclude={setPendingExclusion}
+                  onInclude={includeAgain}
                   fillHeight
                 />
               </div>

@@ -107,7 +107,30 @@ type GbifRecord = {
   lastInterpreted?: string;
   isSequenced?: boolean;
   isInCluster?: boolean;
+  media?: { type?: string; format?: string; identifier?: string; references?: string; title?: string; creator?: string; license?: string; rightsHolder?: string }[];
 };
+
+/**
+ * Images attached to a record — for a herbarium sheet this is a photograph of
+ * the sheet itself, label and all, which is the thing you actually want in
+ * front of you when reading a locality or checking a determination. Capped at a
+ * few per record: some datasets attach dozens, and the list only ever shows the
+ * first.
+ */
+const MAX_IMAGES_PER_RECORD = 4;
+
+function imagesOf(r: GbifRecord) {
+  return (r.media ?? [])
+    .filter((m) => m.type === "StillImage" && (m.identifier || m.references))
+    .slice(0, MAX_IMAGES_PER_RECORD)
+    .map((m) => ({
+      url: m.identifier || m.references!,
+      title: m.title,
+      creator: m.creator,
+      license: m.license,
+      rightsHolder: m.rightsHolder,
+    }));
+}
 
 /**
  * Darwin Core fields passed through untouched for the list's column picker.
@@ -389,6 +412,7 @@ export async function GET(request: NextRequest) {
         coordinateStatus: classify(r, geospatialIssuesByKey.get(r.key) ?? []),
         gbifIssues: geospatialIssuesByKey.get(r.key) ?? [],
         ...passThrough(r),
+        images: imagesOf(r),
       },
       // null for records with no coordinates — valid GeoJSON, and the signal the
       // map uses to skip them while the list still shows their locality.

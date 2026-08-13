@@ -414,3 +414,66 @@ export function uncertaintyCircle(
   }
   return { type: "Polygon", coordinates: [ring] };
 }
+
+
+/**
+ * Records an assessor has struck out by hand, and why.
+ *
+ * A filter says "these records don't match my rules"; an exclusion says "I have
+ * looked at this record and it shouldn't count" — a transcription error, a
+ * duplicate of the sheet above it, a cultivated plant recorded as wild. That
+ * judgement is worth as much as the coordinates, and it's worthless without the
+ * reason, so the reason is required.
+ */
+export interface Exclusion {
+  gbifID: number;
+  /** Why. Required — an exclusion nobody can audit is just missing data. */
+  justification: string;
+  /** ISO 8601, stamped on save. */
+  excludedAt: string;
+  excludedBy?: string;
+}
+
+const EXCLUSIONS_PREFIX = "redlist-exclusions";
+
+function exclusionsKey(speciesKey: string): string {
+  return `${EXCLUSIONS_PREFIX}:v${GEOREFERENCE_SCHEMA_VERSION}:${speciesKey}`;
+}
+
+export function loadExclusions(speciesKey: string): Record<number, Exclusion> {
+  if (typeof window === "undefined") return {};
+  try {
+    const raw = window.localStorage.getItem(exclusionsKey(speciesKey));
+    if (!raw) return {};
+    const parsed = JSON.parse(raw);
+    if (parsed?.version !== GEOREFERENCE_SCHEMA_VERSION) return {};
+    const out: Record<number, Exclusion> = {};
+    for (const [id, e] of Object.entries(parsed.records ?? {})) out[Number(id)] = e as Exclusion;
+    return out;
+  } catch {
+    return {};
+  }
+}
+
+export function saveExclusions(speciesKey: string, records: Record<number, Exclusion>): boolean {
+  if (typeof window === "undefined") return false;
+  try {
+    window.localStorage.setItem(
+      exclusionsKey(speciesKey),
+      JSON.stringify({ version: GEOREFERENCE_SCHEMA_VERSION, updatedAt: new Date().toISOString(), records })
+    );
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/** Reasons that come up again and again, offered as one-click options. */
+export const EXCLUSION_REASONS = [
+  "Duplicate of another record",
+  "Transcription error in the coordinates",
+  "Cultivated or captive, not a wild occurrence",
+  "Locality too vague to place",
+  "Misidentified",
+  "Outside the species' known range",
+] as const;
