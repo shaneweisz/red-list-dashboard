@@ -23,6 +23,18 @@ import {
 } from "@/lib/protected-areas";
 import { ELEVATION_ATTRIBUTION, elevationAt, formatElevation } from "@/lib/elevation";
 import {
+  FOREST_LOSS_ATTRIBUTION,
+  FOREST_LOSS_CAVEAT,
+  FOREST_LOSS_DATASET_URL,
+  FOREST_LOSS_FIRST_YEAR,
+  FOREST_LOSS_LAST_YEAR,
+  FOREST_LOSS_MAX_ZOOM,
+  FOREST_LOSS_RAMP,
+  FOREST_LOSS_SOURCE_NOTE,
+  FOREST_LOSS_TILE_URL,
+  FOREST_LOSS_URL,
+} from "@/lib/forest-loss";
+import {
   HABITAT_ATTRIBUTION,
   HABITAT_LEGEND,
   HABITAT_SCHEME_URL,
@@ -575,6 +587,7 @@ export default function OccurrenceMapRow({
   // occurrence filter above: shading which countries a source considers native,
   // regardless of whether occurrences are being filtered by it.
   const [showProtectedAreas, setShowProtectedAreas] = useState(false);
+  const [showForestLoss, setShowForestLoss] = useState(false);
   const [showHabitat, setShowHabitat] = useState(false);
   const [habitatLegendOpen, setHabitatLegendOpen] = useState(false);
   /**
@@ -2175,6 +2188,22 @@ export default function OccurrenceMapRow({
                   <Layer id={`habitat-layer-${panelId}`} type="raster" paint={{ "raster-opacity": 0.55 }} />
                 </Source>
               )}
+              {/* Global Forest Watch tree cover loss, year-coded. Above the
+                  habitat map, below everything else: the question is what
+                  happened inside a range, so it sits under the range and the
+                  records rather than over them. */}
+              {showForestLoss && (
+                <Source
+                  id={`forest-loss-${panelId}`}
+                  type="raster"
+                  tiles={[FOREST_LOSS_TILE_URL]}
+                  tileSize={256}
+                  maxzoom={FOREST_LOSS_MAX_ZOOM}
+                  attribution={FOREST_LOSS_ATTRIBUTION}
+                >
+                  <Layer id={`forest-loss-layer-${panelId}`} type="raster" paint={{ "raster-opacity": 0.85 }} />
+                </Source>
+              )}
               {/* Protected areas overlay (WDPA) — rendered before the occurrence
                   circles so the points draw on top of the shaded PA polygons */}
               {showProtectedAreas && (
@@ -2518,6 +2547,41 @@ export default function OccurrenceMapRow({
               occurrence legend. Stacked in a column so a legend that only
               appears with its overlay can't land on top of another. */}
           <div className="absolute bottom-2 left-2 z-[1000] flex flex-col items-start gap-1.5 max-w-[90%]">
+          {/* Forest loss reads as a colour ramp, so it needs one: without the
+              years, recent clearance and twenty-year-old logging look the
+              same. It can't be filtered to a year — see lib/forest-loss.ts —
+              and the layer is named for the platform it comes from, since
+              that's the name an assessor knows it by. */}
+          {showForestLoss && !loadingOccurrences && (
+            <div
+              className="bg-white dark:bg-zinc-800 px-2 py-1.5 rounded text-[11px] text-zinc-600 dark:text-zinc-300 shadow flex items-center gap-1.5"
+              title={`${FOREST_LOSS_SOURCE_NOTE} ${FOREST_LOSS_CAVEAT}`}
+            >
+              <a
+                href={FOREST_LOSS_URL}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-zinc-500 dark:text-zinc-400 hover:underline"
+              >
+                Global Forest Watch
+              </a>
+              <a
+                href={FOREST_LOSS_DATASET_URL}
+                target="_blank"
+                rel="noopener noreferrer"
+                title="Hansen/UMD Global Forest Change — the dataset itself, with its methods"
+                className="text-zinc-500 dark:text-zinc-400 hover:underline"
+              >
+                tree cover loss
+              </a>
+              <span className="tabular-nums">{FOREST_LOSS_FIRST_YEAR}</span>
+              <span
+                className="h-2 w-16 rounded-sm"
+                style={{ background: `linear-gradient(to right, ${FOREST_LOSS_RAMP[0]}, ${FOREST_LOSS_RAMP[1]})` }}
+              />
+              <span className="tabular-nums">{FOREST_LOSS_LAST_YEAR}</span>
+            </div>
+          )}
           {/* The habitat legend is 18 classes, which laid out flat covers a
               third of the map. Collapsed to its colours by default: the click
               popup names the class under a point, so the full list is a
@@ -2753,6 +2817,7 @@ export default function OccurrenceMapRow({
     ...(assessmentId && canViewRangeMap ? [showRange] : []),
     ...(isAohAvailable ? [showAoh] : []),
     showProtectedAreas,
+    showForestLoss,
     showHabitat,
     showPowoRangeOverlay,
     ...(hasIucnNativeRange ? [showIucnRangeOverlay] : []),
@@ -3592,6 +3657,34 @@ export default function OccurrenceMapRow({
                           e.preventDefault();
                           e.stopPropagation();
                           window.open("https://www.protectedplanet.net", "_blank", "noopener,noreferrer");
+                        }}
+                        className="shrink-0 text-zinc-300 hover:text-zinc-500 dark:text-zinc-600 dark:hover:text-zinc-400"
+                      >
+                        <FaInfoCircle className="w-3 h-3" />
+                      </a>
+                    </label>
+                    <label
+                      className="flex items-center gap-2 px-3 py-1.5 text-xs hover:bg-zinc-50 dark:hover:bg-zinc-800 cursor-pointer"
+                      title={`${FOREST_LOSS_SOURCE_NOTE} Coloured by year of loss, ${FOREST_LOSS_FIRST_YEAR}\u2013${FOREST_LOSS_LAST_YEAR}. ${FOREST_LOSS_CAVEAT}`}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={showForestLoss}
+                        onChange={() => setShowForestLoss((v) => !v)}
+                        className="w-3 h-3 rounded accent-emerald-500 shrink-0"
+                      />
+                      <span className="flex-1 min-w-0 text-zinc-700 dark:text-zinc-200">
+                        Forest loss <span className="text-zinc-400">· Global Forest Watch</span>
+                      </span>
+                      <a
+                        href={FOREST_LOSS_URL}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        title={`${FOREST_LOSS_SOURCE_NOTE} Opens Global Nature Watch, the platform formerly called Global Forest Watch.`}
+                        onClick={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          window.open(FOREST_LOSS_URL, "_blank", "noopener,noreferrer");
                         }}
                         className="shrink-0 text-zinc-300 hover:text-zinc-500 dark:text-zinc-600 dark:hover:text-zinc-400"
                       >
