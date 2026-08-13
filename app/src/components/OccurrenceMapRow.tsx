@@ -16,10 +16,12 @@ import type { OccurrenceFeature as OccurrenceFeatureType } from "./OccurrenceLis
 import {
   PROTECTED_AREAS_TILE_URL,
   PROTECTED_AREAS_ATTRIBUTION,
+  PROTECTED_AREAS_COLOR,
   identifyProtectedAreas,
   protectedPlanetUrl,
   type ProtectedArea,
 } from "@/lib/protected-areas";
+import { ELEVATION_ATTRIBUTION, elevationAt, formatElevation } from "@/lib/elevation";
 import {
   loadGeoreferences,
   saveGeoreferences,
@@ -566,21 +568,32 @@ export default function OccurrenceMapRow({
   // regardless of whether occurrences are being filtered by it.
   const [showProtectedAreas, setShowProtectedAreas] = useState(false);
   /**
-   * The answer to "what protects this spot?", for the point last clicked while
-   * the overlay was on. A click routinely sits inside several designations at
-   * once — a national park that is also a World Heritage site and a biosphere
-   * reserve — and they're all true, so the popup lists them rather than picking
-   * one to open.
+   * What's at the point last clicked: its elevation, and — when the overlay is
+   * on — what protects it.
+   *
+   * Elevation is here because it's the constraint a specimen label gives you
+   * that a locality description doesn't: "1900 m" is checkable against the
+   * ground before you place a point, and having to leave the map to check it is
+   * how it stops being checked.
+   *
+   * A click routinely sits inside several designations at once — a national
+   * park that is also a World Heritage site and a biosphere reserve — and
+   * they're all true, so the popup lists them and outlines whichever one you're
+   * pointing at rather than picking one on your behalf.
    */
-  const [protectedAreaQuery, setProtectedAreaQuery] = useState<{
+  const [pointQuery, setPointQuery] = useState<{
     panelId: string;
     lng: number;
     lat: number;
-    loading: boolean;
+    elevation: number | null;
+    elevationLoading: boolean;
     areas: ProtectedArea[];
-    failed?: boolean;
+    areasLoading: boolean;
+    areasFailed?: boolean;
+    /** Which of the listed areas is outlined on the map. */
+    highlight: number;
   } | null>(null);
-  const protectedAreaQueryId = useRef(0);
+  const pointQueryId = useRef(0);
   const [showPowoRangeOverlay, setShowPowoRangeOverlay] = useState(false);
   const [showIucnRangeOverlay, setShowIucnRangeOverlay] = useState(false);
   // Whether the current hover started on the map — the list scrolls to meet a
@@ -1802,34 +1815,53 @@ export default function OccurrenceMapRow({
         return;
       }
     }
-    // Nothing of ours under the click, so ask the protected-areas service what
-    // is. The overlay is a raster, so there's no feature to hit-test: the same
-    // MapServer that drew the tiles answers an identify at a point, which means
-    // the answer can't disagree with what's on screen.
-    if (!showProtectedAreas) return;
     const map = e.target;
     const bounds = map.getBounds();
     const canvas = map.getCanvas();
     const { lng, lat } = e.lngLat;
-    const request = {
+    const query = ++pointQueryId.current;
+    // A second click while the first is in flight wins; without the guard a
+    // slow answer would overwrite the popup you're already reading.
+    const isCurrent = () => query === pointQueryId.current;
+    setPointQuery({
+      panelId,
       lng,
       lat,
-      bounds: [bounds.getWest(), bounds.getSouth(), bounds.getEast(), bounds.getNorth()] as [number, number, number, number],
-      width: canvas.clientWidth,
-      height: canvas.clientHeight,
-    };
-    const query = ++protectedAreaQueryId.current;
-    setProtectedAreaQuery({ panelId, lng, lat, loading: true, areas: [] });
-    identifyProtectedAreas(request)
-      .then((areas) => {
-        // A second click while the first was in flight wins; anything else
-        // would replace the popup you're reading with an older answer.
-        if (query !== protectedAreaQueryId.current) return;
-        setProtectedAreaQuery({ panelId, lng, lat, loading: false, areas });
+      elevation: null,
+      elevationLoading: true,
+      areas: [],
+      areasLoading: showProtectedAreas,
+      highlight: 0,
+    });
+
+    elevationAt(lng, lat)
+      .then((metres) => {
+        if (!isCurrent()) return;
+        setPointQuery((prev) => (prev ? { ...prev, elevation: metres, elevationLoading: false } : prev));
       })
       .catch(() => {
-        if (query !== protectedAreaQueryId.current) return;
-        setProtectedAreaQuery({ panelId, lng, lat, loading: false, areas: [], failed: true });
+        if (!isCurrent()) return;
+        setPointQuery((prev) => (prev ? { ...prev, elevation: null, elevationLoading: false } : prev));
+      });
+
+    // The protected-areas overlay is a raster, so there's no feature to
+    // hit-test: the same MapServer that drew the tiles answers an identify at a
+    // point, which means the answer can't disagree with what's on screen.
+    if (!showProtectedAreas) return;
+    identifyProtectedAreas({
+      lng,
+      lat,
+      bounds: [bounds.getWest(), bounds.getSouth(), bounds.getEast(), bounds.getNorth()],
+      width: canvas.clientWidth,
+      height: canvas.clientHeight,
+    })
+      .then((areas) => {
+        if (!isCurrent()) return;
+        setPointQuery((prev) => (prev ? { ...prev, areas, areasLoading: false, highlight: 0 } : prev));
+      })
+      .catch(() => {
+        if (!isCurrent()) return;
+        setPointQuery((prev) => (prev ? { ...prev, areas: [], areasLoading: false, areasFailed: true } : prev));
       });
   }, [showProtectedAreas]);
 
@@ -1969,6 +2001,13 @@ export default function OccurrenceMapRow({
     });
   }, []);
 
+  /** The boundary of whichever listed protected area is being pointed at. */
+  const highlightedAreaGeoJson = useMemo<GeoJSON.Feature | null>(() => {
+    const area = pointQuery?.areas[pointQuery.highlight];
+    if (!area?.geometry) return null;
+    return { type: "Feature", properties: { sitePid: area.sitePid }, geometry: area.geometry };
+  }, [pointQuery]);
+
   // Where a hovered record sits on the map: the assessor's own coordinates
   // when they've supplied any, otherwise GBIF's. Null for a record with
   // neither, which is the one case with nothing to point at.
@@ -2105,54 +2144,29 @@ export default function OccurrenceMapRow({
                   <Layer id={`wdpa-layer-${panelId}`} type="raster" paint={{ "raster-opacity": 0.5 }} />
                 </Source>
               )}
-              {/* What protects the clicked spot. Everything the popup shows is
-                  what an assessor would otherwise have to look up by hand on
-                  protectedplanet.net — including the link to do exactly that. */}
-              {showProtectedAreas && protectedAreaQuery?.panelId === panelId && (
-                <MapPopup
-                  longitude={protectedAreaQuery.lng}
-                  latitude={protectedAreaQuery.lat}
-                  anchor="bottom"
-                  offset={12}
-                  maxWidth="280px"
-                  closeOnClick={false}
-                  onClose={() => setProtectedAreaQuery(null)}
-                  className="occurrence-popup"
-                >
-                  <div className="text-[11px] text-zinc-700 dark:text-zinc-200 space-y-1.5">
-                    {protectedAreaQuery.loading ? (
-                      <span className="text-zinc-400">Looking up protected areas…</span>
-                    ) : protectedAreaQuery.failed ? (
-                      <span className="text-amber-600 dark:text-amber-400">
-                        Couldn&apos;t reach the WDPA service.
-                      </span>
-                    ) : protectedAreaQuery.areas.length === 0 ? (
-                      <span className="text-zinc-400">No protected area here.</span>
-                    ) : (
-                      protectedAreaQuery.areas.map((area) => (
-                        <div key={area.sitePid} className="space-y-0.5">
-                          <a
-                            href={protectedPlanetUrl(area)}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="font-medium text-blue-600 dark:text-blue-400 hover:underline"
-                          >
-                            {area.name}
-                          </a>
-                          <div className="text-zinc-500 dark:text-zinc-400">
-                            {[
-                              area.designation,
-                              area.iucnCategory ? `IUCN ${area.iucnCategory}` : null,
-                              area.statusYear ? String(area.statusYear) : null,
-                            ]
-                              .filter(Boolean)
-                              .join(" · ")}
-                          </div>
-                        </div>
-                      ))
-                    )}
-                  </div>
-                </MapPopup>
+              {/* The clicked area, outlined. A boundary you can see the whole
+                  of answers "does my point sit inside this?" in a way a name in
+                  a popup can't — and with several designations stacked at one
+                  spot, it's the only way to tell which one you're reading. The
+                  white casing keeps it legible over satellite imagery. */}
+              {highlightedAreaGeoJson && pointQuery?.panelId === panelId && (
+                <Source id={`wdpa-highlight-${panelId}`} type="geojson" data={highlightedAreaGeoJson}>
+                  <Layer
+                    id={`wdpa-highlight-fill-${panelId}`}
+                    type="fill"
+                    paint={{ "fill-color": PROTECTED_AREAS_COLOR, "fill-opacity": 0.18 }}
+                  />
+                  <Layer
+                    id={`wdpa-highlight-casing-${panelId}`}
+                    type="line"
+                    paint={{ "line-color": "#ffffff", "line-width": 4.5, "line-opacity": 0.9 }}
+                  />
+                  <Layer
+                    id={`wdpa-highlight-line-${panelId}`}
+                    type="line"
+                    paint={{ "line-color": PROTECTED_AREAS_COLOR, "line-width": 2 }}
+                  />
+                </Source>
               )}
               {/* POWO / IUCN native-range overlays — shade the countries each
                   source considers native, purely informational (independent of
@@ -2317,6 +2331,83 @@ export default function OccurrenceMapRow({
                   />
                 );
               })()}
+              {/* What's here: the ground's height, and what protects it. */}
+              {pointQuery?.panelId === panelId && (
+                <MapPopup
+                  longitude={pointQuery.lng}
+                  latitude={pointQuery.lat}
+                  anchor="bottom"
+                  offset={10}
+                  maxWidth="290px"
+                  closeOnClick={false}
+                  onClose={() => setPointQuery(null)}
+                  className="occurrence-popup"
+                >
+                  <div className="text-[11px] text-zinc-700 dark:text-zinc-200 space-y-1.5">
+                    <div className="tabular-nums text-zinc-500 dark:text-zinc-400">
+                      {pointQuery.lat.toFixed(4)}, {pointQuery.lng.toFixed(4)}
+                      {" · "}
+                      {pointQuery.elevationLoading ? (
+                        <span className="text-zinc-400">reading elevation…</span>
+                      ) : pointQuery.elevation == null ? (
+                        <span className="text-zinc-400">elevation unavailable</span>
+                      ) : (
+                        <span
+                          className="font-medium text-zinc-700 dark:text-zinc-200"
+                          title={ELEVATION_ATTRIBUTION}
+                        >
+                          {formatElevation(pointQuery.elevation)}
+                        </span>
+                      )}
+                    </div>
+                    {showProtectedAreas && (
+                      <div className="pt-1 border-t border-zinc-100 dark:border-zinc-800 space-y-1">
+                        {pointQuery.areasLoading ? (
+                          <span className="text-zinc-400">Looking up protected areas…</span>
+                        ) : pointQuery.areasFailed ? (
+                          <span className="text-amber-600 dark:text-amber-400">
+                            Couldn&apos;t reach the WDPA service.
+                          </span>
+                        ) : pointQuery.areas.length === 0 ? (
+                          <span className="text-zinc-400">Not in a protected area.</span>
+                        ) : (
+                          pointQuery.areas.map((area, index) => (
+                            <div
+                              key={area.sitePid}
+                              // Pointing at an entry outlines that area, which
+                              // is what makes a list of four overlapping
+                              // designations readable at all.
+                              onMouseEnter={() => setPointQuery((prev) => (prev ? { ...prev, highlight: index } : prev))}
+                              className={`-mx-1 px-1 py-0.5 rounded ${
+                                index === pointQuery.highlight ? "bg-pink-50 dark:bg-pink-950/40" : ""
+                              }`}
+                            >
+                              <a
+                                href={protectedPlanetUrl(area)}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                title="Open this site on Protected Planet"
+                                className="font-medium text-blue-600 dark:text-blue-400 hover:underline"
+                              >
+                                {area.name}
+                              </a>
+                              <div className="text-zinc-500 dark:text-zinc-400">
+                                {[
+                                  area.designation,
+                                  area.iucnCategory ? `IUCN ${area.iucnCategory}` : null,
+                                  area.statusYear ? String(area.statusYear) : null,
+                                ]
+                                  .filter(Boolean)
+                                  .join(" · ")}
+                              </div>
+                            </div>
+                          ))
+                        )}
+                      </div>
+                    )}
+                  </div>
+                </MapPopup>
+              )}
               {/* IUCN Range Map layer */}
               {showRange && assessmentId && canViewRangeMap && (
                 <RangeMapLayer
@@ -3363,7 +3454,7 @@ export default function OccurrenceMapRow({
                         checked={showProtectedAreas}
                         onChange={() => {
                           setShowProtectedAreas((v) => !v);
-                          setProtectedAreaQuery(null);
+                          setPointQuery(null);
                         }}
                         className="w-3 h-3 rounded accent-emerald-500 shrink-0"
                       />

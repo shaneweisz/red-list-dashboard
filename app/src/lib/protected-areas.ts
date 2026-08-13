@@ -16,10 +16,64 @@
 const MAP_SERVER =
   "https://data-gis.unep-wcmc.org/server/rest/services/ProtectedSites/The_World_Database_of_Protected_Areas/MapServer";
 
+/**
+ * The overlay's own symbology, overriding the service's.
+ *
+ * WDPA's default rendering is green fills for terrestrial sites and blue for
+ * marine ones — near-invisible over the terrain basemap, which is green, and
+ * not much better over satellite. The MapServer supports `dynamicLayers`, so we
+ * ask it to draw the same data in a colour used nowhere else on this map, as a
+ * thin wash under a strong outline: the boundary is what you're reading, and a
+ * heavy fill just hides the ground you're comparing it against.
+ */
+const PA_FILL = [219, 39, 119, 46];
+const PA_OUTLINE = [190, 24, 93, 255];
+
+const DYNAMIC_LAYERS = JSON.stringify([
+  {
+    id: 1,
+    source: { type: "mapLayer", mapLayerId: 1 },
+    drawingInfo: {
+      renderer: {
+        type: "simple",
+        symbol: {
+          type: "esriSFS",
+          style: "esriSFSSolid",
+          color: PA_FILL,
+          outline: { type: "esriSLS", style: "esriSLSSolid", color: PA_OUTLINE, width: 1.6 },
+        },
+      },
+    },
+  },
+  {
+    // Sites too small to hold a polygon are published as points; without this
+    // they'd vanish entirely once the polygons are restyled.
+    id: 0,
+    source: { type: "mapLayer", mapLayerId: 0 },
+    drawingInfo: {
+      renderer: {
+        type: "simple",
+        symbol: {
+          type: "esriSMS",
+          style: "esriSMSCircle",
+          color: [219, 39, 119, 170],
+          size: 7,
+          outline: { type: "esriSLS", style: "esriSLSSolid", color: PA_OUTLINE, width: 1 },
+        },
+      },
+    },
+  },
+]);
+
+/** The colour the overlay draws in — shared with the legend and the highlight. */
+export const PROTECTED_AREAS_COLOR = "#db2777";
+export const PROTECTED_AREAS_OUTLINE_COLOR = "#9d174d";
+
 /** The rendered overlay: a transparent PNG per tile, via the {bbox} token. */
 export const PROTECTED_AREAS_TILE_URL =
   `${MAP_SERVER}/export` +
-  "?bbox={bbox-epsg-3857}&bboxSR=3857&imageSR=3857&size=256,256&dpi=96&format=png32&transparent=true&f=image";
+  "?bbox={bbox-epsg-3857}&bboxSR=3857&imageSR=3857&size=256,256&dpi=96&format=png32&transparent=true&f=image" +
+  `&dynamicLayers=${encodeURIComponent(DYNAMIC_LAYERS)}`;
 
 export const PROTECTED_AREAS_ATTRIBUTION =
   '<a href="https://www.protectedplanet.net" target="_blank" rel="noopener noreferrer">WDPA</a> &copy; UNEP-WCMC &amp; IUCN';
@@ -45,6 +99,9 @@ export interface ProtectedArea {
   siteType?: string;
   /** Reported area in km², as the country declared it. */
   reportedAreaKm2?: number | null;
+  /** The site's boundary, generalised to the zoom it was asked for, so the
+   *  clicked area can be outlined on the map. Absent for point-only sites. */
+  geometry?: GeoJSON.MultiPolygon | null;
 }
 
 /**
@@ -65,12 +122,39 @@ interface IdentifyRequest {
   /** Canvas size in pixels — the tolerance below is measured against it. */
   width: number;
   height: number;
-  /** Click slop in screen pixels. */
+  /** Click slop in screen pixels. Derived from the zoom when not given. */
   tolerance?: number;
 }
 
+/**
+ * How far off a click may be and still count as inside.
+ *
+ * ArcGIS measures its tolerance in screen pixels, which at a continental zoom
+ * is tens of kilometres of ground — enough that clicking near a national park
+ * reported the point as inside it. An assessor asking "is this record
+ * protected?" needs that answered about the point, not its neighbourhood, so
+ * the pixel tolerance is derived from what a pixel is currently worth: a few
+ * metres of slop when zoomed in, exact containment when zoomed out, where a
+ * park covers plenty of pixels anyway.
+ */
+const CLICK_SLOP_METRES = 250;
+
+function toleranceFor({ lat, bounds, width }: IdentifyRequest): number {
+  const metresPerPixel =
+    (Math.abs(bounds[2] - bounds[0]) * 111320 * Math.cos((lat * Math.PI) / 180)) / Math.max(1, width);
+  if (!Number.isFinite(metresPerPixel) || metresPerPixel <= 0) return 0;
+  return Math.min(5, Math.round(CLICK_SLOP_METRES / metresPerPixel));
+}
+
 /** The identify URL for a clicked point. Split out so it can be tested. */
-export function identifyUrl({ lng, lat, bounds, width, height, tolerance = 5 }: IdentifyRequest): string {
+export function identifyUrl(request: IdentifyRequest): string {
+  const { lng, lat, bounds, width, height } = request;
+  const tolerance = request.tolerance ?? toleranceFor(request);
+  // Boundaries come back generalised to about a screen pixel. Full resolution
+  // is not a nuance here: one Colombian national park is 3.7 MB of rings at
+  // full detail and 15 KB at a pixel's worth of tolerance, and at the zoom you
+  // asked from they draw identically.
+  const degreesPerPixel = Math.abs(bounds[2] - bounds[0]) / Math.max(1, width);
   const params = new URLSearchParams({
     geometry: JSON.stringify({ x: lng, y: lat }),
     geometryType: "esriGeometryPoint",
@@ -81,10 +165,37 @@ export function identifyUrl({ lng, lat, bounds, width, height, tolerance = 5 }: 
     // `all` rather than the polygon sublayer alone: small sites are held only
     // as points (sublayer 0), and a polygon-only query drops them silently.
     layers: "all",
-    returnGeometry: "false",
+    returnGeometry: "true",
+    maxAllowableOffset: degreesPerPixel.toPrecision(4),
     f: "json",
   });
   return `${MAP_SERVER}/identify?${params}`;
+}
+
+/**
+ * Esri rings to a GeoJSON MultiPolygon.
+ *
+ * Esri puts every ring of a site in one flat list and distinguishes outer
+ * rings from holes by winding order — clockwise encloses, anticlockwise cuts
+ * out — where GeoJSON nests each polygon's holes inside it. Get this wrong and
+ * a reserve with a town excised from it renders as solid.
+ */
+export function esriRingsToMultiPolygon(rings: unknown): GeoJSON.MultiPolygon | null {
+  if (!Array.isArray(rings) || rings.length === 0) return null;
+  const polygons: GeoJSON.Position[][][] = [];
+  for (const ring of rings) {
+    if (!Array.isArray(ring) || ring.length < 4) continue;
+    const coordinates = ring as GeoJSON.Position[];
+    // Shoelace: positive means clockwise in lng/lat, i.e. an outer ring.
+    let area = 0;
+    for (let i = 0; i < coordinates.length - 1; i++) {
+      area += (coordinates[i + 1][0] - coordinates[i][0]) * (coordinates[i + 1][1] + coordinates[i][1]);
+    }
+    if (area > 0 || polygons.length === 0) polygons.push([coordinates]);
+    else polygons[polygons.length - 1].push(coordinates);
+  }
+  if (polygons.length === 0) return null;
+  return { type: "MultiPolygon", coordinates: polygons };
 }
 
 function text(value: unknown): string | undefined {
@@ -137,6 +248,7 @@ export function parseIdentifyResponse(json: unknown): ProtectedArea[] {
       statusYear: num(attributes.STATUS_YR) || null,
       siteType: text(attributes.SITE_TYPE),
       reportedAreaKm2: num(attributes.REP_AREA),
+      geometry: esriRingsToMultiPolygon((result as { geometry?: { rings?: unknown } })?.geometry?.rings),
     });
   }
   return areas;
