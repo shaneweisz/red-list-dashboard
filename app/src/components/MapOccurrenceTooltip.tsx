@@ -27,6 +27,8 @@ interface MapOccurrenceTooltipProps {
   images?: { url: string; title?: string; creator?: string; license?: string; rightsHolder?: string }[];
   /** Position within the records sharing this point, when more than one does. */
   page?: { index: number; total: number; onPrev: () => void; onNext: () => void };
+  /** Dismisses a pinned tooltip. */
+  onClose?: () => void;
   /** Keeps the tooltip up while the pointer is on it, so its controls are usable. */
   onPointerEnter?: () => void;
   onPointerLeave?: () => void;
@@ -160,6 +162,17 @@ export default function MapOccurrenceTooltip(props: MapOccurrenceTooltipProps) {
                   <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
                 </svg>
               </button>
+              {props.onClose && (
+                <button
+                  onClick={props.onClose}
+                  title="Close (or click anywhere outside)"
+                  className="p-0.5 hover:text-zinc-700 dark:hover:text-zinc-200"
+                >
+                  <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              )}
             </div>
           )}
           <div className="font-medium italic text-zinc-900 dark:text-zinc-100">

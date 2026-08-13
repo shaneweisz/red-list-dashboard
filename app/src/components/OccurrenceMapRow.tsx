@@ -795,13 +795,25 @@ export default function OccurrenceMapRow({
    * between co-located records impossible to actually reach.
    */
   const hoverClearTimer = useRef<number | null>(null);
+  /** Mirrors tooltipPinned, which is derived far below this. */
+  const tooltipPinnedRef = useRef(false);
   const cancelHoverClear = useCallback(() => {
     if (hoverClearTimer.current != null) {
       window.clearTimeout(hoverClearTimer.current);
       hoverClearTimer.current = null;
     }
   }, []);
+  const closeTooltip = useCallback(() => {
+    cancelHoverClear();
+    setTooltipHeld(false);
+    setHoveredFeature(null);
+    setHoveredPanel(null);
+  }, [cancelHoverClear]);
+
   const clearHoverSoon = useCallback(() => {
+    // A pinned tooltip (several records at one point) ignores hover-out
+    // entirely; see tooltipPinned below.
+    if (tooltipPinnedRef.current) return;
     cancelHoverClear();
     hoverClearTimer.current = window.setTimeout(() => {
       hoverClearTimer.current = null;
@@ -1932,6 +1944,32 @@ export default function OccurrenceMapRow({
     return coLocatedByPosition.get(key) ?? [hoveredFeature];
   }, [hoveredFeature, hoveredPosition, coLocatedByPosition]);
 
+  /**
+   * A tooltip showing several records at one point stays put until you click
+   * away: it has controls, and something you're paging through shouldn't
+   * disappear because the pointer drifted off it. A single-record tooltip is
+   * still pure hover — there's nothing in it to reach for.
+   */
+  const tooltipPinned = hoveredGroup.length > 1;
+  tooltipPinnedRef.current = tooltipPinned;
+
+  useEffect(() => {
+    if (!tooltipPinned) return;
+    const onPointerDown = (e: MouseEvent) => {
+      if ((e.target as HTMLElement).closest("[data-occurrence-tooltip]")) return;
+      closeTooltip();
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") closeTooltip();
+    };
+    document.addEventListener("mousedown", onPointerDown);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("mousedown", onPointerDown);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [tooltipPinned, closeTooltip]);
+
   // Reusable map panel renderer (used once in normal mode, twice in split view)
   const renderMapPanel = (
     panelOccurrences: OccurrenceFeature[],
@@ -2149,6 +2187,7 @@ export default function OccurrenceMapRow({
                       setTooltipHeld(false);
                       clearHoverSoon();
                     }}
+                    onClose={hoveredGroup.length > 1 ? closeTooltip : undefined}
                   />
                 );
               })()}
