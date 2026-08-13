@@ -2164,7 +2164,11 @@ export default function OccurrenceMapRow({
               onMouseMove={(e: MapLayerMouseEvent) => handleMapMouseMove(e, panelId)}
               onMouseLeave={handleMapMouseLeave}
               onLoad={panelId === "main" || panelId === "before" || !splitView ? handleMapLoad : undefined}
-              cursor={hoveredFeature && hoveredPanel === panelId ? "pointer" : "grab"}
+              // A pointer everywhere, not the grab hand: every click on this
+              // map now answers something — a record, or the elevation and
+              // habitat under the spot — so the cursor should say "clickable"
+              // rather than advertising the pan you can still do anyway.
+              cursor="pointer"
             >
               <ScaleControl position="bottom-right" />
               {/* Habitat types (Jung et al.) — bottom of the overlay stack: it
@@ -2451,7 +2455,10 @@ export default function OccurrenceMapRow({
                         )}
                       </div>
                     )}
-                    {showProtectedAreas && (
+                    {/* Silent when the point isn't protected: the overlay is
+                        already showing you that, and a line saying so on every
+                        click is noise on the answer you did ask for. */}
+                    {showProtectedAreas && (pointQuery.areasLoading || pointQuery.areasFailed || pointQuery.areas.length > 0) && (
                       <div className="pt-1 border-t border-zinc-100 dark:border-zinc-800 space-y-1">
                         {pointQuery.areasLoading ? (
                           <span className="text-zinc-400">Looking up protected areas…</span>
@@ -2459,8 +2466,6 @@ export default function OccurrenceMapRow({
                           <span className="text-amber-600 dark:text-amber-400">
                             Couldn&apos;t reach the WDPA service.
                           </span>
-                        ) : pointQuery.areas.length === 0 ? (
-                          <span className="text-zinc-400">Not in a protected area.</span>
                         ) : (
                           pointQuery.areas.map((area, index) => (
                             <div
