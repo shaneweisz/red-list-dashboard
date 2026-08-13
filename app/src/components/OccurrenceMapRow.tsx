@@ -2436,21 +2436,23 @@ export default function OccurrenceMapRow({
                         ) : pointQuery.habitat == null ? (
                           <span className="text-zinc-400">No habitat class mapped here.</span>
                         ) : (
-                          <span className="flex items-center gap-1.5">
+                          <span className="flex items-baseline gap-1.5">
                             <span
-                              className="w-2.5 h-2.5 rounded-sm shrink-0"
+                              className="w-2.5 h-2.5 rounded-sm shrink-0 translate-y-0.5"
                               style={{ background: pointQuery.habitat.color }}
                             />
-                            <span>{pointQuery.habitat.group}</span>
-                            <a
-                              href={HABITAT_SCHEME_URL}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              title="IUCN habitat class — see the classification scheme for this sub-type's name"
-                              className="tabular-nums text-zinc-400 hover:underline"
-                            >
-                              {pointQuery.habitat.code}
-                            </a>
+                            <span>
+                              {pointQuery.habitat.name}{" "}
+                              <a
+                                href={HABITAT_SCHEME_URL}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                title="IUCN Habitats Classification Scheme"
+                                className="tabular-nums text-zinc-400 hover:underline"
+                              >
+                                {pointQuery.habitat.code}
+                              </a>
+                            </span>
                           </span>
                         )}
                       </div>

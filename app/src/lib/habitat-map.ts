@@ -15,37 +15,36 @@
  * would mean building a tile pyramid first.
  */
 
+import { habitatCodeLabel } from "./habitat-classification";
+
 const IMAGE_SERVER =
   "https://data-gis.unep-wcmc.org/server/rest/services/NatureMap/NatureMap_HabitatTypes/ImageServer";
 
 /**
- * IUCN Habitats Classification Scheme, level 1.
- *
- * Pixel values are `level1 * 100 + level2`, so the hundreds give the broad
- * habitat and the remainder the sub-type. Only level 1 is named here: the
- * level-2 names are a published standard we'd be transcribing from memory, and
- * a wrong habitat name on an assessment tool is worse than a bare code, so the
- * popup shows the code and links to the scheme itself.
+ * Pixel values are `level1 * 100 + level2`, so 109 is habitat class 1.9. The
+ * names come from the same IUCN scheme table the dashboard's habitat filter
+ * uses; only the colours are ours, and they're keyed to level 1 because 63
+ * distinct sub-type colours would be a legend nobody could read.
  */
-const LEVEL_1: Record<number, { name: string; color: string }> = {
-  1: { name: "Forest", color: "#166534" },
-  2: { name: "Savanna", color: "#ca8a04" },
-  3: { name: "Shrubland", color: "#b45309" },
-  4: { name: "Grassland", color: "#a3e635" },
-  5: { name: "Wetlands (inland)", color: "#0ea5e9" },
-  6: { name: "Rocky areas", color: "#78716c" },
-  7: { name: "Caves and subterranean", color: "#57534e" },
-  8: { name: "Desert", color: "#fbbf24" },
-  9: { name: "Marine neritic", color: "#2563eb" },
-  10: { name: "Marine oceanic", color: "#1e3a8a" },
-  11: { name: "Marine deep ocean floor", color: "#172554" },
-  12: { name: "Marine intertidal", color: "#38bdf8" },
-  13: { name: "Marine coastal/supratidal", color: "#7dd3fc" },
-  14: { name: "Artificial — terrestrial", color: "#dc2626" },
-  15: { name: "Artificial — aquatic and marine", color: "#f87171" },
-  16: { name: "Introduced vegetation", color: "#c026d3" },
-  17: { name: "Other", color: "#9ca3af" },
-  18: { name: "Unknown", color: "#d4d4d8" },
+const LEVEL_1_COLORS: Record<number, string> = {
+  1: "#166534",
+  2: "#ca8a04",
+  3: "#b45309",
+  4: "#a3e635",
+  5: "#0ea5e9",
+  6: "#78716c",
+  7: "#57534e",
+  8: "#fbbf24",
+  9: "#2563eb",
+  10: "#1e3a8a",
+  11: "#172554",
+  12: "#38bdf8",
+  13: "#7dd3fc",
+  14: "#dc2626",
+  15: "#f87171",
+  16: "#c026d3",
+  17: "#9ca3af",
+  18: "#d4d4d8",
 };
 
 /**
@@ -85,10 +84,10 @@ function rgb(hex: string): [number, number, number] {
 const RENDERING_RULE = JSON.stringify({
   rasterFunction: "Colormap",
   rasterFunctionArguments: {
-    Colormap: HABITAT_VALUES.map((value) => {
-      const level1 = LEVEL_1[Math.floor(value / 100)];
-      return [value, ...rgb(level1?.color ?? "#9ca3af")];
-    }),
+    Colormap: HABITAT_VALUES.map((value) => [
+      value,
+      ...rgb(LEVEL_1_COLORS[Math.floor(value / 100)] ?? "#9ca3af"),
+    ]),
     Raster: "$$",
   },
 });
@@ -106,9 +105,9 @@ export const HABITAT_SCHEME_URL =
   "https://www.iucnredlist.org/resources/habitat-classification-scheme";
 
 /** The level-1 groups, for a legend. */
-export const HABITAT_LEGEND = Object.entries(LEVEL_1).map(([code, { name, color }]) => ({
+export const HABITAT_LEGEND = Object.entries(LEVEL_1_COLORS).map(([code, color]) => ({
   code: Number(code),
-  name,
+  name: habitatCodeLabel(code) ?? code,
   color,
 }));
 
@@ -117,19 +116,28 @@ export interface HabitatClass {
   value: number;
   /** Its dotted form in the IUCN scheme, e.g. "1.9". */
   code: string;
-  /** The level-1 group's name, which is the part we can name safely. */
+  /** The scheme's name for it, e.g. "Forest - Subtropical/Tropical Moist Montane". */
+  name: string;
+  /** The level-1 group it belongs to, which is what the colour encodes. */
   group: string;
   color: string;
 }
 
 export function habitatClass(value: number): HabitatClass | null {
-  const level1 = LEVEL_1[Math.floor(value / 100)];
-  if (!level1 || !Number.isFinite(value) || value <= 0) return null;
+  if (!Number.isFinite(value) || value <= 0) return null;
+  const level1 = Math.floor(value / 100);
+  const color = LEVEL_1_COLORS[level1];
+  const group = habitatCodeLabel(String(level1));
+  if (!color || !group) return null;
+  const code = `${level1}.${value % 100}`;
   return {
     value,
-    code: `${Math.floor(value / 100)}.${value % 100}`,
-    group: level1.name,
-    color: level1.color,
+    code,
+    // A value whose sub-type isn't in the scheme still has a true level-1
+    // name; habitatCodeLabel falls back to it rather than guessing.
+    name: habitatCodeLabel(code) ?? group,
+    group,
+    color,
   };
 }
 

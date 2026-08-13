@@ -7,10 +7,27 @@ import {
 
 describe("habitatClass", () => {
   // Values are level1 * 100 + level2, so the hundreds are the broad habitat.
-  it("splits a pixel value into its IUCN code", () => {
-    expect(habitatClass(109)).toMatchObject({ code: "1.9", group: "Forest" });
-    expect(habitatClass(1402)).toMatchObject({ code: "14.2", group: "Artificial — terrestrial" });
-    expect(habitatClass(500)).toMatchObject({ code: "5.0", group: "Wetlands (inland)" });
+  it("names a pixel value with the scheme's own label", () => {
+    expect(habitatClass(109)).toMatchObject({
+      code: "1.9",
+      name: "Forest - Subtropical/Tropical Moist Montane",
+      group: "Forest",
+    });
+    expect(habitatClass(1402)).toMatchObject({
+      code: "14.2",
+      name: "Artificial/Terrestrial - Pastureland",
+      group: "Artificial/Terrestrial",
+    });
+    // Two-digit sub-types: 510 is 5.10, not 5.1.
+    expect(habitatClass(510)?.name).toBe(
+      "Wetlands (inland) - Tundra Wetlands (incl. pools and temporary waters from snowmelt)"
+    );
+  });
+
+  // 5.0 isn't a code in the scheme, but "Wetlands (inland)" is still true of it.
+  it("falls back to the broad habitat rather than inventing a sub-type", () => {
+    expect(habitatClass(500)).toMatchObject({ code: "5.0", name: "Wetlands (inland)" });
+    expect(habitatClass(600)?.name).toBe("Rocky areas (eg. inland cliffs, mountain peaks)");
   });
 
   it("has nothing to say about nodata", () => {
@@ -48,5 +65,6 @@ describe("HABITAT_LEGEND", () => {
   it("names every level-1 group in the scheme", () => {
     expect(HABITAT_LEGEND).toHaveLength(18);
     expect(HABITAT_LEGEND[0]).toMatchObject({ code: 1, name: "Forest" });
+    expect(HABITAT_LEGEND.map((e) => e.name)).toContain("Marine Deep Benthic");
   });
 });
