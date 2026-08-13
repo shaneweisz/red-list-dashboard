@@ -681,6 +681,15 @@ export async function getSpeciesByGbifKey(gbifSpeciesKey: string): Promise<{
   /** Taxonomic node this species sits under, as the dashboard's `taxa` URL
    *  token — the Not Evaluated view can't list anything without one. */
   node_id: string | null;
+  /**
+   * The dashboard's row key for this species, for its `species=` URL param.
+   *
+   * Not the parquet's own id: the species list derives an unassessed row's key
+   * from its CoL id (colIdToSearchId), and the Not Evaluated view then keys
+   * rows on the absolute value. An assessed row is keyed on its SIS id, which
+   * is the parquet id.
+   */
+  dashboard_row_id: number;
 } | null> {
   const conn = await getConn();
   // sis_taxon_id isn't a column: assessed rows carry it as their positive `id`,
@@ -710,6 +719,13 @@ export async function getSpeciesByGbifKey(gbifSpeciesKey: string): Promise<{
     criteria: (r.criteria as string) ?? null,
     countries: splitList(r.countries),
     assessed: !!r.assessed,
+    // For an unassessed species the GBIF key IS its Catalogue of Life id (the
+    // pipeline is CoL-first), which is what the species list hashes into a row
+    // key — so this reproduces that key without needing the CoL column, which
+    // unassessed.parquet doesn't carry.
+    dashboard_row_id: r.assessed
+      ? Number(r.id)
+      : Math.abs(colIdToSearchId(str(r.gbif_species_key) ?? String(r.scientific_name ?? ""))),
     node_id: nodeIdForSpecies(String(r.taxon_group ?? ""), {
       class_name: str(r.class_name),
       order_name: str(r.order_name),

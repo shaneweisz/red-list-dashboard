@@ -724,16 +724,27 @@ export default function OccurrenceListTable({
   const matchSet = useMemo(() => new Set(matches), [matches]);
   const currentMatch = matches.length > 0 ? matches[Math.min(matchIndex, matches.length - 1)] : null;
 
-  const scrollToRow = (gbifID: number | null) => {
+  /**
+   * Bring a row to the top of the table rather than merely into view: you're
+   * reading down from the record you just picked, so it wants to be where the
+   * reading starts. Offset by the sticky header, which would otherwise sit on
+   * top of it — scrollIntoView has no way to account for that.
+   */
+  const scrollRowToTop = (gbifID: number | null) => {
     if (gbifID == null) return;
-    rowRefs.current.get(gbifID)?.scrollIntoView({ block: "nearest", behavior: "smooth" });
+    const container = scrollRef.current;
+    const row = rowRefs.current.get(gbifID);
+    if (!container || !row) return;
+    const headerHeight = container.querySelector("thead")?.getBoundingClientRect().height ?? 0;
+    const delta = row.getBoundingClientRect().top - container.getBoundingClientRect().top - headerHeight;
+    container.scrollBy({ top: delta, behavior: "smooth" });
   };
 
   const stepMatch = (delta: number) => {
     if (matches.length === 0) return;
     const next = (matchIndex + delta + matches.length) % matches.length;
     setMatchIndex(next);
-    scrollToRow(matches[next]);
+    scrollRowToTop(matches[next]);
   };
 
   // Hovering a point on the map brings its row into view. Only for map-side
@@ -741,7 +752,12 @@ export default function OccurrenceListTable({
   // the pointer.
   useEffect(() => {
     if (!hoverFromMap || hoveredGbifId == null) return;
-    rowRefs.current.get(hoveredGbifId)?.scrollIntoView({ block: "nearest", behavior: "smooth" });
+    const container = scrollRef.current;
+    const row = rowRefs.current.get(hoveredGbifId);
+    if (!container || !row) return;
+    const headerHeight = container.querySelector("thead")?.getBoundingClientRect().height ?? 0;
+    const delta = row.getBoundingClientRect().top - container.getBoundingClientRect().top - headerHeight;
+    container.scrollBy({ top: delta, behavior: "smooth" });
   }, [hoverFromMap, hoveredGbifId]);
 
   const toggleSort = (key: string) => {

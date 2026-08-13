@@ -20,6 +20,7 @@ export default function OccurrencePanel(props: {
   sisTaxonId: number | null;
   nativeCountriesRedList?: string[];
   dashboardTaxonToken?: string | null;
+  dashboardSpeciesId?: number | null;
 }) {
   return (
     <OccurrenceMapRow
@@ -36,6 +37,7 @@ export default function OccurrencePanel(props: {
       scientificName={props.scientificName}
       nativeCountriesRedList={props.nativeCountriesRedList}
       dashboardTaxonToken={props.dashboardTaxonToken}
+      dashboardSpeciesId={props.dashboardSpeciesId}
     />
   );
 }

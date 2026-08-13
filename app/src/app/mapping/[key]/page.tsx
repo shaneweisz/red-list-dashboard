@@ -61,6 +61,7 @@ export default async function OccurrencesPage({ params }: { params: Promise<{ ke
           // would dress the occurrence data up as an independent source.
           nativeCountriesRedList={species.assessed ? species.countries : undefined}
           dashboardTaxonToken={species.node_id}
+          dashboardSpeciesId={species.dashboard_row_id}
         />
       </div>
     </div>
