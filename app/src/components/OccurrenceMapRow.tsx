@@ -23,6 +23,23 @@ import {
 } from "@/lib/protected-areas";
 import { ELEVATION_ATTRIBUTION, elevationAt, formatElevation } from "@/lib/elevation";
 import {
+  FOREST_LOSS_ATTRIBUTION,
+  FOREST_LOSS_CAVEAT,
+  FOREST_LOSS_FIRST_YEAR,
+  FOREST_LOSS_LAST_YEAR,
+  FOREST_LOSS_MAX_ZOOM,
+  FOREST_LOSS_RAMP,
+  FOREST_LOSS_TILE_URL,
+} from "@/lib/forest-loss";
+import {
+  HABITAT_ATTRIBUTION,
+  HABITAT_LEGEND,
+  HABITAT_SCHEME_URL,
+  HABITAT_TILE_URL,
+  identifyHabitat,
+  type HabitatClass,
+} from "@/lib/habitat-map";
+import {
   loadGeoreferences,
   saveGeoreferences,
   loadExclusions,
@@ -567,6 +584,9 @@ export default function OccurrenceMapRow({
   // occurrence filter above: shading which countries a source considers native,
   // regardless of whether occurrences are being filtered by it.
   const [showProtectedAreas, setShowProtectedAreas] = useState(false);
+  const [showForestLoss, setShowForestLoss] = useState(false);
+  const [showHabitat, setShowHabitat] = useState(false);
+  const [habitatLegendOpen, setHabitatLegendOpen] = useState(false);
   /**
    * What's at the point last clicked: its elevation, and — when the overlay is
    * on — what protects it.
@@ -590,6 +610,8 @@ export default function OccurrenceMapRow({
     areas: ProtectedArea[];
     areasLoading: boolean;
     areasFailed?: boolean;
+    habitat: HabitatClass | null;
+    habitatLoading: boolean;
     /** Which of the listed areas is outlined on the map. */
     highlight: number;
   } | null>(null);
@@ -1831,6 +1853,8 @@ export default function OccurrenceMapRow({
       elevationLoading: true,
       areas: [],
       areasLoading: showProtectedAreas,
+      habitat: null,
+      habitatLoading: showHabitat,
       highlight: 0,
     });
 
@@ -1844,9 +1868,21 @@ export default function OccurrenceMapRow({
         setPointQuery((prev) => (prev ? { ...prev, elevation: null, elevationLoading: false } : prev));
       });
 
-    // The protected-areas overlay is a raster, so there's no feature to
-    // hit-test: the same MapServer that drew the tiles answers an identify at a
-    // point, which means the answer can't disagree with what's on screen.
+    // Both overlays below are rasters, so there's no feature to hit-test: the
+    // same services that drew the tiles answer an identify at a point, which
+    // means neither answer can disagree with what's on screen.
+    if (showHabitat) {
+      identifyHabitat(lng, lat)
+        .then((habitat) => {
+          if (!isCurrent()) return;
+          setPointQuery((prev) => (prev ? { ...prev, habitat, habitatLoading: false } : prev));
+        })
+        .catch(() => {
+          if (!isCurrent()) return;
+          setPointQuery((prev) => (prev ? { ...prev, habitat: null, habitatLoading: false } : prev));
+        });
+    }
+
     if (!showProtectedAreas) return;
     identifyProtectedAreas({
       lng,
@@ -1863,7 +1899,7 @@ export default function OccurrenceMapRow({
         if (!isCurrent()) return;
         setPointQuery((prev) => (prev ? { ...prev, areas: [], areasLoading: false, areasFailed: true } : prev));
       });
-  }, [showProtectedAreas]);
+  }, [showProtectedAreas, showHabitat]);
 
   // Loaded records by gbifID — the map hands back only what it stored on a
   // feature, which for the assessor-georeference layer is just an id.
@@ -2131,6 +2167,35 @@ export default function OccurrenceMapRow({
               cursor={hoveredFeature && hoveredPanel === panelId ? "pointer" : "grab"}
             >
               <ScaleControl position="bottom-right" />
+              {/* Habitat types (Jung et al.) — bottom of the overlay stack: it
+                  covers whole continents, so anything drawn over it stays
+                  readable and it never hides a boundary or a point. */}
+              {showHabitat && (
+                <Source
+                  id={`habitat-${panelId}`}
+                  type="raster"
+                  tiles={[HABITAT_TILE_URL]}
+                  tileSize={256}
+                  attribution={HABITAT_ATTRIBUTION}
+                >
+                  <Layer id={`habitat-layer-${panelId}`} type="raster" paint={{ "raster-opacity": 0.55 }} />
+                </Source>
+              )}
+              {/* Tree cover loss, year-coded. Above habitat, below everything
+                  else: the question is what happened inside a range, so it has
+                  to sit under the range and the records. */}
+              {showForestLoss && (
+                <Source
+                  id={`forest-loss-${panelId}`}
+                  type="raster"
+                  tiles={[FOREST_LOSS_TILE_URL]}
+                  tileSize={256}
+                  maxzoom={FOREST_LOSS_MAX_ZOOM}
+                  attribution={FOREST_LOSS_ATTRIBUTION}
+                >
+                  <Layer id={`forest-loss-layer-${panelId}`} type="raster" paint={{ "raster-opacity": 0.85 }} />
+                </Source>
+              )}
               {/* Protected areas overlay (WDPA) — rendered before the occurrence
                   circles so the points draw on top of the shaded PA polygons */}
               {showProtectedAreas && (
@@ -2360,6 +2425,32 @@ export default function OccurrenceMapRow({
                         </span>
                       )}
                     </div>
+                    {showHabitat && (
+                      <div className="pt-1 border-t border-zinc-100 dark:border-zinc-800">
+                        {pointQuery.habitatLoading ? (
+                          <span className="text-zinc-400">Reading habitat…</span>
+                        ) : pointQuery.habitat == null ? (
+                          <span className="text-zinc-400">No habitat class mapped here.</span>
+                        ) : (
+                          <span className="flex items-center gap-1.5">
+                            <span
+                              className="w-2.5 h-2.5 rounded-sm shrink-0"
+                              style={{ background: pointQuery.habitat.color }}
+                            />
+                            <span>{pointQuery.habitat.group}</span>
+                            <a
+                              href={HABITAT_SCHEME_URL}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              title="IUCN habitat class — see the classification scheme for this sub-type's name"
+                              className="tabular-nums text-zinc-400 hover:underline"
+                            >
+                              {pointQuery.habitat.code}
+                            </a>
+                          </span>
+                        )}
+                      </div>
+                    )}
                     {showProtectedAreas && (
                       <div className="pt-1 border-t border-zinc-100 dark:border-zinc-800 space-y-1">
                         {pointQuery.areasLoading ? (
@@ -2441,9 +2532,72 @@ export default function OccurrenceMapRow({
               )}
             </MapGL>
           ) : null}
+          {/* Bottom-left stack: what an overlay's colours mean, then the
+              occurrence legend. Stacked in a column so a legend that only
+              appears with its overlay can't land on top of another. */}
+          <div className="absolute bottom-2 left-2 z-[1000] flex flex-col items-start gap-1.5 max-w-[90%]">
+          {/* Forest loss reads as a colour ramp, so it needs one: without the
+              years, recent clearance and twenty-year-old logging look the
+              same. It can't be filtered to a year — see lib/forest-loss.ts. */}
+          {showForestLoss && !loadingOccurrences && (
+            <div
+              className="bg-white dark:bg-zinc-800 px-2 py-1.5 rounded text-[11px] text-zinc-600 dark:text-zinc-300 shadow flex items-center gap-1.5"
+              title={FOREST_LOSS_CAVEAT}
+            >
+              <span className="text-zinc-500 dark:text-zinc-400">Tree cover loss</span>
+              <span className="tabular-nums">{FOREST_LOSS_FIRST_YEAR}</span>
+              <span
+                className="h-2 w-16 rounded-sm"
+                style={{ background: `linear-gradient(to right, ${FOREST_LOSS_RAMP[0]}, ${FOREST_LOSS_RAMP[1]})` }}
+              />
+              <span className="tabular-nums">{FOREST_LOSS_LAST_YEAR}</span>
+            </div>
+          )}
+          {/* The habitat legend is 18 classes, which laid out flat covers a
+              third of the map. Collapsed to its colours by default: the click
+              popup names the class under a point, so the full list is a
+              reminder rather than the way you read the layer. */}
+          {showHabitat && !loadingOccurrences && (
+            <div className="bg-white dark:bg-zinc-800 px-2 py-1.5 rounded text-[11px] text-zinc-600 dark:text-zinc-300 shadow max-w-full">
+              <div className="flex items-center gap-1.5">
+                <button
+                  onClick={() => setHabitatLegendOpen((v) => !v)}
+                  title={habitatLegendOpen ? "Hide the habitat classes" : "Show what the habitat colours mean"}
+                  className="flex items-center gap-1.5 text-zinc-500 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200"
+                >
+                  <span className="flex rounded-sm overflow-hidden">
+                    {HABITAT_LEGEND.map((entry) => (
+                      <span key={entry.code} className="w-1.5 h-2.5" style={{ background: entry.color }} />
+                    ))}
+                  </span>
+                  Habitat
+                  <span className="text-[9px]">{habitatLegendOpen ? "\u25be" : "\u25b8"}</span>
+                </button>
+                <a
+                  href={HABITAT_SCHEME_URL}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  title="IUCN Habitats Classification Scheme — click the map for the class at a point"
+                  className="text-zinc-300 hover:text-zinc-500 dark:text-zinc-600 dark:hover:text-zinc-400"
+                >
+                  <FaInfoCircle className="w-3 h-3" />
+                </a>
+              </div>
+              {habitatLegendOpen && (
+                <div className="flex flex-wrap items-center gap-x-2 gap-y-1 pt-1.5 max-w-[42rem]">
+                  {HABITAT_LEGEND.map((entry) => (
+                    <span key={entry.code} className="flex items-center gap-1">
+                      <span className="w-2.5 h-2.5 rounded-sm shrink-0" style={{ background: entry.color }} />
+                      {entry.name}
+                    </span>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
           {/* Legend */}
           {!loadingOccurrences && (
-            <div className="absolute bottom-2 left-2 z-[1000] bg-white dark:bg-zinc-800 px-2 py-1.5 rounded text-xs text-zinc-600 dark:text-zinc-300 shadow flex flex-wrap items-center gap-x-3 gap-y-1 max-w-[90%]">
+            <div className="bg-white dark:bg-zinc-800 px-2 py-1.5 rounded text-xs text-zinc-600 dark:text-zinc-300 shadow flex flex-wrap items-center gap-x-3 gap-y-1 max-w-full">
               {label ? (
                 <span>{label}</span>
               ) : colorByDate ? (
@@ -2500,6 +2654,7 @@ export default function OccurrenceMapRow({
               )}
             </div>
           )}
+          </div>
           {/* Label badge for split view */}
           {label && (
             <div className="absolute top-2 left-2 z-[1000] bg-zinc-900/80 text-white text-[11px] font-medium px-2.5 py-1 rounded-full shadow-md">
@@ -2633,6 +2788,8 @@ export default function OccurrenceMapRow({
     ...(assessmentId && canViewRangeMap ? [showRange] : []),
     ...(isAohAvailable ? [showAoh] : []),
     showProtectedAreas,
+    showForestLoss,
+    showHabitat,
     showPowoRangeOverlay,
     ...(hasIucnNativeRange ? [showIucnRangeOverlay] : []),
   ];
@@ -3471,6 +3628,63 @@ export default function OccurrenceMapRow({
                           e.preventDefault();
                           e.stopPropagation();
                           window.open("https://www.protectedplanet.net", "_blank", "noopener,noreferrer");
+                        }}
+                        className="shrink-0 text-zinc-300 hover:text-zinc-500 dark:text-zinc-600 dark:hover:text-zinc-400"
+                      >
+                        <FaInfoCircle className="w-3 h-3" />
+                      </a>
+                    </label>
+                    <label
+                      className="flex items-center gap-2 px-3 py-1.5 text-xs hover:bg-zinc-50 dark:hover:bg-zinc-800 cursor-pointer"
+                      title={`Tree cover loss ${FOREST_LOSS_FIRST_YEAR}\u2013${FOREST_LOSS_LAST_YEAR}, coloured by year. ${FOREST_LOSS_CAVEAT}`}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={showForestLoss}
+                        onChange={() => setShowForestLoss((v) => !v)}
+                        className="w-3 h-3 rounded accent-emerald-500 shrink-0"
+                      />
+                      <span className="flex-1 min-w-0 text-zinc-700 dark:text-zinc-200">
+                        Forest loss {FOREST_LOSS_FIRST_YEAR}&ndash;{FOREST_LOSS_LAST_YEAR}
+                      </span>
+                      <a
+                        href="https://glad.earthengine.app/view/global-forest-change"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        title="Global Forest Change — Hansen/UMD/Google/USGS/NASA"
+                        onClick={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          window.open("https://glad.earthengine.app/view/global-forest-change", "_blank", "noopener,noreferrer");
+                        }}
+                        className="shrink-0 text-zinc-300 hover:text-zinc-500 dark:text-zinc-600 dark:hover:text-zinc-400"
+                      >
+                        <FaInfoCircle className="w-3 h-3" />
+                      </a>
+                    </label>
+                    <label
+                      className="flex items-center gap-2 px-3 py-1.5 text-xs hover:bg-zinc-50 dark:hover:bg-zinc-800 cursor-pointer"
+                      title="IUCN habitat classes from Jung et al. (2020), the 100m map behind Area of Habitat. Coloured by level 1; click the map for the exact class."
+                    >
+                      <input
+                        type="checkbox"
+                        checked={showHabitat}
+                        onChange={() => {
+                          setShowHabitat((v) => !v);
+                          setPointQuery(null);
+                        }}
+                        className="w-3 h-3 rounded accent-emerald-500 shrink-0"
+                      />
+                      <span className="flex-1 min-w-0 text-zinc-700 dark:text-zinc-200">Habitat types</span>
+                      <a
+                        href="https://zenodo.org/records/4058819"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        title="A global map of terrestrial habitat types — Jung et al. 2020"
+                        onClick={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          window.open("https://zenodo.org/records/4058819", "_blank", "noopener,noreferrer");
                         }}
                         className="shrink-0 text-zinc-300 hover:text-zinc-500 dark:text-zinc-600 dark:hover:text-zinc-400"
                       >
