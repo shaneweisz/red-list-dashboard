@@ -142,15 +142,15 @@ export async function runBrowseQuery(input: BrowseInput): Promise<BrowseResult> 
   if (taxa.ids.length) {
     const includeNE = criteria.categories?.has("NE") ?? false;
     const results = await Promise.all(taxa.ids.map((id) => querySpecies({ taxon: id, includeNE })));
-    const seen = new Set<number>();
+    const seen = new Set<string>();
     results.forEach((res, i) => {
       if (res.tooLarge) tooLarge = true;
       const id = taxa.ids[i];
       const isNode = !!findNode(id);
       for (const r of res.species as unknown as RedListSpecies[]) {
         if (isNode && !speciesMatchesNode(r, id)) continue;
-        if (seen.has(r.id)) continue;
-        seen.add(r.id);
+        if (seen.has(r.species_key)) continue;
+        seen.add(r.species_key);
         if (matchesSpeciesFilter(r, criteria)) matched.push(r);
       }
     });
