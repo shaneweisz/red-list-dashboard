@@ -795,8 +795,26 @@ export default function OccurrenceMapRow({
    * between co-located records impossible to actually reach.
    */
   const hoverClearTimer = useRef<number | null>(null);
-  /** Mirrors tooltipPinned, which is derived far below this. */
+  /**
+   * Set once you page through the records at a point, and only then.
+   *
+   * Hovering stays hovering — but the moment you click through the pager the
+   * tooltip has to stop being hover-driven, because it resizes as you go: step
+   * onto a record with no specimen image and it shrinks out from under the
+   * pointer, which reads as "hovered away" and loses your place mid-sequence.
+   * Kept in a ref as well as state so the pinning is in effect before the
+   * mouseleave that same click provokes.
+   */
+  const [tooltipPinned, setTooltipPinned] = useState(false);
   const tooltipPinnedRef = useRef(false);
+  const pinTooltip = useCallback(() => {
+    tooltipPinnedRef.current = true;
+    setTooltipPinned(true);
+  }, []);
+  const unpinTooltip = useCallback(() => {
+    tooltipPinnedRef.current = false;
+    setTooltipPinned(false);
+  }, []);
   const cancelHoverClear = useCallback(() => {
     if (hoverClearTimer.current != null) {
       window.clearTimeout(hoverClearTimer.current);
@@ -805,10 +823,11 @@ export default function OccurrenceMapRow({
   }, []);
   const closeTooltip = useCallback(() => {
     cancelHoverClear();
+    unpinTooltip();
     setTooltipHeld(false);
     setHoveredFeature(null);
     setHoveredPanel(null);
-  }, [cancelHoverClear]);
+  }, [cancelHoverClear, unpinTooltip]);
 
   const clearHoverSoon = useCallback(() => {
     // A pinned tooltip (several records at one point) ignores hover-out
@@ -1793,7 +1812,10 @@ export default function OccurrenceMapRow({
         if (known) {
           cancelHoverClear();
           setHoverFromMap(true);
-          if (known.properties.gbifID !== hoveredFeature?.properties.gbifID) setGroupIndex(0);
+          if (known.properties.gbifID !== hoveredFeature?.properties.gbifID) {
+            setGroupIndex(0);
+            unpinTooltip();
+          }
           setHoveredFeature(known);
           setHoveredPanel(panelId);
           return;
@@ -1825,7 +1847,7 @@ export default function OccurrenceMapRow({
     } else if (!tooltipHeld) {
       clearHoverSoon();
     }
-  }, [isTouchDevice, occurrencesByGbifId, tooltipHeld, hoveredFeature, clearHoverSoon, cancelHoverClear]);
+  }, [isTouchDevice, occurrencesByGbifId, tooltipHeld, hoveredFeature, clearHoverSoon, cancelHoverClear, unpinTooltip]);
 
   const handleMapMouseLeave = useCallback(() => {
     if (tooltipHeld) return;
@@ -1889,11 +1911,12 @@ export default function OccurrenceMapRow({
         return;
       }
       cancelHoverClear();
+      unpinTooltip();
       setGroupIndex(0);
       setHoveredFeature(feature);
       setHoveredPanel("main");
     },
-    [clearHoverSoon, cancelHoverClear]
+    [clearHoverSoon, cancelHoverClear, unpinTooltip]
   );
 
   // Handle view state change for split view sync
@@ -1943,15 +1966,6 @@ export default function OccurrenceMapRow({
     const key = `${hoveredPosition[0].toFixed(4)},${hoveredPosition[1].toFixed(4)}`;
     return coLocatedByPosition.get(key) ?? [hoveredFeature];
   }, [hoveredFeature, hoveredPosition, coLocatedByPosition]);
-
-  /**
-   * A tooltip showing several records at one point stays put until you click
-   * away: it has controls, and something you're paging through shouldn't
-   * disappear because the pointer drifted off it. A single-record tooltip is
-   * still pure hover — there's nothing in it to reach for.
-   */
-  const tooltipPinned = hoveredGroup.length > 1;
-  tooltipPinnedRef.current = tooltipPinned;
 
   useEffect(() => {
     if (!tooltipPinned) return;
@@ -2174,8 +2188,14 @@ export default function OccurrenceMapRow({
                         ? {
                             index: Math.min(groupIndex, hoveredGroup.length - 1),
                             total: hoveredGroup.length,
-                            onPrev: () => setGroupIndex((i) => (i - 1 + hoveredGroup.length) % hoveredGroup.length),
-                            onNext: () => setGroupIndex((i) => (i + 1) % hoveredGroup.length),
+                            onPrev: () => {
+                              pinTooltip();
+                              setGroupIndex((i) => (i - 1 + hoveredGroup.length) % hoveredGroup.length);
+                            },
+                            onNext: () => {
+                              pinTooltip();
+                              setGroupIndex((i) => (i + 1) % hoveredGroup.length);
+                            },
                           }
                         : undefined
                     }
@@ -2187,7 +2207,8 @@ export default function OccurrenceMapRow({
                       setTooltipHeld(false);
                       clearHoverSoon();
                     }}
-                    onClose={hoveredGroup.length > 1 ? closeTooltip : undefined}
+                    onClose={tooltipPinned ? closeTooltip : undefined}
+                    pinned={tooltipPinned}
                   />
                 );
               })()}
