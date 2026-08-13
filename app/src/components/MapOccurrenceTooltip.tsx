@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useMap } from "react-map-gl/maplibre";
 import { QUALITY_FLAG_LABELS, type QualityFlag } from "@/lib/coordinate-cleaning";
@@ -55,6 +55,19 @@ function formatBasis(basis?: string): string {
 export default function MapOccurrenceTooltip(props: MapOccurrenceTooltipProps) {
   const { current: map } = useMap();
   const [pos, setPos] = useState<{ x: number; y: number } | null>(null);
+  // Measured rather than guessed: the panel's height depends on which fields
+  // the record has and whether it carries an image, and both the clamping and
+  // the arrow's position need the real number. Observed rather than read once,
+  // since paging between records at a point changes it under us.
+  const [panelHeight, setPanelHeight] = useState(0);
+  const observerRef = useRef<ResizeObserver | null>(null);
+  const panelRef = useCallback((el: HTMLDivElement | null) => {
+    observerRef.current?.disconnect();
+    if (!el) return;
+    const observer = new ResizeObserver(() => setPanelHeight(el.getBoundingClientRect().height));
+    observer.observe(el);
+    observerRef.current = observer;
+  }, []);
 
   useEffect(() => {
     if (!map) return;
@@ -87,14 +100,18 @@ export default function MapOccurrenceTooltip(props: MapOccurrenceTooltipProps) {
   // the point covers the very area you're comparing it against. Flips to the
   // left when there isn't room on the right.
   const showLeft = fixedX + tooltipWidth + 24 > containerRect.right;
-  // Keep it inside the map vertically; the estimate is deliberately generous
-  // since the height depends on which fields the record has.
-  const estimatedHeight = props.imageUrl || props.images?.length ? 300 : 160;
-  const halfHeight = estimatedHeight / 2;
+  // Keep it inside the map vertically. The estimate only covers the first
+  // frame, before the panel has been measured.
+  const height = panelHeight || (props.imageUrl || props.images?.length ? 300 : 160);
+  const halfHeight = height / 2;
   const clampedY = Math.max(
     containerRect.top + halfHeight + 4,
     Math.min(fixedY, containerRect.bottom - halfHeight - 4)
   );
+  // Once clamped, the panel's middle is no longer level with the point, so the
+  // arrow has to move to keep pointing at it — otherwise a tooltip nudged away
+  // from the edge appears to be labelling a different record entirely.
+  const arrowOffset = Math.max(10, Math.min(height - 10, fixedY - (clampedY - halfHeight)));
 
   // A rotated square rather than a CSS-border triangle, so it can carry the
   // panel's own background and border in both themes (the old triangle was
@@ -103,7 +120,7 @@ export default function MapOccurrenceTooltip(props: MapOccurrenceTooltipProps) {
     <div
       className="absolute w-2.5 h-2.5 bg-white dark:bg-zinc-900 border-zinc-200 dark:border-zinc-700"
       style={{
-        top: "50%",
+        top: arrowOffset,
         [showLeft ? "right" : "left"]: -5,
         transform: "translateY(-50%) rotate(45deg)",
         borderRightWidth: showLeft ? 1 : 0,
@@ -130,7 +147,11 @@ export default function MapOccurrenceTooltip(props: MapOccurrenceTooltipProps) {
       onMouseEnter={props.onPointerEnter}
       onMouseLeave={props.onPointerLeave}
     >
-      <div className="relative bg-white dark:bg-zinc-900 rounded-lg shadow-lg border border-zinc-200 dark:border-zinc-700" style={{ maxWidth: 220 }}>
+      <div
+        ref={panelRef}
+        className="relative bg-white dark:bg-zinc-900 rounded-lg shadow-lg border border-zinc-200 dark:border-zinc-700"
+        style={{ maxWidth: 220 }}
+      >
         {arrow}
         <div className="rounded-lg overflow-hidden">
         {(props.imageUrl || props.images?.[0]) && (

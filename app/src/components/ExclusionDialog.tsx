@@ -54,18 +54,27 @@ export default function ExclusionDialog({
       >
         <div className="px-4 py-3 border-b border-zinc-200 dark:border-zinc-700">
           <h2 className="text-sm font-medium text-zinc-900 dark:text-zinc-100">
-            {gbifIDs.length === 1 ? "Exclude this record" : `Exclude ${gbifIDs.length} records`}
+            {existingJustification
+              ? gbifIDs.length === 1
+                ? "Edit exclusion reason"
+                : `Edit reason for ${gbifIDs.length} records`
+              : gbifIDs.length === 1
+                ? "Exclude this record"
+                : `Exclude ${gbifIDs.length} records`}
           </h2>
-          <p className="text-[11px] text-zinc-400 mt-0.5">
-            {gbifIDs.length === 1 ? (
-              <>
-                GBIF record <span className="tabular-nums">{gbifIDs[0]}</span> will be left out of the map,
-                the counts and the export.
-              </>
-            ) : (
-              <>These records will be left out of the map, the counts and the export.</>
-            )}
-          </p>
+          {gbifIDs.length === 1 && (
+            <p className="text-[11px] text-zinc-400 mt-0.5">
+              GBIF record{" "}
+              <a
+                href={`https://www.gbif.org/occurrence/${gbifIDs[0]}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="tabular-nums text-blue-600 dark:text-blue-400 hover:underline"
+              >
+                {gbifIDs[0]}
+              </a>
+            </p>
+          )}
         </div>
 
         <div className="px-4 py-3 space-y-2">
@@ -99,7 +108,7 @@ export default function ExclusionDialog({
                 setJustification(e.target.value);
                 setShowError(false);
               }}
-              placeholder="Why should this record not count?"
+              placeholder="Why should this record be excluded?"
               className="w-full px-2 py-1 rounded border border-zinc-300 dark:border-zinc-600 bg-white dark:bg-zinc-800 text-zinc-800 dark:text-zinc-100"
             />
           </label>
@@ -121,7 +130,11 @@ export default function ExclusionDialog({
             onClick={confirm}
             className="px-3 py-1 rounded bg-zinc-800 dark:bg-zinc-200 hover:bg-zinc-900 dark:hover:bg-white text-xs text-white dark:text-zinc-900 font-medium transition-colors"
           >
-            {gbifIDs.length === 1 ? "Exclude" : `Exclude ${gbifIDs.length}`}
+            {existingJustification
+              ? "Save reason"
+              : gbifIDs.length === 1
+                ? "Exclude"
+                : `Exclude ${gbifIDs.length}`}
           </button>
         </div>
       </div>

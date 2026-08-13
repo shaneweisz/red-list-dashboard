@@ -2434,6 +2434,9 @@ export default function OccurrenceMapRow({
       {pendingExclusion && (
         <ExclusionDialog
           gbifIDs={pendingExclusion}
+          existingJustification={
+            pendingExclusion.length === 1 ? exclusions[pendingExclusion[0]]?.justification : undefined
+          }
           onConfirm={confirmExclusion}
           onCancel={() => setPendingExclusion(null)}
         />

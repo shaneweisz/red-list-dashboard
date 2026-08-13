@@ -167,6 +167,16 @@ function loadColumnPrefs(): ColumnPrefs | null {
   }
 }
 
+/** Forget a saved layout entirely, so the defaults apply again. */
+function clearColumnPrefs() {
+  if (typeof window === "undefined") return;
+  try {
+    window.localStorage.removeItem(COLUMN_PREFS_KEY);
+  } catch {
+    // The in-memory reset has already happened; nothing else to do.
+  }
+}
+
 function saveColumnPrefs(prefs: ColumnPrefs) {
   if (typeof window === "undefined") return;
   try {
@@ -367,6 +377,16 @@ export default function OccurrenceListTable({
     saveColumnPrefs(next);
   };
 
+  /**
+   * Back to the shipped layout — order, visibility and widths together.
+   * Resetting only the visible set left a reordered table looking unreset,
+   * which is the one thing a reset button must not do.
+   */
+  const resetPrefs = () => {
+    setColumnPrefs(null);
+    clearColumnPrefs();
+  };
+
   const columns = useMemo<ColumnDef[]>(
     () => [
       // Included first: it's the row's status, and it's what you scan down when
@@ -423,9 +443,20 @@ export default function OccurrenceListTable({
                 }`}
               />
               {byHand && (
-                <span className="truncate text-[10px] text-zinc-400" title={byHand.justification}>
+                <button
+                  // Its own mousedown must not reach the cell, or the drag
+                  // selection wrapping this column reads the click as "put this
+                  // record back" and the reason is never editable.
+                  onMouseDown={(e) => e.stopPropagation()}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onExclude?.([p.gbifID]);
+                  }}
+                  className="truncate text-[10px] text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300 hover:underline"
+                  title={`${byHand.justification} — click to edit the reason`}
+                >
                   {byHand.justification}
-                </span>
+                </button>
               )}
             </span>
           );
@@ -495,15 +526,23 @@ export default function OccurrenceListTable({
             onEditGeoreference?.(f);
           };
           if (mine) {
+            // Your note sits with your coordinates, and clicking either reopens
+            // the editor — the reasoning is part of the georeference, not a
+            // footnote to it.
             return (
               <button
                 onClick={open}
                 title={`Your georeference: ${mine.decimalLatitude}, ${mine.decimalLongitude} ± ${mine.coordinateUncertaintyInMeters} m${
                   mine.georeferenceRemarks ? ` — ${mine.georeferenceRemarks}` : ""
                 }. Click to edit, or drag the point on the map.`}
-                className="text-violet-600 dark:text-violet-400 hover:underline"
+                className="block text-left text-violet-600 dark:text-violet-400 hover:underline"
               >
-                ◆ {mine.decimalLatitude.toFixed(4)}, {mine.decimalLongitude.toFixed(4)}
+                <span className="block truncate">
+                  ◆ {mine.decimalLatitude.toFixed(4)}, {mine.decimalLongitude.toFixed(4)}
+                </span>
+                <span className="block truncate text-[10px] text-zinc-400">
+                  {mine.georeferenceRemarks || "add a note"}
+                </span>
               </button>
             );
           }
@@ -699,7 +738,7 @@ export default function OccurrenceListTable({
         ),
       },
     ],
-    [isOutsideNativeRange, georeferences, onEditGeoreference, excludedIds, exclusions, dragSelection]
+    [isOutsideNativeRange, georeferences, onEditGeoreference, excludedIds, exclusions, dragSelection, onExclude]
   );
 
   // The catalogue in the reader's own order, then the subset actually drawn.
@@ -780,14 +819,17 @@ export default function OccurrenceListTable({
     });
   };
 
-  const moveColumn = (index: number, delta: number) => {
-    const next = [...orderedColumns];
-    const target = index + delta;
-    if (target < 0 || target >= next.length) return;
-    [next[index], next[target]] = [next[target], next[index]];
+  /** Drops the dragged column into the position of the one it was dropped on. */
+  const moveColumnBefore = (dragged: string | null, target: string) => {
+    if (!dragged || dragged === target) return;
+    const order = orderedColumns.map((c) => c.key);
+    const from = order.indexOf(dragged);
+    const to = order.indexOf(target);
+    if (from < 0 || to < 0) return;
+    order.splice(to, 0, ...order.splice(from, 1));
     updatePrefs({
-      order: next.map((c) => c.key),
-      visible: next.filter((c) => visibleKeys.has(c.key)).map((c) => c.key),
+      order,
+      visible: order.filter((k) => visibleKeys.has(k)),
       widths: columnWidths,
     });
   };
@@ -922,13 +964,7 @@ export default function OccurrenceListTable({
                     onDragOver={(e) => e.preventDefault()}
                     onDrop={(e) => {
                       e.preventDefault();
-                      if (!dragColumn || dragColumn === col.key) return;
-                      const order = orderedColumns.map((c) => c.key);
-                      const from = order.indexOf(dragColumn);
-                      const to = order.indexOf(col.key);
-                      if (from < 0 || to < 0) return;
-                      order.splice(to, 0, ...order.splice(from, 1));
-                      updatePrefs({ order, visible: order.filter((k) => visibleKeys.has(k)), widths: columnWidths });
+                      moveColumnBefore(dragColumn, col.key);
                       setDragColumn(null);
                     }}
                     onDragEnd={() => setDragColumn(null)}
@@ -980,10 +1016,18 @@ export default function OccurrenceListTable({
                   if (el) rowRefs.current.set(id, el);
                   else rowRefs.current.delete(id);
                 }}
-                onClick={() => window.open(`https://www.gbif.org/occurrence/${id}`, "_blank", "noopener,noreferrer")}
+                // A plain click did this until now, which made every attempt to
+                // touch a row — a checkbox, a coordinate — one near miss away
+                // from a new tab.
+                onClick={(e) => {
+                  if (e.metaKey || e.ctrlKey) {
+                    window.open(`https://www.gbif.org/occurrence/${id}`, "_blank", "noopener,noreferrer");
+                  }
+                }}
+                title="\u2318/Ctrl-click to open this record on gbif.org"
                 onMouseEnter={() => onHoverRow?.(f)}
                 onMouseLeave={() => onHoverRow?.(null)}
-                className={`cursor-pointer border-b border-zinc-100 dark:border-zinc-800 ${
+                className={`border-b border-zinc-100 dark:border-zinc-800 ${
                   hoveredGbifId === id
                     ? "bg-blue-50 dark:bg-blue-950/40"
                     : currentMatch === id
@@ -1109,18 +1153,43 @@ export default function OccurrenceListTable({
                   Show all
                 </button>
                 <span className="text-zinc-300 dark:text-zinc-600">·</span>
-                <button onClick={() => setVisible(DEFAULT_VISIBLE_COLUMNS)} className="hover:underline">
+                <button onClick={resetPrefs} className="hover:underline">
                   Reset to default
                 </button>
-                <span className="ml-auto">Drag with ▲▼ to reorder</span>
+                <span className="ml-auto">Drag a row to reorder</span>
               </div>
-              {orderedColumns.map((col, index) => {
+              {orderedColumns.map((col) => {
                 const shown = visibleKeys.has(col.key);
                 return (
                   <div
                     key={col.key}
-                    className="flex items-center gap-2 px-3 py-1 hover:bg-zinc-50 dark:hover:bg-zinc-800 text-xs"
+                    draggable
+                    onDragStart={(e) => {
+                      setDragColumn(col.key);
+                      e.dataTransfer.effectAllowed = "move";
+                    }}
+                    onDragOver={(e) => e.preventDefault()}
+                    onDrop={(e) => {
+                      e.preventDefault();
+                      moveColumnBefore(dragColumn, col.key);
+                      setDragColumn(null);
+                    }}
+                    onDragEnd={() => setDragColumn(null)}
+                    className={`flex items-center gap-2 px-3 py-1 hover:bg-zinc-50 dark:hover:bg-zinc-800 text-xs ${
+                      dragColumn === col.key ? "opacity-40" : ""
+                    }`}
                   >
+                    {/* The handle: six dots, the usual sign for "pick me up". */}
+                    <span className="cursor-grab active:cursor-grabbing text-zinc-300 dark:text-zinc-600 select-none" title="Drag to reorder">
+                      <svg className="w-3 h-3" viewBox="0 0 24 24" fill="currentColor">
+                        <circle cx="9" cy="6" r="1.6" />
+                        <circle cx="15" cy="6" r="1.6" />
+                        <circle cx="9" cy="12" r="1.6" />
+                        <circle cx="15" cy="12" r="1.6" />
+                        <circle cx="9" cy="18" r="1.6" />
+                        <circle cx="15" cy="18" r="1.6" />
+                      </svg>
+                    </span>
                     <input
                       type="checkbox"
                       checked={shown}
@@ -1139,26 +1208,6 @@ export default function OccurrenceListTable({
                     >
                       {col.label}
                     </span>
-                    <button
-                      onClick={() => moveColumn(index, -1)}
-                      disabled={index === 0}
-                      title="Move left"
-                      className="p-0.5 text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300 disabled:opacity-25 disabled:cursor-not-allowed"
-                    >
-                      <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M5 15l7-7 7 7" />
-                      </svg>
-                    </button>
-                    <button
-                      onClick={() => moveColumn(index, 1)}
-                      disabled={index === orderedColumns.length - 1}
-                      title="Move right"
-                      className="p-0.5 text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300 disabled:opacity-25 disabled:cursor-not-allowed"
-                    >
-                      <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
-                      </svg>
-                    </button>
                   </div>
                 );
               })}
