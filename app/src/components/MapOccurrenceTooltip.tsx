@@ -21,7 +21,10 @@ interface MapOccurrenceTooltipProps {
   /** The record's locality text — the only thing an ungeoreferenced record has. */
   locality?: string;
   /** Present when these coordinates are the assessor's own, not GBIF's. */
-  yourGeoreference?: { protocol?: string };
+  yourGeoreference?: { protocol?: string; remarks?: string };
+  /** Opens the georeference editor for the record shown. The map point itself
+   *  now opens GBIF on click, so this is where correcting it lives. */
+  onEditGeoreference?: () => void;
   /** Images attached to the record — a herbarium sheet's own photograph, most
    *  usefully, which is what you want in front of you when reading its label. */
   images?: { url: string; title?: string; creator?: string; license?: string; rightsHolder?: string }[];
@@ -141,8 +144,8 @@ export default function MapOccurrenceTooltip(props: MapOccurrenceTooltipProps) {
         transform: showLeft ? "translate(-100%, -50%)" : "translate(0, -50%)",
         zIndex: 10000,
         // Interactive when it has controls: you have to be able to reach the
-        // pager without the tooltip vanishing on the way.
-        pointerEvents: props.page ? "auto" : "none",
+        // pager — or the edit link — without the tooltip vanishing on the way.
+        pointerEvents: props.page || props.onEditGeoreference ? "auto" : "none",
       }}
       onMouseEnter={props.onPointerEnter}
       onMouseLeave={props.onPointerLeave}
@@ -238,9 +241,27 @@ export default function MapOccurrenceTooltip(props: MapOccurrenceTooltipProps) {
           {/* Says whose coordinates these are, so an assessor's own reading of
               a locality can never be mistaken for a published position. */}
           {props.yourGeoreference && (
-            <div className="text-violet-600 dark:text-violet-400 font-medium pt-0.5">
-              ◆ Your georeference
-              {props.yourGeoreference.protocol ? ` · ${props.yourGeoreference.protocol}` : ""}
+            <div className="pt-0.5">
+              <div className="flex items-baseline gap-1 text-violet-600 dark:text-violet-400 font-medium">
+                <span>
+                  ◆ Your georeference
+                  {props.yourGeoreference.protocol ? ` · ${props.yourGeoreference.protocol}` : ""}
+                </span>
+                {props.onEditGeoreference && (
+                  <button
+                    onClick={props.onEditGeoreference}
+                    title="Edit these coordinates, their uncertainty and your notes. You can also drag the point on the map."
+                    className="ml-auto shrink-0 text-[10px] font-normal underline decoration-dotted hover:text-violet-800 dark:hover:text-violet-300"
+                  >
+                    Edit
+                  </button>
+                )}
+              </div>
+              {props.yourGeoreference.remarks && (
+                <div className="text-[10px] text-zinc-500 dark:text-zinc-400">
+                  {props.yourGeoreference.remarks}
+                </div>
+              )}
             </div>
           )}
           {props.images && props.images.length > 0 && (

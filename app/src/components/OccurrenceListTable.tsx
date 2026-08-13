@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { QUALITY_FLAG_LABELS, type QualityFlag } from "@/lib/coordinate-cleaning";
 import { formatGbifIssue } from "@/lib/gbif";
@@ -248,6 +248,9 @@ interface ColumnDef {
   value: (p: OccurrenceFeature["properties"], f: OccurrenceFeature) => SortValue;
   /** Cell contents, when they aren't just the sort value rendered as text. */
   render?: (p: OccurrenceFeature["properties"], f: OccurrenceFeature) => React.ReactNode;
+  /** A control drawn in the header beside the label — the Included column's
+   *  show/hide toggle. Its own clicks are kept off the sort handler. */
+  headerExtra?: React.ReactNode;
 }
 
 interface OccurrenceListTableProps {
@@ -280,6 +283,11 @@ interface OccurrenceListTableProps {
   hoverFromMap?: boolean;
   /** Fill the height of the column the table is in. */
   fillHeight?: boolean;
+  /** How the map and this table are arranged, when the caller offers a choice.
+   *  The control lives here, beside the column picker, because both are
+   *  questions about how you want to read the table. */
+  panelLayout?: "rows" | "columns";
+  onTogglePanelLayout?: () => void;
 }
 
 /**
@@ -306,6 +314,8 @@ export default function OccurrenceListTable({
   onInclude,
   hoverFromMap = false,
   fillHeight = false,
+  panelLayout,
+  onTogglePanelLayout,
 }: OccurrenceListTableProps) {
   // Default sort: newest first, matching GBIF's own default result order.
   const [sortKey, setSortKey] = useState<string>("date");
@@ -353,6 +363,13 @@ export default function OccurrenceListTable({
   const [dragColumn, setDragColumn] = useState<string | null>(null);
   // Rows picked out by dragging down the Included column, resolved on mouse-up.
   const [dragSelection, setDragSelection] = useState<Set<number> | null>(null);
+  /**
+   * Excluded rows are shown greyed by default — a record you can't see is a
+   * record you can't reconsider. But once you've worked through a few hundred
+   * and struck out the duplicates, what you want is the evidence that's left,
+   * so the Included header can hide them.
+   */
+  const [showExcluded, setShowExcluded] = useState(true);
 
   useEffect(() => {
     if (!dragSelection) return;
@@ -399,6 +416,39 @@ export default function OccurrenceListTable({
         title:
           "Whether this record counts. Unchecking asks for a reason — drag down the column to exclude a run of records (duplicates, usually) in one go.",
         className: "whitespace-nowrap",
+        headerExtra: (
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              setShowExcluded((v) => !v);
+            }}
+            onMouseDown={(e) => e.stopPropagation()}
+            draggable={false}
+            onDragStart={(e) => e.preventDefault()}
+            title={
+              showExcluded
+                ? "Hide the excluded rows"
+                : "Show the excluded rows again (greyed out, in place)"
+            }
+            className={`ml-1 align-middle ${
+              showExcluded
+                ? "text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300"
+                : "text-emerald-600 dark:text-emerald-400"
+            }`}
+          >
+            {showExcluded ? (
+              <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M2.5 12S6 5.5 12 5.5 21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12z" />
+                <circle cx="12" cy="12" r="2.75" />
+              </svg>
+            ) : (
+              <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M2.5 12S6 5.5 12 5.5c1.7 0 3.2.5 4.5 1.2M21.5 12s-1.3 2.4-3.7 4.2M4 20L20 4" />
+                <path strokeLinecap="round" strokeLinejoin="round" d="M9.9 14.1a3 3 0 014.2-4.2" />
+              </svg>
+            )}
+          </button>
+        ),
         value: (p) => (excludedIds?.has(p.gbifID) || exclusions?.[p.gbifID] ? 0 : 1),
         render: (p) => {
           const byFilter = excludedIds?.has(p.gbifID) ?? false;
@@ -738,7 +788,7 @@ export default function OccurrenceListTable({
         ),
       },
     ],
-    [isOutsideNativeRange, georeferences, onEditGeoreference, excludedIds, exclusions, dragSelection, onExclude]
+    [isOutsideNativeRange, georeferences, onEditGeoreference, excludedIds, exclusions, dragSelection, onExclude, showExcluded]
   );
 
   // The catalogue in the reader's own order, then the subset actually drawn.
@@ -851,11 +901,24 @@ export default function OccurrenceListTable({
     });
   }, [occurrences, columns, sortKey, sortAsc]);
 
+  /** Excluded either way — by a filter, or by hand with a reason. */
+  const isExcluded = useCallback(
+    (f: OccurrenceFeature) =>
+      (excludedIds?.has(f.properties.gbifID) ?? false) || !!exclusions?.[f.properties.gbifID],
+    [excludedIds, exclusions]
+  );
+
+  const excludedCount = useMemo(() => sorted.filter(isExcluded).length, [sorted, isExcluded]);
+  const rows = useMemo(
+    () => (showExcluded ? sorted : sorted.filter((f) => !isExcluded(f))),
+    [sorted, showExcluded, isExcluded]
+  );
+
   // Which rows match the find box, in display order.
   const matches = useMemo(() => {
     const needle = search.trim().toLowerCase();
     if (!needle) return [];
-    return sorted
+    return rows
       .filter((f) =>
         visibleColumns.some((col) => {
           const v = col.value(f.properties, f);
@@ -863,7 +926,7 @@ export default function OccurrenceListTable({
         })
       )
       .map((f) => f.properties.gbifID);
-  }, [sorted, visibleColumns, search]);
+  }, [rows, visibleColumns, search]);
 
   const matchSet = useMemo(() => new Set(matches), [matches]);
   const currentMatch = matches.length > 0 ? matches[Math.min(matchIndex, matches.length - 1)] : null;
@@ -979,6 +1042,7 @@ export default function OccurrenceListTable({
                     <span className={`ml-1 ${active ? "text-zinc-400" : "text-transparent"}`}>
                       {active && !sortAsc ? "▼" : "▲"}
                     </span>
+                    {col.headerExtra}
                     {/* Grab the edge to resize. Its own mousedown stops the
                         header's drag-to-reorder and click-to-sort from firing. */}
                     <span
@@ -1006,9 +1070,9 @@ export default function OccurrenceListTable({
             </tr>
           </thead>
           <tbody>
-            {sorted.map((f) => {
+            {rows.map((f) => {
               const id = f.properties.gbifID;
-              const excluded = (excludedIds?.has(id) ?? false) || !!exclusions?.[id];
+              const excluded = isExcluded(f);
               return (
               <tr
                 key={id}
@@ -1066,10 +1130,12 @@ export default function OccurrenceListTable({
               </tr>
               );
             })}
-            {sorted.length === 0 && (
+            {rows.length === 0 && (
               <tr>
                 <td colSpan={visibleColumns.length} className="px-3 py-8 text-center text-zinc-400 text-sm">
-                  No occurrences match the current filters.
+                  {sorted.length > 0
+                    ? "Every record here is excluded — show them again from the Included column."
+                    : "No occurrences match the current filters."}
                 </td>
               </tr>
             )}
@@ -1079,9 +1145,11 @@ export default function OccurrenceListTable({
       {/* Footer: how many rows the filters left, and which columns are shown */}
       <div className="flex items-center gap-2 px-2 py-1.5 border-t border-zinc-100 dark:border-zinc-800 text-[11px] text-zinc-500 dark:text-zinc-400">
         <span className="tabular-nums">
-          {sorted.length === 0 ? "0 records" : `${sorted.length.toLocaleString()} records`}
-          {excludedIds && excludedIds.size > 0 && (
-            <span className="text-zinc-400"> · {excludedIds.size.toLocaleString()} excluded</span>
+          {rows.length === 0 ? "0 records" : `${rows.length.toLocaleString()} records`}
+          {excludedCount > 0 && (
+            <span className="text-zinc-400">
+              {" "}· {excludedCount.toLocaleString()} excluded{showExcluded ? "" : " (hidden)"}
+            </span>
           )}
         </span>
         <div className="flex items-center gap-1">
@@ -1130,7 +1198,28 @@ export default function OccurrenceListTable({
             </>
           )}
         </div>
-        <div className="ml-auto">
+        <div className="ml-auto flex items-center gap-1.5">
+          {onTogglePanelLayout && (
+            <button
+              onClick={onTogglePanelLayout}
+              title={
+                panelLayout === "rows"
+                  ? "Put the list beside the map"
+                  : "Put the list below the map"
+              }
+              className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded border border-zinc-300 dark:border-zinc-600 text-[10px] text-zinc-500 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors"
+            >
+              <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <rect x="3" y="4" width="18" height="16" rx="1.5" />
+                {panelLayout === "rows" ? (
+                  <path strokeLinecap="round" d="M3 13h18" />
+                ) : (
+                  <path strokeLinecap="round" d="M13 4v16" />
+                )}
+              </svg>
+              {panelLayout === "rows" ? "Side by side" : "Stacked"}
+            </button>
+          )}
           <button
             ref={columnButtonRef}
             onClick={() => setColumnPickerOpen((v) => !v)}

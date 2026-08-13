@@ -19,7 +19,6 @@ import {
   loadExclusions,
   saveExclusions,
   type Exclusion,
-  csvToGeoreferences,
   occurrencesToCsv,
   uncertaintyCircle,
   type Georeference,
@@ -114,6 +113,10 @@ function GeoreferenceMarkerDot({
   onLeave: () => void;
 }) {
   const ref = useRef<HTMLDivElement>(null);
+  // Where the pointer went down, so the click that ends a drag can be told
+  // apart from a click meant as a click — the two arrive identically, and
+  // opening a GBIF tab every time you nudge a point would be unusable.
+  const pressAt = useRef<{ x: number; y: number } | null>(null);
   useEffect(() => {
     const el = ref.current;
     if (!el) return;
@@ -133,8 +136,17 @@ function GeoreferenceMarkerDot({
   return (
     <div
       ref={ref}
-      onClick={onClick}
-      title="Drag to move · click to edit"
+      onMouseDown={(e) => {
+        pressAt.current = { x: e.clientX, y: e.clientY };
+      }}
+      onClick={(e) => {
+        const from = pressAt.current;
+        pressAt.current = null;
+        if (from && Math.hypot(e.clientX - from.x, e.clientY - from.y) > 3) return;
+        onClick();
+      }}
+      // No title: the map's own tooltip is already up by the time you could
+      // read one, and a native tooltip on top of it just covers the record.
       style={{
         width: hovered ? 18 : 14,
         height: hovered ? 18 : 14,
@@ -894,7 +906,6 @@ export default function OccurrenceMapRow({
   const [georeferences, setGeoreferences] = useState<Record<number, Georeference>>({});
   const [editingFeature, setEditingFeature] = useState<OccurrenceFeature | null>(null);
   const [georefMessage, setGeorefMessage] = useState<{ kind: "ok" | "error"; text: string } | null>(null);
-  const importInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     setGeoreferences(loadGeoreferences(speciesKey));
@@ -1290,11 +1301,16 @@ export default function OccurrenceMapRow({
     (gbifID: number) => {
       const record = occurrences.find((o) => o.properties.gbifID === gbifID);
       if (!record) return;
+      // The pointer reaches the marker across bare map, and that last mousemove
+      // — no feature under it — has already queued the hover to clear. Without
+      // cancelling it here the tooltip appears and is taken away again a beat
+      // later, which reads as the marker simply not having one.
+      cancelHoverClear();
       setHoverFromMap(true);
       setHoveredFeature(record);
       setHoveredPanel("main");
     },
-    [occurrences]
+    [occurrences, cancelHoverClear]
   );
 
   const handleDeleteGeoreference = useCallback(() => {
@@ -1344,27 +1360,6 @@ export default function OccurrenceMapRow({
       setGeorefMessage({ kind: "error", text: "Export failed." });
     }
   }, [includedOccurrences, georeferences, speciesKey, scientificName, accountEmail]);
-
-  const handleImportFile = useCallback(
-    async (file: File) => {
-      setGeorefMessage(null);
-      const text = await file.text();
-      const { georeferences: imported, errors } = csvToGeoreferences(text);
-      if (imported.length > 0) {
-        const next = { ...georeferences };
-        for (const g of imported) next[g.gbifID] = g;
-        persistGeoreferences(next);
-      }
-      const parts: string[] = [];
-      if (imported.length > 0) parts.push(`Imported ${imported.length} georeference${imported.length === 1 ? "" : "s"}.`);
-      if (errors.length > 0) parts.push(`${errors.length} row${errors.length === 1 ? "" : "s"} skipped: ${errors[0]}${errors.length > 1 ? " …" : ""}`);
-      setGeorefMessage({
-        kind: imported.length > 0 ? "ok" : "error",
-        text: parts.join(" ") || "Nothing to import.",
-      });
-    },
-    [georeferences, persistGeoreferences]
-  );
 
   // Would this record survive everything except the GBIF-flagged check? Used
   // to say what that one check is deciding on its own, the same way the other
@@ -2114,11 +2109,16 @@ export default function OccurrenceMapRow({
                       draggable
                       onDragEnd={(e) => handleGeoreferenceDragged(g.gbifID, e.lngLat.lat, e.lngLat.lng)}
                     >
-                      {/* Drag to correct the position, click to open the editor —
-                          the two things you do to a point you placed yourself. */}
+                      {/* Clicking opens the record on GBIF, as clicking any
+                          other point on this map does — your own point is
+                          still a GBIF record, and behaving differently from
+                          its neighbours is its own small trap. Correcting the
+                          position is dragging it, or the tooltip's own edit. */}
                       <GeoreferenceMarkerDot
                         hovered={hoveredFeature?.properties.gbifID === g.gbifID}
-                        onClick={() => openGeoreferenceEditor(g.gbifID)}
+                        onClick={() =>
+                          window.open(`https://www.gbif.org/occurrence/${g.gbifID}`, "_blank", "noopener,noreferrer")
+                        }
                         onEnter={() => handleMarkerHover(g.gbifID)}
                         onLeave={() => handleHoverRow(null)}
                       />
@@ -2181,7 +2181,17 @@ export default function OccurrenceMapRow({
                     outsideNativeRange={isOutsideNativeRange(shown.properties.countryCode, effectiveNativeCountries)}
                     country={shown.properties.country}
                     locality={shown.properties.locality || shown.properties.verbatimLocality}
-                    yourGeoreference={mine ? { protocol: mine.georeferenceProtocol } : undefined}
+                    yourGeoreference={
+                      mine ? { protocol: mine.georeferenceProtocol, remarks: mine.georeferenceRemarks } : undefined
+                    }
+                    onEditGeoreference={
+                      mine
+                        ? () => {
+                            closeTooltip();
+                            openGeoreferenceEditor(shown.properties.gbifID);
+                          }
+                        : undefined
+                    }
                     images={shown.properties.images}
                     page={
                       hoveredGroup.length > 1
@@ -3322,10 +3332,10 @@ export default function OccurrenceMapRow({
                   than filters, kept together so they don't scatter when
                   some of them are hidden. */}
               <div className="ml-auto flex items-center gap-1.5 shrink-0">
-                                {/* Georeference export/import. On the toolbar rather than in a
-                    dropdown because they're actions, not filters — and ungated:
-                    a georeference is the assessor's own work over public GBIF
-                    fields, with no Red List data in it. */}
+                                {/* Export. On the toolbar rather than in a dropdown
+                    because it's an action, not a filter — and ungated: the
+                    table is the assessor's own work over public GBIF fields,
+                    with no Red List data in it. */}
                 <div className="flex items-center gap-1.5 shrink-0">
                     {georefMessage && (
                       <span
@@ -3353,49 +3363,10 @@ export default function OccurrenceMapRow({
                         {includedOccurrences.length.toLocaleString()}
                       </span>
                     </button>
-                    <button
-                      onClick={() => importInputRef.current?.click()}
-                      title="Load georeferences from a CSV exported here"
-                      className="inline-flex items-center gap-1 px-2 py-1 rounded border border-zinc-300 dark:border-zinc-600 text-xs text-zinc-600 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800 transition-colors"
-                    >
-                      <svg className="w-3.5 h-3.5 text-zinc-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M4 16v2a2 2 0 002 2h12a2 2 0 002-2v-2M7 8l5-5 5 5M12 3v12" />
-                      </svg>
-                      Import CSV
-                    </button>
-                    <input
-                      ref={importInputRef}
-                      type="file"
-                      accept=".csv,text/csv"
-                      className="hidden"
-                      onChange={(e) => {
-                        const file = e.target.files?.[0];
-                        if (file) handleImportFile(file);
-                        e.target.value = "";
-                      }}
-                    />
                 </div>
-                {fullscreen && (
-                  <button
-                    onClick={() => setPanelLayout((v) => (v === "rows" ? "columns" : "rows"))}
-                    title={
-                      panelLayout === "rows"
-                        ? "Put the list beside the map"
-                        : "Put the list below the map"
-                    }
-                    className="inline-flex items-center gap-1.5 px-2 py-1 rounded border border-zinc-300 dark:border-zinc-600 text-xs text-zinc-600 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800 transition-colors shrink-0"
-                  >
-                    <svg className="w-3.5 h-3.5 text-zinc-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                      <rect x="3" y="4" width="18" height="16" rx="1.5" />
-                      {panelLayout === "rows" ? (
-                        <path strokeLinecap="round" d="M3 13h18" />
-                      ) : (
-                        <path strokeLinecap="round" d="M13 4v16" />
-                      )}
-                    </svg>
-                    {panelLayout === "rows" ? "Side by side" : "Stacked"}
-                  </button>
-                )}
+                {/* The map/list arrangement is chosen from the table's own
+                    footer, beside the column picker — it's a question about
+                    reading the table, and it belongs with the other one. */}
                 {/* Fullscreen is a page of its own, so this is a real link:
                     it can be copied, opened in a new tab, and shared, and the
                     page it opens skips every dashboard query. In fullscreen the
@@ -3674,6 +3645,8 @@ export default function OccurrenceMapRow({
                   exclusions={exclusions}
                   onExclude={setPendingExclusion}
                   onInclude={includeAgain}
+                  panelLayout={panelLayout}
+                  onTogglePanelLayout={() => setPanelLayout((v) => (v === "rows" ? "columns" : "rows"))}
                   fillHeight
                 />
               </div>
