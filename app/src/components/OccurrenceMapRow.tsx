@@ -14,6 +14,13 @@ import booleanPointInPolygon from "@turf/boolean-point-in-polygon";
 import type { Feature, Polygon, MultiPolygon } from "geojson";
 import type { OccurrenceFeature as OccurrenceFeatureType } from "./OccurrenceListTable";
 import {
+  PROTECTED_AREAS_TILE_URL,
+  PROTECTED_AREAS_ATTRIBUTION,
+  identifyProtectedAreas,
+  protectedPlanetUrl,
+  type ProtectedArea,
+} from "@/lib/protected-areas";
+import {
   loadGeoreferences,
   saveGeoreferences,
   loadExclusions,
@@ -46,6 +53,10 @@ const MapLibreMarker = dynamic(
 );
 const ScaleControl = dynamic(
   () => import("react-map-gl/maplibre").then((mod) => mod.ScaleControl),
+  { ssr: false }
+);
+const MapPopup = dynamic(
+  () => import("react-map-gl/maplibre").then((mod) => mod.Popup),
   { ssr: false }
 );
 const MapImageTooltip = dynamic(
@@ -233,17 +244,6 @@ const BASEMAP_STYLES: Record<string, { label: string; style: MaplibreStyle }> = 
 };
 type BasemapKey = keyof typeof BASEMAP_STYLES;
 
-// Protected areas overlay — the World Database on Protected Areas (WDPA),
-// UNEP-WCMC & IUCN (the dataset behind protectedplanet.net, refreshed monthly).
-// Served straight from UNEP-WCMC's ArcGIS MapServer `export` endpoint as a
-// transparent PNG, which MapLibre fetches per-tile via the {bbox-epsg-3857}
-// token. Drawn semi-transparently beneath the occurrence points so you can see
-// at a glance which occurrences fall inside a protected area. No API key needed.
-const PROTECTED_AREAS_TILE_URL =
-  "https://data-gis.unep-wcmc.org/server/rest/services/ProtectedSites/The_World_Database_of_Protected_Areas/MapServer/export" +
-  "?bbox={bbox-epsg-3857}&bboxSR=3857&imageSR=3857&size=256,256&dpi=96&format=png32&transparent=true&f=image";
-const PROTECTED_AREAS_ATTRIBUTION =
-  '<a href="https://www.protectedplanet.net" target="_blank" rel="noopener noreferrer">WDPA</a> &copy; UNEP-WCMC &amp; IUCN';
 
 /**
  * Determine whether an occurrence record is "new" (recorded after the assessment date).
@@ -565,6 +565,22 @@ export default function OccurrenceMapRow({
   // occurrence filter above: shading which countries a source considers native,
   // regardless of whether occurrences are being filtered by it.
   const [showProtectedAreas, setShowProtectedAreas] = useState(false);
+  /**
+   * The answer to "what protects this spot?", for the point last clicked while
+   * the overlay was on. A click routinely sits inside several designations at
+   * once — a national park that is also a World Heritage site and a biosphere
+   * reserve — and they're all true, so the popup lists them rather than picking
+   * one to open.
+   */
+  const [protectedAreaQuery, setProtectedAreaQuery] = useState<{
+    panelId: string;
+    lng: number;
+    lat: number;
+    loading: boolean;
+    areas: ProtectedArea[];
+    failed?: boolean;
+  } | null>(null);
+  const protectedAreaQueryId = useRef(0);
   const [showPowoRangeOverlay, setShowPowoRangeOverlay] = useState(false);
   const [showIucnRangeOverlay, setShowIucnRangeOverlay] = useState(false);
   // Whether the current hover started on the map — the list scrolls to meet a
@@ -1777,15 +1793,45 @@ export default function OccurrenceMapRow({
   }, [bbox, fitMapToBbox]);
 
   // Map event handlers
-  const handleMapClick = useCallback((e: MapLayerMouseEvent) => {
+  const handleMapClick = useCallback((e: MapLayerMouseEvent, panelId: string) => {
     const features = e.features;
     if (features && features.length > 0) {
       const gbifID = features[0].properties?.gbifID;
       if (gbifID) {
         window.open(`https://www.gbif.org/occurrence/${gbifID}`, "_blank");
+        return;
       }
     }
-  }, []);
+    // Nothing of ours under the click, so ask the protected-areas service what
+    // is. The overlay is a raster, so there's no feature to hit-test: the same
+    // MapServer that drew the tiles answers an identify at a point, which means
+    // the answer can't disagree with what's on screen.
+    if (!showProtectedAreas) return;
+    const map = e.target;
+    const bounds = map.getBounds();
+    const canvas = map.getCanvas();
+    const { lng, lat } = e.lngLat;
+    const request = {
+      lng,
+      lat,
+      bounds: [bounds.getWest(), bounds.getSouth(), bounds.getEast(), bounds.getNorth()] as [number, number, number, number],
+      width: canvas.clientWidth,
+      height: canvas.clientHeight,
+    };
+    const query = ++protectedAreaQueryId.current;
+    setProtectedAreaQuery({ panelId, lng, lat, loading: true, areas: [] });
+    identifyProtectedAreas(request)
+      .then((areas) => {
+        // A second click while the first was in flight wins; anything else
+        // would replace the popup you're reading with an older answer.
+        if (query !== protectedAreaQueryId.current) return;
+        setProtectedAreaQuery({ panelId, lng, lat, loading: false, areas });
+      })
+      .catch(() => {
+        if (query !== protectedAreaQueryId.current) return;
+        setProtectedAreaQuery({ panelId, lng, lat, loading: false, areas: [], failed: true });
+      });
+  }, [showProtectedAreas]);
 
   // Loaded records by gbifID — the map hands back only what it stored on a
   // feature, which for the assessor-georeference layer is just an id.
@@ -2039,7 +2085,7 @@ export default function OccurrenceMapRow({
               style={{ width: "100%", height: "100%" }}
               mapStyle={BASEMAP_STYLES[basemap].style}
               interactiveLayerIds={[`occ-circles-${panelId}`, `georef-point-${panelId}`]}
-              onClick={handleMapClick}
+              onClick={(e: MapLayerMouseEvent) => handleMapClick(e, panelId)}
               onMouseMove={(e: MapLayerMouseEvent) => handleMapMouseMove(e, panelId)}
               onMouseLeave={handleMapMouseLeave}
               onLoad={panelId === "main" || panelId === "before" || !splitView ? handleMapLoad : undefined}
@@ -2058,6 +2104,55 @@ export default function OccurrenceMapRow({
                 >
                   <Layer id={`wdpa-layer-${panelId}`} type="raster" paint={{ "raster-opacity": 0.5 }} />
                 </Source>
+              )}
+              {/* What protects the clicked spot. Everything the popup shows is
+                  what an assessor would otherwise have to look up by hand on
+                  protectedplanet.net — including the link to do exactly that. */}
+              {showProtectedAreas && protectedAreaQuery?.panelId === panelId && (
+                <MapPopup
+                  longitude={protectedAreaQuery.lng}
+                  latitude={protectedAreaQuery.lat}
+                  anchor="bottom"
+                  offset={12}
+                  maxWidth="280px"
+                  closeOnClick={false}
+                  onClose={() => setProtectedAreaQuery(null)}
+                  className="occurrence-popup"
+                >
+                  <div className="text-[11px] text-zinc-700 dark:text-zinc-200 space-y-1.5">
+                    {protectedAreaQuery.loading ? (
+                      <span className="text-zinc-400">Looking up protected areas…</span>
+                    ) : protectedAreaQuery.failed ? (
+                      <span className="text-amber-600 dark:text-amber-400">
+                        Couldn&apos;t reach the WDPA service.
+                      </span>
+                    ) : protectedAreaQuery.areas.length === 0 ? (
+                      <span className="text-zinc-400">No protected area here.</span>
+                    ) : (
+                      protectedAreaQuery.areas.map((area) => (
+                        <div key={area.sitePid} className="space-y-0.5">
+                          <a
+                            href={protectedPlanetUrl(area)}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="font-medium text-blue-600 dark:text-blue-400 hover:underline"
+                          >
+                            {area.name}
+                          </a>
+                          <div className="text-zinc-500 dark:text-zinc-400">
+                            {[
+                              area.designation,
+                              area.iucnCategory ? `IUCN ${area.iucnCategory}` : null,
+                              area.statusYear ? String(area.statusYear) : null,
+                            ]
+                              .filter(Boolean)
+                              .join(" · ")}
+                          </div>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                </MapPopup>
               )}
               {/* POWO / IUCN native-range overlays — shade the countries each
                   source considers native, purely informational (independent of
@@ -3261,12 +3356,15 @@ export default function OccurrenceMapRow({
                     <div className="border-t border-zinc-100 dark:border-zinc-800 my-1" />
                     <label
                       className="flex items-center gap-2 px-3 py-1.5 hover:bg-zinc-50 dark:hover:bg-zinc-800 cursor-pointer text-xs"
-                      title="Overlay the World Database on Protected Areas (WDPA) — UNEP-WCMC & IUCN"
+                      title="Overlay the World Database on Protected Areas (WDPA) — UNEP-WCMC & IUCN. With it on, clicking the map names the areas covering that point and links each to Protected Planet."
                     >
                       <input
                         type="checkbox"
                         checked={showProtectedAreas}
-                        onChange={() => setShowProtectedAreas((v) => !v)}
+                        onChange={() => {
+                          setShowProtectedAreas((v) => !v);
+                          setProtectedAreaQuery(null);
+                        }}
                         className="w-3 h-3 rounded accent-emerald-500 shrink-0"
                       />
                       <span className="flex-1 min-w-0 text-zinc-700 dark:text-zinc-200">Protected areas</span>

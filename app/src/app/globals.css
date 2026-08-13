@@ -176,3 +176,28 @@ input[type="range"].dual-range-thumb:focus-visible::-moz-range-thumb {
 .dark input[type="range"].dual-range-thumb:focus-visible::-moz-range-thumb {
   box-shadow: 0 0 0 2px #18181b, 0 0 0 4px #3b82f6;
 }
+
+/*
+ * MapLibre's popup ships a hardcoded white bubble and white arrow, which sits
+ * on the map as a bright rectangle in dark mode. Themed here rather than by
+ * class on the element, because the parts that need it — the tip, the close
+ * button — are MapLibre's own DOM, not ours.
+ */
+.occurrence-popup .maplibregl-popup-content {
+  padding: 8px 10px;
+  border-radius: 8px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25);
+}
+.dark .occurrence-popup .maplibregl-popup-content {
+  background: #18181b;
+  border: 1px solid #3f3f46;
+}
+.dark .occurrence-popup .maplibregl-popup-tip {
+  border-top-color: #18181b;
+  border-bottom-color: #18181b;
+  border-left-color: #18181b;
+  border-right-color: #18181b;
+}
+.dark .occurrence-popup .maplibregl-popup-close-button {
+  color: #a1a1aa;
+}
