@@ -8,6 +8,8 @@ import {
   type Georeference,
 } from "@/lib/georeferences";
 import type { OccurrenceFeature } from "./OccurrenceListTable";
+import { formatKind, searchPlaces, GEOCODER_ATTRIBUTION, type Place } from "@/lib/geocode";
+import { haversineMetres } from "@/lib/geo-distance";
 
 interface GeoreferenceEditorProps {
   /** The GBIF record being georeferenced. */
@@ -22,14 +24,32 @@ interface GeoreferenceEditorProps {
   onClose: () => void;
 }
 
-/** GEOLocate's web form, prefilled — the tool most assessors georeference in. */
-function geoLocateUrl(p: OccurrenceFeature["properties"]): string {
-  const params = new URLSearchParams();
-  if (p.country) params.set("country", p.country);
-  if (p.stateProvince) params.set("state", p.stateProvince);
-  const locality = p.locality || p.verbatimLocality;
-  if (locality) params.set("locality", locality);
-  return `https://www.geo-locate.org/web/WebGeoreflight.aspx?${params}`;
+/**
+ * What to search for, from what the label says.
+ *
+ * The administrative names go in the query rather than being used to filter:
+ * Photon has no country parameter, and a place name plus its region is what
+ * anyone would type anyway — it disambiguates a locality shared by a dozen
+ * municipalities without excluding a hit whose region OSM spells differently.
+ */
+function localityQuery(p: OccurrenceFeature["properties"]): string {
+  return [p.locality || p.verbatimLocality, p.stateProvince, p.country].filter(Boolean).join(", ");
+}
+
+/**
+ * A radius that covers the named feature, for the point-radius method.
+ *
+ * Half the diagonal of the place's own extent, which is the smallest circle
+ * centred on it that contains it. Only a starting point — the assessor still
+ * owns the number — but it beats an empty box, and it is at least honestly
+ * derived from how big the thing actually is rather than guessed.
+ */
+function radiusFromExtent(place: Place): number | null {
+  if (!place.bbox) return null;
+  const [west, south, east, north] = place.bbox;
+  const diagonal = haversineMetres([west, south], [east, north]);
+  if (!Number.isFinite(diagonal) || diagonal <= 0) return null;
+  return Math.max(30, Math.round(diagonal / 2));
 }
 
 function Row({ label, value }: { label: string; value?: string | number | null }) {
@@ -61,6 +81,48 @@ export default function GeoreferenceEditor({
   );
   const [remarks, setRemarks] = useState(existing?.georeferenceRemarks ?? "");
   const [showErrors, setShowErrors] = useState(false);
+  // Looking the locality up, in here rather than in another tab. The round trip
+  // through an external tool — search there, read the numbers off, type them
+  // back — is the whole of the friction this removes.
+  const [query, setQuery] = useState(() => localityQuery(feature.properties));
+  const [results, setResults] = useState<Place[] | null>(null);
+  const [searching, setSearching] = useState(false);
+  const [searchFailed, setSearchFailed] = useState(false);
+
+  const runSearch = async () => {
+    const trimmed = query.trim();
+    if (trimmed.length < 2) return;
+    setSearching(true);
+    setSearchFailed(false);
+    try {
+      // Biased towards GBIF's own coordinates where it has any — a flagged
+      // record is usually flagged for being in the wrong place, not the wrong
+      // country, so its neighbourhood is still the right one to look in.
+      setResults(
+        await searchPlaces(trimmed, {
+          lat: originalCoords?.[1],
+          lng: originalCoords?.[0],
+          zoom: originalCoords ? 6 : undefined,
+        })
+      );
+    } catch {
+      setResults([]);
+      setSearchFailed(true);
+    } finally {
+      setSearching(false);
+    }
+  };
+
+  const applyPlace = (place: Place) => {
+    setLat(String(Number(place.lat.toFixed(5))));
+    setLon(String(Number(place.lng.toFixed(5))));
+    // Only fills an empty box: a number already typed is the assessor's, and
+    // the extent of a named feature is a weaker claim than their own reading.
+    const radius = radiusFromExtent(place);
+    if (uncertainty.trim() === "" && radius != null) setUncertainty(String(radius));
+    setShowErrors(false);
+    setResults(null);
+  };
 
   // Escape closes, like every other dismissible layer in the app.
   useEffect(() => {
@@ -177,18 +239,74 @@ export default function GeoreferenceEditor({
               }`}
             />
           )}
-          {locality && (
-            <a
-              href={geoLocateUrl(p)}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-flex items-center gap-1 pt-1 text-[11px] text-blue-600 dark:text-blue-400 hover:underline"
-            >
-              Open this locality in GEOLocate
-              <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
-              </svg>
-            </a>
+        </div>
+
+        {/* Find the locality without leaving the record */}
+        <div className="px-4 py-3 space-y-2 border-b border-zinc-200 dark:border-zinc-700">
+          <label className="block text-xs">
+            <span className="block mb-1 text-zinc-500 dark:text-zinc-400">
+              Look up the locality
+            </span>
+            <div className="flex gap-2">
+              <input
+                type="text"
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    e.preventDefault();
+                    runSearch();
+                  }
+                }}
+                placeholder="Place name, with its region"
+                className="flex-1 min-w-0 px-2 py-1 rounded border border-zinc-300 dark:border-zinc-600 bg-white dark:bg-zinc-800 text-zinc-800 dark:text-zinc-100"
+              />
+              <button
+                onClick={runSearch}
+                disabled={searching || query.trim().length < 2}
+                className="shrink-0 px-2 py-1 rounded border border-zinc-300 dark:border-zinc-600 text-zinc-600 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800 disabled:opacity-40"
+              >
+                {searching ? "Searching…" : "Search"}
+              </button>
+            </div>
+          </label>
+          {results != null && (
+            searchFailed ? (
+              <p className="text-[11px] text-amber-600 dark:text-amber-400">
+                Couldn&apos;t reach the search service.
+              </p>
+            ) : results.length === 0 ? (
+              <p className="text-[11px] text-zinc-400">
+                Nothing found. Try a shorter name, or drop the region.
+              </p>
+            ) : (
+              <div className="rounded border border-zinc-200 dark:border-zinc-700 divide-y divide-zinc-100 dark:divide-zinc-700 max-h-44 overflow-y-auto">
+                {results.map((place) => {
+                  const radius = radiusFromExtent(place);
+                  return (
+                    <button
+                      key={place.id}
+                      onClick={() => applyPlace(place)}
+                      className="block w-full text-left px-2 py-1.5 text-xs hover:bg-zinc-50 dark:hover:bg-zinc-800"
+                    >
+                      <span className="text-zinc-800 dark:text-zinc-100">{place.name}</span>
+                      {place.kind && (
+                        <span className="ml-1 text-[10px] text-zinc-400">{formatKind(place.kind)}</span>
+                      )}
+                      <span className="block text-[10px] text-zinc-400 truncate">
+                        {place.context}
+                        <span className="tabular-nums">
+                          {place.context ? " · " : ""}
+                          {place.lat.toFixed(4)}, {place.lng.toFixed(4)}
+                        </span>
+                        {radius != null && ` · ±${radius.toLocaleString()} m`}
+                      </span>
+                    </button>
+                  );
+                })}
+                <p className="px-2 py-1 text-[9px] text-zinc-400">{GEOCODER_ATTRIBUTION}</p>
+              </div>
+            )
           )}
         </div>
 

@@ -625,7 +625,7 @@ export default function OccurrenceListTable({
                 title="GBIF has no coordinates for this record — only a locality description. Click to georeference it yourself."
                 className="text-amber-600 dark:text-amber-400 hover:underline decoration-dotted"
               >
-                Not georeferenced +
+                Add georeference
               </button>
             ) : (
               <span className="text-amber-600 dark:text-amber-400">Not georeferenced</span>
