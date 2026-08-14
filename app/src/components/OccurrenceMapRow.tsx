@@ -29,6 +29,7 @@ import {
   FOREST_LOSS_CAVEAT,
   FOREST_LOSS_DATASET_URL,
   FOREST_LOSS_FIRST_YEAR,
+  FOREST_LOSS_HUE_ROTATE,
   FOREST_LOSS_LAST_YEAR,
   FOREST_LOSS_MAX_ZOOM,
   FOREST_LOSS_RAMP,
@@ -2342,7 +2343,11 @@ export default function OccurrenceMapRow({
                   maxzoom={FOREST_LOSS_MAX_ZOOM}
                   attribution={FOREST_LOSS_ATTRIBUTION}
                 >
-                  <Layer id={`forest-loss-layer-${panelId}`} type="raster" paint={{ "raster-opacity": 0.85 }} />
+                  <Layer
+                    id={`forest-loss-layer-${panelId}`}
+                    type="raster"
+                    paint={{ "raster-opacity": 0.85, "raster-hue-rotate": FOREST_LOSS_HUE_ROTATE }}
+                  />
                 </Source>
               )}
               {/* Protected areas overlay (WDPA) — rendered before the occurrence

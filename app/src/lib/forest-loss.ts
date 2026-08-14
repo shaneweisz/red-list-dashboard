@@ -55,8 +55,17 @@ export const FOREST_LOSS_ATTRIBUTION =
 export const FOREST_LOSS_SOURCE_NOTE =
   "Global Forest Watch — now Global Nature Watch — tree cover loss, from Hansen/UMD Global Forest Change.";
 
-/** The ramp's ends, for the legend: oldest loss is yellow, newest is red. */
-export const FOREST_LOSS_RAMP = ["#ffff00", "#ff0000"] as const;
+/**
+ * The tiles ship a yellow-to-red ramp, which is the wrong family for this map:
+ * orange and red are what terrain, bare ground and dry vegetation already look
+ * like, so loss competes with the ground it sits on. A hue rotation turns the
+ * whole ramp pink-to-violet — colours nothing natural takes — without touching
+ * the year encoding underneath, since it moves every hue by the same amount.
+ */
+export const FOREST_LOSS_HUE_ROTATE = 270;
+
+/** The rotated ramp's ends, for the legend: oldest loss pink, newest violet. */
+export const FOREST_LOSS_RAMP = ["#ff0080", "#7f00ff"] as const;
 
 /**
  * What the layer does and doesn't mean.
