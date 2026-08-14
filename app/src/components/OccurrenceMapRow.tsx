@@ -22,6 +22,7 @@ import {
   type ProtectedArea,
 } from "@/lib/protected-areas";
 import { ELEVATION_ATTRIBUTION, elevationAt, formatElevation } from "@/lib/elevation";
+import { formatDistance, pathLengthMetres } from "@/lib/geo-distance";
 import {
   FOREST_LOSS_ATTRIBUTION,
   FOREST_LOSS_CAVEAT,
@@ -623,6 +624,16 @@ export default function OccurrenceMapRow({
     highlight: number;
   } | null>(null);
   const pointQueryId = useRef(0);
+  /** Copied-to-clipboard acknowledgement, cleared on a timer. */
+  const [copiedPoint, setCopiedPoint] = useState(false);
+  /**
+   * The measuring tool: the points clicked so far, along the ground.
+   *
+   * Started from the right-click menu, like Google Maps, because it's a mode —
+   * while it's on, a left click adds a vertex rather than doing what a left
+   * click normally does, and that needs to have been asked for.
+   */
+  const [measure, setMeasure] = useState<[number, number][] | null>(null);
   const [showPowoRangeOverlay, setShowPowoRangeOverlay] = useState(false);
   const [showIucnRangeOverlay, setShowIucnRangeOverlay] = useState(false);
   // Whether the current hover started on the map — the list scrolls to meet a
@@ -1853,7 +1864,12 @@ export default function OccurrenceMapRow({
   }, [bbox, fitMapToBbox]);
 
   // Map event handlers
-  const handleMapClick = useCallback((e: MapLayerMouseEvent, panelId: string) => {
+  const handleMapClick = useCallback((e: MapLayerMouseEvent) => {
+    // Measuring owns the left click while it's on.
+    if (measure) {
+      setMeasure([...measure, [e.lngLat.lng, e.lngLat.lat]]);
+      return;
+    }
     const features = e.features;
     if (features && features.length > 0) {
       const gbifID = features[0].properties?.gbifID;
@@ -1862,14 +1878,31 @@ export default function OccurrenceMapRow({
         return;
       }
     }
+    // A left click on bare map dismisses whatever the right click opened,
+    // rather than opening something of its own.
+    setPointQuery(null);
+  }, [measure]);
+
+  /**
+   * Right-click asks what's here: the coordinates, the ground elevation, and —
+   * where their overlays are on — the habitat class and the protected areas.
+   *
+   * On the right button rather than the left because that's where a map's
+   * "what is this spot" lives (Google Maps put it there and everyone learned
+   * it), and because the left click already means "open this record".
+   */
+  const handleMapContextMenu = useCallback((e: MapLayerMouseEvent, panelId: string) => {
+    e.originalEvent?.preventDefault();
+    if (measure) return;
     const map = e.target;
     const bounds = map.getBounds();
     const canvas = map.getCanvas();
     const { lng, lat } = e.lngLat;
     const query = ++pointQueryId.current;
-    // A second click while the first is in flight wins; without the guard a
-    // slow answer would overwrite the popup you're already reading.
+    // A second right-click while the first is in flight wins; without the guard
+    // a slow answer would overwrite the panel you're already reading.
     const isCurrent = () => query === pointQueryId.current;
+    setCopiedPoint(false);
     setPointQuery({
       panelId,
       lng,
@@ -1924,7 +1957,27 @@ export default function OccurrenceMapRow({
         if (!isCurrent()) return;
         setPointQuery((prev) => (prev ? { ...prev, areas: [], areasLoading: false, areasFailed: true } : prev));
       });
-  }, [showProtectedAreas, showHabitat]);
+  }, [showProtectedAreas, showHabitat, measure]);
+
+  const copyPoint = useCallback((lat: number, lng: number) => {
+    navigator.clipboard?.writeText(`${lat.toFixed(5)}, ${lng.toFixed(5)}`).then(
+      () => {
+        setCopiedPoint(true);
+        window.setTimeout(() => setCopiedPoint(false), 1500);
+      },
+      () => setCopiedPoint(false)
+    );
+  }, []);
+
+  // Escape ends measuring, the way it dismisses every other mode here.
+  useEffect(() => {
+    if (!measure) return;
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setMeasure(null);
+    };
+    document.addEventListener("keydown", handler);
+    return () => document.removeEventListener("keydown", handler);
+  }, [measure]);
 
   // Loaded records by gbifID — the map hands back only what it stored on a
   // feature, which for the assessor-georeference layer is just an id.
@@ -2183,7 +2236,8 @@ export default function OccurrenceMapRow({
               style={{ width: "100%", height: "100%" }}
               mapStyle={BASEMAP_STYLES[basemap].style}
               interactiveLayerIds={[`occ-circles-${panelId}`, `georef-point-${panelId}`]}
-              onClick={(e: MapLayerMouseEvent) => handleMapClick(e, panelId)}
+              onClick={handleMapClick}
+              onContextMenu={(e: MapLayerMouseEvent) => handleMapContextMenu(e, panelId)}
               onMouseMove={(e: MapLayerMouseEvent) => handleMapMouseMove(e, panelId)}
               onMouseLeave={handleMapMouseLeave}
               onLoad={panelId === "main" || panelId === "before" || !splitView ? handleMapLoad : undefined}
@@ -2191,7 +2245,7 @@ export default function OccurrenceMapRow({
               // map now answers something — a record, or the elevation and
               // habitat under the spot — so the cursor should say "clickable"
               // rather than advertising the pan you can still do anyway.
-              cursor="pointer"
+              cursor={measure ? "crosshair" : "pointer"}
             >
               <ScaleControl position="bottom-right" />
               {/* Habitat types (Jung et al.) — bottom of the overlay stack: it
@@ -2424,6 +2478,55 @@ export default function OccurrenceMapRow({
                   />
                 );
               })()}
+              {/* The measured path. Drawn above everything so the line stays
+                  readable over the rasters it's being measured against. */}
+              {measure && measure.length > 0 && (
+                <Source
+                  id={`measure-${panelId}`}
+                  type="geojson"
+                  data={{
+                    type: "FeatureCollection",
+                    features: [
+                      ...(measure.length > 1
+                        ? [{
+                            type: "Feature" as const,
+                            properties: {},
+                            geometry: { type: "LineString" as const, coordinates: measure },
+                          }]
+                        : []),
+                      ...measure.map((point) => ({
+                        type: "Feature" as const,
+                        properties: {},
+                        geometry: { type: "Point" as const, coordinates: point },
+                      })),
+                    ],
+                  }}
+                >
+                  <Layer
+                    id={`measure-casing-${panelId}`}
+                    type="line"
+                    filter={["==", ["geometry-type"], "LineString"]}
+                    paint={{ "line-color": "#ffffff", "line-width": 5, "line-opacity": 0.9 }}
+                  />
+                  <Layer
+                    id={`measure-line-${panelId}`}
+                    type="line"
+                    filter={["==", ["geometry-type"], "LineString"]}
+                    paint={{ "line-color": "#111827", "line-width": 2, "line-dasharray": [2, 1.5] }}
+                  />
+                  <Layer
+                    id={`measure-points-${panelId}`}
+                    type="circle"
+                    filter={["==", ["geometry-type"], "Point"]}
+                    paint={{
+                      "circle-radius": 4,
+                      "circle-color": "#111827",
+                      "circle-stroke-color": "#ffffff",
+                      "circle-stroke-width": 2,
+                    }}
+                  />
+                </Source>
+              )}
               {/* What's here: the ground's height, and what protects it. */}
               {pointQuery?.panelId === panelId && (
                 <MapPopup
@@ -2437,8 +2540,18 @@ export default function OccurrenceMapRow({
                   className="occurrence-popup"
                 >
                   <div className="text-[11px] text-zinc-700 dark:text-zinc-200 space-y-1.5">
-                    <div className="tabular-nums text-zinc-500 dark:text-zinc-400">
-                      {pointQuery.lat.toFixed(4)}, {pointQuery.lng.toFixed(4)}
+                    <div className="text-zinc-500 dark:text-zinc-400">
+                      {/* Click the coordinates to copy them — the reason you
+                          right-clicked a spot is usually to paste it somewhere
+                          else, so it shouldn't need selecting by hand. */}
+                      <button
+                        onClick={() => copyPoint(pointQuery.lat, pointQuery.lng)}
+                        title="Copy these coordinates"
+                        className="tabular-nums hover:text-zinc-800 dark:hover:text-zinc-100 hover:underline decoration-dotted"
+                      >
+                        {pointQuery.lat.toFixed(5)}, {pointQuery.lng.toFixed(5)}
+                      </button>
+                      {copiedPoint && <span className="ml-1 text-emerald-600 dark:text-emerald-400">copied</span>}
                       {" · "}
                       {pointQuery.elevationLoading ? (
                         <span className="text-zinc-400">reading elevation…</span>
@@ -2527,6 +2640,20 @@ export default function OccurrenceMapRow({
                         )}
                       </div>
                     )}
+                    <div className="pt-1 border-t border-zinc-100 dark:border-zinc-800">
+                      <button
+                        onClick={() => {
+                          setMeasure([[pointQuery.lng, pointQuery.lat]]);
+                          setPointQuery(null);
+                        }}
+                        className="flex items-center gap-1.5 text-zinc-500 dark:text-zinc-400 hover:text-zinc-800 dark:hover:text-zinc-100"
+                      >
+                        <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M4 20L20 4M4 20v-5m0 5h5M20 4v5m0-5h-5" />
+                        </svg>
+                        Measure distance
+                      </button>
+                    </div>
                   </div>
                 </MapPopup>
               )}
@@ -2567,6 +2694,34 @@ export default function OccurrenceMapRow({
               occurrence legend. Stacked in a column so a legend that only
               appears with its overlay can't land on top of another. */}
           <div className="absolute bottom-2 left-2 z-[1000] flex flex-col items-start gap-1.5 max-w-[90%]">
+          {/* The measuring tool's running total. First in the stack because
+              it's a live mode, not a legend. */}
+          {measure && (
+            <div className="bg-white dark:bg-zinc-800 px-2 py-1.5 rounded shadow text-[11px] text-zinc-700 dark:text-zinc-200 flex items-center gap-2">
+              <span className="font-medium tabular-nums">{formatDistance(pathLengthMetres(measure))}</span>
+              <span className="text-zinc-400">
+                {measure.length < 2
+                  ? "click the map to measure from here"
+                  : `${measure.length} points`}
+              </span>
+              {measure.length > 1 && (
+                <button
+                  onClick={() => setMeasure(measure.slice(0, -1))}
+                  title="Remove the last point"
+                  className="text-zinc-500 dark:text-zinc-400 hover:underline"
+                >
+                  Undo
+                </button>
+              )}
+              <button
+                onClick={() => setMeasure(null)}
+                title="Finish measuring (or press Escape)"
+                className="text-zinc-500 dark:text-zinc-400 hover:underline"
+              >
+                Done
+              </button>
+            </div>
+          )}
           {/* Forest loss reads as a colour ramp, so it needs one: without the
               years, recent clearance and twenty-year-old logging look the
               same. It can't be filtered to a year — see lib/forest-loss.ts —
