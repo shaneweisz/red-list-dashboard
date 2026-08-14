@@ -23,6 +23,7 @@ import {
 } from "@/lib/protected-areas";
 import { ELEVATION_ATTRIBUTION, elevationAt, formatElevation } from "@/lib/elevation";
 import { formatDistance, pathLengthMetres } from "@/lib/geo-distance";
+import type { Place } from "@/lib/geocode";
 import {
   FOREST_LOSS_ATTRIBUTION,
   FOREST_LOSS_CAVEAT,
@@ -114,6 +115,10 @@ const ExclusionDialog = dynamic(
 );
 const ConfirmDialog = dynamic(
   () => import("./ConfirmDialog"),
+  { ssr: false }
+);
+const MapPlaceSearch = dynamic(
+  () => import("./MapPlaceSearch"),
   { ssr: false }
 );
 
@@ -634,6 +639,26 @@ export default function OccurrenceMapRow({
    * click normally does, and that needs to have been asked for.
    */
   const [measure, setMeasure] = useState<[number, number][] | null>(null);
+  /** The place the search last flew to, pinned so you can see where it is. */
+  const [searchedPlace, setSearchedPlace] = useState<Place | null>(null);
+
+  const goToPlace = useCallback((place: Place) => {
+    setSearchedPlace(place);
+    const map = mapRef.current;
+    if (!map) return;
+    // A named area gets its extent; a point gets a zoom close enough to read
+    // the ground without losing the surroundings you're matching the label
+    // against.
+    if (place.bbox) {
+      map.fitBounds([[place.bbox[0], place.bbox[1]], [place.bbox[2], place.bbox[3]]], {
+        padding: 80,
+        maxZoom: 14,
+        duration: 900,
+      });
+    } else {
+      map.flyTo({ center: [place.lng, place.lat], zoom: Math.max(map.getZoom(), 11), duration: 900 });
+    }
+  }, []);
   const [showPowoRangeOverlay, setShowPowoRangeOverlay] = useState(false);
   const [showIucnRangeOverlay, setShowIucnRangeOverlay] = useState(false);
   // Whether the current hover started on the map — the list scrolls to meet a
@@ -2478,6 +2503,21 @@ export default function OccurrenceMapRow({
                   />
                 );
               })()}
+              {/* Where the search landed. Pinned rather than just flown to:
+                  the point of looking a locality up is to compare it against
+                  the records, which means both have to be on screen at once. */}
+              {searchedPlace && (
+                <MapLibreMarker longitude={searchedPlace.lng} latitude={searchedPlace.lat} anchor="bottom">
+                  <div className="flex flex-col items-center -mb-1">
+                    <span className="px-1.5 py-0.5 rounded bg-zinc-900/80 text-white text-[10px] whitespace-nowrap max-w-[14rem] truncate">
+                      {searchedPlace.name}
+                    </span>
+                    <svg className="w-5 h-5 -mt-0.5 text-zinc-900" viewBox="0 0 24 24" fill="currentColor">
+                      <path d="M12 2a7 7 0 00-7 7c0 5 7 13 7 13s7-8 7-13a7 7 0 00-7-7zm0 9.5A2.5 2.5 0 1112 6.5a2.5 2.5 0 010 5z" />
+                    </svg>
+                  </div>
+                </MapLibreMarker>
+              )}
               {/* The measured path. Drawn above everything so the line stays
                   readable over the rasters it's being measured against. */}
               {measure && measure.length > 0 && (
@@ -2859,12 +2899,28 @@ export default function OccurrenceMapRow({
             </div>
           )}
           </div>
-          {/* Label badge for split view */}
-          {label && (
-            <div className="absolute top-2 left-2 z-[1000] bg-zinc-900/80 text-white text-[11px] font-medium px-2.5 py-1 rounded-full shadow-md">
-              {label}
-            </div>
-          )}
+          {/* Top-left: the split-view label, then the place search — where a
+              map's search box lives everywhere else. */}
+          <div className="absolute top-2 left-2 z-[1000] flex flex-col items-start gap-1.5">
+            {label && (
+              <div className="bg-zinc-900/80 text-white text-[11px] font-medium px-2.5 py-1 rounded-full shadow-md">
+                {label}
+              </div>
+            )}
+            {mounted && !splitView && (
+              <MapPlaceSearch
+                getCentre={() => {
+                  const map = mapRef.current;
+                  if (!map) return undefined;
+                  const centre = map.getCenter();
+                  return { lat: centre.lat, lng: centre.lng, zoom: map.getZoom() };
+                }}
+                onSelect={goToPlace}
+                onClear={() => setSearchedPlace(null)}
+                hasResult={searchedPlace != null}
+              />
+            )}
+          </div>
           {/* Top-right stack: what's loaded, then the basemap choice. Stacked
               in a flex column rather than each guessing the other's offset —
               the counts panel grows a line when there are records without
