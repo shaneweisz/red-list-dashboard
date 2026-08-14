@@ -615,6 +615,8 @@ export default function OccurrenceMapRow({
    * pointing at rather than picking one on your behalf.
    */
   const [pointQuery, setPointQuery] = useState<{
+    /** Which button opened it — the two answer different questions. */
+    kind: "areas" | "point";
     panelId: string;
     lng: number;
     lat: number;
@@ -1905,7 +1907,7 @@ export default function OccurrenceMapRow({
   }, [bbox, fitMapToBbox]);
 
   // Map event handlers
-  const handleMapClick = useCallback((e: MapLayerMouseEvent) => {
+  const handleMapClick = useCallback((e: MapLayerMouseEvent, panelId: string) => {
     // Measuring owns the left click while it's on. Two points, never more,
     // and the first one stays put: it's the deliberate one — you right-clicked
     // that spot and asked to measure from it — so every click after the second
@@ -1923,25 +1925,55 @@ export default function OccurrenceMapRow({
         return;
       }
     }
-    // A left click on bare map dismisses whatever the right click opened,
-    // rather than opening something of its own.
     setPointQuery(null);
-  }, [measure]);
+    // With the overlay on, a plain click asks what protects this spot — the
+    // shapes are right there, so clicking one should answer for it. Everything
+    // else about a location is on the right button.
+    if (!showProtectedAreas) return;
+    const map = e.target;
+    const bounds = map.getBounds();
+    const canvas = map.getCanvas();
+    const { lng, lat } = e.lngLat;
+    const query = ++pointQueryId.current;
+    identifyProtectedAreas({
+      lng,
+      lat,
+      bounds: [bounds.getWest(), bounds.getSouth(), bounds.getEast(), bounds.getNorth()],
+      width: canvas.clientWidth,
+      height: canvas.clientHeight,
+    })
+      .then((areas) => {
+        // Nothing opens for a spot that isn't protected: the overlay already
+        // shows that, and a popup saying so on every click is noise.
+        if (query !== pointQueryId.current || areas.length === 0) return;
+        setPointQuery({
+          kind: "areas",
+          panelId,
+          lng,
+          lat,
+          elevation: null,
+          elevationLoading: false,
+          areas,
+          areasLoading: false,
+          habitat: null,
+          habitatLoading: false,
+          highlight: 0,
+        });
+      })
+      .catch(() => undefined);
+  }, [measure, showProtectedAreas]);
 
   /**
-   * Right-click asks what's here: the coordinates, the ground elevation, and —
-   * where their overlays are on — the habitat class and the protected areas.
+   * Right-click asks what this spot is: its coordinates, the ground elevation,
+   * the habitat class where that overlay is on, and the way into measuring.
    *
-   * On the right button rather than the left because that's where a map's
-   * "what is this spot" lives (Google Maps put it there and everyone learned
-   * it), and because the left click already means "open this record".
+   * On the right button because that's where a map's "what is this" lives —
+   * Google Maps put it there and everyone learned it — and because the left
+   * click is spoken for: a record opens on GBIF, a protected area names itself.
    */
   const handleMapContextMenu = useCallback((e: MapLayerMouseEvent, panelId: string) => {
     e.originalEvent?.preventDefault();
     if (measure) return;
-    const map = e.target;
-    const bounds = map.getBounds();
-    const canvas = map.getCanvas();
     const { lng, lat } = e.lngLat;
     const query = ++pointQueryId.current;
     // A second right-click while the first is in flight wins; without the guard
@@ -1949,13 +1981,14 @@ export default function OccurrenceMapRow({
     const isCurrent = () => query === pointQueryId.current;
     setCopiedPoint(false);
     setPointQuery({
+      kind: "point",
       panelId,
       lng,
       lat,
       elevation: null,
       elevationLoading: true,
       areas: [],
-      areasLoading: showProtectedAreas,
+      areasLoading: false,
       habitat: null,
       habitatLoading: showHabitat,
       highlight: 0,
@@ -1986,23 +2019,7 @@ export default function OccurrenceMapRow({
         });
     }
 
-    if (!showProtectedAreas) return;
-    identifyProtectedAreas({
-      lng,
-      lat,
-      bounds: [bounds.getWest(), bounds.getSouth(), bounds.getEast(), bounds.getNorth()],
-      width: canvas.clientWidth,
-      height: canvas.clientHeight,
-    })
-      .then((areas) => {
-        if (!isCurrent()) return;
-        setPointQuery((prev) => (prev ? { ...prev, areas, areasLoading: false, highlight: 0 } : prev));
-      })
-      .catch(() => {
-        if (!isCurrent()) return;
-        setPointQuery((prev) => (prev ? { ...prev, areas: [], areasLoading: false, areasFailed: true } : prev));
-      });
-  }, [showProtectedAreas, showHabitat, measure]);
+  }, [showHabitat, measure]);
 
   const copyPoint = useCallback((lat: number, lng: number) => {
     navigator.clipboard?.writeText(`${lat.toFixed(5)}, ${lng.toFixed(5)}`).then(
@@ -2284,7 +2301,7 @@ export default function OccurrenceMapRow({
               style={{ width: "100%", height: "100%" }}
               mapStyle={BASEMAP_STYLES[basemap].style}
               interactiveLayerIds={[`occ-circles-${panelId}`, `georef-point-${panelId}`]}
-              onClick={handleMapClick}
+              onClick={(e: MapLayerMouseEvent) => handleMapClick(e, panelId)}
               onContextMenu={(e: MapLayerMouseEvent) => handleMapContextMenu(e, panelId)}
               onMouseMove={(e: MapLayerMouseEvent) => handleMapMouseMove(e, panelId)}
               onMouseLeave={handleMapMouseLeave}
@@ -2627,6 +2644,39 @@ export default function OccurrenceMapRow({
                   className="occurrence-popup"
                 >
                   <div className="text-[11px] text-zinc-700 dark:text-zinc-200 space-y-1.5">
+                    {pointQuery.kind === "areas" ? (
+                      <div className="space-y-1">
+                        {pointQuery.areas.map((area, index) => (
+                          <div
+                            key={area.sitePid}
+                            onMouseEnter={() => setPointQuery((prev) => (prev ? { ...prev, highlight: index } : prev))}
+                            className={`-mx-1 px-1 py-0.5 rounded ${
+                              index === pointQuery.highlight ? "bg-pink-50 dark:bg-pink-950/40" : ""
+                            }`}
+                          >
+                            <a
+                              href={protectedPlanetUrl(area)}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              title="Open this site on Protected Planet"
+                              className="font-medium text-blue-600 dark:text-blue-400 hover:underline"
+                            >
+                              {area.name}
+                            </a>
+                            <div className="text-zinc-500 dark:text-zinc-400">
+                              {[
+                                area.designation,
+                                area.iucnCategory ? `IUCN ${area.iucnCategory}` : null,
+                                area.statusYear ? String(area.statusYear) : null,
+                              ]
+                                .filter(Boolean)
+                                .join(" · ")}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                    <>
                     <div className="text-zinc-500 dark:text-zinc-400">
                       {/* Click the coordinates to copy them — the reason you
                           right-clicked a spot is usually to paste it somewhere
@@ -2684,49 +2734,6 @@ export default function OccurrenceMapRow({
                     {/* Silent when the point isn't protected: the overlay is
                         already showing you that, and a line saying so on every
                         click is noise on the answer you did ask for. */}
-                    {showProtectedAreas && (pointQuery.areasLoading || pointQuery.areasFailed || pointQuery.areas.length > 0) && (
-                      <div className="pt-1 border-t border-zinc-100 dark:border-zinc-800 space-y-1">
-                        {pointQuery.areasLoading ? (
-                          <span className="text-zinc-400">Looking up protected areas…</span>
-                        ) : pointQuery.areasFailed ? (
-                          <span className="text-amber-600 dark:text-amber-400">
-                            Couldn&apos;t reach the WDPA service.
-                          </span>
-                        ) : (
-                          pointQuery.areas.map((area, index) => (
-                            <div
-                              key={area.sitePid}
-                              // Pointing at an entry outlines that area, which
-                              // is what makes a list of four overlapping
-                              // designations readable at all.
-                              onMouseEnter={() => setPointQuery((prev) => (prev ? { ...prev, highlight: index } : prev))}
-                              className={`-mx-1 px-1 py-0.5 rounded ${
-                                index === pointQuery.highlight ? "bg-pink-50 dark:bg-pink-950/40" : ""
-                              }`}
-                            >
-                              <a
-                                href={protectedPlanetUrl(area)}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                title="Open this site on Protected Planet"
-                                className="font-medium text-blue-600 dark:text-blue-400 hover:underline"
-                              >
-                                {area.name}
-                              </a>
-                              <div className="text-zinc-500 dark:text-zinc-400">
-                                {[
-                                  area.designation,
-                                  area.iucnCategory ? `IUCN ${area.iucnCategory}` : null,
-                                  area.statusYear ? String(area.statusYear) : null,
-                                ]
-                                  .filter(Boolean)
-                                  .join(" · ")}
-                              </div>
-                            </div>
-                          ))
-                        )}
-                      </div>
-                    )}
                     <div className="pt-1 border-t border-zinc-100 dark:border-zinc-800">
                       <button
                         onClick={() => {
@@ -2741,6 +2748,8 @@ export default function OccurrenceMapRow({
                         Measure distance
                       </button>
                     </div>
+                    </>
+                    )}
                   </div>
                 </MapPopup>
               )}
