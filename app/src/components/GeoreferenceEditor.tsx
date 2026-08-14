@@ -12,6 +12,17 @@ import { formatKind, searchPlaces, GEOCODER_ATTRIBUTION, type Place } from "@/li
 import { haversineMetres } from "@/lib/geo-distance";
 
 interface GeoreferenceEditorProps {
+  /**
+   * How it's shown. "panel" docks it beside the map, which is what
+   * georeferencing actually wants: the map, its search and the neighbouring
+   * records all stay usable while you work. "modal" is the fallback where
+   * there's no room to dock anything.
+   */
+  variant?: "modal" | "panel";
+  /** A point picked by clicking the map, which fills the coordinates. */
+  pickedPoint?: { lat: number; lon: number } | null;
+  /** The draft, so the map can draw it before it's saved. */
+  onDraftChange?: (draft: { lat: number | null; lon: number | null; uncertainty: number | null }) => void;
   /** The GBIF record being georeferenced. */
   feature: OccurrenceFeature;
   /** The assessor's existing georeference for it, when re-opening one. */
@@ -63,6 +74,9 @@ function Row({ label, value }: { label: string; value?: string | number | null }
 }
 
 export default function GeoreferenceEditor({
+  variant = "modal",
+  pickedPoint,
+  onDraftChange,
   feature,
   existing,
   georeferencedBy,
@@ -124,14 +138,45 @@ export default function GeoreferenceEditor({
     setResults(null);
   };
 
-  // Escape closes, like every other dismissible layer in the app.
+  /**
+   * A click on the map lands here. It overwrites whatever is typed, which is
+   * the point — clicking the map IS how you say where it was, and having to
+   * clear the boxes first would make the map the slower way to do it.
+   */
   useEffect(() => {
+    if (!pickedPoint) return;
+    setLat(String(pickedPoint.lat));
+    setLon(String(pickedPoint.lon));
+    setShowErrors(false);
+  }, [pickedPoint]);
+
+  // Hand the draft back so the map can draw the point and its radius as they
+  // are typed, rather than only once saved.
+  useEffect(() => {
+    onDraftChange?.({
+      lat: lat.trim() === "" ? null : Number(lat),
+      lon: lon.trim() === "" ? null : Number(lon),
+      uncertainty: uncertainty.trim() === "" ? null : Number(uncertainty),
+    });
+    // onDraftChange is a fresh closure each render; depending on it would loop.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [lat, lon, uncertainty]);
+
+  /**
+   * Escape closes the modal, which is what Escape does to a thing laid over the
+   * page. It deliberately does not close the docked panel: there, Escape
+   * belongs to whatever is on top of it — dismissing the map's search, ending a
+   * measurement — and losing a half-filled georeference to a keystroke aimed at
+   * something else is exactly the kind of loss this panel exists to avoid.
+   */
+  useEffect(() => {
+    if (variant !== "modal") return;
     const handler = (e: KeyboardEvent) => {
       if (e.key === "Escape") onClose();
     };
     document.addEventListener("keydown", handler);
     return () => document.removeEventListener("keydown", handler);
-  }, [onClose]);
+  }, [onClose, variant]);
 
   const parsed = {
     decimalLatitude: lat.trim() === "" ? null : Number(lat),
@@ -181,15 +226,8 @@ export default function GeoreferenceEditor({
 
   const locality = p.locality || p.verbatimLocality;
 
-  return createPortal(
-    <div
-      className="fixed inset-0 z-[10001] flex items-center justify-center p-4 bg-black/40"
-      onClick={onClose}
-    >
-      <div
-        className="w-full max-w-2xl max-h-[90vh] overflow-y-auto rounded-lg bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 shadow-xl"
-        onClick={(e) => e.stopPropagation()}
-      >
+  const body = (
+      <>
         <div className="flex items-start gap-2 px-4 py-3 border-b border-zinc-200 dark:border-zinc-700">
           <div className="flex-1 min-w-0">
             <h2 className="text-sm font-medium text-zinc-900 dark:text-zinc-100">
@@ -207,6 +245,11 @@ export default function GeoreferenceEditor({
               </a>
               . Stored in this browser only.
             </p>
+            {variant === "panel" && (
+              <p className="text-[11px] text-violet-600 dark:text-violet-400 mt-1">
+                Click the map to place the point, or drag it once placed.
+              </p>
+            )}
           </div>
           <button
             onClick={onClose}
@@ -393,6 +436,29 @@ export default function GeoreferenceEditor({
             {existing ? "Save changes" : "Save georeference"}
           </button>
         </div>
+      </>
+  );
+
+  // Docked: part of the page, so the map beside it stays live — pannable,
+  // searchable, and clickable to place the point.
+  if (variant === "panel") {
+    return (
+      <div className="flex flex-col w-[22rem] shrink-0 min-h-0 overflow-y-auto border-l border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-900">
+        {body}
+      </div>
+    );
+  }
+
+  return createPortal(
+    <div
+      className="fixed inset-0 z-[10001] flex items-center justify-center p-4 bg-black/40"
+      onClick={onClose}
+    >
+      <div
+        className="w-full max-w-2xl max-h-[90vh] overflow-y-auto rounded-lg bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 shadow-xl"
+        onClick={(e) => e.stopPropagation()}
+      >
+        {body}
       </div>
     </div>,
     document.body

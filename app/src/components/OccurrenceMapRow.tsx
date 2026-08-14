@@ -644,6 +644,15 @@ export default function OccurrenceMapRow({
   const [measure, setMeasure] = useState<[number, number][] | null>(null);
   /** True while the map is being panned, so the cursor can say so. */
   const [panning, setPanning] = useState(false);
+  // Whether there's room to dock a 22rem panel beside the map and still have a
+  // map worth looking at.
+  const [viewportWide, setViewportWide] = useState(false);
+  useEffect(() => {
+    const check = () => setViewportWide(window.innerWidth >= 1100);
+    check();
+    window.addEventListener("resize", check);
+    return () => window.removeEventListener("resize", check);
+  }, []);
   /** The place the search last flew to, pinned so you can see where it is. */
   const [searchedPlace, setSearchedPlace] = useState<Place | null>(null);
   /** The candidate under the pointer in the results list, marked but not flown
@@ -1017,6 +1026,20 @@ export default function OccurrenceMapRow({
   const [georeferences, setGeoreferences] = useState<Record<number, Georeference>>({});
   const [editingFeature, setEditingFeature] = useState<OccurrenceFeature | null>(null);
   const [georefMessage, setGeorefMessage] = useState<{ kind: "ok" | "error"; text: string } | null>(null);
+  /** A point picked by clicking the map while the editor is docked. */
+  const [pickedPoint, setPickedPoint] = useState<{ lat: number; lon: number } | null>(null);
+  /** The editor's unsaved values, so the map can draw them as they're typed. */
+  const [georefDraft, setGeorefDraft] = useState<{ lat: number | null; lon: number | null; uncertainty: number | null } | null>(null);
+  /**
+   * Docked beside the map rather than over it, whenever there's room.
+   *
+   * Georeferencing is a map task: you look the locality up, compare it with
+   * where the neighbouring records are, and put the point where you believe it
+   * was. A modal covers every one of those. Below this width there's nowhere to
+   * dock, so it falls back to the modal.
+   */
+  const editorDocked = fullscreen && editingFeature != null && viewportWide;
+
   /** A dragged georeference waiting to be confirmed or put back. */
   const [pendingMove, setPendingMove] = useState<{ gbifID: number; lat: number; lon: number } | null>(null);
 
@@ -1377,6 +1400,8 @@ export default function OccurrenceMapRow({
   const handleSaveGeoreference = useCallback(
     (georeference: Georeference) => {
       persistGeoreferences({ ...georeferences, [georeference.gbifID]: georeference });
+      setPickedPoint(null);
+      setGeorefDraft(null);
       setEditingFeature(null);
       setGeorefMessage(null);
     },
@@ -1444,13 +1469,19 @@ export default function OccurrenceMapRow({
     [occurrences, cancelHoverClear]
   );
 
+  const closeEditor = useCallback(() => {
+    setEditingFeature(null);
+    setPickedPoint(null);
+    setGeorefDraft(null);
+  }, []);
+
   const handleDeleteGeoreference = useCallback(() => {
     if (!editingFeature) return;
     const next = { ...georeferences };
     delete next[editingFeature.properties.gbifID];
     persistGeoreferences(next);
-    setEditingFeature(null);
-  }, [editingFeature, georeferences, persistGeoreferences]);
+    closeEditor();
+  }, [editingFeature, georeferences, persistGeoreferences, closeEditor]);
 
 
   /**
@@ -1909,6 +1940,12 @@ export default function OccurrenceMapRow({
 
   // Map event handlers
   const handleMapClick = useCallback((e: MapLayerMouseEvent, panelId: string) => {
+    // Placing owns the click while the editor is docked: clicking the map IS
+    // how you say where the specimen was.
+    if (editorDocked) {
+      setPickedPoint({ lat: Number(e.lngLat.lat.toFixed(5)), lon: Number(e.lngLat.lng.toFixed(5)) });
+      return;
+    }
     // Measuring owns the left click while it's on. Two points, never more,
     // and the first one stays put: it's the deliberate one — you right-clicked
     // that spot and asked to measure from it — so every click after the second
@@ -1962,7 +1999,7 @@ export default function OccurrenceMapRow({
         });
       })
       .catch(() => undefined);
-  }, [measure, showProtectedAreas]);
+  }, [measure, showProtectedAreas, editorDocked]);
 
   /**
    * Right-click asks what this spot is: its coordinates, the ground elevation,
@@ -2311,7 +2348,7 @@ export default function OccurrenceMapRow({
               // a crosshair while measuring — the map cursor everyone already
               // knows from Google Maps. The hand it replaces claimed the map
               // was one big button.
-              cursor={measure ? "crosshair" : panning ? "move" : "default"}
+              cursor={measure || editorDocked ? "crosshair" : panning ? "move" : "default"}
               onDragStart={() => setPanning(true)}
               onDragEnd={() => setPanning(false)}
             >
@@ -2585,6 +2622,49 @@ export default function OccurrenceMapRow({
                     </div>
                   </MapLibreMarker>
                 ))}
+              {/* The unsaved georeference, drawn as it's typed. Seeing the
+                  radius on the ground is most of what tells you whether the
+                  number is right — a label saying "1900 m" and a circle that
+                  spans three valleys don't agree. */}
+              {georefDraft?.lat != null && georefDraft?.lon != null &&
+               Number.isFinite(georefDraft.lat) && Number.isFinite(georefDraft.lon) && (
+                <>
+                  {georefDraft.uncertainty != null && georefDraft.uncertainty > 0 && (
+                    <Source
+                      id={`georef-draft-circle-${panelId}`}
+                      type="geojson"
+                      data={{
+                        type: "Feature",
+                        properties: {},
+                        geometry: uncertaintyCircle(georefDraft.lat, georefDraft.lon, georefDraft.uncertainty),
+                      }}
+                    >
+                      <Layer
+                        id={`georef-draft-fill-${panelId}`}
+                        type="fill"
+                        paint={{ "fill-color": "#7c3aed", "fill-opacity": 0.12 }}
+                      />
+                      <Layer
+                        id={`georef-draft-line-${panelId}`}
+                        type="line"
+                        paint={{ "line-color": "#7c3aed", "line-width": 1, "line-dasharray": [2, 2] }}
+                      />
+                    </Source>
+                  )}
+                  <MapLibreMarker longitude={georefDraft.lon} latitude={georefDraft.lat} anchor="center">
+                    <div
+                      style={{
+                        width: 16,
+                        height: 16,
+                        borderRadius: "50%",
+                        background: "#7c3aed",
+                        border: "2px dashed #ffffff",
+                        boxShadow: "0 1px 3px rgba(0,0,0,0.4)",
+                      }}
+                    />
+                  </MapLibreMarker>
+                </>
+              )}
               {/* The measured path. Drawn above everything so the line stays
                   readable over the rasters it's being measured against. */}
               {measure && measure.length > 0 && (
@@ -3145,7 +3225,9 @@ export default function OccurrenceMapRow({
           onCancel={() => setPendingExclusion(null)}
         />
       )}
-      {editingFeature && (
+      {/* The modal is the fallback for a viewport with nowhere to dock; the
+          docked panel is rendered beside the map further down. */}
+      {editingFeature && !editorDocked && (
         <GeoreferenceEditor
           feature={editingFeature}
           existing={georeferences[editingFeature.properties.gbifID]}
@@ -3153,7 +3235,7 @@ export default function OccurrenceMapRow({
           scientificName={scientificName}
           onSave={handleSaveGeoreference}
           onDelete={handleDeleteGeoreference}
-          onClose={() => setEditingFeature(null)}
+          onClose={closeEditor}
         />
       )}
       <div className={fullscreen ? "p-2 flex-1 min-h-0 flex flex-col" : "p-2"}>
@@ -4292,6 +4374,26 @@ export default function OccurrenceMapRow({
                       {renderMapPanel(preAssessmentOccs, bbox, `Before ${splitDate} (${preAssessmentOccs.length})`, "before")}
                       {renderMapPanel(postAssessmentOccs, bbox, `After ${splitDate} (${postAssessmentOccs.length})`, "after")}
                     </div>
+                  </div>
+                ) : editorDocked ? (
+                  /* Map and editor side by side: the whole point of docking is
+                     that the map stays usable while you georeference. */
+                  <div className="flex flex-1 min-h-0 gap-0">
+                    <div className="flex-1 min-w-0 flex flex-col">
+                      {renderMapPanel(includedOccurrences, bbox, null)}
+                    </div>
+                    <GeoreferenceEditor
+                      variant="panel"
+                      feature={editingFeature}
+                      existing={georeferences[editingFeature.properties.gbifID]}
+                      georeferencedBy={accountEmail}
+                      scientificName={scientificName}
+                      pickedPoint={pickedPoint}
+                      onDraftChange={setGeorefDraft}
+                      onSave={handleSaveGeoreference}
+                      onDelete={handleDeleteGeoreference}
+                      onClose={closeEditor}
+                    />
                   </div>
                 ) : (
                   renderMapPanel(includedOccurrences, bbox, null)
