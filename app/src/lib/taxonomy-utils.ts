@@ -83,7 +83,7 @@ const DEFAULT_VIEW_ROOTS = new Set(TAXONOMY_VIEWS.default.roots);
 // (the Table 1a PDF) rather than a third-party citation (MDD, Reptile Database,
 // AmphibiaWeb, Eschmeyer, Zhang 2011, …) or a hand-typed approximation (the SSC
 // pilot groups). That's exactly the 8 default-view summary taxa plus Table 1a's own
-// 21 rows (28 CSV groups, with "insects" as one row) — every node one level deeper
+// 21 rows (28 taxon groups, with "insects" as one row) — every node one level deeper
 // (Rodents, Bats, Beetles, every SSC group, …) cites something else, which — unlike
 // the CoL-derived colDescribed figure — never gets automatically re-verified as the
 // underlying species data changes. Used to pick the "# Described" default per row:
@@ -342,14 +342,14 @@ export function collapseTaxaToTokens(taxa: Iterable<string>, subgroups: Iterable
   return [...tokens];
 }
 
-// ─── CSV group resolution ────────────────────────────────────────────
+// ─── taxon group resolution ────────────────────────────────────────────
 
-/** Get the CSV groups needed to load data for a node. */
-export function getCsvGroupsForNode(nodeId: string): string[] {
+/** Get the taxon groups needed to load data for a node. */
+export function getTaxonGroupsForNode(nodeId: string): string[] {
   const id = canonicalizeTaxonId(nodeId); // map legacy IDs (e.g. mammalia → mammals)
   const node = NODE_INDEX.get(id);
-  if (!node) return [id]; // Fallback: treat as CSV group name
-  return node.filter.csvGroups;
+  if (!node) return [id]; // Fallback: treat as taxon group name
+  return node.filter.taxonGroups;
 }
 
 // ─── Filter matching ─────────────────────────────────────────────────
@@ -359,7 +359,7 @@ export function getCsvGroupsForNode(nodeId: string): string[] {
  *
  * Works both server-side (with RedlistRow/GbifRow) and client-side
  * (with SpeciesRow). Caller must ensure the row comes from one of
- * the filter's csvGroups.
+ * the filter's taxonGroups.
  *
  * Falls back to class_name when order_name is empty (GBIF taxonomy quirk).
  */
@@ -445,7 +445,7 @@ export function matchesFilter(
  * Client-side filter: does a species row match a taxonomy node?
  *
  * Replaces the old `speciesMatchesSubgroup`. Uses the same filter logic
- * but checks CSV group membership first.
+ * but checks taxon group membership first.
  */
 export function speciesMatchesNode(
   species: { taxon_group: string; class_name: string | null; order_name: string | null; family?: string | null; scientific_name?: string | null },
@@ -455,12 +455,12 @@ export function speciesMatchesNode(
   if (!node) {
     // Dynamic (live taxonomic-drilldown) node — not a static tree entry, but a
     // real, filterable rank chain (see dynamic-taxon.ts). Falling through to
-    // "don't filter" here would show every species in the csvGroup regardless
+    // "don't filter" here would show every species in the taxonGroup regardless
     // of the selected order/family/genus — a serious correctness bug, not a
     // graceful degradation, so this is resolved explicitly rather than assumed.
     const dynFilter = dynamicNodeFilter(nodeId);
     if (dynFilter) {
-      if (!dynFilter.csvGroups.includes(species.taxon_group)) return false;
+      if (!dynFilter.taxonGroups.includes(species.taxon_group)) return false;
       return matchesFilter(species, dynFilter);
     }
     return true; // Genuinely unknown, non-dynamic id → don't filter
@@ -468,8 +468,8 @@ export function speciesMatchesNode(
 
   const f = node.filter;
 
-  // Must belong to one of the filter's CSV groups
-  if (!f.csvGroups.includes(species.taxon_group)) return false;
+  // Must belong to one of the filter's taxon groups
+  if (!f.taxonGroups.includes(species.taxon_group)) return false;
 
   // Mirrors filterToSql's COL_SPECIES_NAME_OVERRIDES branch (build-taxa-summary.ts):
   // CoL lumps genus Bison into Bos, so a CoL-sourced row (NE species, named "Bos

@@ -314,7 +314,7 @@ export interface AssessorCountryCandidate {
   latestDate: string;
 }
 
-/** Optional taxonomy filter (orderNames, classNames, etc.) applied on top of csvGroups */
+/** Optional taxonomy filter (orderNames, classNames, etc.) applied on top of taxonGroups */
 interface TaxonomyFilter {
   classNames?: string[];
   orderNames?: string[];

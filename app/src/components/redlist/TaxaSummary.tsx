@@ -1565,7 +1565,7 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
 
   // SSC groups mode — same flat-table layout as Table 1a mode, sourced from
   // the precomputed SSC wrapper nodes' children instead of the top-level
-  // Table 1a CSV groups (see SSC_SECTIONS above).
+  // Table 1a taxon groups (see SSC_SECTIONS above).
   const [sscData, setSscData] = useState<Table1aSectionData[] | null>(null);
   const [sscLoading, setSscLoading] = useState(false);
   const sscFetchStartedRef = useRef(false);
@@ -2882,18 +2882,18 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
                             } else if (onNavigateToSubgroup) {
                               // Table 1a group under a virtual root (e.g. molluscs → invertebrates).
                               // row.group is a tree node id. Aggregating parent rows (e.g. "insecta",
-                              // which spans 8 order CSV groups) match a child by node id; single-group
-                              // rows match by CSV group.
+                              // which spans 8 order taxon groups) match a child by node id; single-group
+                              // rows match by taxon group.
                               const stripPrefix = (id: string) => id.replace(/^(inv-|pl-|fu-)/, "");
                               for (const rootId of defaultRoots) {
                                 const rootNode = findNode(rootId);
                                 const matchingChild =
                                   rootNode?.children?.find(c => stripPrefix(c.id) === row.group)
                                   ?? rootNode?.children?.find(c =>
-                                    c.filter.csvGroups.length === 1 && c.filter.csvGroups[0] === row.group
+                                    c.filter.taxonGroups.length === 1 && c.filter.taxonGroups[0] === row.group
                                   )
                                   ?? rootNode?.children?.find(c =>
-                                    c.filter.csvGroups.includes(row.group)
+                                    c.filter.taxonGroups.includes(row.group)
                                   );
                                 if (matchingChild) {
                                   onNavigateToSubgroup(rootId, matchingChild.id);

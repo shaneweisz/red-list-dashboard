@@ -398,7 +398,7 @@ export async function run(): Promise<void> {
     let gbifNeSpeciesCount = 0;
     const byCategory: Record<string, number> = {};
 
-    for (const group of filter.csvGroups) {
+    for (const group of filter.taxonGroups) {
       const rows = redlistByGroup.get(group) ?? [];
       for (const row of rows) {
         if (!matchesFilter(row, filter)) continue;
@@ -459,7 +459,7 @@ export async function run(): Promise<void> {
       results.push(summary);
 
       if (child.filter.classNames || child.filter.orderNames) {
-        for (const group of child.filter.csvGroups) {
+        for (const group of child.filter.taxonGroups) {
           const rows = redlistByGroup.get(group) ?? [];
           for (const row of rows) {
             if (matchesFilter(row, child.filter)) {
@@ -484,7 +484,7 @@ export async function run(): Promise<void> {
       let gbifNeSpeciesCount = 0;
       const byCategory: Record<string, number> = {};
 
-      for (const group of child.filter.csvGroups) {
+      for (const group of child.filter.taxonGroups) {
         const rows = redlistByGroup.get(group) ?? [];
         for (const row of rows) {
           if (!matchesFilter(row, child.filter)) continue;

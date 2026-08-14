@@ -110,7 +110,7 @@ export function dynamicNodeFilter(id: string): SpeciesFilter | null {
   if (!parsed) return null;
   const root = NODE_INDEX.get(parsed.rootId);
   if (!root) return null;
-  const filter: SpeciesFilter = { csvGroups: root.filter.csvGroups };
+  const filter: SpeciesFilter = { taxonGroups: root.filter.taxonGroups };
   for (const seg of parsed.segments) {
     filter[RANK_TO_FILTER_FIELD[seg.rank]] = [seg.value];
   }

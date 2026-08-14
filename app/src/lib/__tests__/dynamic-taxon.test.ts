@@ -102,10 +102,10 @@ describe("nextDynamicRank", () => {
 });
 
 describe("dynamicNodeFilter", () => {
-  it("inherits the root's csvGroups and ANDs in each segment's rank", () => {
+  it("inherits the root's taxonGroups and ANDs in each segment's rank", () => {
     const filter = dynamicNodeFilter("mammals~order:rodentia~family:muridae");
     expect(filter).toEqual({
-      csvGroups: NODE_INDEX.get("mammals")!.filter.csvGroups,
+      taxonGroups: NODE_INDEX.get("mammals")!.filter.taxonGroups,
       orderNames: ["rodentia"],
       families: ["muridae"],
     });
@@ -118,7 +118,7 @@ describe("dynamicNodeFilter", () => {
   it("a class segment (fishes) ANDs in classNames", () => {
     const filter = dynamicNodeFilter("fishes~class:actinopterygii");
     expect(filter).toEqual({
-      csvGroups: NODE_INDEX.get("fishes")!.filter.csvGroups,
+      taxonGroups: NODE_INDEX.get("fishes")!.filter.taxonGroups,
       classNames: ["actinopterygii"],
     });
   });
@@ -152,7 +152,7 @@ describe("speciesMatchesNode with a dynamic node id", () => {
   // speciesMatchesNode used to do `if (!node) return true` for ANY id not in
   // NODE_INDEX, which — before dynamic ids existed — was a safe "don't filter"
   // default. Once dynamic ids became a real, expected input, that default would
-  // silently show every species in the csvGroup regardless of the selected
+  // silently show every species in the taxonGroup regardless of the selected
   // order/family/genus. These tests fail loudly if that regresses.
   const rodent = { taxon_group: "mammals", class_name: "mammalia", order_name: "rodentia", family: "muridae", scientific_name: "Mus musculus" };
   const bat = { taxon_group: "mammals", class_name: "mammalia", order_name: "chiroptera", family: "vespertilionidae", scientific_name: "Myotis myotis" };
@@ -168,7 +168,7 @@ describe("speciesMatchesNode with a dynamic node id", () => {
     expect(speciesMatchesNode(rodent, "mammals~order:rodentia~family:sciuridae")).toBe(false);
   });
 
-  it("still requires csvGroup membership even if rank values happen to match", () => {
+  it("still requires taxonGroup membership even if rank values happen to match", () => {
     expect(speciesMatchesNode(differentGroup, "mammals~order:rodentia")).toBe(false);
   });
 

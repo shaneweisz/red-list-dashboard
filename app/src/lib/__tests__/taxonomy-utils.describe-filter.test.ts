@@ -12,20 +12,20 @@ import { describeFilter, breakdownHref } from "../taxonomy-utils";
 // includes every set dimension.
 describe("describeFilter", () => {
   it("includes every set dimension, unconditionally (no hideBreakdownRank escape hatch)", () => {
-    const segs = describeFilter({ csvGroups: ["mammals"], orderNames: ["rodentia"], families: ["heteromyidae"], genera: ["chaetodipus"] });
+    const segs = describeFilter({ taxonGroups: ["mammals"], orderNames: ["rodentia"], families: ["heteromyidae"], genera: ["chaetodipus"] });
     const text = segs.map((s) => s.text).join("");
     expect(text).toBe("Order: Rodentia; Family: Heteromyidae; Genus: Chaetodipus");
   });
 
   it("links a name resolvable in the static COL_TAXON_IDS snapshot", () => {
-    const segs = describeFilter({ csvGroups: ["fishes"], families: ["acipenseridae"] });
+    const segs = describeFilter({ taxonGroups: ["fishes"], families: ["acipenseridae"] });
     const linked = segs.find((s) => s.text === "Acipenseridae");
     expect(linked?.href).toContain("TAXON_ID=KTYZ7");
   });
 
   it("falls back to liveColIds for a name the static snapshot doesn't cover", () => {
     const segs = describeFilter(
-      { csvGroups: ["mammals"], genera: ["chaetodipus"] },
+      { taxonGroups: ["mammals"], genera: ["chaetodipus"] },
       undefined,
       { "genus:chaetodipus": "3LLS" }
     );
@@ -34,7 +34,7 @@ describe("describeFilter", () => {
   });
 
   it("leaves a name unlinked when neither the static snapshot nor liveColIds resolve it", () => {
-    const segs = describeFilter({ csvGroups: ["mammals"], genera: ["nonexistentgenusxyz"] });
+    const segs = describeFilter({ taxonGroups: ["mammals"], genera: ["nonexistentgenusxyz"] });
     const seg = segs.find((s) => s.text === "Nonexistentgenusxyz");
     expect(seg?.href).toBeUndefined();
   });

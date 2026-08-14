@@ -12,7 +12,7 @@ import {
   matchesFilter,
   speciesMatchesNode,
   getNodeDef,
-  getCsvGroupsForNode,
+  getTaxonGroupsForNode,
 } from "@/lib/taxonomy-utils";
 import { TAXONOMY_VIEWS } from "../taxonomy-views";
 import { isLiveDrilldownNode } from "@/lib/dynamic-taxon";
@@ -53,11 +53,11 @@ describe("Taxonomy tree integrity", () => {
     }
   });
 
-  it("every node has at least one csvGroup in its filter", () => {
+  it("every node has at least one taxonGroup in its filter", () => {
     for (const node of allNodes) {
       expect(
-        node.filter.csvGroups.length,
-        `${node.id} has no csvGroups`
+        node.filter.taxonGroups.length,
+        `${node.id} has no taxonGroups`
       ).toBeGreaterThan(0);
     }
   });
@@ -236,28 +236,28 @@ describe("getNodePath", () => {
   });
 });
 
-describe("getCsvGroupsForNode", () => {
+describe("getTaxonGroupsForNode", () => {
   it("returns single group for Table 1a leaf node", () => {
-    expect(getCsvGroupsForNode("mammals")).toEqual(["mammals"]);
-    expect(getCsvGroupsForNode("beetles")).toEqual(["beetles"]);
+    expect(getTaxonGroupsForNode("mammals")).toEqual(["mammals"]);
+    expect(getTaxonGroupsForNode("beetles")).toEqual(["beetles"]);
   });
 
   it("returns the 8 order groups for the insects parent node", () => {
-    const groups = getCsvGroupsForNode("insects");
+    const groups = getTaxonGroupsForNode("insects");
     expect(groups).toContain("beetles");
     expect(groups).toContain("other_insects");
     expect(groups.length).toBe(8);
   });
 
   it("returns multiple groups for virtual node", () => {
-    const groups = getCsvGroupsForNode("invertebrates");
+    const groups = getTaxonGroupsForNode("invertebrates");
     expect(groups).toContain("beetles");
     expect(groups).toContain("molluscs");
     expect(groups).toContain("crustaceans");
   });
 
   it("returns all 28 groups for 'all'", () => {
-    expect(getCsvGroupsForNode("all").length).toBe(28);
+    expect(getTaxonGroupsForNode("all").length).toBe(28);
   });
 });
 
@@ -271,7 +271,7 @@ describe("getCsvGroupsForNode", () => {
 // matching logic is unchanged and still exercised below (families/
 // excludeClasses/genera/speciesNames) and via dynamic-taxon.test.ts's
 // speciesMatchesNode-with-a-dynamic-id regression suite, which covers the
-// same ground (order rejection, csvGroup scoping, family narrowing) against
+// same ground (order rejection, taxonGroup scoping, family narrowing) against
 // the live mechanism that replaced these nodes.
 // =============================================================================
 
@@ -289,25 +289,25 @@ describe("speciesMatchesNode – edge cases", () => {
 describe("matchesFilter – families filter", () => {
   it("matches species with family in include list", () => {
     const row = { class_name: "Mammalia", order_name: "Artiodactyla", family: "Delphinidae" };
-    const filter = { csvGroups: ["mammals"], orderNames: ["artiodactyla", "sirenia"], families: ["delphinidae", "trichechidae", "dugongidae"] };
+    const filter = { taxonGroups: ["mammals"], orderNames: ["artiodactyla", "sirenia"], families: ["delphinidae", "trichechidae", "dugongidae"] };
     expect(matchesFilter(row, filter)).toBe(true);
   });
 
   it("rejects species with family not in include list", () => {
     const row = { class_name: "Mammalia", order_name: "Artiodactyla", family: "Bovidae" };
-    const filter = { csvGroups: ["mammals"], orderNames: ["artiodactyla", "sirenia"], families: ["delphinidae", "trichechidae", "dugongidae"] };
+    const filter = { taxonGroups: ["mammals"], orderNames: ["artiodactyla", "sirenia"], families: ["delphinidae", "trichechidae", "dugongidae"] };
     expect(matchesFilter(row, filter)).toBe(false);
   });
 
   it("excludeFamilies rejects matching family", () => {
     const row = { class_name: "Mammalia", order_name: "Artiodactyla", family: "Delphinidae" };
-    const filter = { csvGroups: ["mammals"], orderNames: ["artiodactyla"], excludeFamilies: ["delphinidae", "ziphiidae"] };
+    const filter = { taxonGroups: ["mammals"], orderNames: ["artiodactyla"], excludeFamilies: ["delphinidae", "ziphiidae"] };
     expect(matchesFilter(row, filter)).toBe(false);
   });
 
   it("excludeFamilies passes non-matching family", () => {
     const row = { class_name: "Mammalia", order_name: "Artiodactyla", family: "Bovidae" };
-    const filter = { csvGroups: ["mammals"], orderNames: ["artiodactyla"], excludeFamilies: ["delphinidae", "ziphiidae"] };
+    const filter = { taxonGroups: ["mammals"], orderNames: ["artiodactyla"], excludeFamilies: ["delphinidae", "ziphiidae"] };
     expect(matchesFilter(row, filter)).toBe(true);
   });
 });
@@ -319,19 +319,19 @@ describe("matchesFilter – families filter", () => {
 describe("matchesFilter – excludeClasses filter", () => {
   it("excludes species with class in exclude list", () => {
     const row = { class_name: "Echinoidea", order_name: null };
-    const filter = { csvGroups: ["other_invertebrates"], excludeClasses: ["asteroidea", "echinoidea", "holothuroidea"] };
+    const filter = { taxonGroups: ["other_invertebrates"], excludeClasses: ["asteroidea", "echinoidea", "holothuroidea"] };
     expect(matchesFilter(row, filter)).toBe(false);
   });
 
   it("passes species with class not in exclude list", () => {
     const row = { class_name: "Bivalvia", order_name: null };
-    const filter = { csvGroups: ["other_invertebrates"], excludeClasses: ["asteroidea", "echinoidea", "holothuroidea"] };
+    const filter = { taxonGroups: ["other_invertebrates"], excludeClasses: ["asteroidea", "echinoidea", "holothuroidea"] };
     expect(matchesFilter(row, filter)).toBe(true);
   });
 
   it("passes species with null class_name", () => {
     const row = { class_name: null, order_name: null };
-    const filter = { csvGroups: ["other_invertebrates"], excludeClasses: ["asteroidea", "echinoidea"] };
+    const filter = { taxonGroups: ["other_invertebrates"], excludeClasses: ["asteroidea", "echinoidea"] };
     expect(matchesFilter(row, filter)).toBe(true);
   });
 });
@@ -343,31 +343,31 @@ describe("matchesFilter – excludeClasses filter", () => {
 describe("matchesFilter – genera filter", () => {
   it("matches species with genus (first token of scientific_name) in include list", () => {
     const row = { class_name: "Mammalia", order_name: "Carnivora", family: "Ursidae", scientific_name: "Ursus arctos" };
-    const filter = { csvGroups: ["mammals"], genera: ["ursus", "helarctos"] };
+    const filter = { taxonGroups: ["mammals"], genera: ["ursus", "helarctos"] };
     expect(matchesFilter(row, filter)).toBe(true);
   });
 
   it("rejects species with genus not in include list", () => {
     const row = { class_name: "Mammalia", order_name: "Carnivora", family: "Felidae", scientific_name: "Panthera leo" };
-    const filter = { csvGroups: ["mammals"], genera: ["ursus", "helarctos"] };
+    const filter = { taxonGroups: ["mammals"], genera: ["ursus", "helarctos"] };
     expect(matchesFilter(row, filter)).toBe(false);
   });
 
   it("excludeGenera rejects matching genus", () => {
     const row = { class_name: "Mammalia", order_name: "Carnivora", family: "Mustelidae", scientific_name: "Lutra lutra" };
-    const filter = { csvGroups: ["mammals"], families: ["mustelidae"], excludeGenera: ["lutra", "pteronura"] };
+    const filter = { taxonGroups: ["mammals"], families: ["mustelidae"], excludeGenera: ["lutra", "pteronura"] };
     expect(matchesFilter(row, filter)).toBe(false);
   });
 
   it("excludeGenera passes non-matching genus", () => {
     const row = { class_name: "Mammalia", order_name: "Carnivora", family: "Mustelidae", scientific_name: "Mustela nivalis" };
-    const filter = { csvGroups: ["mammals"], families: ["mustelidae"], excludeGenera: ["lutra", "pteronura"] };
+    const filter = { taxonGroups: ["mammals"], families: ["mustelidae"], excludeGenera: ["lutra", "pteronura"] };
     expect(matchesFilter(row, filter)).toBe(true);
   });
 
   it("treats a missing scientific_name as no genus (fails an include filter)", () => {
     const row = { class_name: "Mammalia", order_name: "Carnivora", family: "Ursidae" };
-    const filter = { csvGroups: ["mammals"], genera: ["ursus"] };
+    const filter = { taxonGroups: ["mammals"], genera: ["ursus"] };
     expect(matchesFilter(row, filter)).toBe(false);
   });
 });
@@ -375,20 +375,20 @@ describe("matchesFilter – genera filter", () => {
 describe("matchesFilter – speciesNames filter", () => {
   it("matches species with scientific_name in include list (case-insensitive)", () => {
     const row = { class_name: "Mammalia", order_name: "Carnivora", family: "Ursidae", scientific_name: "Ursus Maritimus" };
-    const filter = { csvGroups: ["mammals"], speciesNames: ["ursus maritimus"] };
+    const filter = { taxonGroups: ["mammals"], speciesNames: ["ursus maritimus"] };
     expect(matchesFilter(row, filter)).toBe(true);
   });
 
   it("rejects species with scientific_name not in include list", () => {
     const row = { class_name: "Mammalia", order_name: "Carnivora", family: "Ursidae", scientific_name: "Ursus arctos" };
-    const filter = { csvGroups: ["mammals"], speciesNames: ["ursus maritimus"] };
+    const filter = { taxonGroups: ["mammals"], speciesNames: ["ursus maritimus"] };
     expect(matchesFilter(row, filter)).toBe(false);
   });
 
   it("excludeSpeciesNames carves a single species out of a family-level filter", () => {
     const polarBear = { class_name: "Mammalia", order_name: "Carnivora", family: "Ursidae", scientific_name: "Ursus maritimus" };
     const brownBear = { class_name: "Mammalia", order_name: "Carnivora", family: "Ursidae", scientific_name: "Ursus arctos" };
-    const filter = { csvGroups: ["mammals"], families: ["ursidae"], excludeSpeciesNames: ["ursus maritimus"] };
+    const filter = { taxonGroups: ["mammals"], families: ["ursidae"], excludeSpeciesNames: ["ursus maritimus"] };
     expect(matchesFilter(polarBear, filter)).toBe(false);
     expect(matchesFilter(brownBear, filter)).toBe(true);
   });
@@ -481,10 +481,10 @@ describe("SSC Specialist Groups tree", () => {
     expect(speciesMatchesNode(redPanda, "ssc-small-carnivore")).toBe(true);
   });
 
-  it("all SSC group children use the mammals csvGroup and have a unique id", () => {
+  it("all SSC group children use the mammals taxonGroup and have a unique id", () => {
     const ids = new Set<string>();
     for (const child of sscNode?.children ?? []) {
-      expect(child.filter.csvGroups).toEqual(["mammals"]);
+      expect(child.filter.taxonGroups).toEqual(["mammals"]);
       expect(ids.has(child.id), `duplicate id ${child.id}`).toBe(false);
       ids.add(child.id);
     }
@@ -678,10 +678,10 @@ describe("SSC Specialist Groups tree (reptiles)", () => {
     expect(speciesMatchesNode(shieldTail, "ssc-snake-lizard-rla")).toBe(true);
   });
 
-  it("all ssc-reptile-groups children use the reptiles csvGroup and have a unique id", () => {
+  it("all ssc-reptile-groups children use the reptiles taxonGroup and have a unique id", () => {
     const ids = new Set<string>();
     for (const child of sscReptileNode?.children ?? []) {
-      expect(child.filter.csvGroups).toEqual(["reptiles"]);
+      expect(child.filter.taxonGroups).toEqual(["reptiles"]);
       expect(ids.has(child.id), `duplicate id ${child.id}`).toBe(false);
       ids.add(child.id);
     }
@@ -822,10 +822,10 @@ describe("SSC Specialist Groups tree (fishes)", () => {
     expect(speciesMatchesNode(paddlefish, "ssc-sturgeon")).toBe(true);
   });
 
-  it("all ssc-fish-groups children use the fishes csvGroup and have a unique id", () => {
+  it("all ssc-fish-groups children use the fishes taxonGroup and have a unique id", () => {
     const ids = new Set<string>();
     for (const child of sscFishNode?.children ?? []) {
-      expect(child.filter.csvGroups).toEqual(["fishes"]);
+      expect(child.filter.taxonGroups).toEqual(["fishes"]);
       expect(ids.has(child.id), `duplicate id ${child.id}`).toBe(false);
       ids.add(child.id);
     }
@@ -1019,7 +1019,7 @@ describe("SSC Specialist Groups tree (invertebrates)", () => {
     expect(speciesMatchesNode(riverPrawn, "ssc-other-invertebrates")).toBe(false);
   });
 
-  it("Horseshoe Crab SG matches its whole dedicated CSV group", () => {
+  it("Horseshoe Crab SG matches its whole dedicated taxon group", () => {
     const horseshoeCrab = { class_name: "Merostomata", order_name: "Xiphosura", family: "Limulidae", scientific_name: "Limulus polyphemus", taxon_group: "horseshoe_crabs" };
     expect(speciesMatchesNode(horseshoeCrab, "ssc-horseshoe-crab")).toBe(true);
   });
@@ -1083,7 +1083,7 @@ describe("SSC Specialist Groups tree (plants)", () => {
     }
   });
 
-  it("Bryophyte SG matches its whole dedicated CSV group (mosses, liverworts, and hornworts together)", () => {
+  it("Bryophyte SG matches its whole dedicated taxon group (mosses, liverworts, and hornworts together)", () => {
     const moss = { class_name: "Bryopsida", order_name: "Hypnales", family: "Hypnaceae", scientific_name: "Hypnum cupressiforme", taxon_group: "mosses" };
     const liverwort = { class_name: "Jungermanniopsida", order_name: "Jungermanniales", family: "Lepidoziaceae", scientific_name: "Bazzania trilobata", taxon_group: "mosses" };
     expect(speciesMatchesNode(moss, "ssc-bryophyte")).toBe(true);
@@ -1212,10 +1212,10 @@ describe("SSC Specialist Groups tree (fungi)", () => {
     expect(speciesMatchesNode(hypotheticalChytrid, "ssc-other-fungi")).toBe(false);
   });
 
-  it("all ssc-fungi-groups children use the mushrooms csvGroup and have a unique id", () => {
+  it("all ssc-fungi-groups children use the mushrooms taxonGroup and have a unique id", () => {
     const ids = new Set<string>();
     for (const child of sscFungiNode?.children ?? []) {
-      expect(child.filter.csvGroups).toEqual(["mushrooms"]);
+      expect(child.filter.taxonGroups).toEqual(["mushrooms"]);
       expect(ids.has(child.id), `duplicate id ${child.id}`).toBe(false);
       ids.add(child.id);
     }
@@ -1282,33 +1282,33 @@ describe("Subgroup partition coverage", () => {
 
 // ─── Default view: no double counting ────────────────────────────────
 
-describe("default view CSV group coverage", () => {
+describe("default view taxon group coverage", () => {
   const defaultRoots = TAXONOMY_VIEWS.default.roots;
 
-  it("no CSV group appears in multiple default view roots", () => {
-    const seen = new Map<string, string>(); // csvGroup → rootId
+  it("no taxon group appears in multiple default view roots", () => {
+    const seen = new Map<string, string>(); // taxonGroup → rootId
     for (const rootId of defaultRoots) {
       const node = findNode(rootId)!;
-      for (const csv of node.filter.csvGroups) {
+      for (const csv of node.filter.taxonGroups) {
         expect(seen.has(csv), `"${csv}" is in both "${seen.get(csv)}" and "${rootId}"`).toBe(false);
         seen.set(csv, rootId);
       }
     }
   });
 
-  it("all 28 Table 1a CSV groups are covered by exactly one default view root", () => {
-    const allCsvGroups = new Set<string>();
+  it("all 28 Table 1a taxon groups are covered by exactly one default view root", () => {
+    const allTaxonGroups = new Set<string>();
     for (const rootId of defaultRoots) {
-      for (const csv of findNode(rootId)!.filter.csvGroups) {
-        allCsvGroups.add(csv);
+      for (const group of findNode(rootId)!.filter.taxonGroups) {
+        allTaxonGroups.add(group);
       }
     }
-    expect(allCsvGroups.size).toBe(28);
+    expect(allTaxonGroups.size).toBe(28);
   });
 
   it("brown_algae is in fungi, not plantae", () => {
-    expect(findNode("fungi")!.filter.csvGroups).toContain("brown_algae");
-    expect(findNode("plantae")!.filter.csvGroups).not.toContain("brown_algae");
+    expect(findNode("fungi")!.filter.taxonGroups).toContain("brown_algae");
+    expect(findNode("plantae")!.filter.taxonGroups).not.toContain("brown_algae");
   });
 });
 
@@ -1357,14 +1357,14 @@ describe("Table 1a → default view mapping", () => {
       for (const rootId of defaultRoots) {
         const rootNode = findNode(rootId)!;
         // Mirror TaxaSummary navigation: match by node id (aggregating parents
-        // like "insects"), then by single CSV group, then by CSV-group membership.
+        // like "insects"), then by single taxon group, then by CSV-group membership.
         const match =
           rootNode.children?.find(c => stripPrefix(c.id) === group)
           ?? rootNode.children?.find(c =>
-            c.filter.csvGroups.length === 1 && c.filter.csvGroups[0] === group
+            c.filter.taxonGroups.length === 1 && c.filter.taxonGroups[0] === group
           )
           ?? rootNode.children?.find(c =>
-            c.filter.csvGroups.includes(group)
+            c.filter.taxonGroups.includes(group)
           );
         if (match) { found = true; break; }
       }

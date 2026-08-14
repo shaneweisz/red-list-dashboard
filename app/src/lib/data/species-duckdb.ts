@@ -12,7 +12,7 @@
 import * as fs from "fs";
 import * as path from "path";
 import { DuckDBInstance, type DuckDBConnection } from "@duckdb/node-api";
-import { NODE_INDEX, getCsvGroupsForNode, getAncestors, stripNodePrefix } from "@/lib/taxonomy-utils";
+import { NODE_INDEX, getTaxonGroupsForNode, getAncestors, stripNodePrefix } from "@/lib/taxonomy-utils";
 import { canonicalizeTaxonId, mapTaxonId } from "@/lib/data/taxonomy-constants";
 import { getTaxaSummary } from "@/lib/data/species-store";
 import { isDynamicNodeId, dynamicNodeFilter, buildDynamicNodeId, rankOrderFor, isLiveDrilldownNode, type DynamicSegment } from "@/lib/dynamic-taxon";
@@ -98,7 +98,7 @@ export function ensureNeHelpers(conn: DuckDBConnection): Promise<void> {
 
 // ─── Resolve a taxon identifier to a SQL predicate ──────────────────────────
 //
-// Parity with /api/redlist/species: a taxonomy node filters by its csvGroups
+// Parity with /api/redlist/species: a taxonomy node filters by its taxonGroups
 // ONLY (drill-down sub-filtering — rodents, etc. — is applied client-side). A
 // non-node identifier is the new capability: arbitrary-rank match. Values bind
 // as parameters; the '|'-joined string is split in SQL (DuckDB can't bind a raw
@@ -110,7 +110,7 @@ export function resolveWhere(taxonId: string): WhereParts {
   const id = canonicalizeTaxonId(taxonId);
   if (id === "all") return { clauses: [], params: {} };
   if (NODE_INDEX.has(id)) {
-    const groups = getCsvGroupsForNode(id);
+    const groups = getTaxonGroupsForNode(id);
     return { clauses: ["taxon_group = ANY(string_split($g, '|'))"], params: { g: groups.join("|") } };
   }
   // Dynamic (live taxonomic-drilldown) id — not in NODE_INDEX, but a real,
@@ -273,7 +273,7 @@ export async function querySpecies(opts: {
   // isn't bundled in this function, fall through to the live count below (still correct).
   if (opts.includeNE) {
     try {
-      const groups = getCsvGroupsForNode(canonicalizeTaxonId(opts.taxon));
+      const groups = getTaxonGroupsForNode(canonicalizeTaxonId(opts.taxon));
       const neEstimate = groups.reduce((sum, g) => sum + (neByGroup().get(g) ?? 0), 0);
       if (neEstimate > NE_CAP) {
         return { species: [], truncated, tooLarge: true, neTotal: neEstimate };
@@ -468,7 +468,7 @@ export function nodeIdForSpecies(taxonGroup: string, lineage: Lineage): string |
 
   // Nothing known from the top rank down. Fall back to the group's own node unless it's
   // unlistable, in which case take the deepest known rank with the gaps coalesced.
-  const rootNe = getCsvGroupsForNode(leafRoot).reduce((sum, g) => sum + (neByGroup().get(g) ?? 0), 0);
+  const rootNe = getTaxonGroupsForNode(leafRoot).reduce((sum, g) => sum + (neByGroup().get(g) ?? 0), 0);
   if (rootNe <= NE_CAP) return leafRoot;
   let deepest = -1;
   ranks.forEach((r, i) => { if (valueFor[r]) deepest = i; });
@@ -890,13 +890,13 @@ const RANK_TO_COLUMN: Record<TaxonSuggestion["rank"], string> = {
 
 // Same single-dimension-match search as GROUP_TO_LEAF_NODE above, but prefers a group's
 // "inv-"/"pl-"/"fu-"-prefixed virtual-duplicate id over its bare one when both exist for
-// the same csvGroup (insects/molluscs/crustaceans/etc. — see dynamic-taxon.ts's
+// the same taxonGroup (insects/molluscs/crustaceans/etc. — see dynamic-taxon.ts's
 // DYNAMIC_DRILLDOWN_ROOTS comment). The prefixed id is the one actually nested under
 // invertebrates/plantae/fungi in the default "By Taxon" view that TaxaSummary's
 // ancestor-breadcrumb rendering and this search feature both operate within; the bare id
 // is Table1a mode's separate flat id, whose own ancestor is "all" directly (not
 // invertebrates/plantae/fungi) — a dynamic id built off it resolves to the right species
-// (csvGroups is identical either way) but its ancestor chain doesn't match the id
+// (taxonGroups is identical either way) but its ancestor chain doesn't match the id
 // TaxaSummary's precomputed children-summaries use for that group, so the breadcrumb row
 // fails to find its own data and renders a zeroed placeholder (confirmed via a live repro:
 // searching "isopoda" showed "Crustaceans 0 assessed" instead of the real ~3,410 — the
@@ -906,10 +906,10 @@ const RANK_TO_COLUMN: Record<TaxonSuggestion["rank"], string> = {
 // where the bare Table1a id is exactly right and no breadcrumb is ever attempted.
 //
 // Unlike GROUP_TO_LEAF_NODE, this is a function (not a precomputed map): a group
-// doesn't always have its own single-csvGroup leaf node (Insects has none — its 8
+// doesn't always have its own single-taxonGroup leaf node (Insects has none — its 8
 // Table 1a groups, beetles/butterflies/etc., only ever appear together under one
-// umbrella node with csvGroups: ALL_INSECT_GROUPS; the per-order split is live-only),
-// so this also has to fall back to the smallest umbrella node whose csvGroups
+// umbrella node with taxonGroups: ALL_INSECT_GROUPS; the per-order split is live-only),
+// so this also has to fall back to the smallest umbrella node whose taxonGroups
 // includes the target group. A first-match memo (like GROUP_TO_LEAF_NODE's) would
 // silently return whichever node NODE_INDEX iteration happened to visit first — for
 // Insects that was briefly "ssc-dung-beetle" (an SSC node scoped to just Coleoptera
@@ -926,7 +926,7 @@ function findViewLeafForGroup(taxonGroup: string): string | null {
   for (const [id, node] of NODE_INDEX) {
     if (isSscGroupNode(id)) continue;
     const f = node.filter;
-    if (!f.csvGroups.includes(taxonGroup)) continue;
+    if (!f.taxonGroups.includes(taxonGroup)) continue;
     // Only a node with NO OTHER filter dimension at all qualifies — anything else is
     // a curated sub-split of the group (a static family/order node, or a Specialist
     // Group carved out some other way, e.g. by genera/speciesNames), not the group's
@@ -934,7 +934,7 @@ function findViewLeafForGroup(taxonGroup: string): string | null {
     if (f.classNames || f.orderNames || f.families || f.genera || f.excludeClasses ||
         f.excludeOrders || f.excludeFamilies || f.excludeGenera || f.speciesNames ||
         f.excludeSpeciesNames || f.extraSpeciesNames) continue;
-    const size = f.csvGroups.length;
+    const size = f.taxonGroups.length;
     const prefersOverBest = !best || size < best.size ||
       (size === best.size && stripNodePrefix(id) !== id && stripNodePrefix(best.id) === best.id);
     if (prefersOverBest) best = { id, size };
@@ -946,7 +946,7 @@ function findViewLeafForGroup(taxonGroup: string): string | null {
 
 // Resolves a suggestTaxa match to a real node: a curated by-taxon node if one matches
 // exactly (never an SSC Specialist Group node — see isSscGroupNode), else a dynamic
-// drilldown id built against the CSV group's leaf display node (its "By Taxon"-view
+// drilldown id built against the taxon group's leaf display node (its "By Taxon"-view
 // variant — see findViewLeafForGroup). A dynamic id needs every rank from the root's
 // first live-enumerable level down to the matched one, in order (e.g. Isopoda is an
 // "order" match, but Crustaceans drills class-first, so the id needs a class:<value>

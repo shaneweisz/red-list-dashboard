@@ -56,17 +56,17 @@ describe("claimEligibleSiblingsSql", () => {
 
   it("returns null when no sibling is claim-eligible", () => {
     const children = [
-      node("a", { csvGroups: ["fishes"], families: ["labridae"] }),
-      node("catchall", { csvGroups: ["fishes"], excludeClasses: ["chondrichthyes"] }),
+      node("a", { taxonGroups: ["fishes"], families: ["labridae"] }),
+      node("catchall", { taxonGroups: ["fishes"], excludeClasses: ["chondrichthyes"] }),
     ];
     expect(claimEligibleSiblingsSql(children, 1)).toBeNull();
   });
 
   it("includes siblings scoped by classNames or orderNames", () => {
     const children = [
-      node("primates", { csvGroups: ["mammals"], orderNames: ["primates"] }),
-      node("rodents", { csvGroups: ["mammals"], classNames: ["mammalia"] }),
-      node("catchall", { csvGroups: ["mammals"], excludeClasses: [] }),
+      node("primates", { taxonGroups: ["mammals"], orderNames: ["primates"] }),
+      node("rodents", { taxonGroups: ["mammals"], classNames: ["mammalia"] }),
+      node("catchall", { taxonGroups: ["mammals"], excludeClasses: [] }),
     ];
     const sql = claimEligibleSiblingsSql(children, 2);
     expect(sql).toContain("primates");
@@ -75,16 +75,16 @@ describe("claimEligibleSiblingsSql", () => {
 
   it("excludes families/genera/speciesNames-scoped siblings from claim eligibility", () => {
     const children = [
-      node("pinnipeds", { csvGroups: ["mammals"], families: ["otariidae"] }),
-      node("catchall", { csvGroups: ["mammals"], excludeClasses: [] }),
+      node("pinnipeds", { taxonGroups: ["mammals"], families: ["otariidae"] }),
+      node("catchall", { taxonGroups: ["mammals"], excludeClasses: [] }),
     ];
     expect(claimEligibleSiblingsSql(children, 1)).toBeNull();
   });
 
   it("excludes the node at excludeIdx itself even if it would otherwise be claim-eligible", () => {
     const children = [
-      node("primates", { csvGroups: ["mammals"], orderNames: ["primates"] }),
-      node("rodents", { csvGroups: ["mammals"], orderNames: ["rodentia"] }),
+      node("primates", { taxonGroups: ["mammals"], orderNames: ["primates"] }),
+      node("rodents", { taxonGroups: ["mammals"], orderNames: ["rodentia"] }),
     ];
     const sql = claimEligibleSiblingsSql(children, 0);
     expect(sql).not.toContain("primates");
