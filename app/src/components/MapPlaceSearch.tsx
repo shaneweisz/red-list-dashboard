@@ -8,6 +8,7 @@ import {
   type Place,
 } from "@/lib/geocode";
 import { parseCoordinatePair } from "@/lib/georeferences";
+import { bearingDegrees, compassPoint, formatDistance, haversineMetres } from "@/lib/geo-distance";
 
 interface MapPlaceSearchProps {
   /** Where the map is looking, so results near it rank first. Read at search
@@ -15,6 +16,8 @@ interface MapPlaceSearchProps {
    *  those moves should re-render this. */
   getCentre?: () => { lat: number; lng: number; zoom: number } | undefined;
   onSelect: (place: Place) => void;
+  /** Pointing at a candidate marks it on the map, without moving the camera. */
+  onPreview: (place: Place | null) => void;
   /** Removes the marker left by the last result. */
   onClear: () => void;
   /** True while a searched place is still marked on the map. */
@@ -32,12 +35,18 @@ interface MapPlaceSearchProps {
  * being typed, and having to find a different box for them is the kind of
  * friction that stops people checking.
  */
-export default function MapPlaceSearch({ getCentre, onSelect, onClear, hasResult }: MapPlaceSearchProps) {
+export default function MapPlaceSearch({ getCentre, onSelect, onPreview, onClear, hasResult }: MapPlaceSearchProps) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<Place[]>([]);
   const [loading, setLoading] = useState(false);
   const [failed, setFailed] = useState(false);
+  /**
+   * Where the map was when the search ran, so each hit can say how far away it
+   * is and in which direction. Frozen at search time rather than read live: a
+   * distance that changes while you read the list is worse than none.
+   */
+  const [origin, setOrigin] = useState<{ lat: number; lng: number } | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const rootRef = useRef<HTMLDivElement>(null);
 
@@ -61,6 +70,7 @@ export default function MapPlaceSearch({ getCentre, onSelect, onClear, hasResult
       setLoading(true);
       setFailed(false);
       const centre = getCentre?.();
+      setOrigin(centre ? { lat: centre.lat, lng: centre.lng } : null);
       searchPlaces(trimmed, {
         lat: centre?.lat,
         lng: centre?.lng,
@@ -98,9 +108,22 @@ export default function MapPlaceSearch({ getCentre, onSelect, onClear, hasResult
   }, [open]);
 
   const choose = (place: Place) => {
+    onPreview(null);
     onSelect(place);
     setOpen(false);
     setResults([]);
+  };
+
+  // A candidate a long way off the screen can't be shown by marking it, so the
+  // list says how far and which way as well. Both together answer "is this even
+  // the right part of the country?" without moving the map.
+  const away = (place: Place) => {
+    if (!origin) return null;
+    const from: [number, number] = [origin.lng, origin.lat];
+    const to: [number, number] = [place.lng, place.lat];
+    const metres = haversineMetres(from, to);
+    if (metres < 500) return "here";
+    return `${formatDistance(metres)} ${compassPoint(bearingDegrees(from, to))}`;
   };
 
   if (!open) {
@@ -200,26 +223,35 @@ export default function MapPlaceSearch({ getCentre, onSelect, onClear, hasResult
           ) : results.length === 0 ? (
             <div className="px-2 py-1.5 text-zinc-400">No places found.</div>
           ) : (
-            <>
+            <div onMouseLeave={() => onPreview(null)}>
               {results.map((place) => (
                 <button
                   key={place.id}
                   onClick={() => choose(place)}
+                  onMouseEnter={() => onPreview(place)}
+                  onMouseLeave={() => onPreview(null)}
+                  onFocus={() => onPreview(place)}
+                  onBlur={() => onPreview(null)}
                   className="block w-full text-left px-2 py-1.5 hover:bg-zinc-50 dark:hover:bg-zinc-700 border-b border-zinc-100 dark:border-zinc-700 last:border-b-0"
                 >
                   <span className="text-zinc-800 dark:text-zinc-100">{place.name}</span>
                   {place.kind && (
                     <span className="ml-1 text-[10px] text-zinc-400">{formatKind(place.kind)}</span>
                   )}
-                  {place.context && (
-                    <span className="block text-[10px] text-zinc-400 truncate">{place.context}</span>
-                  )}
+                  <span className="flex items-baseline gap-1 text-[10px] text-zinc-400">
+                    {place.context && <span className="truncate">{place.context}</span>}
+                    {away(place) && (
+                      <span className="ml-auto shrink-0 tabular-nums" title="From the centre of the map when you searched">
+                        {away(place)}
+                      </span>
+                    )}
+                  </span>
                 </button>
               ))}
               <div className="px-2 py-1 text-[9px] text-zinc-400 bg-zinc-50 dark:bg-zinc-900/40">
                 {GEOCODER_ATTRIBUTION}
               </div>
-            </>
+            </div>
           )}
         </div>
       )}

@@ -641,6 +641,10 @@ export default function OccurrenceMapRow({
   const [measure, setMeasure] = useState<[number, number][] | null>(null);
   /** The place the search last flew to, pinned so you can see where it is. */
   const [searchedPlace, setSearchedPlace] = useState<Place | null>(null);
+  /** The candidate under the pointer in the results list, marked but not flown
+   *  to — you're deciding which one to commit to, and moving the camera for
+   *  each one you glance at would lose the records you're comparing against. */
+  const [previewPlace, setPreviewPlace] = useState<Place | null>(null);
 
   const goToPlace = useCallback((place: Place) => {
     setSearchedPlace(place);
@@ -2506,18 +2510,38 @@ export default function OccurrenceMapRow({
               {/* Where the search landed. Pinned rather than just flown to:
                   the point of looking a locality up is to compare it against
                   the records, which means both have to be on screen at once. */}
-              {searchedPlace && (
-                <MapLibreMarker longitude={searchedPlace.lng} latitude={searchedPlace.lat} anchor="bottom">
-                  <div className="flex flex-col items-center -mb-1">
-                    <span className="px-1.5 py-0.5 rounded bg-zinc-900/80 text-white text-[10px] whitespace-nowrap max-w-[14rem] truncate">
-                      {searchedPlace.name}
-                    </span>
-                    <svg className="w-5 h-5 -mt-0.5 text-zinc-900" viewBox="0 0 24 24" fill="currentColor">
-                      <path d="M12 2a7 7 0 00-7 7c0 5 7 13 7 13s7-8 7-13a7 7 0 00-7-7zm0 9.5A2.5 2.5 0 1112 6.5a2.5 2.5 0 010 5z" />
-                    </svg>
-                  </div>
-                </MapLibreMarker>
-              )}
+              {[
+                previewPlace && previewPlace.id !== searchedPlace?.id
+                  ? { place: previewPlace, preview: true }
+                  : null,
+                searchedPlace ? { place: searchedPlace, preview: false } : null,
+              ]
+                .filter((entry) => entry != null)
+                .map(({ place, preview }) => (
+                  <MapLibreMarker
+                    key={preview ? `preview-${place.id}` : place.id}
+                    longitude={place.lng}
+                    latitude={place.lat}
+                    anchor="bottom"
+                  >
+                    <div className={`flex flex-col items-center -mb-1 ${preview ? "opacity-80" : ""}`}>
+                      <span
+                        className={`px-1.5 py-0.5 rounded text-white text-[10px] whitespace-nowrap max-w-[14rem] truncate ${
+                          preview ? "bg-zinc-500/80" : "bg-zinc-900/80"
+                        }`}
+                      >
+                        {place.name}
+                      </span>
+                      <svg
+                        className={`w-5 h-5 -mt-0.5 ${preview ? "text-zinc-500" : "text-zinc-900"}`}
+                        viewBox="0 0 24 24"
+                        fill="currentColor"
+                      >
+                        <path d="M12 2a7 7 0 00-7 7c0 5 7 13 7 13s7-8 7-13a7 7 0 00-7-7zm0 9.5A2.5 2.5 0 1112 6.5a2.5 2.5 0 010 5z" />
+                      </svg>
+                    </div>
+                  </MapLibreMarker>
+                ))}
               {/* The measured path. Drawn above everything so the line stays
                   readable over the rasters it's being measured against. */}
               {measure && measure.length > 0 && (
@@ -2916,6 +2940,7 @@ export default function OccurrenceMapRow({
                   return { lat: centre.lat, lng: centre.lng, zoom: map.getZoom() };
                 }}
                 onSelect={goToPlace}
+                onPreview={setPreviewPlace}
                 onClear={() => setSearchedPlace(null)}
                 hasResult={searchedPlace != null}
               />

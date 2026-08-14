@@ -42,3 +42,27 @@ export function formatDistance(metres: number): string {
   if (km < 100) return `${km.toFixed(1)} km`;
   return `${Math.round(km).toLocaleString()} km`;
 }
+
+/**
+ * Initial bearing from one point to another, in degrees clockwise from north.
+ *
+ * Great-circle again, not the angle on the projected map: at the latitudes a
+ * lot of this work happens at they differ enough to point at the wrong
+ * neighbouring valley.
+ */
+export function bearingDegrees([lng1, lat1]: LngLat, [lng2, lat2]: LngLat): number {
+  const toRad = (deg: number) => (deg * Math.PI) / 180;
+  const phi1 = toRad(lat1);
+  const phi2 = toRad(lat2);
+  const dLambda = toRad(lng2 - lng1);
+  const y = Math.sin(dLambda) * Math.cos(phi2);
+  const x = Math.cos(phi1) * Math.sin(phi2) - Math.sin(phi1) * Math.cos(phi2) * Math.cos(dLambda);
+  return (((Math.atan2(y, x) * 180) / Math.PI) + 360) % 360;
+}
+
+const COMPASS = ["N", "NE", "E", "SE", "S", "SW", "W", "NW"] as const;
+
+/** The bearing as a compass point — the precision a glance at a list wants. */
+export function compassPoint(degrees: number): string {
+  return COMPASS[Math.round((((degrees % 360) + 360) % 360) / 45) % 8];
+}
