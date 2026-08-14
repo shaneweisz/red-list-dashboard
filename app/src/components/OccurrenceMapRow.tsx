@@ -894,6 +894,15 @@ export default function OccurrenceMapRow({
   // Hovered occurrence on map (for hover tooltip)
   const [hoveredFeature, setHoveredFeature] = useState<OccurrenceFeature | null>(null);
   const [hoveredPanel, setHoveredPanel] = useState<string | null>(null);
+  /**
+   * Where the current hover came from.
+   *
+   * Both the map and the list set the same hoveredFeature — that's what links
+   * them — but only a hover on the map itself opens the tooltip. Reading down
+   * the table shouldn't have a panel following your pointer across the map;
+   * seeing which point the row is is the whole of what's wanted there.
+   */
+  const [hoverSource, setHoverSource] = useState<"map" | "list" | null>(null);
   // Which of the records sharing a point the tooltip is showing, and whether
   // the pointer has moved onto the tooltip itself — without that, reaching for
   // the pager takes the pointer off the point and dismisses the thing.
@@ -1425,6 +1434,7 @@ export default function OccurrenceMapRow({
       // cancelling it here the tooltip appears and is taken away again a beat
       // later, which reads as the marker simply not having one.
       cancelHoverClear();
+      setHoverSource("map");
       setHoveredFeature(record);
       setHoveredPanel("main");
     },
@@ -1896,12 +1906,13 @@ export default function OccurrenceMapRow({
 
   // Map event handlers
   const handleMapClick = useCallback((e: MapLayerMouseEvent) => {
-    // Measuring owns the left click while it's on. Two points, never more:
-    // the question is "how far is it from here to there", and a third click
-    // moves the start rather than growing a path nobody asked for.
+    // Measuring owns the left click while it's on. Two points, never more,
+    // and the first one stays put: it's the deliberate one — you right-clicked
+    // that spot and asked to measure from it — so every click after the second
+    // moves the far end and re-reads the distance from the same origin.
     if (measure) {
       const point: [number, number] = [e.lngLat.lng, e.lngLat.lat];
-      setMeasure(measure.length < 2 ? [...measure, point] : [point, measure[1]]);
+      setMeasure(measure.length < 2 ? [...measure, point] : [measure[0], point]);
       return;
     }
     const features = e.features;
@@ -2032,6 +2043,7 @@ export default function OccurrenceMapRow({
         const known = occurrencesByGbifId.get(Number(props.gbifID));
         if (known) {
           cancelHoverClear();
+          setHoverSource("map");
               if (known.properties.gbifID !== hoveredFeature?.properties.gbifID) {
             setGroupIndex(0);
             unpinTooltip();
@@ -2041,6 +2053,7 @@ export default function OccurrenceMapRow({
           return;
         }
         // Reconstruct the OccurrenceFeature from the queried feature
+        setHoverSource("map");
         const coords = (features[0].geometry as GeoJSON.Point).coordinates as [number, number];
         setHoveredFeature({
           type: "Feature",
@@ -2132,6 +2145,7 @@ export default function OccurrenceMapRow({
       cancelHoverClear();
       unpinTooltip();
       setGroupIndex(0);
+      setHoverSource("list");
       setHoveredFeature(feature);
       setHoveredPanel("main");
     },
@@ -2453,7 +2467,7 @@ export default function OccurrenceMapRow({
                   coordinates win over GBIF's where you've supplied both (you
                   only ever georeference a record GBIF got wrong or left
                   blank). */}
-              {hoveredFeature && hoveredPosition && !hoveredObs && hoveredPanel === panelId && (() => {
+              {hoveredFeature && hoveredPosition && !hoveredObs && hoverSource === "map" && hoveredPanel === panelId && (() => {
                 const [hLon, hLat] = hoveredPosition;
                 const shown = hoveredGroup[Math.min(groupIndex, hoveredGroup.length - 1)] ?? hoveredFeature;
                 const hInat = inatPhotosByGbifId.get(shown.properties.gbifID);
@@ -2565,9 +2579,11 @@ export default function OccurrenceMapRow({
                             geometry: { type: "LineString" as const, coordinates: measure },
                           }]
                         : []),
-                      ...measure.map((point) => ({
+                      ...measure.map((point, index) => ({
                         type: "Feature" as const,
-                        properties: {},
+                        // The origin is drawn larger, so which end is pinned is
+                        // visible rather than something you have to remember.
+                        properties: { anchor: index === 0 },
                         geometry: { type: "Point" as const, coordinates: point },
                       })),
                     ],
@@ -2590,7 +2606,7 @@ export default function OccurrenceMapRow({
                     type="circle"
                     filter={["==", ["geometry-type"], "Point"]}
                     paint={{
-                      "circle-radius": 4,
+                      "circle-radius": ["case", ["get", "anchor"], 6, 4],
                       "circle-color": "#111827",
                       "circle-stroke-color": "#ffffff",
                       "circle-stroke-width": 2,
@@ -2771,7 +2787,7 @@ export default function OccurrenceMapRow({
             <div className="bg-white dark:bg-zinc-800 px-2 py-1.5 rounded shadow text-[11px] text-zinc-700 dark:text-zinc-200 flex items-center gap-2">
               <span className="font-medium tabular-nums">{formatDistance(pathLengthMetres(measure))}</span>
               <span className="text-zinc-400">
-                {measure.length < 2 ? "click where you're measuring to" : "click to move the start"}
+                {measure.length < 2 ? "click where you're measuring to" : "click to measure somewhere else"}
               </span>
               <button
                 onClick={() => setMeasure(null)}

@@ -109,14 +109,18 @@ export default function MapPlaceSearch({ getCentre, onSelect, onPreview, onClear
   if (!open) {
     return (
       <div className="flex items-center gap-1">
+        {/* Labelled, not just a magnifier: an icon alone on a map full of
+            other controls is easy to read as another layer toggle, and what
+            this searches for isn't obvious until you're told. */}
         <button
           onClick={() => setOpen(true)}
           title="Search for a place — a locality from a specimen label, or a coordinate pair"
-          className="p-1.5 rounded-lg bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 shadow-md text-zinc-500 dark:text-zinc-400 hover:text-zinc-800 dark:hover:text-zinc-100"
+          className="flex items-center gap-1.5 pl-1.5 pr-2 py-1.5 rounded-lg bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 shadow-md text-zinc-500 dark:text-zinc-400 hover:text-zinc-800 dark:hover:text-zinc-100"
         >
-          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+          <svg className="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
             <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-4.35-4.35M17 11a6 6 0 11-12 0 6 6 0 0112 0z" />
           </svg>
+          <span className="text-[11px]">Search a place</span>
         </button>
         {hasResult && (
           <button
@@ -160,7 +164,7 @@ export default function MapPlaceSearch({ getCentre, onSelect, onPreview, onClear
               }
             }
           }}
-          placeholder="Place, or lat, lon"
+          placeholder="Locality from a label, or lat, lon"
           className="flex-1 min-w-0 bg-transparent text-xs text-zinc-800 dark:text-zinc-100 placeholder:text-zinc-400 focus:outline-none"
         />
         {query !== "" && (
