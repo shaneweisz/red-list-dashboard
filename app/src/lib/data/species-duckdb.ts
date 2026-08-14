@@ -17,6 +17,7 @@ import { canonicalizeTaxonId, mapTaxonId } from "@/lib/data/taxonomy-constants";
 import { getTaxaSummary } from "@/lib/data/species-store";
 import { isDynamicNodeId, dynamicNodeFilter, buildDynamicNodeId, rankOrderFor, isLiveDrilldownNode, type DynamicSegment } from "@/lib/dynamic-taxon";
 import { filterToSql, sqlStrList } from "@/lib/taxonomy-sql";
+import { sisRowKey, colRowKey, type SpeciesRowKey } from "@/lib/species-row-key";
 import { COL_DOMESTIC_EXCLUDE_NAMES } from "@/config/col-described-overrides";
 
 const DATA_DIR = path.join(process.cwd(), "data");
@@ -153,12 +154,18 @@ const splitList = (s: unknown): string[] => (typeof s === "string" && s ? s.spli
 const num = (v: unknown): number | null => (v == null ? null : Number(v));
 const str = (v: unknown): string | null => (v == null ? null : String(v));
 
+/**
+ * Assessed rows only — the NE branch of querySpecies builds its own (slimmer) row.
+ * `id` here is assessed.parquet's own id column, which IS the SIS taxon id.
+ */
 export function toSpeciesRow(r: Record<string, unknown>) {
-  const id = Number(r.id);
+  const sisTaxonId = Number(r.id);
   const taxonGroup = String(r.taxon_group);
   return {
-    id,
-    sis_taxon_id: id > 0 ? id : null,
+    // Namespaced row key — see lib/species-row-key. Assessed species always have a
+    // SIS id, so this branch is always `sis-…`; NE rows get `col-…` in querySpecies.
+    species_key: sisRowKey(sisTaxonId),
+    sis_taxon_id: sisTaxonId,
     col_id: (r.col_id as string) ?? null, // CoL id — set on NE rows (assessed resolve via sis)
     assessment_id: num(r.assessment_id),
     scientific_name: r.scientific_name ?? "",
@@ -334,22 +341,27 @@ export async function querySpecies(opts: {
         // null/empty/false for NE, so omitting them ~halves the payload + server
         // serialization (beetles ~262k rows: 178MB → ~90MB). The client handles their
         // absence exactly as the nulls it receives today (audited: every access is
-        // optional-chained, falsy-checked, or NE-skipped). Synthetic negative id (no IUCN
-        // sis) derived from col_id via colIdToSearchId — stable across queries, unlike a
-        // per-query decrementing counter (the previous approach): a species fetched once
-        // as part of "Mammals" and again scoped to "Rodentia" got a DIFFERENT counter-based
-        // id each time (each query restarts its own count from -2,000,000,000), while an
-        // unrelated species from the two different queries could easily land on the exact
-        // same id — RedListView.tsx's speciesDetails cache is keyed by id and never
-        // revalidates an existing entry, so the second species silently rendered under the
-        // first's cached photo/common name/etc (reported: a cached Giraffe thumbnail
-        // showing for Fictidomys parvidens after drilling from Mammals into Rodentia).
-        // colIdToSearchId is already proven collision-free/stable for this exact purpose
-        // (search results); taxon_group is the REAL CoL group (sub-group filter), taxon_id
-        // forced to the requested taxon (top-level filter); GBIF key/count/countries/
-        // common_name overlaid when the species is GBIF-observed.
+        // optional-chained, falsy-checked, or NE-skipped).
+        //
+        // The row key is the CoL id itself (`col-…`). This list IS the CoL universe —
+        // one row per col_id by construction, so the id it keys on is the id it was
+        // selected by, and it identifies the same species no matter which query
+        // produced the row. That last property is load-bearing and used not to hold:
+        // when the key was a per-query decrementing counter, a species fetched once
+        // under "Mammals" and again scoped to "Rodentia" got a different key each time
+        // (every query restarted from -2,000,000,000) while two unrelated species could
+        // collide on one — and RedListView's speciesDetails cache, keyed on it and never
+        // revalidated, then rendered the second species under the first's cached photo
+        // and common name (a Giraffe thumbnail on Fictidomys parvidens, after drilling
+        // from Mammals into Rodentia). Hashing col_id fixed that; using col_id directly
+        // makes it true by construction.
+        //
+        // taxon_group is the REAL CoL group (sub-group filter), taxon_id forced to the
+        // requested taxon (top-level filter); GBIF key/count/countries/common_name
+        // overlaid when the species is GBIF-observed.
         result.push({
-          id: colIdToSearchId((r.col_id as string) ?? (r.scientific_name as string) ?? String(taxonId)),
+          species_key: colRowKey(String(r.col_id)),
+          sis_taxon_id: null,
           col_id: (r.col_id as string) ?? null,
           scientific_name: r.scientific_name ?? "",
           common_name: r.common_name ?? null,
@@ -376,7 +388,16 @@ export async function querySpecies(opts: {
 // ─── Cross-taxa search ──────────────────────────────────────────────────────
 
 export interface SearchResult {
-  id: number;
+  /**
+   * The row key this result selects in the species table (see lib/species-row-key).
+   * Null when the species has neither identity the table can address — a GBIF-observed
+   * species with no CoL link (~9.2k of them). Those still search, and still open their
+   * own /mapping page; they just can't be pointed at a row, because the NE list is the
+   * CoL universe and they aren't in it.
+   */
+  species_key: SpeciesRowKey | null;
+  sis_taxon_id: number | null;
+  col_id: string | null;
   scientific_name: string;
   common_name: string | null;
   taxon_id: string;
@@ -454,15 +475,28 @@ export function nodeIdForSpecies(taxonGroup: string, lineage: Lineage): string |
   return deepest === -1 ? leafRoot : idFor(deepest + 1);
 }
 
-// Stable negative int id for a CoL-only species (no IUCN sis id / GBIF key). Used as the
-// search result's id — the URL `species=` param + the cached-preview key — and never
-// collides with real positive sis/gbif ids. Also used by the NE branch of querySpecies
-// above (same reasoning: a stable, collision-free id independent of which query produced
-// the row — see that call site's comment for the bug a per-query counter caused here).
-export function colIdToSearchId(colId: string): number {
-  let h = 0;
-  for (let i = 0; i < colId.length; i++) h = (Math.imul(h, 31) + colId.charCodeAt(i)) | 0;
-  return -(Math.abs(h) || 1);
+/**
+ * CoL ids for GBIF species keys, via species_link — the bridge build-matching writes.
+ *
+ * The search fast path reads unassessed.parquet, which is one row per GBIF species
+ * key and carries no col_id; the NE list it has to agree with is one row per col_id.
+ * The two grains genuinely differ (3,756 col_ids have more than one GBIF key), so a
+ * search hit's row key has to come from the link table rather than from its GBIF key.
+ * Assuming key == col_id would be wrong for ~4.3k species even though it holds for
+ * 99.4% of them.
+ *
+ * Batched by the keys actually matched (a handful per search), so this reads two
+ * columns of species_link filtered to those keys rather than scanning it whole.
+ */
+async function colIdsForGbifKeys(conn: DuckDBConnection, keys: string[]): Promise<Map<string, string>> {
+  const out = new Map<string, string>();
+  if (!keys.length) return out;
+  const list = keys.map((k) => `'${k.replace(/'/g, "''")}'`).join(",");
+  const rows = (await conn.runAndReadAll(
+    `SELECT gbif_species_key, col_id FROM read_parquet('${parquetUri("species_link.parquet")}')
+     WHERE src = 'gbif' AND col_id IS NOT NULL AND gbif_species_key IN (${list})`, {})).getRowObjects();
+  for (const r of rows) out.set(String(r.gbif_species_key), String(r.col_id));
+  return out;
 }
 
 // Substring search over both parquets (replaces the in-memory search-index.json).
@@ -478,7 +512,7 @@ export async function searchSpecies(query: string, limit = 10): Promise<SearchRe
     SELECT id, scientific_name, common_name, taxon_group, iucn_category AS category, gbif_species_key,
            class_name, order_name, family, gbif_occurrence_count,
            ${assessed ? "assessment_id, CAST(assessment_date AS VARCHAR) AS assessment_date" : "NULL AS assessment_id, NULL AS assessment_date"},
-           countries, class_name, order_name, family
+           countries, class_name, order_name, family, ${assessed} AS assessed
     FROM '${parquetUri(src)}'
     WHERE scientific_name ILIKE '%' || $q || '%'
        OR (common_name IS NOT NULL AND common_name ILIKE '%' || $q || '%')`;
@@ -491,14 +525,24 @@ export async function searchSpecies(query: string, limit = 10): Promise<SearchRe
              lower(scientific_name)
     LIMIT ${lim}`;
   const rows = (await conn.runAndReadAll(sql, { q: query.toLowerCase() })).getRowObjects();
-  const fast: SearchResult[] = rows.map((r) => {
+  // An unassessed hit is keyed by the col_id its GBIF key links to, which is what the
+  // NE list keys its rows on — resolved for the whole page of hits in one lookup.
+  const neKeys = rows.filter((r) => !r.assessed).map((r) => str(r.gbif_species_key)).filter((k): k is string => !!k);
+  const colIdByGbifKey = await colIdsForGbifKeys(conn, neKeys);
+  const hits: SearchResult[] = rows.map((r) => {
     const tg = String(r.taxon_group);
     const cat = String(r.category ?? "");
     const lineage = { class_name: str(r.class_name), order_name: str(r.order_name), family: str(r.family) };
+    // assessed.parquet's id column IS the SIS taxon id; unassessed.parquet's is an
+    // internal build-time key that never leaves the pipeline (see build-parquet).
+    const sisTaxonId = r.assessed ? Number(r.id) : null;
+    const colId = r.assessed ? null : (colIdByGbifKey.get(str(r.gbif_species_key) ?? "") ?? null);
     // Both views browse via the top-level taxon, plus the sub-group node the species
     // itself sits in — see nodeIdForSpecies.
     return {
-      id: Number(r.id),
+      species_key: sisTaxonId != null ? sisRowKey(sisTaxonId) : colId ? colRowKey(colId) : null,
+      sis_taxon_id: sisTaxonId,
+      col_id: colId,
       scientific_name: String(r.scientific_name ?? ""),
       common_name: (r.common_name as string) ?? null,
       taxon_id: mapTaxonId(tg),
@@ -513,6 +557,25 @@ export async function searchSpecies(query: string, limit = 10): Promise<SearchRe
       node_id: nodeIdForSpecies(tg, lineage),
     };
   });
+
+  // One entry per species. unassessed.parquet is one row per GBIF species key, and CoL
+  // lumps some of those: 3,756 col_ids carry more than one key, so a name like Abutilon
+  // halophilum matched twice (keys VLWL9 and 8N4F) and listed twice in the dropdown —
+  // two rows that now resolve to the same species and would select the same table row.
+  // The NE list already shows one row per col_id (ne_gbif_by_col groups by it), so
+  // collapsing here is what makes search agree with the list it selects into. Keep the
+  // best-observed key of the group, which is the most useful one to preview from.
+  // Null keys are never collapsed — those species have no shared identity to merge on.
+  const bestByKey = new Map<string, SearchResult>();
+  for (const r of hits) {
+    if (!r.species_key) continue;
+    const prev = bestByKey.get(r.species_key);
+    if (!prev || (r.gbif_occurrence_count ?? -1) > (prev.gbif_occurrence_count ?? -1)) {
+      bestByKey.set(r.species_key, r);
+    }
+  }
+  const fast: SearchResult[] = hits.filter((r) => !r.species_key || bestByKey.get(r.species_key) === r);
+
   // Return as soon as the direct search (assessed ∪ unassessed, ~16MB) finds anything.
   // The CoL-only and synonym tiers below each full-scan a large parquet over R2 (species/
   // ~36MB, synonym-index ~77MB) with no pruning — ~10s on a cold function. They exist to
@@ -543,7 +606,9 @@ export async function searchSpecies(query: string, limit = 10): Promise<SearchRe
     const tg = String(r.taxon_group);
     const lineage = { class_name: str(r.class_name), order_name: str(r.order_name), family: str(r.family) };
     fast.push({
-      id: colIdToSearchId(String(r.col_id)),
+      species_key: colRowKey(String(r.col_id)),
+      sis_taxon_id: null,
+      col_id: String(r.col_id),
       scientific_name: name,
       common_name: null,
       taxon_id: mapTaxonId(tg),
@@ -594,8 +659,11 @@ export async function searchSpecies(query: string, limit = 10): Promise<SearchRe
       const tg = String(r.taxon_group);
       const cat = String(r.category ?? "NE");
       const sis = r.sis_id == null ? null : Number(r.sis_id);
+      const colId = r.accepted_col_id == null ? null : String(r.accepted_col_id);
       const result: SearchResult = {
-        id: sis ?? colIdToSearchId(String(r.accepted_col_id)),
+        species_key: sis != null ? sisRowKey(sis) : colId ? colRowKey(colId) : null,
+        sis_taxon_id: sis,
+        col_id: colId,
         scientific_name: accName,
         common_name: null,
         taxon_id: mapTaxonId(tg),

@@ -3,7 +3,13 @@
 // canonical type definition imported across the app.)
 
 export interface RedListSpecies {
-  id: number;
+  /**
+   * This row's identity everywhere in the UI — selection, pinning, React keys,
+   * per-species caches, the `species=` URL param. `sis-<sis_taxon_id>` for an
+   * assessed species, `col-<col_id>` for a Not Evaluated one. See
+   * lib/species-row-key for why it's namespaced rather than a bare number.
+   */
+  species_key: string;
   sis_taxon_id: number | null;
   col_id?: string | null; // CoL id (on NE rows); used for the detail panel's synonyms/CoL tab
   assessment_id: number | null;

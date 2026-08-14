@@ -234,7 +234,7 @@ export default function RedListPage() {
           >
             Species+
           </a>
-          ,{" "}
+          , and{" "}
           <a
             href="https://www.catalogueoflife.org"
             target="_blank"
@@ -242,15 +242,6 @@ export default function RedListPage() {
             className="underline hover:text-zinc-600 dark:hover:text-zinc-300"
           >
             Catalogue of Life
-          </a>
-          , and{" "}
-          <a
-            href="https://eol.org"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="underline hover:text-zinc-600 dark:hover:text-zinc-300"
-          >
-            Encyclopedia of Life
           </a>
           {" "}data. This is a free, non-commercial research tool; commercial users should obtain IUCN Red List data via{" "}
           <a

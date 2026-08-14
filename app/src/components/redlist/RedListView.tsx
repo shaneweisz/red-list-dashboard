@@ -28,9 +28,24 @@ import { isOutdated, outdatedCutoffDate } from "@/lib/outdated";
 import AssessorCandidatesTable from "../AssessorCandidatesTable";
 import ReviewerCandidatesTable from "../ReviewerCandidatesTable";
 import { getLastSearchResult, clearLastSearchResult, type SearchResult } from "../SpeciesSearchBar";
+import { migratePinnedSpecies } from "@/lib/species-row-key";
 
 // Species list is served by the DuckDB/Parquet-backed /api/redlist/species route.
 const SPECIES_API = "/api/redlist/species";
+
+type DetailTab = "gbif" | "literature" | "redlist" | "wikipedia" | "cites" | "assessors" | "reviewers" | "col" | "eol";
+
+// Encyclopedia of Life tab is hidden for now. The tab, its panel and the
+// /api/eol routes are all still here — flip this back to true to bring it back.
+const SHOW_EOL_TAB = false;
+
+// A ?tab=eol link (or a stale one) shouldn't strand the user on a tab with no
+// button in the bar, so fall back to the default tab while EoL is hidden.
+function visibleTab(tab: DetailTab | null | undefined): DetailTab {
+  if (!tab) return "gbif";
+  if (tab === "eol" && !SHOW_EOL_TAB) return "gbif";
+  return tab;
+}
 
 // Dynamically import OccurrenceMapRow to avoid SSR issues with Leaflet
 const OccurrenceMapRow = dynamic(
@@ -331,10 +346,15 @@ interface SpeciesDetails {
 // assessment-only fields (trend, criteria, threats, assessors, …) left empty — the same
 // shape and the same absent-field handling as a Not-Evaluated row from the species list.
 // Lets the searched species be rendered before (or without) the taxon's own list.
-function previewFromSearchResult(r: SearchResult): RedListSpecies {
+// Null for a search hit the table can't address — a GBIF species with no CoL link,
+// which is in no node's NE list to be previewed into. The search still navigates to
+// it by name; only the auto-opened detail panel is skipped.
+function previewFromSearchResult(r: SearchResult): RedListSpecies | null {
+  if (!r.species_key) return null;
   return {
-    id: r.id,
-    sis_taxon_id: r.id > 0 ? r.id : null,
+    species_key: r.species_key,
+    sis_taxon_id: r.sis_taxon_id,
+    col_id: r.col_id,
     assessment_id: r.assessment_id,
     scientific_name: r.scientific_name,
     common_name: r.common_name,
@@ -1313,7 +1333,7 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
   [selectedHabitat, habitatBreadth, selectedHabitatImportance, selectedHabitatSeasons, selectedHabitatSuitability]);
 
   // Species details cache (images, criteria, common names)
-  const [speciesDetails, setSpeciesDetails] = useState<Record<number, SpeciesDetails>>({});
+  const [speciesDetails, setSpeciesDetails] = useState<Record<string, SpeciesDetails>>({});
   // Lazy assessment-history cache, keyed by sis_taxon_id. The species list no
   // longer carries the full history array; it's fetched when a detail row opens.
   const [assessmentHistory, setAssessmentHistory] = useState<Record<number, Species["previous_assessments"]>>({});
@@ -1322,10 +1342,10 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
   const [synonymsBySpecies, setSynonymsBySpecies] = useState<Record<string, SynInfo>>({});
 
   // Row expansion state (initialized from URL params if present)
-  const [selectedSpeciesKey, setSelectedSpeciesKeyRaw] = useState<number | null>(urlSpecies != null && isNewAssessments ? Math.abs(urlSpecies) : urlSpecies);
-  const [activeDetailTab, setActiveDetailTabRaw] = useState<"gbif" | "literature" | "redlist" | "wikipedia" | "cites" | "assessors" | "reviewers" | "col" | "eol">(urlTab ?? "gbif");
+  const [selectedSpeciesKey, setSelectedSpeciesKeyRaw] = useState<string | null>(urlSpecies);
+  const [activeDetailTab, setActiveDetailTabRaw] = useState<DetailTab>(visibleTab(urlTab));
   // Track which tabs have been visited so we only mount (and fetch data for) a tab on first click
-  const [visitedTabs, setVisitedTabs] = useState<Set<string>>(new Set([urlTab ?? "gbif"]));
+  const [visitedTabs, setVisitedTabs] = useState<Set<string>>(new Set([visibleTab(urlTab)]));
   const urlSpeciesHandledRef = useRef(false);
   // Track whether a tab change was initiated programmatically (click) vs URL navigation (popstate)
   const programmaticTabChangeRef = useRef(false);
@@ -1337,7 +1357,7 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
   const autoColSwitchedRef = useRef(false);
 
   // Wrap setters to sync with URL
-  const setSelectedSpeciesKey = useCallback((key: number | null) => {
+  const setSelectedSpeciesKey = useCallback((key: string | null) => {
     setSelectedSpeciesKeyRaw(key);
     setSpeciesParam(key, key != null ? "gbif" : "gbif");
     if (key != null) {
@@ -1348,7 +1368,7 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
     }
   }, [setSpeciesParam]);
 
-  const setActiveDetailTab = useCallback((tab: "gbif" | "literature" | "redlist" | "wikipedia" | "cites" | "assessors" | "reviewers" | "col" | "eol", isManual = true) => {
+  const setActiveDetailTab = useCallback((tab: DetailTab, isManual = true) => {
     setActiveDetailTabRaw(tab);
     programmaticTabChangeRef.current = true;
     if (isManual) manualTabSelectionRef.current = true;
@@ -1369,8 +1389,8 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
     autoColSwitchedRef.current = true;
     setActiveDetailTab("col", false);
   }, [setActiveDetailTab]);
-  // Sync species/tab from URL params (fires on popstate, e.g. back/forward or search bar navigation)
-  // In new-assessments mode, row keys use Math.abs(id) so selectedSpeciesKey must match.
+  // Sync species/tab from URL params (fires on popstate, e.g. back/forward or search bar navigation).
+  // The param IS the row key (`sis-…`/`col-…`), so it needs no per-view translation.
   useEffect(() => {
     if (urlSpecies != null) {
       // Skip visitedTabs reset for programmatic (click) tab changes – only reset on URL navigation
@@ -1378,15 +1398,15 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
         programmaticTabChangeRef.current = false;
         return;
       }
-      setSelectedSpeciesKeyRaw(isNewAssessments ? Math.abs(urlSpecies) : urlSpecies);
-      setActiveDetailTabRaw(urlTab ?? "gbif");
-      setVisitedTabs(new Set([urlTab ?? "gbif"]));
+      setSelectedSpeciesKeyRaw(urlSpecies);
+      setActiveDetailTabRaw(visibleTab(urlTab));
+      setVisitedTabs(new Set([visibleTab(urlTab)]));
       // A tab pinned in the URL counts as an explicit choice, so don't auto-switch.
-      manualTabSelectionRef.current = urlTab != null && urlTab !== "gbif";
+      manualTabSelectionRef.current = visibleTab(urlTab) !== "gbif";
       autoColSwitchedRef.current = false;
       urlSpeciesHandledRef.current = false; // allow auto-page-navigate for new species
     }
-  }, [urlSpecies, urlTab, isNewAssessments]);
+  }, [urlSpecies, urlTab]);
 
   // Single-species fast path: use cached search result to render the detail panel
   // immediately without waiting for the bulk table to load.
@@ -1400,14 +1420,14 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
     const bulkTaxon = selectedTaxa.size === 1 ? [...selectedTaxa][0] : "all";
     const bulkUrl = speciesApiUrl(bulkTaxon, isNewAssessments ? "&category=NE" : "");
     const allSpecies = cache.entries[bulkUrl]?.species ?? [];
-    if (allSpecies.some(s => s.id === urlSpecies)) {
+    if (allSpecies.some(s => s.species_key === urlSpecies)) {
       setSingleSpeciesPreview(null);
       return;
     }
 
     // Use cached search result to construct preview (no API call needed)
     const cached = getLastSearchResult();
-    if (cached && cached.id === urlSpecies) {
+    if (cached && cached.species_key === urlSpecies) {
       clearLastSearchResult();
       setSingleSpeciesPreview(previewFromSearchResult(cached));
       urlSpeciesHandledRef.current = true;
@@ -1425,7 +1445,7 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
       .then(r => (r.ok ? r.json() : null))
       .then((data: { results?: SearchResult[] } | null) => {
         if (cancelled || !data) return;
-        const hit = data.results?.find(r => r.id === urlSpecies);
+        const hit = data.results?.find(r => r.species_key === urlSpecies);
         if (!hit) return;
         setSingleSpeciesPreview(previewFromSearchResult(hit));
         urlSpeciesHandledRef.current = true;
@@ -1437,7 +1457,7 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
   // Clear preview once the species appears in bulk-loaded data
   useEffect(() => {
     if (!singleSpeciesPreview) return;
-    if (assessedSpecies.some(s => s.id === singleSpeciesPreview.id)) {
+    if (assessedSpecies.some(s => s.species_key === singleSpeciesPreview.species_key)) {
       setSingleSpeciesPreview(null);
     }
   }, [assessedSpecies, singleSpeciesPreview]);
@@ -1449,14 +1469,15 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
   // (a synonym mismatch — Pararge aegeria's id is held by the assessed Pararge xiphioides)
   // is filtered out of the not-evaluated universe as "already assessed", so search is the
   // only way to reach it and the list it lands in will never list it.
-  // Dedupe as paginatedSpecies does — by id, and for NE also by name, since a row loaded
-  // from the NE list is keyed on its CoL id while the search result is keyed on its GBIF one.
+  // Dedupe by row key alone. This used to need a name-equality fallback for NE species,
+  // because a row from the NE list was keyed on its CoL id while the same species from
+  // search was keyed on its GBIF one — two different keys for one species. Both sides
+  // resolve through species_link to the same `col-…` key now, so the keys match.
   const taxaFilteredSpecies = useMemo(() => {
     if (!singleSpeciesPreview) return taxaFilteredSpeciesNoPreview;
-    if (taxaFilteredSpeciesNoPreview.some(s =>
-      s.id === singleSpeciesPreview.id ||
-      (singleSpeciesPreview.category === "NE" && s.scientific_name === singleSpeciesPreview.scientific_name)
-    )) return taxaFilteredSpeciesNoPreview;
+    if (taxaFilteredSpeciesNoPreview.some(s => s.species_key === singleSpeciesPreview.species_key)) {
+      return taxaFilteredSpeciesNoPreview;
+    }
     return [singleSpeciesPreview, ...taxaFilteredSpeciesNoPreview];
   }, [taxaFilteredSpeciesNoPreview, singleSpeciesPreview]);
 
@@ -1464,12 +1485,12 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
 
 
   // Pinned species as ordered array (persisted to localStorage)
-  const [pinnedSpecies, setPinnedSpecies] = useState<number[]>([]);
+  const [pinnedSpecies, setPinnedSpecies] = useState<string[]>([]);
   const pinnedSet = useMemo(() => new Set(pinnedSpecies), [pinnedSpecies]); // For O(1) lookup
 
   // Drag state for reordering pinned species
-  const [draggedSpecies, setDraggedSpecies] = useState<number | null>(null);
-  const [dragOverSpecies, setDragOverSpecies] = useState<number | null>(null);
+  const [draggedSpecies, setDraggedSpecies] = useState<string | null>(null);
+  const [dragOverSpecies, setDragOverSpecies] = useState<string | null>(null);
 
   const pinnedStorageKey = isNewAssessments ? "new-assessments-pinned-species" : "redlist-pinned-species";
 
@@ -1481,14 +1502,16 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
   useEffect(() => {
     try {
       const stored = localStorage.getItem(pinnedStorageKey);
-      setPinnedSpecies(stored ? JSON.parse(stored) : []);
+      // Pins were stored as numbers before the key was namespaced; migrate in place so
+      // existing pins survive (assessed ones exactly — see migratePinnedSpecies).
+      setPinnedSpecies(migratePinnedSpecies(stored ? JSON.parse(stored) : []));
     } catch {
       setPinnedSpecies([]);
     }
   }, [pinnedStorageKey]);
 
   // Save pinned species to localStorage
-  const savePinnedSpecies = (newPinned: number[]) => {
+  const savePinnedSpecies = (newPinned: string[]) => {
     setPinnedSpecies(newPinned);
     try {
       localStorage.setItem(pinnedStorageKey, JSON.stringify(newPinned));
@@ -1498,32 +1521,32 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
   };
 
   // Toggle pin status
-  const togglePinned = (speciesId: number) => {
-    if (pinnedSet.has(speciesId)) {
-      savePinnedSpecies(pinnedSpecies.filter(id => id !== speciesId));
+  const togglePinned = (speciesKey: string) => {
+    if (pinnedSet.has(speciesKey)) {
+      savePinnedSpecies(pinnedSpecies.filter(k => k !== speciesKey));
     } else {
-      savePinnedSpecies([...pinnedSpecies, speciesId]);
+      savePinnedSpecies([...pinnedSpecies, speciesKey]);
     }
   };
 
   // Drag handlers for reordering
-  const handleDragStart = (e: React.DragEvent, speciesId: number) => {
-    if (!pinnedSet.has(speciesId)) return;
-    setDraggedSpecies(speciesId);
+  const handleDragStart = (e: React.DragEvent, speciesKey: string) => {
+    if (!pinnedSet.has(speciesKey)) return;
+    setDraggedSpecies(speciesKey);
     e.dataTransfer.effectAllowed = 'move';
   };
 
-  const handleDragOver = (e: React.DragEvent, speciesId: number) => {
+  const handleDragOver = (e: React.DragEvent, speciesKey: string) => {
     e.preventDefault();
-    if (!draggedSpecies || !pinnedSet.has(speciesId)) return;
-    setDragOverSpecies(speciesId);
+    if (!draggedSpecies || !pinnedSet.has(speciesKey)) return;
+    setDragOverSpecies(speciesKey);
   };
 
   const handleDragLeave = () => {
     setDragOverSpecies(null);
   };
 
-  const handleDrop = (e: React.DragEvent, targetId: number) => {
+  const handleDrop = (e: React.DragEvent, targetId: string) => {
     e.preventDefault();
     if (!draggedSpecies || draggedSpecies === targetId) {
       setDraggedSpecies(null);
@@ -2231,20 +2254,15 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
         s.common_name?.toLowerCase().includes(searchFilter);
       const matchesAssessor = matchesAssessorsFilter(s);
       const matchesReviewer = matchesReviewersFilter(s);
-      const pinnedKey = isNewAssessments ? Math.abs(s.id) : s.sis_taxon_id;
-      const matchesStarred = !showOnlyStarred || (pinnedKey != null && pinnedSet.has(pinnedKey));
+      const matchesStarred = !showOnlyStarred || pinnedSet.has(s.species_key);
       return matchesCategory && matchesYear && matchesDescribed && matchesObs && matchesAssessmentCount && matchesCountry && matchesSystem && matchesTrend && matchesMovement && matchesThreat && matchesCriteria && matchesHabitat && matchesEndemic && matchesGrowth && matchesSearch && matchesAssessor && matchesReviewer && matchesStarred;
     });
 
     const sorted = [...filtered].sort((a, b) => {
       if (showOnlyStarred) {
-        const aKey = isNewAssessments ? Math.abs(a.id) : a.sis_taxon_id;
-        const bKey = isNewAssessments ? Math.abs(b.id) : b.sis_taxon_id;
-        if (aKey != null && bKey != null) {
-          const aIdx = pinnedSpecies.indexOf(aKey);
-          const bIdx = pinnedSpecies.indexOf(bKey);
-          if (aIdx !== -1 && bIdx !== -1) return aIdx - bIdx;
-        }
+        const aIdx = pinnedSpecies.indexOf(a.species_key);
+        const bIdx = pinnedSpecies.indexOf(b.species_key);
+        if (aIdx !== -1 && bIdx !== -1) return aIdx - bIdx;
       }
 
       let comparison = 0;
@@ -2280,8 +2298,8 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
       const gbifCmp = (b.gbif_occurrence_count ?? -1) - (a.gbif_occurrence_count ?? -1);
       if (gbifCmp !== 0) return gbifCmp;
 
-      // Tertiary tiebreaker: stable ID order
-      return (a.sis_taxon_id ?? a.id) - (b.sis_taxon_id ?? b.id);
+      // Tertiary tiebreaker: stable row-key order
+      return a.species_key.localeCompare(b.species_key);
     });
 
     return { filteredSpecies: filtered, sortedSpecies: sorted };
@@ -2328,13 +2346,11 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
   // Include single-species preview at the top of the page when bulk data hasn't loaded yet
   const paginatedSpecies = useMemo(() => {
     if (!singleSpeciesPreview) return paginatedSpeciesBase;
-    // De-dupe by id, and (for NE search results, whose cached-preview id differs from the
-    // loaded NE row's synthetic id) also by scientific name — so a searched CoL species
-    // shows the loaded row once the list arrives, not a duplicate alongside the preview.
-    if (paginatedSpeciesBase.some(s =>
-      s.id === singleSpeciesPreview.id ||
-      (singleSpeciesPreview.category === "NE" && s.scientific_name === singleSpeciesPreview.scientific_name)
-    )) return paginatedSpeciesBase;
+    // De-dupe by row key — a searched species and its loaded list row now carry the
+    // same one, so the preview collapses into the row instead of doubling it.
+    if (paginatedSpeciesBase.some(s => s.species_key === singleSpeciesPreview.species_key)) {
+      return paginatedSpeciesBase;
+    }
     return [singleSpeciesPreview, ...paginatedSpeciesBase];
   }, [paginatedSpeciesBase, singleSpeciesPreview]);
 
@@ -2391,10 +2407,7 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
   // Auto-navigate to the page containing the URL-selected species
   useEffect(() => {
     if (urlSpeciesHandledRef.current || selectedSpeciesKey == null || sortedSpecies.length === 0) return;
-    const idx = sortedSpecies.findIndex(s => {
-      const key = isNewAssessments ? Math.abs(s.id) : (s.sis_taxon_id ?? s.id);
-      return key === selectedSpeciesKey;
-    });
+    const idx = sortedSpecies.findIndex(s => s.species_key === selectedSpeciesKey);
     if (idx >= 0) {
       const page = Math.floor(idx / PAGE_SIZE) + 1;
       setCurrentPage(page);
@@ -2405,12 +2418,12 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
   // Populate basic speciesDetails from DB data (GBIF counts instant, no API calls)
   // inatDefaultImage / openAlexPaperCount / papersAtAssessment are left as undefined → spinner
   useEffect(() => {
-    const newDetails: Record<number, SpeciesDetails> = {};
+    const newDetails: Record<string, SpeciesDetails> = {};
     for (const s of paginatedSpecies) {
-      if (speciesDetails[s.id]) continue; // Already have details
+      if (speciesDetails[s.species_key]) continue; // Already have details
 
       if (s.gbif_species_key) {
-        newDetails[s.id] = {
+        newDetails[s.species_key] = {
           criteria: null,
           commonName: s.common_name || null,
           gbifUrl: `https://www.gbif.org/species/${s.gbif_species_key}`,
@@ -2420,7 +2433,7 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
           inatDefaultImage: undefined, // Loading — fetched per-page below
         };
       } else {
-        newDetails[s.id] = {
+        newDetails[s.species_key] = {
           criteria: null,
           commonName: s.common_name || null,
           gbifUrl: null,
@@ -2441,7 +2454,7 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
   useEffect(() => {
     const speciesToFetch = paginatedSpecies.filter(
       (s) => {
-        const d = speciesDetails[s.id];
+        const d = speciesDetails[s.species_key];
         // Fetch if we have basic details but inatDefaultImage is still undefined (not yet fetched)
         return d && d.inatDefaultImage === undefined;
       }
@@ -2499,18 +2512,18 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
             };
           }
 
-          return { id: s.id, inatDefaultImage, gbifMatchStatus };
+          return { key: s.species_key, inatDefaultImage, gbifMatchStatus };
         } catch {
-          return { id: s.id, inatDefaultImage: null, gbifMatchStatus: null };
+          return { key: s.species_key, inatDefaultImage: null, gbifMatchStatus: null };
         }
       });
 
       const results = await Promise.all(promises);
       if (signal.aborted) return;
 
-      const updates: Record<number, Partial<SpeciesDetails>> = {};
+      const updates: Record<string, Partial<SpeciesDetails>> = {};
       for (const r of results) {
-        updates[r.id] = {
+        updates[r.key] = {
           inatDefaultImage: r.inatDefaultImage,
           gbifMatchFetched: true,
           ...(r.gbifMatchStatus ? { gbifMatchStatus: r.gbifMatchStatus } : {}),
@@ -2518,10 +2531,9 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
       }
       setSpeciesDetails((prev) => {
         const next = { ...prev };
-        for (const [id, update] of Object.entries(updates)) {
-          const numId = Number(id);
-          if (next[numId]) {
-            next[numId] = { ...next[numId], ...update };
+        for (const [key, update] of Object.entries(updates)) {
+          if (next[key]) {
+            next[key] = { ...next[key], ...update };
           }
         }
         return next;
@@ -2535,9 +2547,9 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
   // Fetch IUCN criteria on row expansion (lightweight — no GBIF calls; the map handles those)
   useEffect(() => {
     if (!selectedSpeciesKey) return;
-    const s = paginatedSpecies.find((sp) => sp.id === selectedSpeciesKey);
+    const s = paginatedSpecies.find((sp) => sp.species_key === selectedSpeciesKey);
     if (!s || s.category === "NE") return;
-    const existing = speciesDetails[s.id];
+    const existing = speciesDetails[s.species_key];
     if (!existing || existing.criteriaFetched) return;
 
     async function fetchCriteria() {
@@ -2550,8 +2562,8 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
           const data = await res.json();
           setSpeciesDetails((prev) => ({
             ...prev,
-            [s.id]: {
-              ...prev[s.id],
+            [s.species_key]: {
+              ...prev[s.species_key],
               criteria: data.criteria || null,
               criteriaFetched: true,
             },
@@ -2570,7 +2582,7 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
   // here on demand for the Red List Assessments tab).
   useEffect(() => {
     if (!selectedSpeciesKey) return;
-    const s = paginatedSpecies.find((sp) => sp.id === selectedSpeciesKey);
+    const s = paginatedSpecies.find((sp) => sp.species_key === selectedSpeciesKey);
     const sis = s?.sis_taxon_id;
     if (!s || s.category === "NE" || !sis || assessmentHistory[sis]) return;
     let aborted = false;
@@ -2589,13 +2601,12 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
   }, [selectedSpeciesKey, paginatedSpecies, assessmentHistory]);
 
   // Lazily fetch CoL synonyms for the open species — only once the CoL tab is opened.
-  // Keyed by col_id (NE rows carry it) or sis_taxon_id (assessed, resolved server-side).
-  const synKey = useCallback((s: Species | undefined): string | null =>
-    s?.col_id ? `col:${s.col_id}` : (s?.sis_taxon_id != null ? `sis:${s.sis_taxon_id}` : null), []);
+  // Keyed by the row key, which already encodes which id the lookup uses (`col-…` →
+  // by CoL id, `sis-…` → resolved server-side through species_link).
   useEffect(() => {
     if (selectedSpeciesKey == null || !visitedTabs.has("col")) return;
-    const s = paginatedSpecies.find((sp) => (isNewAssessments ? Math.abs(sp.id) : sp.id) === selectedSpeciesKey);
-    const key = synKey(s);
+    const s = paginatedSpecies.find((sp) => sp.species_key === selectedSpeciesKey);
+    const key = s?.species_key ?? null;
     if (!s || !key || synonymsBySpecies[key]) return;
     const qs = s.col_id ? `col=${encodeURIComponent(s.col_id)}` : `sis=${s.sis_taxon_id}`;
     let aborted = false;
@@ -2606,7 +2617,7 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
       } catch { /* panel falls back to empty */ }
     })();
     return () => { aborted = true; };
-  }, [selectedSpeciesKey, visitedTabs, paginatedSpecies, isNewAssessments, synonymsBySpecies, synKey]);
+  }, [selectedSpeciesKey, visitedTabs, paginatedSpecies, synonymsBySpecies]);
 
   // Handle category bar click (Cmd/Ctrl+click for multi-select, regular click replaces)
   const handleCategoryClick = (data: { payload?: { code?: string } }, event: React.MouseEvent) => {
@@ -3747,7 +3758,7 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
           )}
           {/* Single species header */}
           {isSingleSpecies && singleSpecies && (() => {
-            const details = speciesDetails[singleSpecies.id];
+            const details = speciesDetails[singleSpecies.species_key];
             return (
               <div
                 className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl px-5 py-4 flex items-center gap-4"
@@ -4939,19 +4950,19 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
             </thead>
             <tbody className="divide-y divide-zinc-200 dark:divide-zinc-800">
               {paginatedSpecies.map((s) => {
-                const speciesKey = isNewAssessments ? Math.abs(s.id) : (s.sis_taxon_id ?? s.id);
+                const speciesKey = s.species_key;
                 const assessmentDateObj = s.assessment_date ? new Date(s.assessment_date) : null;
                 const assessmentYear = assessmentDateObj ? assessmentDateObj.getFullYear() : null;
                 const yearsSinceAssessment = assessmentDateObj
                   ? Math.floor((Date.now() - assessmentDateObj.getTime()) / (365.25 * 24 * 60 * 60 * 1000))
                   : null;
-                const details = speciesDetails[s.id];
+                const details = speciesDetails[s.species_key];
                 const gbifSpeciesKey = s.gbif_species_key || details?.gbifUrl?.split('/').pop() || null;
                 const isPinned = pinnedSet.has(speciesKey);
                 const isDragging = draggedSpecies === speciesKey;
                 const isDragOver = dragOverSpecies === speciesKey && draggedSpecies !== speciesKey;
                 return (
-                  <React.Fragment key={s.id}>
+                  <React.Fragment key={speciesKey}>
                   <tr
                     className={`hover:bg-zinc-50 dark:hover:bg-zinc-800/50 cursor-pointer ${selectedSpeciesKey === speciesKey ? "bg-zinc-100 dark:bg-zinc-800" : ""} ${isDragging ? "opacity-50" : ""} ${isDragOver ? "border-t-2 border-amber-500" : ""}`}
                     onClick={() => { setSelectedSpeciesKey(selectedSpeciesKey === speciesKey ? null : speciesKey); }}
@@ -5212,12 +5223,14 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
                                 >
                                   Catalogue of Life
                                 </button>
-                                <button
-                                  className={`shrink-0 px-2 sm:px-4 py-2 text-sm font-medium whitespace-nowrap transition-colors ${activeDetailTab === "eol" ? "text-blue-600 dark:text-blue-400 border-b-2 border-blue-600 dark:border-blue-400" : "text-zinc-500 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-300"}`}
-                                  onClick={() => setActiveDetailTab("eol")}
-                                >
-                                  Encyclopedia of Life
-                                </button>
+                                {SHOW_EOL_TAB && (
+                                  <button
+                                    className={`shrink-0 px-2 sm:px-4 py-2 text-sm font-medium whitespace-nowrap transition-colors ${activeDetailTab === "eol" ? "text-blue-600 dark:text-blue-400 border-b-2 border-blue-600 dark:border-blue-400" : "text-zinc-500 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-300"}`}
+                                    onClick={() => setActiveDetailTab("eol")}
+                                  >
+                                    Encyclopedia of Life
+                                  </button>
+                                )}
                                 <button
                                   className={`shrink-0 px-2 sm:px-4 py-2 text-sm font-medium whitespace-nowrap transition-colors ${activeDetailTab === "wikipedia" ? "text-blue-600 dark:text-blue-400 border-b-2 border-blue-600 dark:border-blue-400" : "text-zinc-500 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-300"}`}
                                   onClick={() => setActiveDetailTab("wikipedia")}
@@ -5283,7 +5296,7 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
                             </div>
                           )}
                           {(visitedTabs.has("col")) && (() => {
-                            const syn = synonymsBySpecies[synKey(s) ?? ""];
+                            const syn = synonymsBySpecies[s.species_key];
                             return (
                             <div style={{ display: activeDetailTab === "col" ? undefined : "none" }}>
                               {!syn ? (
@@ -5330,7 +5343,7 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
                             </div>
                             );
                           })()}
-                          {(visitedTabs.has("eol")) && (
+                          {SHOW_EOL_TAB && (visitedTabs.has("eol")) && (
                             <div style={{ display: activeDetailTab === "eol" ? undefined : "none" }}>
                               <EolSummary scientificName={s.scientific_name} />
                             </div>

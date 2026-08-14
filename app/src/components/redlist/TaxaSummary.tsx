@@ -18,6 +18,7 @@ import { TAXONOMY_VIEWS } from "@/config/taxonomy-views";
 import { IUCN_SOURCE_URL } from "@/config/taxonomy-tree";
 import { isLiveDrilldownNode, nextDynamicRank, isDynamicNodeId, dynamicNodeDisplayName, dynamicNodeFilter, dynamicNodeRankInfo, parseDynamicNodeId } from "@/lib/dynamic-taxon";
 import type { RedListSpecies } from "@/hooks/useRedListSpeciesQuery";
+import { sisRowKey } from "@/lib/species-row-key";
 
 // See scripts/build-taxa-summary.ts's classifyNoMatch for what each reason means.
 // Modular/additive on top of colBreakdown[].noMatchIds — safe to drop independently
@@ -345,11 +346,11 @@ function nodeSpeciesListHref(
 // Builds a real URL (not a pushState-only path) for a single species' detail view —
 // used with target="_blank" so opening a species from the popover doesn't lose the
 // caller's place in the current tab.
-function speciesHref(nodeId: string, id: number, view: "reassessments" | "new-assessments"): string {
+function speciesHref(nodeId: string, speciesKey: string, view: "reassessments" | "new-assessments"): string {
   const params = new URLSearchParams();
   params.set("taxa", stripNodePrefix(nodeId));
   if (view === "new-assessments") params.set("view", "new-assessments");
-  params.set("species", String(id));
+  params.set("species", speciesKey);
   return `/?${params.toString()}`;
 }
 
@@ -664,10 +665,10 @@ function SpeciesListPanel({
                 const split = s.col_id != null ? splitByColId.get(s.col_id) : undefined;
                 const year = isNe ? s.described_year : (s.assessment_date ? s.assessment_date.slice(0, 4) : null);
                 return (
-                  <tr key={s.id} className="border-t border-zinc-700/60 align-top">
+                  <tr key={s.species_key} className="border-t border-zinc-700/60 align-top">
                     <td className="py-1 pr-2">
                       <a
-                        href={speciesHref(nodeId, s.id, isNe ? "new-assessments" : "reassessments")}
+                        href={speciesHref(nodeId, s.species_key, isNe ? "new-assessments" : "reassessments")}
                         target="_blank"
                         rel="noopener noreferrer"
                         className="text-blue-300 hover:text-blue-200 underline"
@@ -692,7 +693,7 @@ function SpeciesListPanel({
                               <>
                                 {" "}
                                 <a
-                                  href={speciesHref(nodeId, detail.detailId, "reassessments")}
+                                  href={speciesHref(nodeId, sisRowKey(detail.detailId), "reassessments")}
                                   target="_blank"
                                   rel="noopener noreferrer"
                                   className="text-blue-300 hover:text-blue-200 underline"
@@ -710,7 +711,7 @@ function SpeciesListPanel({
                         >
                           {"Likely split from "}
                           <a
-                            href={speciesHref(nodeId, split.parentId, "reassessments")}
+                            href={speciesHref(nodeId, sisRowKey(split.parentId), "reassessments")}
                             target="_blank"
                             rel="noopener noreferrer"
                             className="text-blue-300 hover:text-blue-200 underline"

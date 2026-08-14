@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
-import { resolveWhere, toSpeciesRow, colIdToSearchId, nodeIdForSpecies } from "@/lib/data/species-duckdb";
+import { resolveWhere, toSpeciesRow, nodeIdForSpecies } from "@/lib/data/species-duckdb";
+import { speciesRowKey, parseSpeciesRowKey, parseSpeciesParam, migratePinnedSpecies } from "@/lib/species-row-key";
 
 // Unit tests for the parity-critical pure logic of the DuckDB read layer (#261):
 // the taxon→SQL resolver and the row→SpeciesRow mapping. (Full v1-vs-v2 parity is
@@ -43,27 +44,79 @@ describe("resolveWhere", () => {
 // fetch) — so the same species got a DIFFERENT id depending on which taxon scope it was
 // fetched through, while two UNRELATED species from two different queries could easily
 // land on the identical counter value. RedListView.tsx's client-side speciesDetails
-// cache is keyed purely by id and never revalidates an existing entry, so the second
-// species silently rendered under the first's cached iNaturalist photo/common name (a
-// Giraffe's cached thumbnail showing for Fictidomys parvidens after drilling from
-// Mammals into Rodentia — the Giraffe's query-local id and the squirrel's query-local id
-// collided). Fixed by deriving the id from col_id via this function instead — stable
-// across queries (same species, same id, however it was fetched) and collision-resistant
-// across species (a hash, not a fixed decrementing range every query restarts).
-describe("colIdToSearchId", () => {
-  it("is stable: the same col_id always maps to the same id", () => {
-    expect(colIdToSearchId("3LLS")).toBe(colIdToSearchId("3LLS"));
+// cache is keyed purely by that key and never revalidates an existing entry, so the
+// second species silently rendered under the first's cached iNaturalist photo/common
+// name (a Giraffe's cached thumbnail showing for Fictidomys parvidens after drilling
+// from Mammals into Rodentia — the Giraffe's query-local id and the squirrel's
+// query-local id collided). Hashing col_id fixed it; keying on col_id itself makes the
+// property hold by construction — the key IS the identity, so it cannot vary by query.
+describe("speciesRowKey", () => {
+  it("keys an assessed species on its SIS id", () => {
+    expect(speciesRowKey({ sis_taxon_id: 18, col_id: null })).toBe("sis-18");
   });
 
-  it("gives different col_ids different ids (spot-checked, not exhaustive)", () => {
-    const ids = new Set(["3LLS", "6255W", "3Z5", "KTYZ7", "B3FVX"].map(colIdToSearchId));
-    expect(ids.size).toBe(5);
+  it("keys a Not Evaluated species on its CoL id", () => {
+    expect(speciesRowKey({ sis_taxon_id: null, col_id: "3LLS" })).toBe("col-3LLS");
   });
 
-  it("is always negative, so it never collides with a real positive sis/gbif id", () => {
-    for (const colId of ["3LLS", "6255W", "3Z5", "", "a", "zzzzzz"]) {
-      expect(colIdToSearchId(colId)).toBeLessThan(0);
+  it("is stable: the same species always gets the same key, whatever query produced it", () => {
+    expect(speciesRowKey({ col_id: "3LLS" })).toBe(speciesRowKey({ col_id: "3LLS" }));
+  });
+
+  it("gives different species different keys", () => {
+    const keys = new Set(["3LLS", "6255W", "3Z5", "KTYZ7", "B3FVX"].map((c) => speciesRowKey({ col_id: c })));
+    expect(keys.size).toBe(5);
+  });
+
+  it("prefers the SIS id, so a species keeps its key when a CoL link appears", () => {
+    expect(speciesRowKey({ sis_taxon_id: 18, col_id: "3LLS" })).toBe("sis-18");
+  });
+
+  it("is null for a species with neither id (no row can address it)", () => {
+    expect(speciesRowKey({ sis_taxon_id: null, col_id: null })).toBeNull();
+  });
+
+  it("never collides across the two namespaces, even for an all-digit CoL id", () => {
+    expect(speciesRowKey({ col_id: "176168" })).not.toBe(speciesRowKey({ sis_taxon_id: 176168 }));
+  });
+});
+
+describe("parseSpeciesRowKey", () => {
+  it("round-trips both namespaces", () => {
+    expect(parseSpeciesRowKey("sis-176168")).toEqual({ kind: "sis", sisTaxonId: 176168 });
+    expect(parseSpeciesRowKey("col-6CX6F")).toEqual({ kind: "col", colId: "6CX6F" });
+  });
+
+  it("rejects anything outside them", () => {
+    for (const bad of [null, undefined, "", "176168", "sis-", "col-", "gbif-5"]) {
+      expect(parseSpeciesRowKey(bad)).toBeNull();
     }
+  });
+});
+
+// Links written before the key was namespaced carry a bare number.
+describe("parseSpeciesParam", () => {
+  it("reads a namespaced key as-is", () => {
+    expect(parseSpeciesParam("col-6CX6F")).toBe("col-6CX6F");
+  });
+
+  it("upgrades a legacy positive id (a SIS id) so old links still resolve", () => {
+    expect(parseSpeciesParam("176168")).toBe("sis-176168");
+  });
+
+  it("drops a legacy negative id — it was a one-way hash, so guessing risks the wrong species", () => {
+    expect(parseSpeciesParam("-1938472651")).toBeNull();
+  });
+});
+
+describe("migratePinnedSpecies", () => {
+  it("keeps assessed pins, drops un-invertible hash pins, passes new keys through", () => {
+    expect(migratePinnedSpecies([176168, -1938472651, "col-6CX6F"])).toEqual(["sis-176168", "col-6CX6F"]);
+  });
+
+  it("survives absent or corrupt storage", () => {
+    expect(migratePinnedSpecies(null)).toEqual([]);
+    expect(migratePinnedSpecies("nonsense")).toEqual([]);
   });
 });
 
@@ -97,6 +150,7 @@ describe("toSpeciesRow", () => {
       latest_reviewers: "Z, A.",
     });
     expect(row.sis_taxon_id).toBe(18);
+    expect(row.species_key).toBe("sis-18");
     expect(row.assessment_id).toBe(123456);
     expect(row.countries).toEqual(["CO", "EC"]);
     expect(row.systems).toEqual(["Terrestrial"]);
@@ -111,9 +165,13 @@ describe("toSpeciesRow", () => {
     expect(row.previous_assessments).toEqual([]);
   });
 
-  it("maps an NE row: negative id → null sis_taxon_id, no history, group → invertebrates", () => {
+  // toSpeciesRow is the assessed path only — Not Evaluated rows are built inline by
+  // querySpecies' NE branch (they come from a different parquet with a slimmer schema),
+  // so what matters here is that a row missing every assessment-only column degrades to
+  // empty rather than throwing.
+  it("maps a row with no assessment columns: empty history, group → invertebrates", () => {
     const row = toSpeciesRow({
-      id: -BigInt(99),
+      id: BigInt(99),
       scientific_name: "Beetlus novus",
       common_name: null,
       family: "x",
@@ -125,17 +183,12 @@ describe("toSpeciesRow", () => {
       gbif_species_key: BigInt(99),
       gbif_occurrence_count: BigInt(5),
     });
-    expect(row.sis_taxon_id).toBeNull();
     expect(row.previous_assessments).toEqual([]);
     expect(row.taxon_id).toBe("invertebrates"); // mapTaxonId("beetles")
     expect(row.gbif_observations_after_assessment_year).toBeNull();
   });
 });
 
-// Which node a search result opens in. The taxa table renders the ancestor chain of
-// whatever is selected, so this is what puts a species' lineage on screen — and on the
-// not-evaluated side it also decides whether the species can be listed at all, since that
-// view loads exactly ONE node's NE list and refuses anything over NE_CAP (#453).
 describe("nodeIdForSpecies", () => {
   const butterfly = { class_name: "insecta", order_name: "lepidoptera", family: "nymphalidae" };
 
