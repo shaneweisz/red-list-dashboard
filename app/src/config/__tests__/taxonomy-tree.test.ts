@@ -53,6 +53,34 @@ describe("Taxonomy tree integrity", () => {
     }
   });
 
+  // taxonGroups is the parquet partition predicate (`taxon_group IN (…)` — see
+  // taxonomy-sql), so a parent that doesn't cover everything its children claim
+  // prunes away its own descendants' rows: the child's node lists species the
+  // parent's node silently omits. Nothing else catches that — the counts just
+  // come back wrong. Verified to hold for all 139 nodes when written, so a
+  // failure here means a new group was added to a child and not to its ancestors
+  // (the likely path: extending ALL_INSECT_GROUPS or a virtual root's list).
+  //
+  // Deliberately a CHECK rather than a derivation. Deriving a node's groups from
+  // its children would let 65 of the 139 declarations be deleted, but it makes a
+  // node's partition scope non-local — you'd have to walk the tree to see why
+  // ssc-otter is [mammals] — in the one config file where being explicit and
+  // greppable is worth more than being short.
+  it("every node's taxonGroups covers the union of its children's", () => {
+    for (const node of allNodes) {
+      if (!node.children?.length) continue;
+      const own = new Set(node.filter.taxonGroups);
+      for (const child of node.children) {
+        for (const group of child.filter.taxonGroups) {
+          expect(
+            own.has(group),
+            `${node.id} is missing taxonGroup "${group}" claimed by its child ${child.id}`
+          ).toBe(true);
+        }
+      }
+    }
+  });
+
   it("every node has at least one taxonGroup in its filter", () => {
     for (const node of allNodes) {
       expect(
