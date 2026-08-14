@@ -16,7 +16,10 @@ import COL_RELEASE from "@/config/col-release.json";
 // circular import, but a safe one: both sides only reference the other inside
 // function bodies (never at module-eval time), so by the time either function
 // actually runs, both modules have finished initializing.
-import { dynamicNodeFilter, isDynamicNodeId, dynamicNodeAncestors } from "@/lib/dynamic-taxon";
+import {
+  dynamicNodeFilter, isDynamicNodeId, dynamicNodeAncestors,
+  rankOrderFor, parseDynamicNodeId, buildDynamicNodeId,
+} from "@/lib/dynamic-taxon";
 
 // ─── Indexes (built once at import) ──────────────────────────────────
 
@@ -202,6 +205,83 @@ for (const id of NODE_INDEX.keys()) {
 }
 
 /**
+ * Resolve the first "~"-separated piece of a dynamic token back to a real node id.
+ *
+ * Deliberately mirrors expandTaxaToken's own resolution order rather than hitting
+ * NODE_INDEX first: `molluscs` exists BOTH as the flat Table-1a clone (under `all`,
+ * not reachable in the default view) and as `inv-molluscs` under Invertebrates.
+ * DEFAULT_VIEW_TOKEN_INDEX excludes the clone, so going through it is what picks
+ * the drillable one — a direct NODE_INDEX lookup would silently pick the clone.
+ */
+function resolveRootToken(rootToken: string): string | null {
+  const id = canonicalizeTaxonId(rootToken.trim());
+  if (DEFAULT_VIEW_ROOTS.has(id)) return id;
+  const viaToken = DEFAULT_VIEW_TOKEN_INDEX.get(id) ?? DEFAULT_VIEW_TOKEN_INDEX.get(stripNodePrefix(id));
+  if (viaToken) return viaToken;
+  return NODE_INDEX.has(id) ? id : null; // explicitly-prefixed legacy token
+}
+
+/**
+ * URL form of a dynamic (live taxonomic-drilldown) node id.
+ *
+ * The internal id spells out everything —
+ * `pl-flowering_plants~order:dioscoreales~family:dioscoreaceae` — but two thirds of
+ * that is recoverable rather than carried:
+ *
+ *   - The `pl-`/`inv-`/`fu-` prefix marks the virtual view group the root was cloned
+ *     into. A STATIC token already drops it and resolves back through
+ *     DEFAULT_VIEW_TOKEN_INDEX (`flowering_plants` → `pl-flowering_plants`); a dynamic
+ *     one can use the identical path for its root piece.
+ *   - The `order:`/`family:` labels are fixed by POSITION. Segments are always a
+ *     contiguous prefix of rankOrderFor(root) and never sparse — nodeIdForSpecies
+ *     fills a lineage gap with "" rather than skipping the rank, precisely because
+ *     "dynamicNodeAncestors/nextDynamicRank read depth positionally" (see its
+ *     comment). So segment i is rankOrderFor(root)[i], always.
+ *
+ * What's left is the root token and the bare values:
+ * `flowering_plants~dioscoreales~dioscoreaceae`. An empty value stays an empty
+ * segment, so the Unclassified buckets remain expressible (`molluscs~gastropoda~`
+ * is Unclassified Order under Gastropoda).
+ */
+export function dynamicIdToToken(id: string): string {
+  const parsed = parseDynamicNodeId(id);
+  if (!parsed) return id;
+  return [stripNodePrefix(parsed.rootId), ...parsed.segments.map((s) => s.value)].join("~");
+}
+
+/**
+ * Inverse of dynamicIdToToken. Null when the root piece names nothing, or when the
+ * token is deeper than the root's rank order — either way the caller falls back to
+ * treating the token as-is rather than inventing a node.
+ *
+ * Also accepts the pre-cleanup labelled form (`pl-flowering_plants~order:dioscoreales`)
+ * so links shared before this change keep resolving: the label is redundant with
+ * position, so it's stripped and position wins.
+ */
+export function tokenToDynamicId(token: string): string | null {
+  if (!isDynamicNodeId(token)) return null;
+  const [rootToken, ...rest] = token.split("~");
+  const rootId = resolveRootToken(rootToken);
+  if (!rootId) return null;
+  const ranks = rankOrderFor(rootId);
+  if (rest.length > ranks.length) return null;
+  const segments = rest.map((part, i) => {
+    const idx = part.indexOf(":");
+    return { rank: ranks[i], value: idx === -1 ? part : part.slice(idx + 1) };
+  });
+  return buildDynamicNodeId(rootId, segments);
+}
+
+/**
+ * The `taxa=` URL token for any node id, static or dynamic — the single place that
+ * knows which of the two token forms applies. Callers building a URL by hand (e.g.
+ * TaxaSummary's popover hrefs) must use this rather than stripNodePrefix, which is
+ * only correct for a static id and mangles a dynamic one.
+ */
+export const taxaUrlToken = (nodeId: string): string =>
+  isDynamicNodeId(nodeId) ? dynamicIdToToken(nodeId) : stripNodePrefix(nodeId);
+
+/**
  * Expand one flat URL token into the internal selection it represents:
  * `{ taxa }` for a display root or an arbitrary scientific rank, or
  * `{ taxa, subgroup }` for a default-view sub-group (corals → invertebrates +
@@ -210,13 +290,14 @@ for (const id of NODE_INDEX.keys()) {
 export function expandTaxaToken(token: string): { taxa: string; subgroup?: string } {
   const id = canonicalizeTaxonId(token.trim());
   if (DEFAULT_VIEW_ROOTS.has(id)) return { taxa: id };
-  // A dynamic (live taxonomic-drilldown) id round-trips through the URL as
-  // itself — no DEFAULT_VIEW_TOKEN_INDEX lookup needed, since its root is
-  // always its own first "~"-separated segment (see dynamic-taxon.ts), and
-  // getViewRootForNode already resolves it correctly via getAncestors.
+  // A dynamic (live taxonomic-drilldown) token carries its root as its own first
+  // "~"-separated piece, so it needs no DEFAULT_VIEW_TOKEN_INDEX lookup for the
+  // WHOLE token — but the root piece itself does (see dynamicIdToToken), which is
+  // what tokenToDynamicId rebuilds before getViewRootForNode resolves the ancestry.
   if (isDynamicNodeId(id)) {
-    const root = getViewRootForNode(id);
-    if (root) return { taxa: root, subgroup: id };
+    const dynamicId = tokenToDynamicId(id) ?? id;
+    const root = getViewRootForNode(dynamicId);
+    if (root) return { taxa: root, subgroup: dynamicId };
   }
   const nodeId = DEFAULT_VIEW_TOKEN_INDEX.get(id) ?? DEFAULT_VIEW_TOKEN_INDEX.get(stripNodePrefix(id));
   if (nodeId) {
@@ -235,21 +316,22 @@ export function collapseTaxaToTokens(taxa: Iterable<string>, subgroups: Iterable
   const tokens = new Set<string>();
   const rootsWithSubgroup = new Set<string>();
   for (const sg of subgroups) {
-    // A dynamic id round-trips through the URL as itself (see expandTaxaToken's own
-    // comment) — stripNodePrefix is only correct for a STATIC node id's token form
-    // (inv-corals -> corals). Applying it unconditionally here was a real bug: a
-    // dynamic id whose OWN root segment happens to start with one of these same
-    // three letters (e.g. "pl-flowering_plants~order:malpighiales", reached by
-    // drilling into a virtual-view-group child like Flowering Plants) had its
-    // prefix silently stripped too, rewriting it to a DIFFERENT dynamic id
-    // ("flowering_plants~order:malpighiales" — a different root identity as far as
-    // isDynamicNodeId/DYNAMIC_DRILLDOWN_ROOTS-based lookups are concerned) every
-    // time the URL was rewritten for an unrelated reason (e.g. toggling the
-    // Assessed/Not Evaluated view mode). TaxaSummary.tsx's subgroupData cache is
-    // keyed by whichever root string first populated it, so this second, bare-
-    // rooted id was a fresh cache miss — its ancestor row silently fell back to a
-    // zeroed placeholder instead of the already-fetched real data.
-    tokens.add(isDynamicNodeId(sg) ? sg : stripNodePrefix(sg));
+    // Both branches drop the pl-/inv-/fu- prefix, but they are NOT interchangeable:
+    // a static id's token is just the bare id, while a dynamic id's token also drops
+    // its per-segment rank labels (see dynamicIdToToken). Applying the static form
+    // blanket-style to a dynamic id was a real bug: "pl-flowering_plants~order:
+    // malpighiales" became "flowering_plants~order:malpighiales", which round-tripped
+    // back as a DIFFERENT dynamic id (a bare root where the prefixed one was meant),
+    // silently, on any URL rewrite — e.g. toggling the Assessed/Not Evaluated view
+    // mode re-serializes the whole taxa list. TaxaSummary's subgroupData cache is
+    // keyed by whichever root string first populated it, so the bare-rooted id was a
+    // fresh miss and its ancestor row fell back to a zeroed placeholder.
+    //
+    // That specific rewrite is now the DEFINED token form rather than an accident, so
+    // the invariant that matters is the round-trip: collapse→expand→collapse must be
+    // stable, which tokenToDynamicId restores the prefix to satisfy. Covered by the
+    // repeated-cycle test in dynamic-taxon.test.ts.
+    tokens.add(taxaUrlToken(sg));
     const root = getViewRootForNode(sg);
     if (root) rootsWithSubgroup.add(root);
   }

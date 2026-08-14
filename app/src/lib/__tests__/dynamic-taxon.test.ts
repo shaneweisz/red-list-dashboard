@@ -198,10 +198,59 @@ describe("URL token round-trip for a dynamic id (deep-link support)", () => {
     expect(expandTaxaToken(id)).toEqual({ taxa: "mammals", subgroup: id });
   });
 
-  it("collapseTaxaToTokens emits the dynamic id as its own token and drops the redundant root", () => {
-    const id = "mammals~order:rodentia";
-    const tokens = collapseTaxaToTokens(["mammals"], [id]);
-    expect(tokens).toEqual([id]);
+  it("collapseTaxaToTokens emits one token for the dynamic id and drops the redundant root", () => {
+    const tokens = collapseTaxaToTokens(["mammals"], ["mammals~order:rodentia"]);
+    expect(tokens).toEqual(["mammals~rodentia"]);
+  });
+
+  // The rank labels are redundant with position (segments are always a contiguous
+  // prefix of rankOrderFor(root) — see dynamicIdToToken), so the URL omits them.
+  it("drops the per-segment rank labels from the token", () => {
+    const [token] = collapseTaxaToTokens([], ["mammals~order:rodentia~family:muridae"]);
+    expect(token).toBe("mammals~rodentia~muridae");
+  });
+
+  it("drops the virtual-root prefix from the token and restores it on read", () => {
+    const id = "pl-flowering_plants~order:dioscoreales~family:dioscoreaceae";
+    const [token] = collapseTaxaToTokens([], [id]);
+    expect(token).toBe("flowering_plants~dioscoreales~dioscoreaceae");
+    expect(expandTaxaToken(token)).toEqual({ taxa: "plantae", subgroup: id });
+  });
+
+  // "molluscs" is BOTH the flat Table-1a clone (under `all`, not reachable in the
+  // default view) and inv-molluscs under Invertebrates. The token must resolve to
+  // the drillable one — a plain NODE_INDEX lookup would pick the clone.
+  it("resolves an ambiguous root token to the drillable node, not the Table-1a clone", () => {
+    expect(expandTaxaToken("molluscs~gastropoda")).toEqual({
+      taxa: "invertebrates", subgroup: "inv-molluscs~class:gastropoda",
+    });
+  });
+
+  // A class-first root (see ROOT_RANK_ORDER) reads its segments against a different
+  // rank sequence, which is exactly what position-only tokens depend on.
+  it("uses the root's own rank order when rebuilding a class-first token", () => {
+    expect(expandTaxaToken("fishes~teleostei~cypriniformes")).toEqual({
+      taxa: "fishes", subgroup: "fishes~class:teleostei~order:cypriniformes",
+    });
+  });
+
+  // An Unclassified bucket is an empty segment value, so it survives label removal
+  // as an empty token piece — "molluscs~gastropoda~" is Unclassified Order under
+  // Gastropoda, and must not collapse into the Gastropoda node itself.
+  it("keeps an Unclassified bucket distinct from its parent", () => {
+    expect(expandTaxaToken("molluscs~gastropoda~")).toEqual({
+      taxa: "invertebrates", subgroup: "inv-molluscs~class:gastropoda~order:",
+    });
+    expect(collapseTaxaToTokens([], ["inv-molluscs~class:gastropoda~order:"])).toEqual(["molluscs~gastropoda~"]);
+  });
+
+  // Links shared before the token was shortened carry the prefix and the labels.
+  it.each([
+    ["pl-flowering_plants~order:dioscoreales", "plantae", "pl-flowering_plants~order:dioscoreales"],
+    ["mammals~order:rodentia", "mammals", "mammals~order:rodentia"],
+    ["inv-molluscs~class:gastropoda", "invertebrates", "inv-molluscs~class:gastropoda"],
+  ])("still resolves the pre-cleanup token %s", (token, taxa, subgroup) => {
+    expect(expandTaxaToken(token)).toEqual({ taxa, subgroup });
   });
 
   it("round-trips: collapse then expand recovers the original selection", () => {
@@ -210,33 +259,33 @@ describe("URL token round-trip for a dynamic id (deep-link support)", () => {
     expect(expandTaxaToken(token)).toEqual({ taxa: "mammals", subgroup: id });
   });
 
-  // Regression: a dynamic id whose OWN root segment happens to start with one of
-  // the pl-/inv-/fu- virtual-view-group prefixes (reached by drilling into a
-  // virtual-group child like Flowering Plants, Corals, Mushrooms) used to have
-  // that prefix silently stripped by collapseTaxaToTokens' blanket
-  // stripNodePrefix(sg) call — stripNodePrefix is only correct for a STATIC id's
-  // URL-token form (inv-corals -> corals), not for a dynamic id, which round-
-  // trips through the URL as itself. That made the id unstable across any URL
-  // rewrite for an unrelated reason (e.g. toggling the Assessed/Not Evaluated
-  // view mode calls setUrlViewMode, which re-serializes the whole taxa list) —
-  // "pl-flowering_plants~order:malpighiales" silently became
-  // "flowering_plants~order:malpighiales", a DIFFERENT dynamic id as far as
-  // anything keyed on the original root string is concerned (reported: an
-  // ancestor breadcrumb row's cached data went missing after toggling view mode,
-  // since TaxaSummary.tsx's subgroupData cache was keyed by the now-stale prefixed
-  // root and never populated under the new bare one).
-  it("preserves a dynamic id's own pl-/inv-/fu- root prefix through a collapse (does not strip it like a static id's token)", () => {
-    const id = "pl-flowering_plants~order:malpighiales";
-    const tokens = collapseTaxaToTokens(["plantae"], [id]);
-    expect(tokens).toEqual([id]);
-  });
-
-  it("round-trips a prefixed-root dynamic id through repeated collapse+expand cycles unchanged (simulates toggling view mode, which re-serializes the URL)", () => {
-    const id = "pl-flowering_plants~order:malpighiales";
-    const [token1] = collapseTaxaToTokens(["plantae"], [id]);
-    const { taxa, subgroup } = expandTaxaToken(token1);
-    const [token2] = collapseTaxaToTokens([taxa], [subgroup!]);
-    expect(token2).toBe(id);
+  // Regression: a dynamic id whose OWN root segment starts with one of the
+  // pl-/inv-/fu- virtual-view-group prefixes (reached by drilling into a virtual-group
+  // child like Flowering Plants, Corals, Mushrooms) used to have that prefix stripped
+  // by collapseTaxaToTokens' blanket stripNodePrefix(sg) call, WITHOUT anything on the
+  // read side putting it back. "pl-flowering_plants~order:malpighiales" became
+  // "flowering_plants~order:malpighiales" — a different dynamic id as far as anything
+  // keyed on the root string is concerned — silently, on any URL rewrite for an
+  // unrelated reason (toggling the Assessed/Not Evaluated view mode re-serializes the
+  // whole taxa list). Reported as an ancestor breadcrumb row losing its data after a
+  // view-mode toggle, since TaxaSummary's subgroupData cache was keyed by the stale
+  // prefixed root and never populated under the new bare one.
+  //
+  // Dropping the prefix is now the DEFINED token form, with tokenToDynamicId restoring
+  // it on read, so the invariant to protect is no longer "the token equals the id" but
+  // "repeated collapse→expand cycles are stable". That's what actually broke.
+  it.each([
+    "pl-flowering_plants~order:malpighiales",
+    "inv-corals~order:scleractinia",
+    "inv-molluscs~class:gastropoda~order:",
+    "mammals~order:rodentia~family:muridae~genus:mus",
+  ])("is stable across repeated collapse+expand cycles: %s", (id) => {
+    const [token1] = collapseTaxaToTokens([], [id]);
+    const first = expandTaxaToken(token1);
+    expect(first.subgroup).toBe(id);
+    const [token2] = collapseTaxaToTokens([first.taxa], [first.subgroup!]);
+    expect(token2).toBe(token1);
+    expect(expandTaxaToken(token2).subgroup).toBe(id);
   });
 });
 
