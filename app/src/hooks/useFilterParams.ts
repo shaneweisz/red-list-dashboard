@@ -5,6 +5,7 @@ import { canonicalizeTaxonId } from "@/lib/data/taxonomy-constants";
 import { resolveRegions } from "@/lib/regions";
 import { expandTaxaToken, collapseTaxaToTokens, getViewRootForNode, type FilterRank } from "@/lib/taxonomy-utils";
 import { ALL_HABITAT_SEASONS, ALL_HABITAT_IMPORTANCE, ALL_HABITAT_SUITABILITY } from "@/lib/habitat-filter";
+import { parseSpeciesParam } from "@/lib/species-row-key";
 
 // Both habitat checkbox-dropdowns (Importance, Season) default to "everything
 // checked" (nothing excluded) rather than "nothing checked" — see
@@ -260,7 +261,9 @@ export function parseParams(search: string, suffix: string = "") {
       "species"
     ) as MapSortKey,
     mapSortDirection: (p.get(k("mapdir")) === "asc" ? "asc" : "desc") as "asc" | "desc",
-    species: p.get(k("species")) ? Number(p.get(k("species"))) : null,
+    // The row key, namespaced (`sis-…`/`col-…`). parseSpeciesParam also accepts the
+    // pre-namespace bare-number form so existing links keep working — see its doc.
+    species: parseSpeciesParam(p.get(k("species"))),
     tab: (p.get(k("tab")) || null) as "gbif" | "literature" | "redlist" | "wikipedia" | "cites" | "assessors" | "reviewers" | "col" | "eol" | null,
   };
 }
@@ -306,7 +309,7 @@ export function buildQs(state: {
   mapViewMode?: MapViewMode;
   mapSortKey?: MapSortKey;
   mapSortDirection?: "asc" | "desc";
-  species: number | null;
+  species: string | null;
   tab: "gbif" | "literature" | "redlist" | "wikipedia" | "cites" | "assessors" | "reviewers" | "col" | "eol" | null;
 }, suffix: string = ""): string {
   const p = new URLSearchParams();
@@ -353,7 +356,7 @@ export function buildQs(state: {
   if (state.maxAssessmentYear != null) p.set(k("maxAssessmentYear"), String(state.maxAssessmentYear));
   if (state.minDescribedYear != null) p.set(k("minDescribedYear"), String(state.minDescribedYear));
   if (state.maxDescribedYear != null) p.set(k("maxDescribedYear"), String(state.maxDescribedYear));
-  if (state.species != null) p.set(k("species"), String(state.species));
+  if (state.species != null) p.set(k("species"), state.species);
   if (state.species != null && state.tab && state.tab !== "gbif") p.set(k("tab"), state.tab);
   // null / "year" desc is the default — only write non-default sort to URL
   const isDefaultSort = state.sortField === null || state.sortField === "year";
@@ -925,7 +928,7 @@ export function useFilterParams(paramSuffix: string = "") {
   );
 
   const setSpeciesParam = useCallback(
-    (species: number | null, tab: "gbif" | "literature" | "redlist" | "wikipedia" | "cites" | "assessors" | "reviewers" | "col" | "eol" = "gbif") => {
+    (species: string | null, tab: "gbif" | "literature" | "redlist" | "wikipedia" | "cites" | "assessors" | "reviewers" | "col" | "eol" = "gbif") => {
       setState(prev => {
         const next = { ...prev, species, tab: species != null ? tab : null };
         queueMicrotask(() => syncUrl(next, true));

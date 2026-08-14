@@ -11,7 +11,7 @@ import { runBrowseQuery } from "../browse-query";
 
 function row(over: Record<string, unknown> = {}) {
   return {
-    id: Math.floor(Math.random() * 1e9), scientific_name: "Acropora sp.", common_name: null,
+    species_key: `sis-${Math.floor(Math.random() * 1e9)}`, scientific_name: "Acropora sp.", common_name: null,
     category: "EN", countries: ["AU"], systems: [], population_trend: null, movement_pattern: null,
     threat_codes: ["11.4"], growth_forms: [], gbif_occurrence_count: 5,
     assessment_date: "2020-01-01", taxon_group: "corals", class_name: "anthozoa",
@@ -50,7 +50,7 @@ describe("runBrowseQuery", () => {
 
   it("looks up a species via searchSpecies (synonym-aware)", async () => {
     searchSpecies.mockResolvedValue([
-      { id: -1, scientific_name: "Acinonyx jubatus", common_name: "Cheetah", taxon_id: "mammals",
+      { species_key: "sis-219", sis_taxon_id: 219, col_id: null, scientific_name: "Acinonyx jubatus", common_name: "Cheetah", taxon_id: "mammals",
         taxon_group: "mammals", category: "VU", gbif_species_key: null, assessment_id: null,
         assessment_date: "2021-01-01", countries: ["NA"], matched_synonym: "Felis jubata" },
     ]);
@@ -63,7 +63,7 @@ describe("runBrowseQuery", () => {
   it("expands an IUCN region to its countries", async () => {
     const { iucnRegionCountries } = await import("@/lib/regions");
     const eu = iucnRegionCountries("Europe")[0];
-    querySpecies.mockResolvedValue({ species: [row({ id: 1, countries: [eu] }), row({ id: 2, countries: ["ZZ"] })], truncated: false, tooLarge: false, neTotal: null });
+    querySpecies.mockResolvedValue({ species: [row({ species_key: "sis-1", countries: [eu] }), row({ species_key: "sis-2", countries: ["ZZ"] })], truncated: false, tooLarge: false, neTotal: null });
     const r = await runBrowseQuery({ taxa: ["corals"], region: ["Europe"] });
     expect(r.total).toBe(1);
   });

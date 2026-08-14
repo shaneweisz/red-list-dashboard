@@ -21,7 +21,7 @@ const json = (qs: string) => GET(req(qs)).then((r) => r.json());
 // A minimal querySpecies row (the fields /browse reads).
 function row(over: Record<string, unknown> = {}) {
   return {
-    id: Math.floor(Math.random() * 1e9), scientific_name: "Acropora sp.", common_name: null,
+    species_key: `sis-${Math.floor(Math.random() * 1e9)}`, scientific_name: "Acropora sp.", common_name: null,
     category: "EN", countries: ["AU"], systems: [], population_trend: null, movement_pattern: null,
     threat_codes: ["11.1"], growth_forms: [], gbif_occurrence_count: 5,
     assessment_date: "2020-01-01", taxon_group: "corals", class_name: "anthozoa",
@@ -105,20 +105,20 @@ describe("/browse", () => {
 
   it("expands an IUCN region to its countries (country filter)", async () => {
     const euCode = iucnRegionCountries("Europe")[0];
-    querySpecies.mockResolvedValue({ species: [row({ id: 1, countries: [euCode] }), row({ id: 2, countries: ["ZZ"] })], truncated: false, tooLarge: false, neTotal: null });
+    querySpecies.mockResolvedValue({ species: [row({ species_key: "sis-1", countries: [euCode] }), row({ species_key: "sis-2", countries: ["ZZ"] })], truncated: false, tooLarge: false, neTotal: null });
     const d = await json("?taxa=corals&region=Europe&format=json");
     expect(d.total).toBe(1);
     expect(d.species[0].countries).toEqual([euCode]);
   });
 
   it("filters by assessor name (substring)", async () => {
-    querySpecies.mockResolvedValue({ species: [row({ id: 1, latest_assessors: "Smith, J.A." }), row({ id: 2, latest_assessors: "Jones, B." })], truncated: false, tooLarge: false, neTotal: null });
+    querySpecies.mockResolvedValue({ species: [row({ species_key: "sis-1", latest_assessors: "Smith, J.A." }), row({ species_key: "sis-2", latest_assessors: "Jones, B." })], truncated: false, tooLarge: false, neTotal: null });
     expect((await json("?taxa=corals&assessors=smith&format=json")).total).toBe(1);
     expect((await json("?taxa=corals&assessors=nobody&format=json")).total).toBe(0);
   });
 
   it("filters by described-year bounds", async () => {
-    querySpecies.mockResolvedValue({ species: [row({ id: 1, described_year: 1850 }), row({ id: 2, described_year: 2010 })], truncated: false, tooLarge: false, neTotal: null });
+    querySpecies.mockResolvedValue({ species: [row({ species_key: "sis-1", described_year: 1850 }), row({ species_key: "sis-2", described_year: 2010 })], truncated: false, tooLarge: false, neTotal: null });
     const d = await json("?taxa=corals&minDescribedYear=1900&format=json");
     expect(d.total).toBe(1);
   });

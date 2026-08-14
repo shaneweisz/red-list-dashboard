@@ -7,7 +7,15 @@ import { findNode, getViewRootForNode } from "../lib/taxonomy-utils";
 import { ALL_HABITAT_SEASONS, ALL_HABITAT_IMPORTANCE, ALL_HABITAT_SUITABILITY } from "../lib/habitat-filter";
 
 export interface SearchResult {
-  id: number;
+  /**
+   * The row this result selects in the species table — `sis-<sis_taxon_id>` for an
+   * assessed species, `col-<col_id>` for a Not Evaluated one (see lib/species-row-key).
+   * Null for a GBIF species with no CoL link: it has no row in any list, so selecting
+   * it navigates by name only, with no detail panel opened.
+   */
+  species_key: string | null;
+  sis_taxon_id: number | null;
+  col_id: string | null;
   scientific_name: string;
   common_name: string | null;
   taxon_id: string;
@@ -164,7 +172,7 @@ export function SpeciesSearchBar() {
         search: result.scientific_name,
         sortField: null,
         sortDirection: "desc",
-        species: result.id,
+        species: result.species_key,
         tab: "gbif",
       });
 
@@ -356,7 +364,7 @@ export function SpeciesSearchBar() {
               const i = taxaResults.length + ri;
               return (
               <button
-                key={`${result.id}-${result.taxon_group}`}
+                key={`${result.species_key ?? result.scientific_name}-${result.taxon_group}`}
                 onClick={() => selectResult(result)}
                 onMouseEnter={() => setHighlightIndex(i)}
                 className={`w-full text-left px-3 py-2 text-sm flex items-center gap-2 ${
