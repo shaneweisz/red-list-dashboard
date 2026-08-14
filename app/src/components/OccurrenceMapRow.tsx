@@ -1894,9 +1894,12 @@ export default function OccurrenceMapRow({
 
   // Map event handlers
   const handleMapClick = useCallback((e: MapLayerMouseEvent) => {
-    // Measuring owns the left click while it's on.
+    // Measuring owns the left click while it's on. Two points, never more:
+    // the question is "how far is it from here to there", and a third click
+    // moves the start rather than growing a path nobody asked for.
     if (measure) {
-      setMeasure([...measure, [e.lngLat.lng, e.lngLat.lat]]);
+      const point: [number, number] = [e.lngLat.lng, e.lngLat.lat];
+      setMeasure(measure.length < 2 ? [...measure, point] : [point, measure[1]]);
       return;
     }
     const features = e.features;
@@ -2764,19 +2767,8 @@ export default function OccurrenceMapRow({
             <div className="bg-white dark:bg-zinc-800 px-2 py-1.5 rounded shadow text-[11px] text-zinc-700 dark:text-zinc-200 flex items-center gap-2">
               <span className="font-medium tabular-nums">{formatDistance(pathLengthMetres(measure))}</span>
               <span className="text-zinc-400">
-                {measure.length < 2
-                  ? "click the map to measure from here"
-                  : `${measure.length} points`}
+                {measure.length < 2 ? "click where you're measuring to" : "click to move the start"}
               </span>
-              {measure.length > 1 && (
-                <button
-                  onClick={() => setMeasure(measure.slice(0, -1))}
-                  title="Remove the last point"
-                  className="text-zinc-500 dark:text-zinc-400 hover:underline"
-                >
-                  Undo
-                </button>
-              )}
               <button
                 onClick={() => setMeasure(null)}
                 title="Finish measuring (or press Escape)"

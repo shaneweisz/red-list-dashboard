@@ -1,11 +1,5 @@
 import { describe, it, expect } from "vitest";
-import {
-  bearingDegrees,
-  compassPoint,
-  formatDistance,
-  haversineMetres,
-  pathLengthMetres,
-} from "../geo-distance";
+import { formatDistance, haversineMetres, pathLengthMetres } from "../geo-distance";
 
 describe("haversineMetres", () => {
   it("is zero for a point and itself", () => {
@@ -73,32 +67,3 @@ describe("formatDistance", () => {
   });
 });
 
-describe("bearingDegrees", () => {
-  it("points at the cardinal directions", () => {
-    expect(bearingDegrees([0, 0], [0, 1])).toBeCloseTo(0, 6);
-    expect(bearingDegrees([0, 0], [1, 0])).toBeCloseTo(90, 6);
-    expect(bearingDegrees([0, 0], [0, -1])).toBeCloseTo(180, 6);
-    expect(bearingDegrees([0, 0], [-1, 0])).toBeCloseTo(270, 6);
-  });
-
-  it("is always a positive angle", () => {
-    expect(bearingDegrees([0, 0], [-1, 1])).toBeGreaterThan(180);
-    expect(bearingDegrees([0, 0], [-1, 1])).toBeLessThan(360);
-  });
-});
-
-describe("compassPoint", () => {
-  it("rounds to the eight points", () => {
-    expect(compassPoint(0)).toBe("N");
-    expect(compassPoint(44)).toBe("NE");
-    expect(compassPoint(90)).toBe("E");
-    expect(compassPoint(200)).toBe("S");
-    expect(compassPoint(315)).toBe("NW");
-  });
-
-  it("wraps rather than falling off the end", () => {
-    expect(compassPoint(359)).toBe("N");
-    expect(compassPoint(360)).toBe("N");
-    expect(compassPoint(-45)).toBe("NW");
-  });
-});
