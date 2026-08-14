@@ -279,8 +279,6 @@ interface OccurrenceListTableProps {
   onExclude?: (gbifIDs: number[]) => void;
   /** Puts a hand-excluded record back. */
   onInclude?: (gbifID: number) => void;
-  /** True when the hover came from the map, so the list scrolls to meet it. */
-  hoverFromMap?: boolean;
   /** Fill the height of the column the table is in. */
   fillHeight?: boolean;
   /** How the map and this table are arranged, when the caller offers a choice.
@@ -312,7 +310,6 @@ export default function OccurrenceListTable({
   exclusions,
   onExclude,
   onInclude,
-  hoverFromMap = false,
   fillHeight = false,
   panelLayout,
   onTogglePanelLayout,
@@ -953,19 +950,6 @@ export default function OccurrenceListTable({
     setMatchIndex(next);
     scrollRowToTop(matches[next]);
   };
-
-  // Hovering a point on the map brings its row into view. Only for map-side
-  // hover: doing it for the list's own hover would yank the table around under
-  // the pointer.
-  useEffect(() => {
-    if (!hoverFromMap || hoveredGbifId == null) return;
-    const container = scrollRef.current;
-    const row = rowRefs.current.get(hoveredGbifId);
-    if (!container || !row) return;
-    const headerHeight = container.querySelector("thead")?.getBoundingClientRect().height ?? 0;
-    const delta = row.getBoundingClientRect().top - container.getBoundingClientRect().top - headerHeight;
-    container.scrollBy({ top: delta, behavior: "smooth" });
-  }, [hoverFromMap, hoveredGbifId]);
 
   const toggleSort = (key: string) => {
     if (key === sortKey) {

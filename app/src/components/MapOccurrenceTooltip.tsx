@@ -13,6 +13,9 @@ interface MapOccurrenceTooltipProps {
   datasetName?: string;
   eventDate?: string;
   coordinateUncertaintyInMeters?: number | null;
+  /** Kept for the caller's sake; the tooltip no longer draws it. A photograph
+   *  is the slowest thing in the panel and it resized under the pointer as you
+   *  paged between records — the fields are what's being read. */
   imageUrl?: string | null;
   observer?: string | null;
   qualityFlags?: string[];
@@ -25,8 +28,7 @@ interface MapOccurrenceTooltipProps {
   /** Opens the georeference editor for the record shown. The map point itself
    *  now opens GBIF on click, so this is where correcting it lives. */
   onEditGeoreference?: () => void;
-  /** Images attached to the record — a herbarium sheet's own photograph, most
-   *  usefully, which is what you want in front of you when reading its label. */
+  /** Images attached to the record. Not drawn — see imageUrl above. */
   images?: { url: string; title?: string; creator?: string; license?: string; rightsHolder?: string }[];
   /** Position within the records sharing this point, when more than one does. */
   page?: { index: number; total: number; onPrev: () => void; onNext: () => void };
@@ -105,7 +107,7 @@ export default function MapOccurrenceTooltip(props: MapOccurrenceTooltipProps) {
   const showLeft = fixedX + tooltipWidth + 24 > containerRect.right;
   // Keep it inside the map vertically. The estimate only covers the first
   // frame, before the panel has been measured.
-  const height = panelHeight || (props.imageUrl || props.images?.length ? 300 : 160);
+  const height = panelHeight || 160;
   const halfHeight = height / 2;
   const clampedY = Math.max(
     containerRect.top + halfHeight + 4,
@@ -157,13 +159,6 @@ export default function MapOccurrenceTooltip(props: MapOccurrenceTooltipProps) {
       >
         {arrow}
         <div className="rounded-lg overflow-hidden">
-        {(props.imageUrl || props.images?.[0]) && (
-          <img
-            src={props.imageUrl || props.images![0].url}
-            alt={props.images?.[0]?.title ?? ""}
-            className="w-full h-32 object-cover bg-zinc-100 dark:bg-zinc-800"
-          />
-        )}
         <div className="p-2 text-xs space-y-0.5">
           {props.page && props.page.total > 1 && (
             <div className="flex items-center gap-1 pb-1 mb-1 border-b border-zinc-100 dark:border-zinc-800 text-[10px] text-zinc-500 dark:text-zinc-400">
@@ -262,12 +257,6 @@ export default function MapOccurrenceTooltip(props: MapOccurrenceTooltipProps) {
                   {props.yourGeoreference.remarks}
                 </div>
               )}
-            </div>
-          )}
-          {props.images && props.images.length > 0 && (
-            <div className="text-[10px] text-zinc-400 truncate" title={props.images[0].rightsHolder ?? props.images[0].creator ?? ""}>
-              Image: {props.images[0].rightsHolder ?? props.images[0].creator ?? "see GBIF"}
-              {props.images.length > 1 ? ` (+${props.images.length - 1} more)` : ""}
             </div>
           )}
           {props.qualityFlags && props.qualityFlags.length > 0 && (

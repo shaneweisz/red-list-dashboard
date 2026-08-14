@@ -111,6 +111,10 @@ const ExclusionDialog = dynamic(
   () => import("./ExclusionDialog"),
   { ssr: false }
 );
+const ConfirmDialog = dynamic(
+  () => import("./ConfirmDialog"),
+  { ssr: false }
+);
 
 // Shape of coordinate-cleaning-refdata/countries.json (Natural Earth admin-0
 // country polygons, keyed by ISO 3166-1 alpha-2), dynamically imported for the
@@ -623,7 +627,6 @@ export default function OccurrenceMapRow({
   const [showIucnRangeOverlay, setShowIucnRangeOverlay] = useState(false);
   // Whether the current hover started on the map — the list scrolls to meet a
   // map hover, but must not yank itself around under the pointer for its own.
-  const [hoverFromMap, setHoverFromMap] = useState(false);
 
   // Which way the two panels sit. Dragging the divider resizes them; this flips
   // the axis, for when the list reads better beside the map than beneath it.
@@ -960,6 +963,8 @@ export default function OccurrenceMapRow({
   const [georeferences, setGeoreferences] = useState<Record<number, Georeference>>({});
   const [editingFeature, setEditingFeature] = useState<OccurrenceFeature | null>(null);
   const [georefMessage, setGeorefMessage] = useState<{ kind: "ok" | "error"; text: string } | null>(null);
+  /** A dragged georeference waiting to be confirmed or put back. */
+  const [pendingMove, setPendingMove] = useState<{ gbifID: number; lat: number; lon: number } | null>(null);
 
   useEffect(() => {
     setGeoreferences(loadGeoreferences(speciesKey));
@@ -1326,22 +1331,40 @@ export default function OccurrenceMapRow({
 
   // Dragging a marker moves the point and leaves everything else — radius,
   // notes, the record it belongs to — alone.
+  /**
+   * A drag proposes a new position; it doesn't commit one.
+   *
+   * The point is small, the map pans under it, and a stray drag silently
+   * rewrote a coordinate someone had worked out from a locality description —
+   * with no undo, since the old position was gone the moment it moved. So the
+   * marker sits where you dropped it and waits to be confirmed; cancelling puts
+   * the prop back and MapLibre snaps it home.
+   */
   const handleGeoreferenceDragged = useCallback(
     (gbifID: number, lat: number, lon: number) => {
-      const existing = georeferences[gbifID];
-      if (!existing) return;
+      if (!georeferences[gbifID]) return;
+      setPendingMove({ gbifID, lat: Number(lat.toFixed(5)), lon: Number(lon.toFixed(5)) });
+    },
+    [georeferences]
+  );
+
+  const confirmMove = useCallback(() => {
+    if (!pendingMove) return;
+    const existing = georeferences[pendingMove.gbifID];
+    if (existing) {
       persistGeoreferences({
         ...georeferences,
-        [gbifID]: {
+        [pendingMove.gbifID]: {
           ...existing,
-          decimalLatitude: Number(lat.toFixed(5)),
-          decimalLongitude: Number(lon.toFixed(5)),
+          decimalLatitude: pendingMove.lat,
+          decimalLongitude: pendingMove.lon,
           georeferencedDate: new Date().toISOString(),
+          georeferencedBy: existing.georeferencedBy || accountEmail || undefined,
         },
       });
-    },
-    [georeferences, persistGeoreferences]
-  );
+    }
+    setPendingMove(null);
+  }, [pendingMove, georeferences, persistGeoreferences, accountEmail]);
 
   const openGeoreferenceEditor = useCallback(
     (gbifID: number) => {
@@ -1360,7 +1383,6 @@ export default function OccurrenceMapRow({
       // cancelling it here the tooltip appears and is taken away again a beat
       // later, which reads as the marker simply not having one.
       cancelHoverClear();
-      setHoverFromMap(true);
       setHoveredFeature(record);
       setHoveredPanel("main");
     },
@@ -1923,8 +1945,7 @@ export default function OccurrenceMapRow({
         const known = occurrencesByGbifId.get(Number(props.gbifID));
         if (known) {
           cancelHoverClear();
-          setHoverFromMap(true);
-          if (known.properties.gbifID !== hoveredFeature?.properties.gbifID) {
+              if (known.properties.gbifID !== hoveredFeature?.properties.gbifID) {
             setGroupIndex(0);
             unpinTooltip();
           }
@@ -2017,7 +2038,6 @@ export default function OccurrenceMapRow({
    */
   const handleHoverRow = useCallback(
     (feature: OccurrenceFeature | null) => {
-      setHoverFromMap(false);
       if (!feature) {
         clearHoverSoon();
         return;
@@ -2285,8 +2305,8 @@ export default function OccurrenceMapRow({
                   {visibleGeoreferences.map((g) => (
                     <MapLibreMarker
                       key={g.gbifID}
-                      longitude={g.decimalLongitude}
-                      latitude={g.decimalLatitude}
+                      longitude={pendingMove?.gbifID === g.gbifID ? pendingMove.lon : g.decimalLongitude}
+                      latitude={pendingMove?.gbifID === g.gbifID ? pendingMove.lat : g.decimalLatitude}
                       anchor="center"
                       draggable
                       onDragEnd={(e) => handleGeoreferenceDragged(g.gbifID, e.lngLat.lat, e.lngLat.lng)}
@@ -2713,9 +2733,9 @@ export default function OccurrenceMapRow({
                 {!splitView && totalOccurrences != null && (
                   <div className="text-emerald-700 dark:text-emerald-400">
                     {isFullSample ? (
-                      <>All <strong>{(georeferencedTotal ?? 0).toLocaleString()}</strong> georeferenced GBIF records loaded.</>
+                      <>All <strong>{(georeferencedTotal ?? 0).toLocaleString()}</strong> GBIF records with coordinates loaded.</>
                     ) : (
-                      <>Loaded <strong>{georeferencedLoadedCount.toLocaleString()}</strong> of <strong>{(georeferencedTotal ?? 0).toLocaleString()}</strong> georeferenced GBIF records.</>
+                      <>Loaded <strong>{georeferencedLoadedCount.toLocaleString()}</strong> of <strong>{(georeferencedTotal ?? 0).toLocaleString()}</strong> GBIF records with coordinates.</>
                     )}
                     {!isFullSample && (
                       <>
@@ -2739,15 +2759,12 @@ export default function OccurrenceMapRow({
                     )}
                   </div>
                 )}
-                {/* Records with no coordinates keep their own line, and their
-                    own colour: they're counted, paged and read separately, and
-                    nothing about them appears on the map itself. */}
-                {fullscreen && (recordSetTotals?.missing ?? 0) > 0 && (
+                {/* Records with no coordinates only get a line when there are
+                    more to fetch. "All N loaded" was a fact with nothing to do
+                    about it — they're in the table either way. */}
+                {fullscreen && missingLoadedCount < (recordSetTotals?.missing ?? 0) && (
                   <div className="text-amber-700 dark:text-amber-400">
-                    {missingLoadedCount >= (recordSetTotals?.missing ?? 0) ? (
-                      <>All <strong>{(recordSetTotals?.missing ?? 0).toLocaleString()}</strong> records without coordinates loaded.</>
-                    ) : (
-                      <>
+                    <>
                         Loaded <strong>{missingLoadedCount.toLocaleString()}</strong> of{" "}
                         <strong>{(recordSetTotals?.missing ?? 0).toLocaleString()}</strong> without coordinates.{" "}
                         <button
@@ -2759,8 +2776,7 @@ export default function OccurrenceMapRow({
                             ? "Loading…"
                             : `Click to load ${Math.min(sampleSize, (recordSetTotals?.missing ?? 0) - missingLoadedCount).toLocaleString()} more`}
                         </button>
-                      </>
-                    )}
+                    </>
                   </div>
                 )}
               </div>
@@ -2831,6 +2847,32 @@ export default function OccurrenceMapRow({
           : "bg-zinc-50 dark:bg-zinc-800/50"
       }
     >
+      {pendingMove && (
+        <ConfirmDialog
+          title="Move this georeference?"
+          body={
+            <>
+              To <span className="tabular-nums">{pendingMove.lat.toFixed(5)}, {pendingMove.lon.toFixed(5)}</span>.
+              {(() => {
+                const from = georeferences[pendingMove.gbifID];
+                return from ? (
+                  <>
+                    {" "}It currently sits at{" "}
+                    <span className="tabular-nums">
+                      {from.decimalLatitude.toFixed(5)}, {from.decimalLongitude.toFixed(5)}
+                    </span>
+                    , and that position won&apos;t be recoverable.
+                  </>
+                ) : null;
+              })()}
+            </>
+          }
+          confirmLabel="Move it"
+          cancelLabel="Put it back"
+          onConfirm={confirmMove}
+          onCancel={() => setPendingMove(null)}
+        />
+      )}
       {pendingExclusion && (
         <ExclusionDialog
           gbifIDs={pendingExclusion}
@@ -4090,7 +4132,6 @@ export default function OccurrenceMapRow({
                   onEditGeoreference={setEditingFeature}
                   hoveredGbifId={hoveredFeature?.properties.gbifID ?? null}
                   onHoverRow={handleHoverRow}
-                  hoverFromMap={hoverFromMap}
                   excludedIds={excludedIds}
                   exclusions={exclusions}
                   onExclude={setPendingExclusion}
