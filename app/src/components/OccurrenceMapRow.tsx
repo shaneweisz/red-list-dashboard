@@ -433,7 +433,7 @@ interface OccurrenceMapRowProps {
   dashboardTaxonToken?: string | null;
   /** The dashboard's row id for this species, so leaving fullscreen lands on
    *  the row already open rather than on a list to hunt through. */
-  dashboardSpeciesId?: number | null;
+  dashboardSpeciesKey?: string | null;
   /** Render as the fullscreen page: map above, record list below, filling the
    *  height given to it. Driven by the /mapping/<key> route. */
   fullscreen?: boolean;
@@ -541,7 +541,7 @@ export default function OccurrenceMapRow({
   previousAssessments,
   fullscreen: fullscreenProp,
   dashboardTaxonToken,
-  dashboardSpeciesId,
+  dashboardSpeciesKey,
   onEmpty,
 }: OccurrenceMapRowProps) {
   const [occurrences, setOccurrences] = useState<OccurrenceFeature[]>([]);
@@ -693,12 +693,12 @@ export default function OccurrenceMapRow({
     if (dashboardTaxonToken) params.set("taxa", dashboardTaxonToken);
     // Open the row itself, on the tab you were just looking at — the dashboard
     // already reads both of these from the URL.
-    if (dashboardSpeciesId != null) {
-      params.set("species", String(dashboardSpeciesId));
+    if (dashboardSpeciesKey) {
+      params.set("species", dashboardSpeciesKey);
       params.set("tab", "gbif");
     }
     return `/?${params}`;
-  }, [scientificName, category, dashboardTaxonToken, dashboardSpeciesId]);
+  }, [scientificName, category, dashboardTaxonToken, dashboardSpeciesKey]);
   // Share of the fullscreen height given to the map, as a percentage. Two
   // thirds by default, dragged from the divider between map and list.
   const [mapHeightPct, setMapHeightPct] = useState(FULLSCREEN_DEFAULT_MAP_PCT);

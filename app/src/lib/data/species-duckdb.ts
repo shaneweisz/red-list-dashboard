@@ -17,7 +17,7 @@ import { canonicalizeTaxonId, mapTaxonId } from "@/lib/data/taxonomy-constants";
 import { getTaxaSummary } from "@/lib/data/species-store";
 import { isDynamicNodeId, dynamicNodeFilter, buildDynamicNodeId, rankOrderFor, isLiveDrilldownNode, type DynamicSegment } from "@/lib/dynamic-taxon";
 import { filterToSql, sqlStrList } from "@/lib/taxonomy-sql";
-import { sisRowKey, colRowKey, type SpeciesRowKey } from "@/lib/species-row-key";
+import { sisRowKey, colRowKey, speciesRowKey, type SpeciesRowKey } from "@/lib/species-row-key";
 import { COL_DOMESTIC_EXCLUDE_NAMES } from "@/config/col-described-overrides";
 
 const DATA_DIR = path.join(process.cwd(), "data");
@@ -750,14 +750,11 @@ export async function getSpeciesByGbifKey(gbifSpeciesKey: string): Promise<{
    *  token — the Not Evaluated view can't list anything without one. */
   node_id: string | null;
   /**
-   * The dashboard's row key for this species, for its `species=` URL param.
-   *
-   * Not the parquet's own id: the species list derives an unassessed row's key
-   * from its CoL id (colIdToSearchId), and the Not Evaluated view then keys
-   * rows on the absolute value. An assessed row is keyed on its SIS id, which
-   * is the parquet id.
+   * The dashboard's row key for this species, for its `species=` URL param —
+   * `sis-<id>` when assessed, `col-<id>` when not. See lib/species-row-key.ts,
+   * which owns what a row key is; this only supplies the two identities.
    */
-  dashboard_row_id: number;
+  dashboard_row_key: SpeciesRowKey | null;
 } | null> {
   const conn = await getConn();
   // sis_taxon_id isn't a column: assessed rows carry it as their positive `id`,
@@ -775,6 +772,12 @@ export async function getSpeciesByGbifKey(gbifSpeciesKey: string): Promise<{
   const rows = (await conn.runAndReadAll(sql, { key: gbifSpeciesKey })).getRowObjects();
   const r = rows[0];
   if (!r) return null;
+  const sisTaxonId = Number(r.id) > 0 ? Number(r.id) : null;
+  const colId = sisTaxonId
+    ? null
+    : (await colIdsForGbifKeys(conn, [str(r.gbif_species_key) ?? gbifSpeciesKey])).get(
+        str(r.gbif_species_key) ?? gbifSpeciesKey
+      ) ?? null;
   return {
     scientific_name: String(r.scientific_name ?? ""),
     common_name: (r.common_name as string) ?? null,
@@ -783,17 +786,16 @@ export async function getSpeciesByGbifKey(gbifSpeciesKey: string): Promise<{
     gbif_species_key: str(r.gbif_species_key) ?? gbifSpeciesKey,
     assessment_id: num(r.assessment_id),
     assessment_date: (r.assessment_date as string) ?? null,
-    sis_taxon_id: Number(r.id) > 0 ? Number(r.id) : null,
+    sis_taxon_id: sisTaxonId,
     criteria: (r.criteria as string) ?? null,
     countries: splitList(r.countries),
     assessed: !!r.assessed,
-    // For an unassessed species the GBIF key IS its Catalogue of Life id (the
-    // pipeline is CoL-first), which is what the species list hashes into a row
-    // key — so this reproduces that key without needing the CoL column, which
-    // unassessed.parquet doesn't carry.
-    dashboard_row_id: r.assessed
-      ? Number(r.id)
-      : Math.abs(colIdToSearchId(str(r.gbif_species_key) ?? String(r.scientific_name ?? ""))),
+    // Built by the one helper that decides what a row key is, rather than
+    // derived here. The CoL id comes from species_link rather than from the
+    // GBIF key: unassessed.parquet is one row per GBIF key and the NE list is
+    // one row per col_id, and 3,756 col_ids carry more than one GBIF key, so
+    // assuming they're the same value is wrong for ~4.3k species.
+    dashboard_row_key: speciesRowKey({ sis_taxon_id: sisTaxonId, col_id: colId }),
     node_id: nodeIdForSpecies(String(r.taxon_group ?? ""), {
       class_name: str(r.class_name),
       order_name: str(r.order_name),
