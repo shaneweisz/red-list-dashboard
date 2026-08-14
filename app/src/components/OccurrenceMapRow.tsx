@@ -639,6 +639,8 @@ export default function OccurrenceMapRow({
    * click normally does, and that needs to have been asked for.
    */
   const [measure, setMeasure] = useState<[number, number][] | null>(null);
+  /** True while the map is being panned, so the cursor can say so. */
+  const [panning, setPanning] = useState(false);
   /** The place the search last flew to, pinned so you can see where it is. */
   const [searchedPlace, setSearchedPlace] = useState<Place | null>(null);
   /** The candidate under the pointer in the results list, marked but not flown
@@ -2273,11 +2275,13 @@ export default function OccurrenceMapRow({
               onMouseMove={(e: MapLayerMouseEvent) => handleMapMouseMove(e, panelId)}
               onMouseLeave={handleMapMouseLeave}
               onLoad={panelId === "main" || panelId === "before" || !splitView ? handleMapLoad : undefined}
-              // A pointer everywhere, not the grab hand: every click on this
-              // map now answers something — a record, or the elevation and
-              // habitat under the spot — so the cursor should say "clickable"
-              // rather than advertising the pan you can still do anyway.
-              cursor={measure ? "crosshair" : "pointer"}
+              // The ordinary arrow at rest, four-way arrows while panning and
+              // a crosshair while measuring — the map cursor everyone already
+              // knows from Google Maps. The hand it replaces claimed the map
+              // was one big button.
+              cursor={measure ? "crosshair" : panning ? "move" : "default"}
+              onDragStart={() => setPanning(true)}
+              onDragEnd={() => setPanning(false)}
             >
               <ScaleControl position="bottom-right" />
               {/* Habitat types (Jung et al.) — bottom of the overlay stack: it
