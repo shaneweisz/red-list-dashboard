@@ -1127,17 +1127,17 @@ export default function OccurrenceListTable({
                   else rowRefs.current.delete(id);
                 }}
                 /**
-                 * Click anywhere to select, shift-click to take the run in
-                 * between. Plain click toggles rather than replacing the
-                 * selection, so a set can be built with clicks alone — the
-                 * usual modifier for that is taken by gbif.org, and requiring
-                 * a modifier is how the old selection stayed unfindable.
+                 * Click anywhere to select; shift takes the run in between and
+                 * Cmd/Ctrl picks rows out one at a time. A plain click toggles
+                 * too, so a set can be built either way — with the modifiers
+                 * for anyone who reaches for them out of habit, and without for
+                 * anyone who doesn't.
+                 *
+                 * The record itself opens from the GBIF column, which is a
+                 * link. Spending a whole-row gesture on it cost the modifier
+                 * that selection actually wants.
                  */
                 onClick={(e) => {
-                  if (e.metaKey || e.ctrlKey) {
-                    window.open(`https://www.gbif.org/occurrence/${id}`, "_blank", "noopener,noreferrer");
-                    return;
-                  }
                   if (excludedIds?.has(id)) return;
                   selectRow(id, { extend: e.shiftKey });
                 }}
@@ -1148,7 +1148,7 @@ export default function OccurrenceListTable({
                 onMouseDown={(e) => {
                   if (e.shiftKey) e.preventDefault();
                 }}
-                title="Click to select \u2014 shift-click for a run, then untick any one of them to exclude the lot. \u2318/Ctrl-click opens the record on gbif.org."
+                title="Click to select \u2014 shift-click for a run, \u2318/Ctrl-click to pick rows out \u2014 then untick any one of them to exclude the lot."
                 onMouseEnter={() => onHoverRow?.(f)}
                 onMouseLeave={() => onHoverRow?.(null)}
                 className={`border-b border-zinc-100 dark:border-zinc-800 ${
