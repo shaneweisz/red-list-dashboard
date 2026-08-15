@@ -8,7 +8,7 @@
  */
 
 import { CATEGORY_NAMES } from "@/config/taxa";
-import { findNode } from "@/lib/taxonomy-utils";
+import { findNode, tokenToDynamicId } from "@/lib/taxonomy-utils";
 import { canonicalizeTaxonId } from "@/lib/data/taxonomy-constants";
 import { resolveCountryToAlpha2, ALPHA2_TO_NAME } from "@/lib/countries";
 import { isDynamicNodeId, dynamicNodeFilter, dynamicNodeDisplayName } from "@/lib/dynamic-taxon";
@@ -227,7 +227,16 @@ export function resolveTaxa(values: string[]): { ids: string[]; unresolved: stri
   const toNode = (c: string): string | null => {
     const canon = canonicalizeTaxonId(c.toLowerCase());
     if (findNode(canon)) return canon;
-    if (isDynamicNodeId(canon) && dynamicNodeFilter(canon)) return canon;
+    if (isDynamicNodeId(canon)) {
+      // Two spellings reach here. The internal id (`mammals~order:rodentia`) is what
+      // dynamicNodeFilter understands directly. The URL token (`mammals~rodentia`) is
+      // what the dashboard's address bar actually shows, so it's what anyone — or any
+      // agent reading /llms.txt — will paste into /browse; it has to resolve to the
+      // same node rather than falling through to "unresolved".
+      if (dynamicNodeFilter(canon)) return canon;
+      const fromToken = tokenToDynamicId(canon);
+      if (fromToken && dynamicNodeFilter(fromToken)) return fromToken;
+    }
     return null;
   };
   for (const raw of values) {

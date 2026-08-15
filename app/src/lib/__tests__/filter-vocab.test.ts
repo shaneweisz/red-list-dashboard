@@ -54,6 +54,26 @@ describe("resolveTaxa", () => {
     // multi-word / punctuated values aren't taxa (species names go to `search`).
     expect(resolveTaxa(["not a taxon"]).unresolved).toEqual(["not a taxon"]);
   });
+
+  // /browse is what an agent reading /llms.txt calls, and the most natural thing to
+  // hand it is a URL copied out of the dashboard's address bar. That address bar now
+  // shows the short token form, so resolveTaxa has to accept BOTH spellings — it
+  // previously only understood the internal `rank:value` one, so a pasted dashboard
+  // URL came back unresolved with no results and no error.
+  it.each([
+    ["mammals~order:rodentia", "mammals~order:rodentia"],
+    ["mammals~rodentia", "mammals~order:rodentia"],
+    ["pl-flowering_plants~order:dioscoreales", "pl-flowering_plants~order:dioscoreales"],
+    ["flowering_plants~dioscoreales", "pl-flowering_plants~order:dioscoreales"],
+    ["fishes~teleostei~cypriniformes", "fishes~class:teleostei~order:cypriniformes"],
+    ["molluscs~gastropoda~", "inv-molluscs~class:gastropoda~order:"],
+  ])("resolves the dynamic taxon %s to %s", (input, expected) => {
+    expect(resolveTaxa([input]).ids).toEqual([expected]);
+  });
+
+  it("still rejects a ~-shaped value that names nothing", () => {
+    expect(resolveTaxa(["not~a~real~thing"]).unresolved).toEqual(["not~a~real~thing"]);
+  });
 });
 
 describe("resolveCountries", () => {
