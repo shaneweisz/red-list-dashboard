@@ -408,6 +408,31 @@ export default function OccurrenceListTable({
    * filters removed are never selectable: there's no reason to give for a
    * record that isn't being counted anyway.
    */
+  /**
+   * What the selection currently holds, for the handlers the columns close
+   * over. Read through a ref so the column definitions don't have to be
+   * rebuilt — and the table re-rendered — on every click.
+   */
+  const selectionRef = useRef(selection);
+  selectionRef.current = selection;
+  const exclusionsRef = useRef(exclusions);
+  exclusionsRef.current = exclusions;
+
+  /**
+   * Strikes out everything selected, under one reason.
+   *
+   * Re-including needs no justification; excluding always does, so a selection
+   * that is entirely excluded already puts itself back instead.
+   */
+  const excludeSelection = useCallback(() => {
+    const ids = [...selectionRef.current];
+    if (ids.length === 0) return;
+    const toExclude = ids.filter((id) => !exclusionsRef.current?.[id]);
+    if (toExclude.length === 0) ids.forEach((id) => onInclude?.(id));
+    else onExclude?.(toExclude);
+    setSelection(new Set());
+  }, [onExclude, onInclude]);
+
   const selectRow = useCallback(
     (gbifID: number, { extend }: { extend: boolean }) => {
       // Read the anchor before moving it. A state updater runs during the next
@@ -497,11 +522,14 @@ export default function OccurrenceListTable({
                 // Shift extends a run and Cmd/Ctrl picks rows out one at a
                 // time — the selection conventions from every file list — and a
                 // plain click just includes or excludes this one.
+                // The checkbox of a selected row acts on the whole selection:
+                // having picked out the duplicates, unticking any one of them
+                // is the obvious way to say "not these".
                 onClick={(e) => {
                   e.stopPropagation();
                   if (byFilter) return;
-                  if (e.shiftKey || e.metaKey || e.ctrlKey) {
-                    selectRow(p.gbifID, { extend: e.shiftKey });
+                  if (selected) {
+                    excludeSelection();
                     return;
                   }
                   if (byHand) onInclude?.(p.gbifID);
@@ -510,9 +538,11 @@ export default function OccurrenceListTable({
                 title={
                   byFilter
                     ? "Excluded by your filters"
-                    : byHand
-                      ? `Excluded: ${byHand.justification} — click to put it back`
-                      : "Counted. Uncheck to exclude it, with a reason. Shift-click to select a run, \u2318/Ctrl-click to pick rows out."
+                    : selected
+                      ? "Excludes every selected record, under one reason"
+                      : byHand
+                        ? `Excluded: ${byHand.justification} — click to put it back`
+                        : "Counted. Uncheck to exclude it, with a reason."
                 }
                 className={`w-3 h-3 rounded accent-emerald-600 disabled:opacity-60 cursor-pointer ${
                   selected ? "ring-2 ring-blue-400" : ""
@@ -810,7 +840,7 @@ export default function OccurrenceListTable({
         ),
       },
     ],
-    [isOutsideNativeRange, georeferences, onEditGeoreference, excludedIds, exclusions, selection, onExclude, onInclude, showExcluded, selectRow]
+    [isOutsideNativeRange, georeferences, onEditGeoreference, excludedIds, exclusions, selection, onExclude, onInclude, showExcluded, excludeSelection]
   );
 
   // The catalogue in the reader's own order, then the subset actually drawn.
@@ -958,10 +988,6 @@ export default function OccurrenceListTable({
     () => rows.map((f) => f.properties.gbifID).filter((id) => selection.has(id)),
     [rows, selection]
   );
-  const selectedToExclude = useMemo(
-    () => selectedIds.filter((id) => !exclusions?.[id]),
-    [selectedIds, exclusions]
-  );
   const currentMatch = matches.length > 0 ? matches[Math.min(matchIndex, matches.length - 1)] : null;
 
   /**
@@ -1100,15 +1126,29 @@ export default function OccurrenceListTable({
                   if (el) rowRefs.current.set(id, el);
                   else rowRefs.current.delete(id);
                 }}
-                // A plain click did this until now, which made every attempt to
-                // touch a row — a checkbox, a coordinate — one near miss away
-                // from a new tab.
+                /**
+                 * Click anywhere to select, shift-click to take the run in
+                 * between. Plain click toggles rather than replacing the
+                 * selection, so a set can be built with clicks alone — the
+                 * usual modifier for that is taken by gbif.org, and requiring
+                 * a modifier is how the old selection stayed unfindable.
+                 */
                 onClick={(e) => {
                   if (e.metaKey || e.ctrlKey) {
                     window.open(`https://www.gbif.org/occurrence/${id}`, "_blank", "noopener,noreferrer");
+                    return;
                   }
+                  if (excludedIds?.has(id)) return;
+                  selectRow(id, { extend: e.shiftKey });
                 }}
-                title="\u2318/Ctrl-click to open this record on gbif.org"
+                // Shift-clicking a row otherwise drags a native text selection
+                // across everything in between, which reads as a mess on top of
+                // the rows it just selected. Ordinary text selection is
+                // untouched — only the shift-extend is suppressed.
+                onMouseDown={(e) => {
+                  if (e.shiftKey) e.preventDefault();
+                }}
+                title="Click to select \u2014 shift-click for a run, then untick any one of them to exclude the lot. \u2318/Ctrl-click opens the record on gbif.org."
                 onMouseEnter={() => onHoverRow?.(f)}
                 onMouseLeave={() => onHoverRow?.(null)}
                 className={`border-b border-zinc-100 dark:border-zinc-800 ${
@@ -1170,32 +1210,17 @@ export default function OccurrenceListTable({
             know then is how many you're about to act on, and what the action
             is. One reason covers the whole run — duplicates are the case this
             exists for, and they share a reason by definition. */}
+        {/* The count and a way out of it. The action lives on the checkboxes
+            themselves — a button down here was too far from the rows it acted
+            on to be found. */}
         {selectedIds.length > 0 ? (
           <span className="flex items-center gap-2">
             <span className="tabular-nums font-medium text-zinc-700 dark:text-zinc-200">
               {selectedIds.length.toLocaleString()} selected
             </span>
-            {selectedToExclude.length > 0 ? (
-              <button
-                onClick={() => {
-                  onExclude?.(selectedToExclude);
-                  setSelection(new Set());
-                }}
-                className="px-1.5 py-0.5 rounded border border-zinc-300 dark:border-zinc-600 hover:bg-zinc-100 dark:hover:bg-zinc-700"
-              >
-                Exclude {selectedToExclude.length.toLocaleString()} with one reason
-              </button>
-            ) : (
-              <button
-                onClick={() => {
-                  selectedIds.forEach((id) => onInclude?.(id));
-                  setSelection(new Set());
-                }}
-                className="px-1.5 py-0.5 rounded border border-zinc-300 dark:border-zinc-600 hover:bg-zinc-100 dark:hover:bg-zinc-700"
-              >
-                Put {selectedIds.length.toLocaleString()} back
-              </button>
-            )}
+            <span className="text-zinc-400">
+              untick any of them to exclude them together
+            </span>
             <button onClick={() => setSelection(new Set())} className="hover:underline">
               Clear
             </button>
