@@ -109,7 +109,19 @@ const ALL_INSECT_GROUPS = [
 // turned out clean when checked directly) — this comment is about why they
 // never had a STATIC one, not that they're undrillable today.
 
-// All 28 Table 1a taxon groups (Insects split into 8 order-based groups)
+// All 28 Table 1a taxon groups (Insects split into 8 order-based groups).
+//
+// These are also the parquet partition values every node's `taxonGroups` draws
+// from — species/ is hive-partitioned by taxon_group, and a node's filter compiles
+// to `taxon_group IN (…)` (see taxonomy-sql). The two vocabularies coincide because
+// Table 1a is the reporting granularity the partitioning was built for; the field
+// is named taxonGroups after the COLUMN rather than after Table 1a, so it keeps
+// matching the SQL if IUCN ever restructures that table.
+//
+// Deliberately 28 of the 29 partitions on disk: `other` (~119k rows — foraminifera,
+// diatoms and the rest of the CoL universe outside the dashboard's remit) is a real
+// partition that NO node lists, so nothing reads it. That's intentional, not a gap,
+// but it does mean this is a curated subset rather than "every taxon_group value".
 export const ALL_TAXON_GROUPS = [
   "mammals", "birds", "reptiles", "amphibians", "fishes",
   ...ALL_INSECT_GROUPS,
