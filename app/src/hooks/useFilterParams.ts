@@ -101,13 +101,43 @@ export interface BreakdownParam {
   onlyIds?: number[];
   excludeIds?: number[];
 }
+/**
+ * Parsed from the RIGHT, because the nodeId is the one field that can itself contain
+ * the delimiter: a live-drilldown node id is `mammals~order:rodentia`, so
+ * `bd=mammals~order:rodentia:family:Muridae` split left-to-right yields
+ * nodeId="mammals~order", rank="rodentia" — not a rank, so the whole param was
+ * rejected and the breakdown narrowing silently vanished, leaving the full node list.
+ * (Static ids like `ssc-small-mammal` have no colon and always parsed fine, which is
+ * why this survived: every curated breakdown row worked, only live-drilldown ones
+ * didn't.)
+ *
+ * The tail is fixed-arity, so it can be peeled off unambiguously: an optional
+ * `only|excl:<ids>` pair, then name, then rank — and whatever remains, colons and
+ * all, is the nodeId. Deliberately fixed here rather than by making the writer emit
+ * a colon-free node id: RedListView gates this filter on
+ * `selectedSubgroups.has(breakdownFilter.nodeId)`, and selectedSubgroups holds
+ * INTERNAL ids, so rewriting the nodeId to its URL-token form would make the filter
+ * silently inert instead — the same failure with extra steps.
+ */
 const parseBreakdownParam = (p: URLSearchParams, key: string): BreakdownParam | null => {
   const raw = p.get(key);
   if (!raw) return null;
-  const [nodeId, rank, name, mode, idsCsv] = raw.split(":");
+  const parts = raw.split(":");
+  let mode: string | undefined;
+  let idsCsv: string | undefined;
+  // `:only:1,2` / `:excl:1,2` only exists alongside a nodeId+rank+name, so there are
+  // at least 5 fields when present — which also stops a 3-field `nodeId:rank:name`
+  // from mistaking its own rank for a mode.
+  if (parts.length >= 5 && (parts[parts.length - 2] === "only" || parts[parts.length - 2] === "excl")) {
+    idsCsv = parts.pop();
+    mode = parts.pop();
+  }
+  const name = parts.pop();
+  const rank = parts.pop();
+  const nodeId = parts.join(":");
   if (!nodeId || !name || !FILTER_RANKS.includes(rank as FilterRank)) return null;
   const result: BreakdownParam = { nodeId, rank: rank as FilterRank, name };
-  if ((mode === "only" || mode === "excl") && idsCsv) {
+  if (mode && idsCsv) {
     const ids = idsCsv.split(",").map(Number).filter((n) => !Number.isNaN(n));
     if (ids.length > 0) {
       if (mode === "only") result.onlyIds = ids;
