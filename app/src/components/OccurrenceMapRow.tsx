@@ -3014,8 +3014,8 @@ export default function OccurrenceMapRow({
                     <td className="pr-2 text-right font-medium">{formatAreaKm2(rangeMetrics.eoo.areaKm2)}</td>
                     <td className="text-zinc-500 dark:text-zinc-400">
                       {b1Threshold(rangeMetrics.eoo.areaKm2)
-                        ? `B1 \u2265 ${b1Threshold(rangeMetrics.eoo.areaKm2)}`
-                        : "no B1 threshold"}
+                        ? `meets B1 for ${b1Threshold(rangeMetrics.eoo.areaKm2)}`
+                        : "above the VU threshold"}
                     </td>
                   </tr>
                   <tr>
@@ -3023,14 +3023,14 @@ export default function OccurrenceMapRow({
                     <td className="pr-2 text-right font-medium">{formatAreaKm2(rangeMetrics.aoo.areaKm2)}</td>
                     <td className="text-zinc-500 dark:text-zinc-400">
                       {b2Threshold(rangeMetrics.aoo.areaKm2)
-                        ? `B2 \u2265 ${b2Threshold(rangeMetrics.aoo.areaKm2)}`
-                        : "no B2 threshold"}
+                        ? `meets B2 for ${b2Threshold(rangeMetrics.aoo.areaKm2)}`
+                        : "above the VU threshold"}
                     </td>
                   </tr>
                 </tbody>
               </table>
               <div className="text-[10px] text-zinc-400 pt-0.5">
-                {rangeMetrics.aoo.cellCount.toLocaleString()} cells of 2 km ·{" "}
+                {rangeMetrics.aoo.cellCount.toLocaleString()} cells of 2 km × 2 km ·{" "}
                 {rangeMetrics.eoo.pointCount.toLocaleString()} records
                 {rangeMetrics.ownCount > 0 && (
                   <span className="text-violet-600 dark:text-violet-400">
@@ -4229,32 +4229,6 @@ export default function OccurrenceMapRow({
                     </label>
                     <label
                       className="flex items-center gap-2 px-3 py-1.5 text-xs hover:bg-zinc-50 dark:hover:bg-zinc-800 cursor-pointer"
-                      title="Extent of occurrence (minimum convex polygon) and area of occupancy (2km cells), computed from the records currently included — GeoCAT's method, so the two can be compared directly."
-                    >
-                      <input
-                        type="checkbox"
-                        checked={showRangeMetrics}
-                        onChange={() => setShowRangeMetrics((v) => !v)}
-                        className="w-3 h-3 rounded accent-emerald-500 shrink-0"
-                      />
-                      <span className="flex-1 min-w-0 text-zinc-700 dark:text-zinc-200">Enable EOO / AOO</span>
-                      <a
-                        href="https://geocat.iucnredlist.org/"
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        title="GeoCAT — the IUCN's own tool for these metrics"
-                        onClick={(e) => {
-                          e.preventDefault();
-                          e.stopPropagation();
-                          window.open("https://geocat.iucnredlist.org/", "_blank", "noopener,noreferrer");
-                        }}
-                        className="shrink-0 text-zinc-300 hover:text-zinc-500 dark:text-zinc-600 dark:hover:text-zinc-400"
-                      >
-                        <FaInfoCircle className="w-3 h-3" />
-                      </a>
-                    </label>
-                    <label
-                      className="flex items-center gap-2 px-3 py-1.5 text-xs hover:bg-zinc-50 dark:hover:bg-zinc-800 cursor-pointer"
                       title="IUCN habitat classes from Jung et al. (2020), the 100m map behind Area of Habitat. Coloured by level 1; click the map for the exact class."
                     >
                       <input
@@ -4337,6 +4311,33 @@ export default function OccurrenceMapRow({
                       <span className="flex-1 min-w-0 text-zinc-700 dark:text-zinc-200">IUCN native countries</span>
                     </label>
                     )}
+                    <div className="border-t border-zinc-100 dark:border-zinc-800 my-1" />
+                    <label
+                      className="flex items-center gap-2 px-3 py-1.5 text-xs hover:bg-zinc-50 dark:hover:bg-zinc-800 cursor-pointer"
+                      title="Extent of occurrence (minimum convex polygon) and area of occupancy (2km cells), computed from the records currently included — GeoCAT's method, so the two can be compared directly."
+                    >
+                      <input
+                        type="checkbox"
+                        checked={showRangeMetrics}
+                        onChange={() => setShowRangeMetrics((v) => !v)}
+                        className="w-3 h-3 rounded accent-emerald-500 shrink-0"
+                      />
+                      <span className="flex-1 min-w-0 text-zinc-700 dark:text-zinc-200">Enable EOO / AOO</span>
+                      <a
+                        href="https://geocat.iucnredlist.org/"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        title="GeoCAT — the IUCN's own tool for these metrics"
+                        onClick={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          window.open("https://geocat.iucnredlist.org/", "_blank", "noopener,noreferrer");
+                        }}
+                        className="shrink-0 text-zinc-300 hover:text-zinc-500 dark:text-zinc-600 dark:hover:text-zinc-400"
+                      >
+                        <FaInfoCircle className="w-3 h-3" />
+                      </a>
+                    </label>
                   </div>
                 )}
               </div>
