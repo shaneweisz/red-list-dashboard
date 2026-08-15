@@ -23,6 +23,13 @@ import {
 } from "@/lib/protected-areas";
 import { ELEVATION_ATTRIBUTION, elevationAt, formatElevation } from "@/lib/elevation";
 import { formatDistance, pathLengthMetres } from "@/lib/geo-distance";
+import {
+  b1Threshold,
+  b2Threshold,
+  computeAoo,
+  computeEoo,
+  formatAreaKm2,
+} from "@/lib/range-metrics";
 import type { Place } from "@/lib/geocode";
 import {
   FOREST_LOSS_ATTRIBUTION,
@@ -600,6 +607,7 @@ export default function OccurrenceMapRow({
   const [showProtectedAreas, setShowProtectedAreas] = useState(false);
   const [showForestLoss, setShowForestLoss] = useState(false);
   const [showHabitat, setShowHabitat] = useState(false);
+  const [showRangeMetrics, setShowRangeMetrics] = useState(false);
   const [habitatLegendOpen, setHabitatLegendOpen] = useState(false);
   /**
    * What's at the point last clicked: its elevation, and — when the overlay is
@@ -2238,6 +2246,32 @@ export default function OccurrenceMapRow({
     });
   }, []);
 
+  /**
+   * EOO and AOO over the records the assessor has actually kept.
+   *
+   * That's the difference from running the same numbers in GeoCAT: the
+   * coordinate-cleaning checks, the hand-struck records and their reasons, the
+   * native-range restriction, the date window and any georeferences the
+   * assessor placed have all already been applied — which is what the
+   * Guidelines ask for when using aggregated data (§12.1.12.1) and what nobody
+   * wants to redo in a second tool.
+   */
+  const rangeMetricPoints = useMemo(
+    () =>
+      includedOccurrences.filter(hasPosition).map((o) => {
+        const mine = georeferences[o.properties.gbifID];
+        return mine
+          ? { lon: mine.decimalLongitude, lat: mine.decimalLatitude }
+          : { lon: o.geometry.coordinates[0], lat: o.geometry.coordinates[1] };
+      }),
+    [includedOccurrences, georeferences]
+  );
+
+  const rangeMetrics = useMemo(() => {
+    if (!showRangeMetrics || rangeMetricPoints.length === 0) return null;
+    return { eoo: computeEoo(rangeMetricPoints), aoo: computeAoo(rangeMetricPoints) };
+  }, [showRangeMetrics, rangeMetricPoints]);
+
   /** The boundary of whichever listed protected area is being pointed at. */
   const highlightedAreaGeoJson = useMemo<GeoJSON.Feature | null>(() => {
     const area = pointQuery?.areas[pointQuery.highlight];
@@ -2687,6 +2721,41 @@ export default function OccurrenceMapRow({
                   </MapLibreMarker>
                 </>
               )}
+              {/* Extent of occurrence and area of occupancy, drawn so the
+                  numbers can be checked against the ground rather than taken on
+                  trust — a hull reaching across an ocean usually means an
+                  outlier that should have been struck out. */}
+              {rangeMetrics?.eoo.hull && (
+                <Source
+                  id={`eoo-${panelId}`}
+                  type="geojson"
+                  data={{ type: "Feature", properties: {}, geometry: rangeMetrics.eoo.hull }}
+                >
+                  <Layer id={`eoo-fill-${panelId}`} type="fill" paint={{ "fill-color": "#0ea5e9", "fill-opacity": 0.07 }} />
+                  <Layer
+                    id={`eoo-line-${panelId}`}
+                    type="line"
+                    paint={{ "line-color": "#0369a1", "line-width": 1.5, "line-dasharray": [3, 2] }}
+                  />
+                </Source>
+              )}
+              {rangeMetrics && rangeMetrics.aoo.cells.length > 0 && (
+                <Source
+                  id={`aoo-${panelId}`}
+                  type="geojson"
+                  data={{
+                    type: "FeatureCollection",
+                    features: rangeMetrics.aoo.cells.map((cell) => ({
+                      type: "Feature" as const,
+                      properties: {},
+                      geometry: cell,
+                    })),
+                  }}
+                >
+                  <Layer id={`aoo-fill-${panelId}`} type="fill" paint={{ "fill-color": "#0369a1", "fill-opacity": 0.35 }} />
+                  <Layer id={`aoo-line-${panelId}`} type="line" paint={{ "line-color": "#0369a1", "line-width": 0.6 }} />
+                </Source>
+              )}
               {/* The measured path. Drawn above everything so the line stays
                   readable over the rasters it's being measured against. */}
               {measure && measure.length > 0 && (
@@ -2912,6 +2981,47 @@ export default function OccurrenceMapRow({
               >
                 Done
               </button>
+            </div>
+          )}
+          {/* Reported plainly: two numbers and which threshold each reaches.
+              Not a category — criterion B needs two of (a), (b), (c) as well,
+              and none of those come from occurrence points. */}
+          {rangeMetrics && !loadingOccurrences && (
+            <div
+              className="bg-white dark:bg-zinc-800 px-2 py-1.5 rounded shadow text-[11px] text-zinc-700 dark:text-zinc-200"
+              title={
+                "Computed from the records currently included, using GeoCAT's method so the two can be compared. " +
+                "A record-based AOO is a lower bound (Red List Guidelines \u00a74.10.8), and meeting a threshold is not a listing: " +
+                "criterion B also requires at least two of (a) severe fragmentation or few locations, (b) continuing decline, (c) extreme fluctuations."
+              }
+            >
+              <table className="tabular-nums">
+                <tbody>
+                  <tr>
+                    <td className="pr-2 text-zinc-500 dark:text-zinc-400">EOO</td>
+                    <td className="pr-2 text-right font-medium">{formatAreaKm2(rangeMetrics.eoo.areaKm2)}</td>
+                    <td className="text-zinc-500 dark:text-zinc-400">
+                      {b1Threshold(rangeMetrics.eoo.areaKm2)
+                        ? `B1 \u2265 ${b1Threshold(rangeMetrics.eoo.areaKm2)}`
+                        : "no B1 threshold"}
+                    </td>
+                  </tr>
+                  <tr>
+                    <td className="pr-2 text-zinc-500 dark:text-zinc-400">AOO</td>
+                    <td className="pr-2 text-right font-medium">{formatAreaKm2(rangeMetrics.aoo.areaKm2)}</td>
+                    <td className="text-zinc-500 dark:text-zinc-400">
+                      {b2Threshold(rangeMetrics.aoo.areaKm2)
+                        ? `B2 \u2265 ${b2Threshold(rangeMetrics.aoo.areaKm2)}`
+                        : "no B2 threshold"}
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+              <div className="text-[10px] text-zinc-400 pt-0.5">
+                {rangeMetrics.aoo.cellCount.toLocaleString()} cells of 2 km ·{" "}
+                {rangeMetrics.eoo.pointCount.toLocaleString()} records
+                {!isFullSample && <span className="text-amber-600 dark:text-amber-400"> · partial sample</span>}
+              </div>
             </div>
           )}
           {/* Forest loss reads as a colour ramp, so it needs one: without the
@@ -3199,6 +3309,7 @@ export default function OccurrenceMapRow({
     showProtectedAreas,
     showForestLoss,
     showHabitat,
+    showRangeMetrics,
     showPowoRangeOverlay,
     ...(hasIucnNativeRange ? [showIucnRangeOverlay] : []),
   ];
@@ -4093,6 +4204,32 @@ export default function OccurrenceMapRow({
                           e.preventDefault();
                           e.stopPropagation();
                           window.open(FOREST_LOSS_URL, "_blank", "noopener,noreferrer");
+                        }}
+                        className="shrink-0 text-zinc-300 hover:text-zinc-500 dark:text-zinc-600 dark:hover:text-zinc-400"
+                      >
+                        <FaInfoCircle className="w-3 h-3" />
+                      </a>
+                    </label>
+                    <label
+                      className="flex items-center gap-2 px-3 py-1.5 text-xs hover:bg-zinc-50 dark:hover:bg-zinc-800 cursor-pointer"
+                      title="Extent of occurrence (minimum convex polygon) and area of occupancy (2km cells), computed from the records currently included — GeoCAT's method, so the two can be compared directly."
+                    >
+                      <input
+                        type="checkbox"
+                        checked={showRangeMetrics}
+                        onChange={() => setShowRangeMetrics((v) => !v)}
+                        className="w-3 h-3 rounded accent-emerald-500 shrink-0"
+                      />
+                      <span className="flex-1 min-w-0 text-zinc-700 dark:text-zinc-200">Enable EOO / AOO</span>
+                      <a
+                        href="https://geocat.iucnredlist.org/"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        title="GeoCAT — the IUCN's own tool for these metrics"
+                        onClick={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          window.open("https://geocat.iucnredlist.org/", "_blank", "noopener,noreferrer");
                         }}
                         className="shrink-0 text-zinc-300 hover:text-zinc-500 dark:text-zinc-600 dark:hover:text-zinc-400"
                       >
