@@ -10,7 +10,7 @@ import * as path from "path";
 
 const DATA_DIR = path.join(__dirname, "../../data");
 
-// Assessed-species counts per CSV group, from the official 2026-1 Table 1a
+// Assessed-species counts per taxon group, from the official 2026-1 Table 1a
 // (https://nc.iucnredlist.org/redlist/content/attachment_files/2026-1_RL_Table1a.pdf,
 // "last updated 09 July 2026") cross-checked against our own synced totals.
 // Originally every group matched exactly except crustaceans, off by 2 — not

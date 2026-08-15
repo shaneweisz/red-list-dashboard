@@ -248,13 +248,13 @@ export function sqlStrList(vals: string[]): string {
 export function filterToSql(filter: NodeFilter, nodeId?: string): string {
   const sciName = "coalesce(lower(scientific_name), '')";
   if (nodeId && COL_SPECIES_NAME_OVERRIDES[nodeId]) {
-    return `taxon_group IN (${sqlStrList(filter.csvGroups)}) AND ${sciName} IN (${sqlStrList(COL_SPECIES_NAME_OVERRIDES[nodeId])})`;
+    return `taxon_group IN (${sqlStrList(filter.taxonGroups)}) AND ${sciName} IN (${sqlStrList(COL_SPECIES_NAME_OVERRIDES[nodeId])})`;
   }
   const cls = "coalesce(lower(class_name), '')";
   const ord = "coalesce(lower(order_name), '')";
   const fam = "coalesce(lower(family), '')";
   const genus = "coalesce(lower(split_part(scientific_name, ' ', 1)), '')";
-  const conds: string[] = [`taxon_group IN (${sqlStrList(filter.csvGroups)})`];
+  const conds: string[] = [`taxon_group IN (${sqlStrList(filter.taxonGroups)})`];
   if (filter.classNames?.length) conds.push(`${cls} IN (${sqlStrList(expandClasses(filter.classNames))})`);
   if (filter.excludeClasses?.length) conds.push(`${cls} NOT IN (${sqlStrList(expandClasses(filter.excludeClasses))})`);
   if (filter.orderNames?.length) {
@@ -281,9 +281,9 @@ export function filterToSql(filter: NodeFilter, nodeId?: string): string {
   const normalClause = conds.join(" AND ");
   // extraSpeciesNames: mirrors matchesFilter's OR escape hatch (taxonomy-utils.ts) —
   // species included regardless of the class/order/family/genus rule above. Still
-  // scoped to this node's csvGroups and the universe-wide exclusions.
+  // scoped to this node's taxonGroups and the universe-wide exclusions.
   if (filter.extraSpeciesNames?.length) {
-    const extraClause = `taxon_group IN (${sqlStrList(filter.csvGroups)}) AND ${sciName} IN (${sqlStrList(filter.extraSpeciesNames)}) AND ${sciName} NOT IN (${sqlStrList(COL_EXCLUDE_ALL_NODES)})`;
+    const extraClause = `taxon_group IN (${sqlStrList(filter.taxonGroups)}) AND ${sciName} IN (${sqlStrList(filter.extraSpeciesNames)}) AND ${sciName} NOT IN (${sqlStrList(COL_EXCLUDE_ALL_NODES)})`;
     return `((${normalClause}) OR (${extraClause}))`;
   }
   return normalClause;

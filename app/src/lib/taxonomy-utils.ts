@@ -16,7 +16,11 @@ import COL_RELEASE from "@/config/col-release.json";
 // circular import, but a safe one: both sides only reference the other inside
 // function bodies (never at module-eval time), so by the time either function
 // actually runs, both modules have finished initializing.
-import { dynamicNodeFilter, isDynamicNodeId, dynamicNodeAncestors } from "@/lib/dynamic-taxon";
+import {
+  dynamicNodeFilter, isDynamicNodeId, dynamicNodeAncestors,
+  rankOrderFor, parseDynamicNodeId, buildDynamicNodeId, isDynamicRank,
+  type DynamicSegment,
+} from "@/lib/dynamic-taxon";
 
 // ─── Indexes (built once at import) ──────────────────────────────────
 
@@ -80,7 +84,7 @@ const DEFAULT_VIEW_ROOTS = new Set(TAXONOMY_VIEWS.default.roots);
 // (the Table 1a PDF) rather than a third-party citation (MDD, Reptile Database,
 // AmphibiaWeb, Eschmeyer, Zhang 2011, …) or a hand-typed approximation (the SSC
 // pilot groups). That's exactly the 8 default-view summary taxa plus Table 1a's own
-// 21 rows (28 CSV groups, with "insects" as one row) — every node one level deeper
+// 21 rows (28 taxon groups, with "insects" as one row) — every node one level deeper
 // (Rodents, Bats, Beetles, every SSC group, …) cites something else, which — unlike
 // the CoL-derived colDescribed figure — never gets automatically re-verified as the
 // underlying species data changes. Used to pick the "# Described" default per row:
@@ -202,6 +206,111 @@ for (const id of NODE_INDEX.keys()) {
 }
 
 /**
+ * Resolve the first "~"-separated piece of a dynamic token back to a real node id.
+ *
+ * Deliberately mirrors expandTaxaToken's own resolution order rather than hitting
+ * NODE_INDEX first: `molluscs` exists BOTH as the flat Table-1a clone (under `all`,
+ * not reachable in the default view) and as `inv-molluscs` under Invertebrates.
+ * DEFAULT_VIEW_TOKEN_INDEX excludes the clone, so going through it is what picks
+ * the drillable one — a direct NODE_INDEX lookup would silently pick the clone.
+ */
+function resolveRootToken(rootToken: string): string | null {
+  const id = canonicalizeTaxonId(rootToken.trim());
+  if (DEFAULT_VIEW_ROOTS.has(id)) return id;
+  const viaToken = DEFAULT_VIEW_TOKEN_INDEX.get(id) ?? DEFAULT_VIEW_TOKEN_INDEX.get(stripNodePrefix(id));
+  if (viaToken) return viaToken;
+  return NODE_INDEX.has(id) ? id : null; // explicitly-prefixed legacy token
+}
+
+/**
+ * URL form of a dynamic (live taxonomic-drilldown) node id.
+ *
+ * The internal id spells out everything —
+ * `pl-flowering_plants~order:dioscoreales~family:dioscoreaceae` — but two thirds of
+ * that is recoverable rather than carried:
+ *
+ *   - The `pl-`/`inv-`/`fu-` prefix marks the virtual view group the root was cloned
+ *     into. A STATIC token already drops it and resolves back through
+ *     DEFAULT_VIEW_TOKEN_INDEX (`flowering_plants` → `pl-flowering_plants`); a dynamic
+ *     one can use the identical path for its root piece.
+ *   - The `order:`/`family:` labels are fixed by POSITION. Segments are always a
+ *     contiguous prefix of rankOrderFor(root) and never sparse — nodeIdForSpecies
+ *     fills a lineage gap with "" rather than skipping the rank, precisely because
+ *     "dynamicNodeAncestors/nextDynamicRank read depth positionally" (see its
+ *     comment). So segment i is rankOrderFor(root)[i], always.
+ *
+ * What's left is the root token and the bare values:
+ * `flowering_plants~dioscoreales~dioscoreaceae`. An empty value stays an empty
+ * segment, so the Unclassified buckets remain expressible (`molluscs~gastropoda~`
+ * is Unclassified Order under Gastropoda).
+ */
+export function dynamicIdToToken(id: string): string {
+  const parsed = parseDynamicNodeId(id);
+  if (!parsed) return id;
+  const ranks = rankOrderFor(parsed.rootId);
+  // Position expresses the rank for every id the UI builds. It can't for an id whose
+  // rank doesn't match its position, which a link predating a root's rank-order change
+  // can be (molluscs/crustaceans/other_invertebrates moved to class-first on
+  // 2026-07-22, so `molluscs~order:stylommatophora` has an order at position 0 where
+  // the root now starts at class). Those keep an explicit label rather than being
+  // flattened into a position that would say something else — otherwise re-serializing
+  // such a URL would launder a still-valid order filter into a class filter matching
+  // nothing.
+  const parts = parsed.segments.map((s, i) => (s.rank === ranks[i] ? s.value : `${s.rank}:${s.value}`));
+  return [stripNodePrefix(parsed.rootId), ...parts].join("~");
+}
+
+/**
+ * Inverse of dynamicIdToToken. Null when the root piece names nothing, or when the
+ * token is deeper than the root's rank order — either way the caller falls back to
+ * treating the token as-is rather than inventing a node.
+ *
+ * Also accepts the pre-cleanup labelled form (`pl-flowering_plants~order:dioscoreales`)
+ * so links shared before this change keep resolving.
+ *
+ * An explicit label WINS over position when present. Position is only an inference,
+ * and it's wrong for a link that predates a root's rank-order change: molluscs,
+ * crustaceans and other_invertebrates moved to class-first on 2026-07-22, so
+ * `molluscs~order:stylommatophora` carries an order at the position that now means
+ * class. Inferring there would silently turn ~3,300 land snails into a classNames
+ * filter matching nothing — a shared link that quietly returns an empty list, which
+ * is exactly the failure this token change is supposed to be free of.
+ *
+ * A label that isn't one of the four ranks rejects the whole token, matching what
+ * parseDynamicNodeId did before: better to fall through to arbitrary-rank handling
+ * than to invent a rank for it.
+ */
+export function tokenToDynamicId(token: string): string | null {
+  if (!isDynamicNodeId(token)) return null;
+  const [rootToken, ...rest] = token.split("~");
+  const rootId = resolveRootToken(rootToken);
+  if (!rootId) return null;
+  const ranks = rankOrderFor(rootId);
+  if (rest.length > ranks.length) return null;
+  const segments: DynamicSegment[] = [];
+  for (const [i, part] of rest.entries()) {
+    const idx = part.indexOf(":");
+    if (idx === -1) {
+      segments.push({ rank: ranks[i], value: part });
+      continue;
+    }
+    const label = part.slice(0, idx);
+    if (!isDynamicRank(label)) return null;
+    segments.push({ rank: label, value: part.slice(idx + 1) });
+  }
+  return buildDynamicNodeId(rootId, segments);
+}
+
+/**
+ * The `taxa=` URL token for any node id, static or dynamic — the single place that
+ * knows which of the two token forms applies. Callers building a URL by hand (e.g.
+ * TaxaSummary's popover hrefs) must use this rather than stripNodePrefix, which is
+ * only correct for a static id and mangles a dynamic one.
+ */
+export const taxaUrlToken = (nodeId: string): string =>
+  isDynamicNodeId(nodeId) ? dynamicIdToToken(nodeId) : stripNodePrefix(nodeId);
+
+/**
  * Expand one flat URL token into the internal selection it represents:
  * `{ taxa }` for a display root or an arbitrary scientific rank, or
  * `{ taxa, subgroup }` for a default-view sub-group (corals → invertebrates +
@@ -210,13 +319,14 @@ for (const id of NODE_INDEX.keys()) {
 export function expandTaxaToken(token: string): { taxa: string; subgroup?: string } {
   const id = canonicalizeTaxonId(token.trim());
   if (DEFAULT_VIEW_ROOTS.has(id)) return { taxa: id };
-  // A dynamic (live taxonomic-drilldown) id round-trips through the URL as
-  // itself — no DEFAULT_VIEW_TOKEN_INDEX lookup needed, since its root is
-  // always its own first "~"-separated segment (see dynamic-taxon.ts), and
-  // getViewRootForNode already resolves it correctly via getAncestors.
+  // A dynamic (live taxonomic-drilldown) token carries its root as its own first
+  // "~"-separated piece, so it needs no DEFAULT_VIEW_TOKEN_INDEX lookup for the
+  // WHOLE token — but the root piece itself does (see dynamicIdToToken), which is
+  // what tokenToDynamicId rebuilds before getViewRootForNode resolves the ancestry.
   if (isDynamicNodeId(id)) {
-    const root = getViewRootForNode(id);
-    if (root) return { taxa: root, subgroup: id };
+    const dynamicId = tokenToDynamicId(id) ?? id;
+    const root = getViewRootForNode(dynamicId);
+    if (root) return { taxa: root, subgroup: dynamicId };
   }
   const nodeId = DEFAULT_VIEW_TOKEN_INDEX.get(id) ?? DEFAULT_VIEW_TOKEN_INDEX.get(stripNodePrefix(id));
   if (nodeId) {
@@ -235,21 +345,22 @@ export function collapseTaxaToTokens(taxa: Iterable<string>, subgroups: Iterable
   const tokens = new Set<string>();
   const rootsWithSubgroup = new Set<string>();
   for (const sg of subgroups) {
-    // A dynamic id round-trips through the URL as itself (see expandTaxaToken's own
-    // comment) — stripNodePrefix is only correct for a STATIC node id's token form
-    // (inv-corals -> corals). Applying it unconditionally here was a real bug: a
-    // dynamic id whose OWN root segment happens to start with one of these same
-    // three letters (e.g. "pl-flowering_plants~order:malpighiales", reached by
-    // drilling into a virtual-view-group child like Flowering Plants) had its
-    // prefix silently stripped too, rewriting it to a DIFFERENT dynamic id
-    // ("flowering_plants~order:malpighiales" — a different root identity as far as
-    // isDynamicNodeId/DYNAMIC_DRILLDOWN_ROOTS-based lookups are concerned) every
-    // time the URL was rewritten for an unrelated reason (e.g. toggling the
-    // Assessed/Not Evaluated view mode). TaxaSummary.tsx's subgroupData cache is
-    // keyed by whichever root string first populated it, so this second, bare-
-    // rooted id was a fresh cache miss — its ancestor row silently fell back to a
-    // zeroed placeholder instead of the already-fetched real data.
-    tokens.add(isDynamicNodeId(sg) ? sg : stripNodePrefix(sg));
+    // Both branches drop the pl-/inv-/fu- prefix, but they are NOT interchangeable:
+    // a static id's token is just the bare id, while a dynamic id's token also drops
+    // its per-segment rank labels (see dynamicIdToToken). Applying the static form
+    // blanket-style to a dynamic id was a real bug: "pl-flowering_plants~order:
+    // malpighiales" became "flowering_plants~order:malpighiales", which round-tripped
+    // back as a DIFFERENT dynamic id (a bare root where the prefixed one was meant),
+    // silently, on any URL rewrite — e.g. toggling the Assessed/Not Evaluated view
+    // mode re-serializes the whole taxa list. TaxaSummary's subgroupData cache is
+    // keyed by whichever root string first populated it, so the bare-rooted id was a
+    // fresh miss and its ancestor row fell back to a zeroed placeholder.
+    //
+    // That specific rewrite is now the DEFINED token form rather than an accident, so
+    // the invariant that matters is the round-trip: collapse→expand→collapse must be
+    // stable, which tokenToDynamicId restores the prefix to satisfy. Covered by the
+    // repeated-cycle test in dynamic-taxon.test.ts.
+    tokens.add(taxaUrlToken(sg));
     const root = getViewRootForNode(sg);
     if (root) rootsWithSubgroup.add(root);
   }
@@ -260,14 +371,14 @@ export function collapseTaxaToTokens(taxa: Iterable<string>, subgroups: Iterable
   return [...tokens];
 }
 
-// ─── CSV group resolution ────────────────────────────────────────────
+// ─── taxon group resolution ────────────────────────────────────────────
 
-/** Get the CSV groups needed to load data for a node. */
-export function getCsvGroupsForNode(nodeId: string): string[] {
+/** Get the taxon groups needed to load data for a node. */
+export function getTaxonGroupsForNode(nodeId: string): string[] {
   const id = canonicalizeTaxonId(nodeId); // map legacy IDs (e.g. mammalia → mammals)
   const node = NODE_INDEX.get(id);
-  if (!node) return [id]; // Fallback: treat as CSV group name
-  return node.filter.csvGroups;
+  if (!node) return [id]; // Fallback: treat as taxon group name
+  return node.filter.taxonGroups;
 }
 
 // ─── Filter matching ─────────────────────────────────────────────────
@@ -277,7 +388,7 @@ export function getCsvGroupsForNode(nodeId: string): string[] {
  *
  * Works both server-side (with RedlistRow/GbifRow) and client-side
  * (with SpeciesRow). Caller must ensure the row comes from one of
- * the filter's csvGroups.
+ * the filter's taxonGroups.
  *
  * Falls back to class_name when order_name is empty (GBIF taxonomy quirk).
  */
@@ -363,7 +474,7 @@ export function matchesFilter(
  * Client-side filter: does a species row match a taxonomy node?
  *
  * Replaces the old `speciesMatchesSubgroup`. Uses the same filter logic
- * but checks CSV group membership first.
+ * but checks taxon group membership first.
  */
 export function speciesMatchesNode(
   species: { taxon_group: string; class_name: string | null; order_name: string | null; family?: string | null; scientific_name?: string | null },
@@ -373,12 +484,12 @@ export function speciesMatchesNode(
   if (!node) {
     // Dynamic (live taxonomic-drilldown) node — not a static tree entry, but a
     // real, filterable rank chain (see dynamic-taxon.ts). Falling through to
-    // "don't filter" here would show every species in the csvGroup regardless
+    // "don't filter" here would show every species in the taxonGroup regardless
     // of the selected order/family/genus — a serious correctness bug, not a
     // graceful degradation, so this is resolved explicitly rather than assumed.
     const dynFilter = dynamicNodeFilter(nodeId);
     if (dynFilter) {
-      if (!dynFilter.csvGroups.includes(species.taxon_group)) return false;
+      if (!dynFilter.taxonGroups.includes(species.taxon_group)) return false;
       return matchesFilter(species, dynFilter);
     }
     return true; // Genuinely unknown, non-dynamic id → don't filter
@@ -386,8 +497,8 @@ export function speciesMatchesNode(
 
   const f = node.filter;
 
-  // Must belong to one of the filter's CSV groups
-  if (!f.csvGroups.includes(species.taxon_group)) return false;
+  // Must belong to one of the filter's taxon groups
+  if (!f.taxonGroups.includes(species.taxon_group)) return false;
 
   // Mirrors filterToSql's COL_SPECIES_NAME_OVERRIDES branch (build-taxa-summary.ts):
   // CoL lumps genus Bison into Bos, so a CoL-sourced row (NE species, named "Bos

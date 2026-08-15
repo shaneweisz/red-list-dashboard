@@ -102,7 +102,7 @@ export function kingdomCountsPreservedSpecimens(colKingdomKey: string): boolean 
 }
 
 /**
- * The same rule expressed over a Table 1a CSV group (`flowering_plants`,
+ * The same rule expressed over a Table 1a taxon group (`flowering_plants`,
  * `mushrooms`…) or a dashboard taxon id (`plantae`), for the runtime, which
  * knows a species' group rather than its kingdom. Kept in step with
  * kingdomCountsPreservedSpecimens by a test over every group.

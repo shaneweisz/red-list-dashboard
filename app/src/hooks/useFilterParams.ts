@@ -6,6 +6,7 @@ import { resolveRegions } from "@/lib/regions";
 import { expandTaxaToken, collapseTaxaToTokens, getViewRootForNode, type FilterRank } from "@/lib/taxonomy-utils";
 import { ALL_HABITAT_SEASONS, ALL_HABITAT_IMPORTANCE, ALL_HABITAT_SUITABILITY } from "@/lib/habitat-filter";
 import { parseSpeciesParam } from "@/lib/species-row-key";
+import { prettifyQs } from "@/lib/query-string";
 
 // Both habitat checkbox-dropdowns (Importance, Season) default to "everything
 // checked" (nothing excluded) rather than "nothing checked" — see
@@ -146,8 +147,19 @@ export function parseParams(search: string, suffix: string = "") {
     const root = getViewRootForNode(id);
     if (root) taxaSet.add(root);
   }
+  // A `col-…` species key IS a Not Evaluated species (assessed rows always key on
+  // `sis-…` — see lib/species-row-key), so a link carrying one but no `view` can only
+  // have meant the Not Evaluated list. Without this a hand-written or truncated
+  // `?species=col-…` lands in the assessed list, which never contains that row, and
+  // the panel silently never opens. `view` still wins when present, and is still
+  // required on its own — it is the list's mode, and most URLs carry no species.
+  const speciesKey = parseSpeciesParam(p.get(k("species")));
+  const impliedView: ViewMode | null = speciesKey?.startsWith("col-") ? "new-assessments" : null;
+
   return {
-    viewMode: (viewParam === "new-assessments" ? "new-assessments" : "reassessments") as ViewMode,
+    viewMode: (viewParam === "new-assessments" ? "new-assessments"
+      : viewParam ? "reassessments"
+      : impliedView ?? "reassessments") as ViewMode,
     layoutMode: (layoutParam === "table1a" || layoutParam === "ssc" || layoutParam === "country" ? layoutParam : null) as LayoutMode,
     // Remembers the layout mode a taxon drill-down exited FROM (see
     // exitCountryModeForTaxon) — survives even while layoutMode itself is
@@ -263,7 +275,7 @@ export function parseParams(search: string, suffix: string = "") {
     mapSortDirection: (p.get(k("mapdir")) === "asc" ? "asc" : "desc") as "asc" | "desc",
     // The row key, namespaced (`sis-…`/`col-…`). parseSpeciesParam also accepts the
     // pre-namespace bare-number form so existing links keep working — see its doc.
-    species: parseSpeciesParam(p.get(k("species"))),
+    species: speciesKey,
     tab: (p.get(k("tab")) || null) as "gbif" | "literature" | "redlist" | "wikipedia" | "cites" | "assessors" | "reviewers" | "col" | "eol" | null,
   };
 }
@@ -369,9 +381,11 @@ export function buildQs(state: {
   if (state.mapViewMode === "list") p.set(k("mapview"), "list");
   if (state.mapSortKey && state.mapSortKey !== "species") p.set(k("mapsort"), state.mapSortKey);
   if (state.mapSortDirection === "asc") p.set(k("mapdir"), "asc");
-  const qs = p.toString();
+  const qs = prettifyQs(p.toString());
   return qs ? `?${qs}` : "";
 }
+
+export { prettifyQs };
 
 // Pure merge: combines this instance's (suffixed) params into whatever's
 // already present in `currentSearch`, rather than replacing the whole query
@@ -390,7 +404,7 @@ export function mergeParamsIntoSearch(
   for (const [ownKey, value] of new URLSearchParams(buildQs(newState, suffix))) {
     current.set(ownKey, value);
   }
-  const qs = current.toString();
+  const qs = prettifyQs(current.toString());
   return qs ? `?${qs}` : "";
 }
 

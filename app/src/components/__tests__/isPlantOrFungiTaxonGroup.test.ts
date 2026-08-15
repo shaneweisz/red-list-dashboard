@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { isPlantOrFungiTaxonGroup } from "../OccurrenceMapRow";
-import { ALL_CSV_GROUPS } from "@/config/taxonomy-tree";
+import { ALL_TAXON_GROUPS } from "@/config/taxonomy-tree";
 
 // ---------------------------------------------------------------------------
 // isPlantOrFungiTaxonGroup — decides whether PRESERVED_SPECIMEN should default
@@ -54,11 +54,11 @@ describe("isPlantOrFungiTaxonGroup", () => {
     expect(isPlantOrFungiTaxonGroup("not_a_real_group")).toBe(false);
   });
 
-  // Guards against forgetting to add newly-introduced CSV groups to the
+  // Guards against forgetting to add newly-introduced taxon groups to the
   // plantae/fungi mapping in taxonomy-constants.ts. Every Table 1a group
   // should classify deterministically as plant/fungi-or-not.
-  it("covers every Table 1a CSV group", () => {
-    for (const group of ALL_CSV_GROUPS) {
+  it("covers every Table 1a taxon group", () => {
+    for (const group of ALL_TAXON_GROUPS) {
       const result = isPlantOrFungiTaxonGroup(group);
       expect(typeof result).toBe("boolean");
     }

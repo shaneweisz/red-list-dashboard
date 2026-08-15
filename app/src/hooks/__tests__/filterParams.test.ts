@@ -961,3 +961,73 @@ describe("OWN_PARAM_NAMES stays in sync with buildQs", () => {
     expect(missing).toEqual([]);
   });
 });
+
+describe("query-string readability (prettifyQs)", () => {
+  // Base off parseParams("") rather than a hand-written literal: it returns a
+  // complete default state by construction, so a field added to buildQs later
+  // can't make these tests fail for an unrelated reason.
+  const stateWith = (over: Record<string, unknown>) =>
+    buildQs({ ...parseParams(""), ...over } as unknown as Parameters<typeof buildQs>[0]);
+
+  // URLSearchParams form-encodes ~ : and , even though RFC 3986 allows them bare in
+  // a query. Leaving them encoded is most of why a drilled-in URL reads badly.
+  it("writes ~ : and , bare rather than percent-encoded", () => {
+    const qs = stateWith({
+      subgroups: new Set(["pl-flowering_plants~order:dioscoreales~family:dioscoreaceae"]),
+      countries: new Set(["BR", "PE"]),
+    });
+    expect(qs).toContain("taxa=flowering_plants~dioscoreales~dioscoreaceae");
+    expect(qs).toContain("countries=BR,PE");
+    expect(qs).not.toContain("%7E");
+    expect(qs).not.toContain("%3A");
+    expect(qs).not.toContain("%2C");
+  });
+
+  // The whole point is that this is cosmetic — every value must survive unchanged.
+  it.each([
+    "a+b",            // literal plus: decoding %2B would silently become a space
+    "a&b=c",          // delimiters must stay encoded
+    "Müller's shrew", // multi-byte UTF-8: per-escape decodeURIComponent would throw
+    "50–60 years",
+    "100%",
+    "a,b:c~d",
+  ])("round-trips the search value %j unchanged", (value) => {
+    const qs = stateWith({ search: value });
+    expect(new URLSearchParams(qs).get("search")).toBe(value);
+  });
+
+  it("is left alone by the browser's own URL parser", () => {
+    const qs = stateWith({
+      subgroups: new Set(["mammals~order:rodentia~family:muridae"]),
+      countries: new Set(["BR", "PE"]),
+    });
+    expect(new URL(`https://x.test/${qs}`).search).toBe(qs);
+  });
+});
+
+describe("view mode inferred from the species key", () => {
+  // A col- key is a Not Evaluated species by construction (assessed rows always key
+  // on sis-), so a link carrying one but no `view` can only have meant the NE list.
+  it("infers new-assessments from a col- species key when view is absent", () => {
+    expect(parseParams("?species=col-35VNR").viewMode).toBe("new-assessments");
+  });
+
+  it("leaves a sis- key in the assessed view", () => {
+    expect(parseParams("?species=sis-15951").viewMode).toBe("reassessments");
+  });
+
+  it("still defaults to reassessments with no species at all", () => {
+    expect(parseParams("?taxa=mammals").viewMode).toBe("reassessments");
+  });
+
+  // `view` is the list's own mode and stays authoritative — it has to work with no
+  // species selected at all, which is the common case.
+  it("lets an explicit view win over the inference", () => {
+    expect(parseParams("?species=col-35VNR&view=reassessments").viewMode).toBe("reassessments");
+    expect(parseParams("?view=new-assessments").viewMode).toBe("new-assessments");
+  });
+
+  it("does not infer from a legacy bare-number species param", () => {
+    expect(parseParams("?species=15951").viewMode).toBe("reassessments");
+  });
+});

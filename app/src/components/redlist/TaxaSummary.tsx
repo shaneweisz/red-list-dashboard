@@ -9,7 +9,7 @@ import { HiOutlineAdjustmentsHorizontal } from "react-icons/hi2";
 import TaxaIcon from "@/components/TaxaIcon";
 import { CATEGORY_COLORS, CATEGORY_NAMES, CATEGORY_ORDER } from "@/config/taxa";
 import {
-  hasChildren, findNode, getAncestors, stripNodePrefix, OFFICIAL_IUCN_DESCRIBED_NODE_IDS,
+  hasChildren, findNode, getAncestors, stripNodePrefix, taxaUrlToken, OFFICIAL_IUCN_DESCRIBED_NODE_IDS,
   describeFilter, COL_RELEASE_LABEL, COL_RELEASE_URL, primaryFilterRank, breakdownDisplayName, breakdownHref,
   matchesBreakdownName, speciesMatchesNode,
   type FilterRank, type DescribeFilterSegment,
@@ -18,6 +18,7 @@ import { TAXONOMY_VIEWS } from "@/config/taxonomy-views";
 import { IUCN_SOURCE_URL } from "@/config/taxonomy-tree";
 import { isLiveDrilldownNode, nextDynamicRank, isDynamicNodeId, dynamicNodeDisplayName, dynamicNodeFilter, dynamicNodeRankInfo, parseDynamicNodeId } from "@/lib/dynamic-taxon";
 import type { RedListSpecies } from "@/hooks/useRedListSpeciesQuery";
+import { prettifyQs } from "@/lib/query-string";
 import { sisRowKey } from "@/lib/species-row-key";
 
 // See scripts/build-taxa-summary.ts's classifyNoMatch for what each reason means.
@@ -329,7 +330,7 @@ function nodeSpeciesListHref(
   breakdown?: { rank: FilterRank; name: string; only?: number[]; excl?: number[] },
 ): string {
   const params = new URLSearchParams();
-  params.set("taxa", stripNodePrefix(nodeId));
+  params.set("taxa", taxaUrlToken(nodeId));
   if (view === "new-assessments") params.set("view", "new-assessments");
   // Narrows to just this breakdown row (e.g. Rodentia within Small Mammal SG), and
   // optionally to/away-from a small explicit id list (CoL Match / No CoL Match — see
@@ -340,7 +341,7 @@ function nodeSpeciesListHref(
     else if (breakdown.excl?.length) bd += `:excl:${breakdown.excl.join(",")}`;
     params.set("bd", bd);
   }
-  return `/?${params.toString()}`;
+  return `/?${prettifyQs(params.toString())}`;
 }
 
 // Builds a real URL (not a pushState-only path) for a single species' detail view —
@@ -348,10 +349,10 @@ function nodeSpeciesListHref(
 // caller's place in the current tab.
 function speciesHref(nodeId: string, speciesKey: string, view: "reassessments" | "new-assessments"): string {
   const params = new URLSearchParams();
-  params.set("taxa", stripNodePrefix(nodeId));
+  params.set("taxa", taxaUrlToken(nodeId));
   if (view === "new-assessments") params.set("view", "new-assessments");
   params.set("species", speciesKey);
-  return `/?${params.toString()}`;
+  return `/?${prettifyQs(params.toString())}`;
 }
 
 // What SpeciesListPanel is currently showing — captured at click time from the
@@ -1564,7 +1565,7 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
 
   // SSC groups mode — same flat-table layout as Table 1a mode, sourced from
   // the precomputed SSC wrapper nodes' children instead of the top-level
-  // Table 1a CSV groups (see SSC_SECTIONS above).
+  // Table 1a taxon groups (see SSC_SECTIONS above).
   const [sscData, setSscData] = useState<Table1aSectionData[] | null>(null);
   const [sscLoading, setSscLoading] = useState(false);
   const sscFetchStartedRef = useRef(false);
@@ -2881,18 +2882,18 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
                             } else if (onNavigateToSubgroup) {
                               // Table 1a group under a virtual root (e.g. molluscs → invertebrates).
                               // row.group is a tree node id. Aggregating parent rows (e.g. "insecta",
-                              // which spans 8 order CSV groups) match a child by node id; single-group
-                              // rows match by CSV group.
+                              // which spans 8 order taxon groups) match a child by node id; single-group
+                              // rows match by taxon group.
                               const stripPrefix = (id: string) => id.replace(/^(inv-|pl-|fu-)/, "");
                               for (const rootId of defaultRoots) {
                                 const rootNode = findNode(rootId);
                                 const matchingChild =
                                   rootNode?.children?.find(c => stripPrefix(c.id) === row.group)
                                   ?? rootNode?.children?.find(c =>
-                                    c.filter.csvGroups.length === 1 && c.filter.csvGroups[0] === row.group
+                                    c.filter.taxonGroups.length === 1 && c.filter.taxonGroups[0] === row.group
                                   )
                                   ?? rootNode?.children?.find(c =>
-                                    c.filter.csvGroups.includes(row.group)
+                                    c.filter.taxonGroups.includes(row.group)
                                   );
                                 if (matchingChild) {
                                   onNavigateToSubgroup(rootId, matchingChild.id);

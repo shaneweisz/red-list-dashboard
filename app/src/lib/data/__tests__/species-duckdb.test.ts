@@ -11,13 +11,13 @@ describe("resolveWhere", () => {
     expect(resolveWhere("all")).toEqual({ clauses: [], params: {} });
   });
 
-  it("filters a taxonomy node by its csvGroups", () => {
+  it("filters a taxonomy node by its taxonGroups", () => {
     const w = resolveWhere("mammals");
     expect(w.clauses).toEqual(["taxon_group = ANY(string_split($g, '|'))"]);
     expect(w.params.g).toBe("mammals");
   });
 
-  it("expands a virtual node to all its csvGroups", () => {
+  it("expands a virtual node to all its taxonGroups", () => {
     const groups = resolveWhere("insecta").params.g.split("|");
     expect(groups).toContain("beetles");
     expect(groups).toContain("other_insects");

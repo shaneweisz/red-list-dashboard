@@ -49,7 +49,7 @@ type ColRow = { scientific_name: string; class_name: string | null; order_name: 
 // Same "extant, or CoL-extinct but IUCN-confirmed EX/EW" + Homo sapiens exclusion
 // scripts/build-taxa-summary.ts uses for every other CoL-derived count in this app —
 // mirrored here (not imported) since that logic lives inside non-exported functions.
-async function fetchColUniverse(csvGroups: string[]): Promise<ColRow[]> {
+async function fetchColUniverse(taxonGroups: string[]): Promise<ColRow[]> {
   const conn = await (await DuckDBInstance.create(":memory:")).connect();
   await conn.run(`
     CREATE TABLE ex_ew_assessed AS
@@ -58,7 +58,7 @@ async function fetchColUniverse(csvGroups: string[]): Promise<ColRow[]> {
     JOIN read_parquet('${ASSESSED}') a ON a.id = l.id
     WHERE l.src = 'redlist' AND l.col_id IS NOT NULL AND a.iucn_category IN ('EX', 'EW')
   `);
-  const groupList = csvGroups.map((g) => `'${g}'`).join(", ");
+  const groupList = taxonGroups.map((g) => `'${g}'`).join(", ");
   const result = await conn.run(`
     SELECT scientific_name, class_name, order_name, family, taxon_group
     FROM read_parquet('${SPECIES_GLOB}', hive_partitioning=true)
@@ -76,7 +76,7 @@ describe.skipIf(!DATA_AVAILABLE)("SSC Specialist Group filters vs. the live Cata
   beforeAll(async () => {
     for (const wrapperId of SSC_WRAPPER_IDS) {
       const wrapper = NODE_INDEX.get(wrapperId)!;
-      universeByWrapper.set(wrapperId, await fetchColUniverse(wrapper.filter.csvGroups));
+      universeByWrapper.set(wrapperId, await fetchColUniverse(wrapper.filter.taxonGroups));
     }
   }, 180_000);
 

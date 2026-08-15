@@ -102,10 +102,10 @@ describe("nextDynamicRank", () => {
 });
 
 describe("dynamicNodeFilter", () => {
-  it("inherits the root's csvGroups and ANDs in each segment's rank", () => {
+  it("inherits the root's taxonGroups and ANDs in each segment's rank", () => {
     const filter = dynamicNodeFilter("mammals~order:rodentia~family:muridae");
     expect(filter).toEqual({
-      csvGroups: NODE_INDEX.get("mammals")!.filter.csvGroups,
+      taxonGroups: NODE_INDEX.get("mammals")!.filter.taxonGroups,
       orderNames: ["rodentia"],
       families: ["muridae"],
     });
@@ -118,7 +118,7 @@ describe("dynamicNodeFilter", () => {
   it("a class segment (fishes) ANDs in classNames", () => {
     const filter = dynamicNodeFilter("fishes~class:actinopterygii");
     expect(filter).toEqual({
-      csvGroups: NODE_INDEX.get("fishes")!.filter.csvGroups,
+      taxonGroups: NODE_INDEX.get("fishes")!.filter.taxonGroups,
       classNames: ["actinopterygii"],
     });
   });
@@ -152,7 +152,7 @@ describe("speciesMatchesNode with a dynamic node id", () => {
   // speciesMatchesNode used to do `if (!node) return true` for ANY id not in
   // NODE_INDEX, which — before dynamic ids existed — was a safe "don't filter"
   // default. Once dynamic ids became a real, expected input, that default would
-  // silently show every species in the csvGroup regardless of the selected
+  // silently show every species in the taxonGroup regardless of the selected
   // order/family/genus. These tests fail loudly if that regresses.
   const rodent = { taxon_group: "mammals", class_name: "mammalia", order_name: "rodentia", family: "muridae", scientific_name: "Mus musculus" };
   const bat = { taxon_group: "mammals", class_name: "mammalia", order_name: "chiroptera", family: "vespertilionidae", scientific_name: "Myotis myotis" };
@@ -168,7 +168,7 @@ describe("speciesMatchesNode with a dynamic node id", () => {
     expect(speciesMatchesNode(rodent, "mammals~order:rodentia~family:sciuridae")).toBe(false);
   });
 
-  it("still requires csvGroup membership even if rank values happen to match", () => {
+  it("still requires taxonGroup membership even if rank values happen to match", () => {
     expect(speciesMatchesNode(differentGroup, "mammals~order:rodentia")).toBe(false);
   });
 
@@ -198,10 +198,89 @@ describe("URL token round-trip for a dynamic id (deep-link support)", () => {
     expect(expandTaxaToken(id)).toEqual({ taxa: "mammals", subgroup: id });
   });
 
-  it("collapseTaxaToTokens emits the dynamic id as its own token and drops the redundant root", () => {
-    const id = "mammals~order:rodentia";
-    const tokens = collapseTaxaToTokens(["mammals"], [id]);
-    expect(tokens).toEqual([id]);
+  it("collapseTaxaToTokens emits one token for the dynamic id and drops the redundant root", () => {
+    const tokens = collapseTaxaToTokens(["mammals"], ["mammals~order:rodentia"]);
+    expect(tokens).toEqual(["mammals~rodentia"]);
+  });
+
+  // The rank labels are redundant with position (segments are always a contiguous
+  // prefix of rankOrderFor(root) — see dynamicIdToToken), so the URL omits them.
+  it("drops the per-segment rank labels from the token", () => {
+    const [token] = collapseTaxaToTokens([], ["mammals~order:rodentia~family:muridae"]);
+    expect(token).toBe("mammals~rodentia~muridae");
+  });
+
+  it("drops the virtual-root prefix from the token and restores it on read", () => {
+    const id = "pl-flowering_plants~order:dioscoreales~family:dioscoreaceae";
+    const [token] = collapseTaxaToTokens([], [id]);
+    expect(token).toBe("flowering_plants~dioscoreales~dioscoreaceae");
+    expect(expandTaxaToken(token)).toEqual({ taxa: "plantae", subgroup: id });
+  });
+
+  // "molluscs" is BOTH the flat Table-1a clone (under `all`, not reachable in the
+  // default view) and inv-molluscs under Invertebrates. The token must resolve to
+  // the drillable one — a plain NODE_INDEX lookup would pick the clone.
+  it("resolves an ambiguous root token to the drillable node, not the Table-1a clone", () => {
+    expect(expandTaxaToken("molluscs~gastropoda")).toEqual({
+      taxa: "invertebrates", subgroup: "inv-molluscs~class:gastropoda",
+    });
+  });
+
+  // A class-first root (see ROOT_RANK_ORDER) reads its segments against a different
+  // rank sequence, which is exactly what position-only tokens depend on.
+  it("uses the root's own rank order when rebuilding a class-first token", () => {
+    expect(expandTaxaToken("fishes~teleostei~cypriniformes")).toEqual({
+      taxa: "fishes", subgroup: "fishes~class:teleostei~order:cypriniformes",
+    });
+  });
+
+  // An Unclassified bucket is an empty segment value, so it survives label removal
+  // as an empty token piece — "molluscs~gastropoda~" is Unclassified Order under
+  // Gastropoda, and must not collapse into the Gastropoda node itself.
+  it("keeps an Unclassified bucket distinct from its parent", () => {
+    expect(expandTaxaToken("molluscs~gastropoda~")).toEqual({
+      taxa: "invertebrates", subgroup: "inv-molluscs~class:gastropoda~order:",
+    });
+    expect(collapseTaxaToTokens([], ["inv-molluscs~class:gastropoda~order:"])).toEqual(["molluscs~gastropoda~"]);
+  });
+
+  // Position is only an INFERENCE, and it's wrong for a link that predates a root's
+  // rank-order change: molluscs/crustaceans/other_invertebrates moved to class-first
+  // on 2026-07-22, so `molluscs~order:stylommatophora` carries an order at the
+  // position that now means class. Inferring there turned ~3,300 land snails into a
+  // classNames filter matching nothing — a shared link silently returning an empty
+  // list, the exact failure this token change is meant to be free of. An explicit
+  // label therefore wins over position.
+  it.each([
+    ["molluscs~order:stylommatophora", "inv-molluscs~order:stylommatophora"],
+    ["crustaceans~order:isopoda", "inv-crustaceans~order:isopoda"],
+    ["other_invertebrates~order:haplotaxida", "inv-other_invertebrates~order:haplotaxida"],
+    ["fishes~order:cypriniformes", "fishes~order:cypriniformes"],
+  ])("keeps the rank an explicit label states, against position: %s", (token, expected) => {
+    expect(expandTaxaToken(token).subgroup).toBe(expected);
+  });
+
+  it("keeps the label on the way back out, so re-serializing can't launder the rank", () => {
+    // Flattening this to `molluscs~stylommatophora` would read back as a CLASS.
+    const id = "inv-molluscs~order:stylommatophora";
+    const [token] = collapseTaxaToTokens([], [id]);
+    expect(token).toBe("molluscs~order:stylommatophora");
+    expect(expandTaxaToken(token).subgroup).toBe(id);
+  });
+
+  it("rejects a label that isn't a rank rather than inventing one", () => {
+    // parseDynamicNodeId returned null for an unknown rank; falling through to
+    // arbitrary-rank handling beats silently calling this an order.
+    expect(expandTaxaToken("mammals~phylum:chordata").subgroup).toBeUndefined();
+  });
+
+  // Links shared before the token was shortened carry the prefix and the labels.
+  it.each([
+    ["pl-flowering_plants~order:dioscoreales", "plantae", "pl-flowering_plants~order:dioscoreales"],
+    ["mammals~order:rodentia", "mammals", "mammals~order:rodentia"],
+    ["inv-molluscs~class:gastropoda", "invertebrates", "inv-molluscs~class:gastropoda"],
+  ])("still resolves the pre-cleanup token %s", (token, taxa, subgroup) => {
+    expect(expandTaxaToken(token)).toEqual({ taxa, subgroup });
   });
 
   it("round-trips: collapse then expand recovers the original selection", () => {
@@ -210,33 +289,33 @@ describe("URL token round-trip for a dynamic id (deep-link support)", () => {
     expect(expandTaxaToken(token)).toEqual({ taxa: "mammals", subgroup: id });
   });
 
-  // Regression: a dynamic id whose OWN root segment happens to start with one of
-  // the pl-/inv-/fu- virtual-view-group prefixes (reached by drilling into a
-  // virtual-group child like Flowering Plants, Corals, Mushrooms) used to have
-  // that prefix silently stripped by collapseTaxaToTokens' blanket
-  // stripNodePrefix(sg) call — stripNodePrefix is only correct for a STATIC id's
-  // URL-token form (inv-corals -> corals), not for a dynamic id, which round-
-  // trips through the URL as itself. That made the id unstable across any URL
-  // rewrite for an unrelated reason (e.g. toggling the Assessed/Not Evaluated
-  // view mode calls setUrlViewMode, which re-serializes the whole taxa list) —
-  // "pl-flowering_plants~order:malpighiales" silently became
-  // "flowering_plants~order:malpighiales", a DIFFERENT dynamic id as far as
-  // anything keyed on the original root string is concerned (reported: an
-  // ancestor breadcrumb row's cached data went missing after toggling view mode,
-  // since TaxaSummary.tsx's subgroupData cache was keyed by the now-stale prefixed
-  // root and never populated under the new bare one).
-  it("preserves a dynamic id's own pl-/inv-/fu- root prefix through a collapse (does not strip it like a static id's token)", () => {
-    const id = "pl-flowering_plants~order:malpighiales";
-    const tokens = collapseTaxaToTokens(["plantae"], [id]);
-    expect(tokens).toEqual([id]);
-  });
-
-  it("round-trips a prefixed-root dynamic id through repeated collapse+expand cycles unchanged (simulates toggling view mode, which re-serializes the URL)", () => {
-    const id = "pl-flowering_plants~order:malpighiales";
-    const [token1] = collapseTaxaToTokens(["plantae"], [id]);
-    const { taxa, subgroup } = expandTaxaToken(token1);
-    const [token2] = collapseTaxaToTokens([taxa], [subgroup!]);
-    expect(token2).toBe(id);
+  // Regression: a dynamic id whose OWN root segment starts with one of the
+  // pl-/inv-/fu- virtual-view-group prefixes (reached by drilling into a virtual-group
+  // child like Flowering Plants, Corals, Mushrooms) used to have that prefix stripped
+  // by collapseTaxaToTokens' blanket stripNodePrefix(sg) call, WITHOUT anything on the
+  // read side putting it back. "pl-flowering_plants~order:malpighiales" became
+  // "flowering_plants~order:malpighiales" — a different dynamic id as far as anything
+  // keyed on the root string is concerned — silently, on any URL rewrite for an
+  // unrelated reason (toggling the Assessed/Not Evaluated view mode re-serializes the
+  // whole taxa list). Reported as an ancestor breadcrumb row losing its data after a
+  // view-mode toggle, since TaxaSummary's subgroupData cache was keyed by the stale
+  // prefixed root and never populated under the new bare one.
+  //
+  // Dropping the prefix is now the DEFINED token form, with tokenToDynamicId restoring
+  // it on read, so the invariant to protect is no longer "the token equals the id" but
+  // "repeated collapse→expand cycles are stable". That's what actually broke.
+  it.each([
+    "pl-flowering_plants~order:malpighiales",
+    "inv-corals~order:scleractinia",
+    "inv-molluscs~class:gastropoda~order:",
+    "mammals~order:rodentia~family:muridae~genus:mus",
+  ])("is stable across repeated collapse+expand cycles: %s", (id) => {
+    const [token1] = collapseTaxaToTokens([], [id]);
+    const first = expandTaxaToken(token1);
+    expect(first.subgroup).toBe(id);
+    const [token2] = collapseTaxaToTokens([first.taxa], [first.subgroup!]);
+    expect(token2).toBe(token1);
+    expect(expandTaxaToken(token2).subgroup).toBe(id);
   });
 });
 

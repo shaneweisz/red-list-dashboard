@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getTaxaSummary } from "@/lib/data/species-store";
 import { getCountryTaxaSummary } from "@/lib/data/country-taxa-summary-duckdb";
-import { findNode, getCsvGroupsForNode } from "@/lib/taxonomy-utils";
+import { findNode, getTaxonGroupsForNode } from "@/lib/taxonomy-utils";
 import { getView } from "@/config/taxonomy-views";
 import { CACHE_1H } from "@/lib/cache-headers";
 
@@ -66,9 +66,9 @@ export async function GET(request: NextRequest) {
         title: section.title,
         rows: section.nodeIds.map((nodeId) => {
           const node = findNode(nodeId);
-          const csvGroups = getCsvGroupsForNode(nodeId);
+          const taxonGroups = getTaxonGroupsForNode(nodeId);
           // For multi-group nodes, merge
-          const matchedRows = csvGroups
+          const matchedRows = taxonGroups
             .map((g) => rowsByGroup.get(g))
             .filter(Boolean) as typeof data;
           const totalAssessed = matchedRows.reduce(
@@ -151,7 +151,7 @@ export async function GET(request: NextRequest) {
           };
         }
 
-        const groups = getCsvGroupsForNode(nodeId);
+        const groups = getTaxonGroupsForNode(nodeId);
         const matchedRows = groups
           .map((g) => rowsByGroup.get(g))
           .filter(Boolean) as typeof data;
