@@ -32,6 +32,9 @@ const RANK_TO_FILTER_FIELD: Record<DynamicRank, "classNames" | "orderNames" | "f
 };
 const ALL_RANKS = new Set<DynamicRank>(["class", "order", "family", "genus"]);
 
+/** Is this string one of the four drillable ranks? */
+export const isDynamicRank = (s: string): s is DynamicRank => ALL_RANKS.has(s as DynamicRank);
+
 // Every root drills order -> family -> genus by default. Fishes was the first
 // exception: its static tree already split at CLASS first (Ray-finned vs.
 // Lobe-finned vs. Sharks & Rays — Actinopterygii/Sarcopterygii/Chondrichthyes),

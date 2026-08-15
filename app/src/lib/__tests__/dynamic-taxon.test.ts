@@ -244,6 +244,36 @@ describe("URL token round-trip for a dynamic id (deep-link support)", () => {
     expect(collapseTaxaToTokens([], ["inv-molluscs~class:gastropoda~order:"])).toEqual(["molluscs~gastropoda~"]);
   });
 
+  // Position is only an INFERENCE, and it's wrong for a link that predates a root's
+  // rank-order change: molluscs/crustaceans/other_invertebrates moved to class-first
+  // on 2026-07-22, so `molluscs~order:stylommatophora` carries an order at the
+  // position that now means class. Inferring there turned ~3,300 land snails into a
+  // classNames filter matching nothing — a shared link silently returning an empty
+  // list, the exact failure this token change is meant to be free of. An explicit
+  // label therefore wins over position.
+  it.each([
+    ["molluscs~order:stylommatophora", "inv-molluscs~order:stylommatophora"],
+    ["crustaceans~order:isopoda", "inv-crustaceans~order:isopoda"],
+    ["other_invertebrates~order:haplotaxida", "inv-other_invertebrates~order:haplotaxida"],
+    ["fishes~order:cypriniformes", "fishes~order:cypriniformes"],
+  ])("keeps the rank an explicit label states, against position: %s", (token, expected) => {
+    expect(expandTaxaToken(token).subgroup).toBe(expected);
+  });
+
+  it("keeps the label on the way back out, so re-serializing can't launder the rank", () => {
+    // Flattening this to `molluscs~stylommatophora` would read back as a CLASS.
+    const id = "inv-molluscs~order:stylommatophora";
+    const [token] = collapseTaxaToTokens([], [id]);
+    expect(token).toBe("molluscs~order:stylommatophora");
+    expect(expandTaxaToken(token).subgroup).toBe(id);
+  });
+
+  it("rejects a label that isn't a rank rather than inventing one", () => {
+    // parseDynamicNodeId returned null for an unknown rank; falling through to
+    // arbitrary-rank handling beats silently calling this an order.
+    expect(expandTaxaToken("mammals~phylum:chordata").subgroup).toBeUndefined();
+  });
+
   // Links shared before the token was shortened carry the prefix and the labels.
   it.each([
     ["pl-flowering_plants~order:dioscoreales", "plantae", "pl-flowering_plants~order:dioscoreales"],

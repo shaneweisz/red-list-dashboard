@@ -18,7 +18,8 @@ import COL_RELEASE from "@/config/col-release.json";
 // actually runs, both modules have finished initializing.
 import {
   dynamicNodeFilter, isDynamicNodeId, dynamicNodeAncestors,
-  rankOrderFor, parseDynamicNodeId, buildDynamicNodeId,
+  rankOrderFor, parseDynamicNodeId, buildDynamicNodeId, isDynamicRank,
+  type DynamicSegment,
 } from "@/lib/dynamic-taxon";
 
 // ─── Indexes (built once at import) ──────────────────────────────────
@@ -246,7 +247,17 @@ function resolveRootToken(rootToken: string): string | null {
 export function dynamicIdToToken(id: string): string {
   const parsed = parseDynamicNodeId(id);
   if (!parsed) return id;
-  return [stripNodePrefix(parsed.rootId), ...parsed.segments.map((s) => s.value)].join("~");
+  const ranks = rankOrderFor(parsed.rootId);
+  // Position expresses the rank for every id the UI builds. It can't for an id whose
+  // rank doesn't match its position, which a link predating a root's rank-order change
+  // can be (molluscs/crustaceans/other_invertebrates moved to class-first on
+  // 2026-07-22, so `molluscs~order:stylommatophora` has an order at position 0 where
+  // the root now starts at class). Those keep an explicit label rather than being
+  // flattened into a position that would say something else — otherwise re-serializing
+  // such a URL would launder a still-valid order filter into a class filter matching
+  // nothing.
+  const parts = parsed.segments.map((s, i) => (s.rank === ranks[i] ? s.value : `${s.rank}:${s.value}`));
+  return [stripNodePrefix(parsed.rootId), ...parts].join("~");
 }
 
 /**
@@ -255,8 +266,19 @@ export function dynamicIdToToken(id: string): string {
  * treating the token as-is rather than inventing a node.
  *
  * Also accepts the pre-cleanup labelled form (`pl-flowering_plants~order:dioscoreales`)
- * so links shared before this change keep resolving: the label is redundant with
- * position, so it's stripped and position wins.
+ * so links shared before this change keep resolving.
+ *
+ * An explicit label WINS over position when present. Position is only an inference,
+ * and it's wrong for a link that predates a root's rank-order change: molluscs,
+ * crustaceans and other_invertebrates moved to class-first on 2026-07-22, so
+ * `molluscs~order:stylommatophora` carries an order at the position that now means
+ * class. Inferring there would silently turn ~3,300 land snails into a classNames
+ * filter matching nothing — a shared link that quietly returns an empty list, which
+ * is exactly the failure this token change is supposed to be free of.
+ *
+ * A label that isn't one of the four ranks rejects the whole token, matching what
+ * parseDynamicNodeId did before: better to fall through to arbitrary-rank handling
+ * than to invent a rank for it.
  */
 export function tokenToDynamicId(token: string): string | null {
   if (!isDynamicNodeId(token)) return null;
@@ -265,10 +287,17 @@ export function tokenToDynamicId(token: string): string | null {
   if (!rootId) return null;
   const ranks = rankOrderFor(rootId);
   if (rest.length > ranks.length) return null;
-  const segments = rest.map((part, i) => {
+  const segments: DynamicSegment[] = [];
+  for (const [i, part] of rest.entries()) {
     const idx = part.indexOf(":");
-    return { rank: ranks[i], value: idx === -1 ? part : part.slice(idx + 1) };
-  });
+    if (idx === -1) {
+      segments.push({ rank: ranks[i], value: part });
+      continue;
+    }
+    const label = part.slice(0, idx);
+    if (!isDynamicRank(label)) return null;
+    segments.push({ rank: label, value: part.slice(idx + 1) });
+  }
   return buildDynamicNodeId(rootId, segments);
 }
 

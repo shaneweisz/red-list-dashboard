@@ -9,6 +9,7 @@ import { ThemeToggle } from "../components/ThemeToggle";
 import { AuthStatus } from "../components/AuthStatus";
 import { useBrand } from "../components/BrandProvider";
 import { parseParams, type ViewMode } from "../hooks/useFilterParams";
+import { prettifyQs } from "../lib/query-string";
 import { SpeciesCacheProvider } from "../contexts/SpeciesCacheContext";
 
 // Dynamically import view component
@@ -56,7 +57,10 @@ export default function RedListPage() {
     const params = new URLSearchParams(window.location.search);
     if (mode === "reassessments") params.delete("view");
     else params.set("view", "new-assessments");
-    const qs = params.toString();
+    // Re-serializing the whole query here would re-encode the taxa token's `~`/`:`
+    // that buildQs deliberately leaves bare, so the toggle briefly pushes an uglier
+    // URL than the one it replaced. Same treatment keeps it stable.
+    const qs = prettifyQs(params.toString());
     window.history.pushState(null, "", qs ? `/?${qs}` : "/");
     window.dispatchEvent(new PopStateEvent("popstate"));
   };
