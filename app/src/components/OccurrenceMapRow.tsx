@@ -661,15 +661,22 @@ export default function OccurrenceMapRow({
     window.addEventListener("resize", check);
     return () => window.removeEventListener("resize", check);
   }, []);
-  /** The place the search last flew to, pinned so you can see where it is. */
-  const [searchedPlace, setSearchedPlace] = useState<Place | null>(null);
+  /**
+   * Places pinned from the search, kept until each is dismissed by its own ×.
+   *
+   * They accumulate on purpose: a locality description names several places —
+   * "Carretera Hollín-Loreto-Coca, near Volcán Sumaco" — and pinning them all
+   * at once is how you see whether they agree with each other and with the
+   * records, which is the judgement being made.
+   */
+  const [pinnedPlaces, setPinnedPlaces] = useState<Place[]>([]);
   /** The candidate under the pointer in the results list, marked but not flown
    *  to — you're deciding which one to commit to, and moving the camera for
    *  each one you glance at would lose the records you're comparing against. */
   const [previewPlace, setPreviewPlace] = useState<Place | null>(null);
 
   const goToPlace = useCallback((place: Place) => {
-    setSearchedPlace(place);
+    setPinnedPlaces((prev) => (prev.some((p) => p.id === place.id) ? prev : [...prev, place]));
     const map = mapRef.current;
     if (!map) return;
     // A named area gets its extent; a point gets a zoom close enough to read
@@ -2658,38 +2665,46 @@ export default function OccurrenceMapRow({
               {/* Where the search landed. Pinned rather than just flown to:
                   the point of looking a locality up is to compare it against
                   the records, which means both have to be on screen at once. */}
-              {[
-                previewPlace && previewPlace.id !== searchedPlace?.id
-                  ? { place: previewPlace, preview: true }
-                  : null,
-                searchedPlace ? { place: searchedPlace, preview: false } : null,
-              ]
-                .filter((entry) => entry != null)
-                .map(({ place, preview }) => (
-                  <MapLibreMarker
-                    key={preview ? `preview-${place.id}` : place.id}
-                    longitude={place.lng}
-                    latitude={place.lat}
-                    anchor="bottom"
-                  >
-                    <div className={`flex flex-col items-center -mb-1 ${preview ? "opacity-80" : ""}`}>
-                      <span
-                        className={`px-1.5 py-0.5 rounded text-white text-[10px] whitespace-nowrap max-w-[14rem] truncate ${
-                          preview ? "bg-zinc-500/80" : "bg-zinc-900/80"
-                        }`}
+              {previewPlace && !pinnedPlaces.some((p) => p.id === previewPlace.id) && (
+                <MapLibreMarker
+                  key={`preview-${previewPlace.id}`}
+                  longitude={previewPlace.lng}
+                  latitude={previewPlace.lat}
+                  anchor="bottom"
+                >
+                  <div className="flex flex-col items-center -mb-1 opacity-80">
+                    <span className="px-1.5 py-0.5 rounded bg-zinc-500/80 text-white text-[10px] whitespace-nowrap max-w-[14rem] truncate">
+                      {previewPlace.name}
+                    </span>
+                    <svg className="w-5 h-5 -mt-0.5 text-zinc-500" viewBox="0 0 24 24" fill="currentColor">
+                      <path d="M12 2a7 7 0 00-7 7c0 5 7 13 7 13s7-8 7-13a7 7 0 00-7-7zm0 9.5A2.5 2.5 0 1112 6.5a2.5 2.5 0 010 5z" />
+                    </svg>
+                  </div>
+                </MapLibreMarker>
+              )}
+              {pinnedPlaces.map((place) => (
+                <MapLibreMarker key={place.id} longitude={place.lng} latitude={place.lat} anchor="bottom">
+                  <div className="flex flex-col items-center -mb-1">
+                    <span className="flex items-center gap-1 px-1.5 py-0.5 rounded bg-zinc-900/80 text-white text-[10px] whitespace-nowrap">
+                      <span className="max-w-[12rem] truncate">{place.name}</span>
+                      {/* Each pin is dismissed on its own, so several can stand
+                          at once and none goes away by accident. */}
+                      <button
+                        onClick={() => setPinnedPlaces((prev) => prev.filter((p) => p.id !== place.id))}
+                        title="Remove this pin"
+                        className="shrink-0 -mr-0.5 px-0.5 text-white/70 hover:text-white"
                       >
-                        {place.name}
-                      </span>
-                      <svg
-                        className={`w-5 h-5 -mt-0.5 ${preview ? "text-zinc-500" : "text-zinc-900"}`}
-                        viewBox="0 0 24 24"
-                        fill="currentColor"
-                      >
-                        <path d="M12 2a7 7 0 00-7 7c0 5 7 13 7 13s7-8 7-13a7 7 0 00-7-7zm0 9.5A2.5 2.5 0 1112 6.5a2.5 2.5 0 010 5z" />
-                      </svg>
-                    </div>
-                  </MapLibreMarker>
-                ))}
+                        <svg className="w-2.5 h-2.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+                          <path strokeLinecap="round" d="M6 18L18 6M6 6l12 12" />
+                        </svg>
+                      </button>
+                    </span>
+                    <svg className="w-5 h-5 -mt-0.5 text-zinc-900" viewBox="0 0 24 24" fill="currentColor">
+                      <path d="M12 2a7 7 0 00-7 7c0 5 7 13 7 13s7-8 7-13a7 7 0 00-7-7zm0 9.5A2.5 2.5 0 1112 6.5a2.5 2.5 0 010 5z" />
+                    </svg>
+                  </div>
+                </MapLibreMarker>
+              ))}
               {/* The unsaved georeference, drawn as it's typed. Seeing the
                   radius on the ground is most of what tells you whether the
                   number is right — a label saying "1900 m" and a circle that
@@ -3196,8 +3211,6 @@ export default function OccurrenceMapRow({
                 }}
                 onSelect={goToPlace}
                 onPreview={setPreviewPlace}
-                onClear={() => setSearchedPlace(null)}
-                hasResult={searchedPlace != null}
               />
             )}
           </div>

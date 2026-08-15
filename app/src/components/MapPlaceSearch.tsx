@@ -17,25 +17,21 @@ interface MapPlaceSearchProps {
   onSelect: (place: Place) => void;
   /** Pointing at a candidate marks it on the map, without moving the camera. */
   onPreview: (place: Place | null) => void;
-  /** Removes the marker left by the last result. */
-  onClear: () => void;
-  /** True while a searched place is still marked on the map. */
-  hasResult: boolean;
 }
 
 /**
  * Finds the locality written on a specimen label.
  *
- * Collapsed to a magnifier until you need it: on a map this small, a permanent
- * search field costs more than it earns, and the icon is understood everywhere.
+ * A permanent field at a fixed width, rather than a magnifier that expands
+ * into one: a control that changes size when you touch it makes you look at
+ * the control instead of the map, and the map is the thing being read.
  *
  * Typing a coordinate pair works too — "1.1958, -76.9256" offers to fly
- * straight there. Coordinates arrive by copy-paste far more often than by
- * being typed, and having to find a different box for them is the kind of
- * friction that stops people checking.
+ * straight there. It isn't advertised in the placeholder, because a label
+ * naming two different things it accepts is harder to read than one naming the
+ * thing it's for; pasting coordinates is a habit people already have.
  */
-export default function MapPlaceSearch({ getCentre, onSelect, onPreview, onClear, hasResult }: MapPlaceSearchProps) {
-  const [open, setOpen] = useState(false);
+export default function MapPlaceSearch({ getCentre, onSelect, onPreview }: MapPlaceSearchProps) {
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<Place[]>([]);
   const [loading, setLoading] = useState(false);
@@ -44,10 +40,6 @@ export default function MapPlaceSearch({ getCentre, onSelect, onPreview, onClear
   const rootRef = useRef<HTMLDivElement>(null);
 
   const coordinates = parseCoordinatePair(query);
-
-  useEffect(() => {
-    if (open) inputRef.current?.focus();
-  }, [open]);
 
   // Debounced, and never per-keystroke: Photon is a free service and a search
   // on every letter is both rude and slower than the typing.
@@ -88,66 +80,40 @@ export default function MapPlaceSearch({ getCentre, onSelect, onPreview, onClear
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [query]);
 
-  // Click away to close, like the other map controls.
+  /** Clicking away puts the results list away, but leaves the field. */
+  const [showResults, setShowResults] = useState(false);
   useEffect(() => {
-    if (!open) return;
     const handler = (e: MouseEvent) => {
       if (rootRef.current?.contains(e.target as Node)) return;
-      setOpen(false);
+      setShowResults(false);
     };
     document.addEventListener("mousedown", handler);
     return () => document.removeEventListener("mousedown", handler);
-  }, [open]);
+  }, []);
 
   const choose = (place: Place) => {
     onPreview(null);
     onSelect(place);
-    setOpen(false);
-    setResults([]);
+    setShowResults(false);
   };
-
-  if (!open) {
-    return (
-      <div className="flex items-center gap-1">
-        {/* Labelled, not just a magnifier: an icon alone on a map full of
-            other controls is easy to read as another layer toggle, and what
-            this searches for isn't obvious until you're told. */}
-        <button
-          onClick={() => setOpen(true)}
-          title="Search for a place — a locality from a specimen label, or a coordinate pair"
-          className="flex items-center gap-1.5 pl-1.5 pr-2 py-1.5 rounded-lg bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 shadow-md text-zinc-500 dark:text-zinc-400 hover:text-zinc-800 dark:hover:text-zinc-100"
-        >
-          <svg className="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-            <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-4.35-4.35M17 11a6 6 0 11-12 0 6 6 0 0112 0z" />
-          </svg>
-          <span className="text-[11px]">Search a place</span>
-        </button>
-        {hasResult && (
-          <button
-            onClick={onClear}
-            title="Remove the searched place from the map"
-            className="px-1.5 py-1 rounded-lg bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 shadow-md text-[10px] text-zinc-500 dark:text-zinc-400 hover:text-zinc-800 dark:hover:text-zinc-100"
-          >
-            Clear pin
-          </button>
-        )}
-      </div>
-    );
-  }
 
   return (
     <div ref={rootRef} className="w-72 max-w-[80vw]">
-      <div className="flex items-center gap-1 px-2 py-1 rounded-lg bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 shadow-md">
-        <svg className="w-3.5 h-3.5 shrink-0 text-zinc-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+      <div className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-white dark:bg-zinc-800 border border-zinc-300 dark:border-zinc-600 shadow-md focus-within:border-blue-400 focus-within:ring-1 focus-within:ring-blue-400 transition-colors">
+        <svg className="w-4 h-4 shrink-0 text-zinc-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
           <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-4.35-4.35M17 11a6 6 0 11-12 0 6 6 0 0112 0z" />
         </svg>
         <input
           ref={inputRef}
           value={query}
-          onChange={(e) => setQuery(e.target.value)}
+          onChange={(e) => {
+            setQuery(e.target.value);
+            setShowResults(true);
+          }}
+          onFocus={() => setShowResults(true)}
           onKeyDown={(e) => {
             if (e.key === "Escape") {
-              setOpen(false);
+              setShowResults(false);
               return;
             }
             if (e.key === "Enter") {
@@ -164,8 +130,8 @@ export default function MapPlaceSearch({ getCentre, onSelect, onPreview, onClear
               }
             }
           }}
-          placeholder="Locality from a label, or lat, lon"
-          className="flex-1 min-w-0 bg-transparent text-xs text-zinc-800 dark:text-zinc-100 placeholder:text-zinc-400 focus:outline-none"
+          placeholder="Search for a locality"
+          className="flex-1 min-w-0 bg-transparent text-xs text-zinc-800 dark:text-zinc-100 placeholder:text-zinc-500 dark:placeholder:text-zinc-400 focus:outline-none"
         />
         {query !== "" && (
           <button
@@ -180,7 +146,7 @@ export default function MapPlaceSearch({ getCentre, onSelect, onPreview, onClear
         )}
       </div>
 
-      {(coordinates || results.length > 0 || loading || failed || query.trim().length >= 2) && (
+      {showResults && (coordinates || results.length > 0 || loading || failed || query.trim().length >= 2) && (
         <div className="mt-1 rounded-lg bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 shadow-lg overflow-hidden text-xs">
           {coordinates ? (
             <button
