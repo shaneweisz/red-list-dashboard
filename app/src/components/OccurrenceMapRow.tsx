@@ -791,6 +791,28 @@ export default function OccurrenceMapRow({
     [pendingExclusion, exclusions, persistExclusions, accountEmail]
   );
 
+  /**
+   * Excludes records with the reason already known — what dropping a selection
+   * onto the record it duplicates produces. No dialog: the reason names the
+   * record being kept, which is more specific than anything the assessor would
+   * type, and it stays editable from the row afterwards.
+   */
+  const excludeAs = useCallback(
+    (gbifIDs: number[], justification: string) => {
+      const next = { ...exclusions };
+      for (const gbifID of gbifIDs) {
+        next[gbifID] = {
+          gbifID,
+          justification,
+          excludedAt: new Date().toISOString(),
+          excludedBy: accountEmail || undefined,
+        };
+      }
+      persistExclusions(next);
+    },
+    [exclusions, persistExclusions, accountEmail]
+  );
+
   const includeAgain = useCallback(
     (gbifID: number) => {
       const next = { ...exclusions };
@@ -4499,6 +4521,7 @@ export default function OccurrenceMapRow({
                   excludedIds={excludedIds}
                   exclusions={exclusions}
                   onExclude={setPendingExclusion}
+                  onExcludeAs={excludeAs}
                   onInclude={includeAgain}
                   panelLayout={panelLayout}
                   onTogglePanelLayout={() => setPanelLayout((v) => (v === "rows" ? "columns" : "rows"))}

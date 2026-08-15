@@ -277,6 +277,9 @@ interface OccurrenceListTableProps {
   exclusions?: Record<number, { justification: string }>;
   /** Asks for a justification and excludes the given records. */
   onExclude?: (gbifIDs: number[]) => void;
+  /** Excludes records with a justification already known — dropping a
+   *  selection onto the record it duplicates writes its own reason. */
+  onExcludeAs?: (gbifIDs: number[], justification: string) => void;
   /** Puts a hand-excluded record back. */
   onInclude?: (gbifID: number) => void;
   /** Fill the height of the column the table is in. */
@@ -309,6 +312,7 @@ export default function OccurrenceListTable({
   excludedIds,
   exclusions,
   onExclude,
+  onExcludeAs,
   onInclude,
   fillHeight = false,
   panelLayout,
@@ -413,6 +417,17 @@ export default function OccurrenceListTable({
    * over. Read through a ref so the column definitions don't have to be
    * rebuilt — and the table re-rendered — on every click.
    */
+  /**
+   * Records being dragged onto another, and the row they're over.
+   *
+   * Duplicates are the commonest reason to strike records out, and the
+   * duplicate-of relationship is between two specific records — so saying it
+   * by dragging one onto the other is both faster than typing a reason and
+   * more precise than the reason anyone would type.
+   */
+  const [draggingIds, setDraggingIds] = useState<number[] | null>(null);
+  const [dropTargetId, setDropTargetId] = useState<number | null>(null);
+
   const selectionRef = useRef(selection);
   selectionRef.current = selection;
   const exclusionsRef = useRef(exclusions);
@@ -1127,6 +1142,39 @@ export default function OccurrenceListTable({
                   else rowRefs.current.delete(id);
                 }}
                 /**
+                 * Drag a record — or a whole selection — onto the record it
+                 * duplicates. The reason writes itself, and names the record
+                 * kept, which is more than anyone would type by hand.
+                 */
+                draggable={onExcludeAs != null && !excluded}
+                onDragStart={(e) => {
+                  const ids = selection.has(id) ? [...selection] : [id];
+                  setDraggingIds(ids);
+                  e.dataTransfer.effectAllowed = "move";
+                  // Firefox won't start a drag without data on the transfer.
+                  e.dataTransfer.setData("text/plain", String(id));
+                }}
+                onDragEnd={() => {
+                  setDraggingIds(null);
+                  setDropTargetId(null);
+                }}
+                onDragOver={(e) => {
+                  if (!draggingIds || draggingIds.includes(id)) return;
+                  e.preventDefault();
+                  e.dataTransfer.dropEffect = "move";
+                  setDropTargetId(id);
+                }}
+                onDragLeave={() => setDropTargetId((prev) => (prev === id ? null : prev))}
+                onDrop={(e) => {
+                  e.preventDefault();
+                  const ids = (draggingIds ?? []).filter((dragged) => dragged !== id);
+                  setDraggingIds(null);
+                  setDropTargetId(null);
+                  setSelection(new Set());
+                  if (ids.length === 0) return;
+                  onExcludeAs?.(ids, `Duplicate of GBIF record ${id}`);
+                }}
+                /**
                  * Click anywhere to select; shift takes the run in between and
                  * Cmd/Ctrl picks rows out one at a time. A plain click toggles
                  * too, so a set can be built either way — with the modifiers
@@ -1161,6 +1209,10 @@ export default function OccurrenceListTable({
                         : "hover:bg-zinc-50 dark:hover:bg-zinc-800/60"
                 } ${excluded ? "opacity-40" : ""} ${
                   selection.has(id) ? "outline outline-1 -outline-offset-1 outline-blue-400" : ""
+                } ${draggingIds?.includes(id) ? "opacity-50" : ""} ${
+                  dropTargetId === id
+                    ? "outline outline-2 -outline-offset-2 outline-amber-500 bg-amber-50 dark:bg-amber-950/40"
+                    : ""
                 }`}
               >
                 {visibleColumns.map((col) => {
