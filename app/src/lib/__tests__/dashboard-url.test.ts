@@ -25,8 +25,9 @@ describe("browseInputToDashboardQuery", () => {
     // The dashboard's parseParams expands these tokens (corals → invertebrates +
     // inv-corals) — see the round-trip below. A dynamic id (fishes' live
     // class-level drilldown — sharks-rays was retired as a static node in
-    // Phase 8) passes through the same way, unexpanded.
-    expect(params({ taxa: ["fishes~class:chondrichthyes"] }).get("taxa")).toBe("fishes~class:chondrichthyes");
+    // Phase 8) is likewise one token, emitted in the short URL form: the rank
+    // labels are recoverable from position, so they aren't written.
+    expect(params({ taxa: ["fishes~class:chondrichthyes"] }).get("taxa")).toBe("fishes~chondrichthyes");
     const p = params({ taxa: ["corals"] });
     expect(p.get("taxa")).toBe("corals");
     expect(p.has("subgroups")).toBe(false);
@@ -118,5 +119,37 @@ describe("browseInputToDashboardQuery → parseParams round-trip", () => {
     const parsed = parseParams(qs);
     expect(parsed.taxa).toEqual(new Set(["invertebrates"]));
     expect(parsed.subgroups).toEqual(new Set(["inv-corals"]));
+  });
+});
+
+describe("browseInputToDashboardQuery emits the short taxon token", () => {
+  // This is the link /browse and /api/mcp hand back to a person or an agent — the
+  // most-shared URL the app produces. resolveTaxa returns INTERNAL node ids, which
+  // spell out the pl-/inv-/fu- prefix and every rank label, so emitting them raw
+  // produced the long form the address bar no longer uses. Both still resolve; this
+  // is about the two staying in step.
+  it.each([
+    [["mammals~order:rodentia"], "mammals~rodentia"],
+    [["mammals~rodentia"], "mammals~rodentia"],
+    [["flowering_plants~dioscoreales~dioscoreaceae"], "flowering_plants~dioscoreales~dioscoreaceae"],
+    [["sharks"], "fishes~chondrichthyes"], // alias that resolves to a dynamic id
+    [["corals"], "corals"],
+  ])("%j -> taxa=%s", (taxa, expected) => {
+    expect(params({ taxa }).get("taxa")).toBe(expected);
+  });
+
+  it("writes ~ and , bare rather than percent-encoded", () => {
+    const qs = browseInputToDashboardQuery({ taxa: ["mammals~order:rodentia"], countries: ["BR", "PE"] });
+    expect(qs).toContain("taxa=mammals~rodentia");
+    expect(qs).toContain("countries=BR,PE");
+    expect(qs).not.toContain("%7E");
+    expect(qs).not.toContain("%3A");
+    expect(qs).not.toContain("%2C");
+  });
+
+  // The point of the short form is that the dashboard reads it back to the same node.
+  it("round-trips through parseParams to the internal id", () => {
+    const qs = browseInputToDashboardQuery({ taxa: ["flowering_plants~dioscoreales~dioscoreaceae"] });
+    expect([...parseParams(qs).subgroups]).toEqual(["pl-flowering_plants~order:dioscoreales~family:dioscoreaceae"]);
   });
 });

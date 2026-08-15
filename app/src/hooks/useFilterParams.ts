@@ -6,6 +6,7 @@ import { resolveRegions } from "@/lib/regions";
 import { expandTaxaToken, collapseTaxaToTokens, getViewRootForNode, type FilterRank } from "@/lib/taxonomy-utils";
 import { ALL_HABITAT_SEASONS, ALL_HABITAT_IMPORTANCE, ALL_HABITAT_SUITABILITY } from "@/lib/habitat-filter";
 import { parseSpeciesParam } from "@/lib/species-row-key";
+import { prettifyQs } from "@/lib/query-string";
 
 // Both habitat checkbox-dropdowns (Importance, Season) default to "everything
 // checked" (nothing excluded) rather than "nothing checked" — see
@@ -384,31 +385,7 @@ export function buildQs(state: {
   return qs ? `?${qs}` : "";
 }
 
-/**
- * Undo URLSearchParams' over-encoding of characters a query string may carry bare.
- *
- * `toString()` serializes as application/x-www-form-urlencoded, which escapes
- * everything outside `*-._` and alphanumerics. RFC 3986 is looser for the query
- * component — `query = *( pchar / "/" / "?" )` where `pchar` includes `unreserved`
- * (which contains `~`), the sub-delims (which contain `,`) and `:` — so `%7E`/`%3A`/
- * `%2C` are pure noise. Turning `?taxa=pl-flowering_plants%7Eorder%3Adioscoreales`
- * into `?taxa=flowering_plants~dioscoreales` is most of why the URLs read badly.
- *
- * Deliberately a STATIC escape map, never decodeURIComponent per match: `%C3` is
- * half of a multi-byte UTF-8 sequence and decoding it alone throws URIError, so a
- * species named "Müller's shrew" would crash the URL sync. Substituting fixed
- * three-character escapes can't misfire that way.
- *
- * Only these three. `%2B` in particular must stay encoded — a bare `+` in a query
- * string means a space, so decoding it would silently corrupt any value containing
- * a literal plus. `&`, `=` and `#` are delimiters and stay encoded for the same
- * reason. Reading needs no counterpart: URLSearchParams already parses bare `~`,
- * `:` and `,` correctly, so links written before this change are unaffected.
- */
-const QS_BARE_ESCAPES: Record<string, string> = { "%7E": "~", "%3A": ":", "%2C": "," };
-const QS_BARE_ESCAPE_RE = new RegExp(Object.keys(QS_BARE_ESCAPES).join("|"), "gi");
-export const prettifyQs = (qs: string): string =>
-  qs.replace(QS_BARE_ESCAPE_RE, (m) => QS_BARE_ESCAPES[m.toUpperCase()]);
+export { prettifyQs };
 
 // Pure merge: combines this instance's (suffixed) params into whatever's
 // already present in `currentSearch`, rather than replacing the whole query

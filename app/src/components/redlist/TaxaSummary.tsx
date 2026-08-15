@@ -18,7 +18,7 @@ import { TAXONOMY_VIEWS } from "@/config/taxonomy-views";
 import { IUCN_SOURCE_URL } from "@/config/taxonomy-tree";
 import { isLiveDrilldownNode, nextDynamicRank, isDynamicNodeId, dynamicNodeDisplayName, dynamicNodeFilter, dynamicNodeRankInfo, parseDynamicNodeId } from "@/lib/dynamic-taxon";
 import type { RedListSpecies } from "@/hooks/useRedListSpeciesQuery";
-import { prettifyQs } from "@/hooks/useFilterParams";
+import { prettifyQs } from "@/lib/query-string";
 import { sisRowKey } from "@/lib/species-row-key";
 
 // See scripts/build-taxa-summary.ts's classifyNoMatch for what each reason means.
