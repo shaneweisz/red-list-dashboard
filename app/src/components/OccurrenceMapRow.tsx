@@ -670,6 +670,33 @@ export default function OccurrenceMapRow({
    * records, which is the judgement being made.
    */
   const [pinnedPlaces, setPinnedPlaces] = useState<Place[]>([]);
+  /** The label being typed in the right-click panel, before the pin exists. */
+  const [newPinLabel, setNewPinLabel] = useState("");
+  /** A pin whose label is being renamed in place. */
+  const [renamingPin, setRenamingPin] = useState<string | null>(null);
+  const pinCounter = useRef(0);
+
+  /**
+   * Drops a pin where you right-clicked.
+   *
+   * Somewhere worth remembering on a map rarely has a name a gazetteer knows —
+   * "the ridge the 1987 collections came from", "where the road crosses the
+   * river" — so the label is whatever you say it is, and blank falls back to
+   * the coordinates rather than to nothing.
+   */
+  const addPin = useCallback((lng: number, lat: number, label: string) => {
+    pinCounter.current += 1;
+    setPinnedPlaces((prev) => [
+      ...prev,
+      {
+        id: `pin-${pinCounter.current}`,
+        name: label.trim() || `${lat.toFixed(4)}, ${lng.toFixed(4)}`,
+        context: "",
+        lat,
+        lng,
+      },
+    ]);
+  }, []);
   /** The candidate under the pointer in the results list, marked but not flown
    *  to — you're deciding which one to commit to, and moving the camera for
    *  each one you glance at would lose the records you're comparing against. */
@@ -2686,7 +2713,38 @@ export default function OccurrenceMapRow({
                 <MapLibreMarker key={place.id} longitude={place.lng} latitude={place.lat} anchor="bottom">
                   <div className="flex flex-col items-center -mb-1">
                     <span className="flex items-center gap-1 px-1.5 py-0.5 rounded bg-zinc-900/80 text-white text-[10px] whitespace-nowrap">
-                      <span className="max-w-[12rem] truncate">{place.name}</span>
+                      {renamingPin === place.id ? (
+                        // Keystrokes stop here: MapLibre listens for keys on
+                        // the container this marker is portalled into, so
+                        // typing "e" would otherwise pan the map east.
+                        <input
+                          autoFocus
+                          defaultValue={place.name}
+                          onKeyDown={(e) => {
+                            e.stopPropagation();
+                            if (e.key === "Enter") e.currentTarget.blur();
+                            if (e.key === "Escape") setRenamingPin(null);
+                          }}
+                          onBlur={(e) => {
+                            const name = e.currentTarget.value.trim();
+                            if (name) {
+                              setPinnedPlaces((prev) =>
+                                prev.map((p) => (p.id === place.id ? { ...p, name } : p))
+                              );
+                            }
+                            setRenamingPin(null);
+                          }}
+                          className="w-28 bg-transparent border-b border-white/40 text-white text-[10px] focus:outline-none"
+                        />
+                      ) : (
+                        <button
+                          onClick={() => setRenamingPin(place.id)}
+                          title="Rename this pin"
+                          className="max-w-[12rem] truncate hover:underline decoration-dotted"
+                        >
+                          {place.name}
+                        </button>
+                      )}
                       {/* Each pin is dismissed on its own, so several can stand
                           at once and none goes away by accident. */}
                       <button
@@ -2937,6 +2995,33 @@ export default function OccurrenceMapRow({
                     {/* Silent when the point isn't protected: the overlay is
                         already showing you that, and a line saying so on every
                         click is noise on the answer you did ask for. */}
+                    <div className="pt-1 border-t border-zinc-100 dark:border-zinc-800 flex items-center gap-1">
+                      <input
+                        value={newPinLabel}
+                        onChange={(e) => setNewPinLabel(e.target.value)}
+                        onKeyDown={(e) => {
+                          e.stopPropagation();
+                          if (e.key === "Enter") {
+                            addPin(pointQuery.lng, pointQuery.lat, newPinLabel);
+                            setNewPinLabel("");
+                            setPointQuery(null);
+                          }
+                        }}
+                        placeholder="Label a pin here"
+                        className="flex-1 min-w-0 px-1.5 py-0.5 rounded border border-zinc-300 dark:border-zinc-600 bg-white dark:bg-zinc-800 text-[11px] text-zinc-800 dark:text-zinc-100"
+                      />
+                      <button
+                        onClick={() => {
+                          addPin(pointQuery.lng, pointQuery.lat, newPinLabel);
+                          setNewPinLabel("");
+                          setPointQuery(null);
+                        }}
+                        title="Drop a pin at this spot"
+                        className="shrink-0 px-1.5 py-0.5 rounded border border-zinc-300 dark:border-zinc-600 text-zinc-600 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800"
+                      >
+                        Pin
+                      </button>
+                    </div>
                     <div className="pt-1 border-t border-zinc-100 dark:border-zinc-800">
                       <button
                         onClick={() => {
