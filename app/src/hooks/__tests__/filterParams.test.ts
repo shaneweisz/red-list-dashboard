@@ -1031,3 +1031,56 @@ describe("view mode inferred from the species key", () => {
     expect(parseParams("?species=15951").viewMode).toBe("reassessments");
   });
 });
+
+describe("bd= breakdown param", () => {
+  const bd = (v: string) => parseParams(`?bd=${encodeURIComponent(v)}`).breakdown;
+
+  it("parses a static node id", () => {
+    expect(bd("ssc-small-mammal:order:rodentia")).toEqual({
+      nodeId: "ssc-small-mammal", rank: "order", name: "rodentia",
+    });
+  });
+
+  // A live-drilldown node id contains the delimiter, so splitting left-to-right made
+  // nodeId="mammals~order" and rank="rodentia" — not a rank, so the whole param was
+  // rejected and the breakdown narrowing silently vanished, showing the full node
+  // list instead of the one row that was clicked.
+  it.each([
+    ["mammals~order:rodentia:family:Muridae", "mammals~order:rodentia", "family", "Muridae"],
+    ["inv-molluscs~class:gastropoda~order:stylommatophora:family:Helicidae",
+     "inv-molluscs~class:gastropoda~order:stylommatophora", "family", "Helicidae"],
+  ])("parses a dynamic node id whose own id contains colons: %s", (raw, nodeId, rank, name) => {
+    expect(bd(raw)).toEqual({ nodeId, rank, name });
+  });
+
+  it.each([
+    ["ssc-small-mammal:order:rodentia:only:1,2,3", { nodeId: "ssc-small-mammal", rank: "order", name: "rodentia", onlyIds: [1, 2, 3] }],
+    ["mammals~order:rodentia:family:Muridae:excl:4,5", { nodeId: "mammals~order:rodentia", rank: "family", name: "Muridae", excludeIds: [4, 5] }],
+  ])("keeps the only/excl id-list suffix: %s", (raw, expected) => {
+    expect(bd(raw)).toEqual(expected);
+  });
+
+  it.each([
+    "mammals~order:rodentia:notarank:Muridae",
+    "justonefield",
+    "nodeid:order",
+  ])("rejects a malformed value rather than half-applying it: %s", (raw) => {
+    expect(bd(raw)).toBeNull();
+  });
+
+  // The three-field form must not mistake its own rank for an only/excl mode.
+  it("does not treat a 3-field value's rank as a mode", () => {
+    expect(bd("ssc-small-mammal:order:only")).toEqual({
+      nodeId: "ssc-small-mammal", rank: "order", name: "only",
+    });
+  });
+
+  it.each([
+    { nodeId: "ssc-small-mammal", rank: "order" as const, name: "rodentia" },
+    { nodeId: "mammals~order:rodentia", rank: "family" as const, name: "Muridae" },
+    { nodeId: "mammals~order:rodentia", rank: "family" as const, name: "Muridae", onlyIds: [7, 8] },
+  ])("round-trips through buildQs: %j", (breakdown) => {
+    const qs = buildQs({ ...parseParams(""), breakdown } as unknown as Parameters<typeof buildQs>[0]);
+    expect(parseParams(qs).breakdown).toEqual(breakdown);
+  });
+});
