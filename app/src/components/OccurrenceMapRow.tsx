@@ -2256,20 +2256,32 @@ export default function OccurrenceMapRow({
    * Guidelines ask for when using aggregated data (§12.1.12.1) and what nobody
    * wants to redo in a second tool.
    */
-  const rangeMetricPoints = useMemo(
-    () =>
-      includedOccurrences.filter(hasPosition).map((o) => {
-        const mine = georeferences[o.properties.gbifID];
-        return mine
-          ? { lon: mine.decimalLongitude, lat: mine.decimalLatitude }
-          : { lon: o.geometry.coordinates[0], lat: o.geometry.coordinates[1] };
-      }),
-    [includedOccurrences, georeferences]
-  );
+  const rangeMetricPoints = useMemo(() => {
+    const points: { lon: number; lat: number }[] = [];
+    let ownCount = 0;
+    for (const o of includedOccurrences) {
+      // The assessor's own coordinates first, and — the part that matters —
+      // whether or not GBIF has any. A record georeferenced by hand is
+      // precisely one GBIF couldn't place, so requiring GBIF geometry dropped
+      // exactly the points the georeferencing work exists to add.
+      const mine = georeferences[o.properties.gbifID];
+      if (mine) {
+        points.push({ lon: mine.decimalLongitude, lat: mine.decimalLatitude });
+        ownCount += 1;
+        continue;
+      }
+      if (o.geometry) points.push({ lon: o.geometry.coordinates[0], lat: o.geometry.coordinates[1] });
+    }
+    return { points, ownCount };
+  }, [includedOccurrences, georeferences]);
 
   const rangeMetrics = useMemo(() => {
-    if (!showRangeMetrics || rangeMetricPoints.length === 0) return null;
-    return { eoo: computeEoo(rangeMetricPoints), aoo: computeAoo(rangeMetricPoints) };
+    if (!showRangeMetrics || rangeMetricPoints.points.length === 0) return null;
+    return {
+      eoo: computeEoo(rangeMetricPoints.points),
+      aoo: computeAoo(rangeMetricPoints.points),
+      ownCount: rangeMetricPoints.ownCount,
+    };
   }, [showRangeMetrics, rangeMetricPoints]);
 
   /** The boundary of whichever listed protected area is being pointed at. */
@@ -3020,6 +3032,11 @@ export default function OccurrenceMapRow({
               <div className="text-[10px] text-zinc-400 pt-0.5">
                 {rangeMetrics.aoo.cellCount.toLocaleString()} cells of 2 km ·{" "}
                 {rangeMetrics.eoo.pointCount.toLocaleString()} records
+                {rangeMetrics.ownCount > 0 && (
+                  <span className="text-violet-600 dark:text-violet-400">
+                    {" "}· {rangeMetrics.ownCount.toLocaleString()} yours
+                  </span>
+                )}
                 {!isFullSample && <span className="text-amber-600 dark:text-amber-400"> · partial sample</span>}
               </div>
             </div>
