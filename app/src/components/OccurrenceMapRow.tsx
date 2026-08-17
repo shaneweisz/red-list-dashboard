@@ -23,6 +23,7 @@ import {
 } from "@/lib/protected-areas";
 import { ELEVATION_ATTRIBUTION, elevationAt, formatElevation } from "@/lib/elevation";
 import { formatDistance, pathLengthMetres } from "@/lib/geo-distance";
+import { isAssessorsOwn, type WorksheetImport } from "@/lib/georeferencing-worksheet";
 import {
   b1Threshold,
   b2Threshold,
@@ -127,6 +128,10 @@ const ConfirmDialog = dynamic(
 );
 const MapPlaceSearch = dynamic(
   () => import("./MapPlaceSearch"),
+  { ssr: false }
+);
+const WorksheetSyncDialog = dynamic(
+  () => import("./WorksheetSyncDialog"),
   { ssr: false }
 );
 
@@ -1103,6 +1108,16 @@ export default function OccurrenceMapRow({
    * dock, so it falls back to the modal.
    */
   const editorDocked = fullscreen && editingFeature != null && viewportWide;
+
+  /**
+   * The georeferencing spreadsheet, when one has been pasted.
+   *
+   * Kept whole — header row and every data row — because writing it back means
+   * returning the same columns in the same order, and the workbook's derived
+   * GeoCAT and IUCN sheets read this one by position.
+   */
+  const [worksheet, setWorksheet] = useState<WorksheetImport | null>(null);
+  const [worksheetOpen, setWorksheetOpen] = useState(false);
 
   /** A dragged georeference waiting to be confirmed or put back. */
   const [pendingMove, setPendingMove] = useState<{ gbifID: number; lat: number; lon: number } | null>(null);
@@ -2148,6 +2163,42 @@ export default function OccurrenceMapRow({
   const occurrencesByGbifId = useMemo(
     () => new Map(occurrences.map((o) => [o.properties.gbifID, o])),
     [occurrences]
+  );
+
+  /**
+   * GBIF's own coordinates for a record, for telling the sheet's copied-in rows
+   * apart from the assessor's actual work. See isAssessorsOwn.
+   */
+  const gbifPointFor = useCallback(
+    (gbifID: number) => {
+      const coords = occurrencesByGbifId.get(gbifID)?.geometry?.coordinates;
+      return coords ? { lat: coords[1], lon: coords[0] } : null;
+    },
+    [occurrencesByGbifId]
+  );
+
+  const worksheetIsOwnWork = useCallback(
+    (candidate: Georeference) => isAssessorsOwn(candidate, gbifPointFor(candidate.gbifID)),
+    [gbifPointFor]
+  );
+
+  const applyWorksheetGeoreferences = useCallback(
+    (incoming: Georeference[]) => {
+      const own = incoming.filter(worksheetIsOwnWork);
+      const next = { ...georeferences };
+      for (const g of own) next[g.gbifID] = g;
+      persistGeoreferences(next);
+      const passedOver = incoming.length - own.length;
+      setGeorefMessage({
+        kind: "ok",
+        text:
+          `Brought in ${own.length.toLocaleString()} georeference${own.length === 1 ? "" : "s"} from the spreadsheet.` +
+          (passedOver > 0
+            ? ` ${passedOver.toLocaleString()} row${passedOver === 1 ? " was" : "s were"} GBIF's own coordinates, unchanged.`
+            : ""),
+      });
+    },
+    [georeferences, persistGeoreferences, worksheetIsOwnWork]
   );
 
   const handleMapMouseMove = useCallback((e: MapLayerMouseEvent, panelId: string) => {
@@ -3437,6 +3488,20 @@ export default function OccurrenceMapRow({
           : "bg-zinc-50 dark:bg-zinc-800/50"
       }
     >
+      {worksheetOpen && (
+        <WorksheetSyncDialog
+          imported={worksheet}
+          onImported={setWorksheet}
+          onApply={applyWorksheetGeoreferences}
+          isOwnWork={worksheetIsOwnWork}
+          isLoaded={(gbifID) => occurrencesByGbifId.has(gbifID)}
+          georeferences={georeferences}
+          exclusions={exclusions}
+          georeferencedBy={accountEmail}
+          scientificName={scientificName}
+          onClose={() => setWorksheetOpen(false)}
+        />
+      )}
       {pendingMove && (
         <ConfirmDialog
           title="Move this georeference?"
@@ -4460,6 +4525,22 @@ export default function OccurrenceMapRow({
                         {georefMessage.text}
                       </span>
                     )}
+                    <button
+                      onClick={() => setWorksheetOpen(true)}
+                      title="Move georeferences between here and the spreadsheet — paste the Manual_georeferencing_data sheet in, or copy it back out"
+                      className="inline-flex items-center gap-1 px-2 py-1 rounded border border-zinc-300 dark:border-zinc-600 text-xs text-zinc-600 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800 transition-colors"
+                    >
+                      <svg className="w-3.5 h-3.5 text-zinc-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                        <rect x="3" y="4" width="18" height="16" rx="1.5" />
+                        <path strokeLinecap="round" d="M3 9h18M9 9v11" />
+                      </svg>
+                      Spreadsheet
+                      {worksheet && (
+                        <span className="tabular-nums text-[10px] text-zinc-400">
+                          {worksheet.rows.length.toLocaleString()}
+                        </span>
+                      )}
+                    </button>
                     <button
                       onClick={handleExport}
                       disabled={includedOccurrences.length === 0}

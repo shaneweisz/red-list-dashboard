@@ -59,3 +59,6 @@ skills-lock.json
 
 # VS Code
 *.code-workspace
+# Assessors' georeferencing worksheets — other people's working specimen data,
+# dropped in the repo root to be read, never to be committed.
+*.xlsx
