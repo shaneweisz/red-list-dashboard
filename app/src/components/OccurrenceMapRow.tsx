@@ -1119,6 +1119,9 @@ export default function OccurrenceMapRow({
   const [worksheet, setWorksheet] = useState<WorksheetImport | null>(null);
   const [worksheetOpen, setWorksheetOpen] = useState(false);
 
+  /** The georeferences as they stood before the last spreadsheet import. */
+  const [georefUndo, setGeorefUndo] = useState<Record<number, Georeference> | null>(null);
+
   /** A dragged georeference waiting to be confirmed or put back. */
   const [pendingMove, setPendingMove] = useState<{ gbifID: number; lat: number; lon: number } | null>(null);
 
@@ -2185,14 +2188,20 @@ export default function OccurrenceMapRow({
   const applyWorksheetGeoreferences = useCallback(
     (incoming: Georeference[]) => {
       const own = incoming.filter(worksheetIsOwnWork);
+      const replaced = own.filter((g) => georeferences[g.gbifID]).length;
       const next = { ...georeferences };
       for (const g of own) next[g.gbifID] = g;
+      // Snapshot first. An import can replace work done here, and a paste that
+      // silently overwrote a coordinate someone had reasoned their way to would
+      // be exactly the loss this whole feature is supposed to avoid.
+      setGeorefUndo(georeferences);
       persistGeoreferences(next);
       const passedOver = incoming.length - own.length;
       setGeorefMessage({
         kind: "ok",
         text:
           `Brought in ${own.length.toLocaleString()} georeference${own.length === 1 ? "" : "s"} from the spreadsheet.` +
+          (replaced > 0 ? ` ${replaced.toLocaleString()} replaced one already here.` : "") +
           (passedOver > 0
             ? ` ${passedOver.toLocaleString()} row${passedOver === 1 ? " was" : "s were"} GBIF's own coordinates, unchanged.`
             : ""),
@@ -2200,6 +2209,14 @@ export default function OccurrenceMapRow({
     },
     [georeferences, persistGeoreferences, worksheetIsOwnWork]
   );
+
+  /** Puts the georeferences back as they were before the last import. */
+  const undoWorksheetImport = useCallback(() => {
+    if (!georefUndo) return;
+    persistGeoreferences(georefUndo);
+    setGeorefUndo(null);
+    setGeorefMessage({ kind: "ok", text: "Put the georeferences back as they were before the import." });
+  }, [georefUndo, persistGeoreferences]);
 
   const handleMapMouseMove = useCallback((e: MapLayerMouseEvent, panelId: string) => {
     if (isTouchDevice) return;
@@ -4524,6 +4541,15 @@ export default function OccurrenceMapRow({
                       >
                         {georefMessage.text}
                       </span>
+                    )}
+                    {georefUndo && (
+                      <button
+                        onClick={undoWorksheetImport}
+                        title="Restore the georeferences to what they were before the spreadsheet was brought in"
+                        className="shrink-0 text-[10px] text-blue-600 dark:text-blue-400 hover:underline"
+                      >
+                        Undo import
+                      </button>
                     )}
                     <button
                       onClick={() => setWorksheetOpen(true)}

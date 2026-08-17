@@ -98,6 +98,9 @@ export default function WorksheetSyncDialog({
   // capped, and GBIF's holdings shift between exports. They're kept either way,
   // but silently not appearing on the map would read as the import failing.
   const notLoaded = ownWork.filter((g) => !isLoaded(g.gbifID)).length;
+  // Bringing a sheet in replaces what's held here for the same record, so say
+  // so before it happens rather than after.
+  const replacing = ownWork.filter((g) => georeferences[g.gbifID]).length;
 
   const excludedCount = imported
     ? imported.rows.filter((row) => {
@@ -147,6 +150,12 @@ export default function WorksheetSyncDialog({
                   {(preview.georeferences.length - ownWork.length).toLocaleString()} more hold GBIF&apos;s
                   own coordinates unchanged — the sheet starts as a copy of the GBIF export, so those
                   aren&apos;t brought in as yours.
+                </p>
+              )}
+              {replacing > 0 && (
+                <p className="text-amber-600 dark:text-amber-400">
+                  {replacing.toLocaleString()} of them would replace a georeference already held here.
+                  Your spreadsheet wins, and the toolbar offers one undo afterwards.
                 </p>
               )}
               {notLoaded > 0 && (
