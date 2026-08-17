@@ -24,6 +24,7 @@ import {
 import { ELEVATION_ATTRIBUTION, elevationAt, formatElevation } from "@/lib/elevation";
 import { formatDistance, pathLengthMetres } from "@/lib/geo-distance";
 import { isAssessorsOwn, type WorksheetImport } from "@/lib/georeferencing-worksheet";
+import { useAssessorEdits } from "@/hooks/useAssessorEdits";
 import {
   b1Threshold,
   b2Threshold,
@@ -54,11 +55,6 @@ import {
   type HabitatClass,
 } from "@/lib/habitat-map";
 import {
-  loadGeoreferences,
-  saveGeoreferences,
-  loadExclusions,
-  saveExclusions,
-  type Exclusion,
   occurrencesToCsv,
   uncertaintyCircle,
   type Georeference,
@@ -803,71 +799,7 @@ export default function OccurrenceMapRow({
   // filter: the filters answer "which records match these rules", this answers
   // "I have looked at that one and it shouldn't count" — and the reason is the
   // part worth keeping, so it's stored alongside the georeferences.
-  const [exclusions, setExclusions] = useState<Record<number, Exclusion>>({});
   const [pendingExclusion, setPendingExclusion] = useState<number[] | null>(null);
-
-  useEffect(() => {
-    setExclusions(loadExclusions(speciesKey));
-  }, [speciesKey]);
-
-  const persistExclusions = useCallback(
-    (next: Record<number, Exclusion>) => {
-      setExclusions(next);
-      if (!saveExclusions(speciesKey, next)) {
-        setGeorefMessage({ kind: "error", text: "Couldn't save to this browser's storage." });
-      }
-    },
-    [speciesKey]
-  );
-
-  const confirmExclusion = useCallback(
-    (justification: string) => {
-      if (!pendingExclusion) return;
-      const next = { ...exclusions };
-      for (const gbifID of pendingExclusion) {
-        next[gbifID] = {
-          gbifID,
-          justification,
-          excludedAt: new Date().toISOString(),
-          excludedBy: accountEmail || undefined,
-        };
-      }
-      persistExclusions(next);
-      setPendingExclusion(null);
-    },
-    [pendingExclusion, exclusions, persistExclusions, accountEmail]
-  );
-
-  /**
-   * Excludes records with the reason already known — what dropping a selection
-   * onto the record it duplicates produces. No dialog: the reason names the
-   * record being kept, which is more specific than anything the assessor would
-   * type, and it stays editable from the row afterwards.
-   */
-  const excludeAs = useCallback(
-    (gbifIDs: number[], justification: string) => {
-      const next = { ...exclusions };
-      for (const gbifID of gbifIDs) {
-        next[gbifID] = {
-          gbifID,
-          justification,
-          excludedAt: new Date().toISOString(),
-          excludedBy: accountEmail || undefined,
-        };
-      }
-      persistExclusions(next);
-    },
-    [exclusions, persistExclusions, accountEmail]
-  );
-
-  const includeAgain = useCallback(
-    (gbifID: number) => {
-      const next = { ...exclusions };
-      delete next[gbifID];
-      persistExclusions(next);
-    },
-    [exclusions, persistExclusions]
-  );
 
   // Range map layer state
   const [showRange, setShowRange] = useState(false);
@@ -1088,13 +1020,38 @@ export default function OccurrenceMapRow({
   const [hideGbifFlagged, setHideGbifFlagged] = useState(() => !isPlantOrFungiTaxonGroup(taxonGroup));
   const [recordSetTotals, setRecordSetTotals] = useState<{ mapped: number; issue: number; missing: number } | null>(null);
 
-  // The assessor's own georeferences for this species, keyed by gbifID. Held in
-  // the browser (see lib/georeferences.ts) and never sent to GBIF: they are one
-  // person's working interpretation of a locality description, not a correction
-  // anyone has vouched for.
-  const [georeferences, setGeoreferences] = useState<Record<number, Georeference>>({});
-  const [editingFeature, setEditingFeature] = useState<OccurrenceFeature | null>(null);
+  /**
+   * Everything the assessor has added for this species — their georeferences and
+   * their exclusions — as one document with undo and redo over it.
+   *
+   * Held in the browser (see lib/georeferences.ts) and never sent to GBIF: they
+   * are one person's working interpretation of a locality description, not a
+   * correction anyone has vouched for. Every write goes through `commitEdits`,
+   * which is also the only thing that persists, so nothing can change the data
+   * without becoming undoable.
+   */
   const [georefMessage, setGeorefMessage] = useState<{ kind: "ok" | "error"; text: string } | null>(null);
+  const {
+    georeferences,
+    exclusions,
+    commit: commitEdits,
+    undo: undoEdit,
+    redo: redoEdit,
+    jumpBack: jumpBackEdits,
+    canUndo,
+    canRedo,
+    undoLabel,
+    redoLabel,
+    history: editHistory,
+  } = useAssessorEdits(speciesKey, {
+    onStorageError: () =>
+      setGeorefMessage({
+        kind: "error",
+        text: "Couldn't save to this browser's storage — export before you close the tab.",
+      }),
+  });
+  const [historyOpen, setHistoryOpen] = useState(false);
+  const [editingFeature, setEditingFeature] = useState<OccurrenceFeature | null>(null);
   /** A point picked by clicking the map while the editor is docked. */
   const [pickedPoint, setPickedPoint] = useState<{ lat: number; lon: number } | null>(null);
   /** The editor's unsaved values, so the map can draw them as they're typed. */
@@ -1119,31 +1076,8 @@ export default function OccurrenceMapRow({
   const [worksheet, setWorksheet] = useState<WorksheetImport | null>(null);
   const [worksheetOpen, setWorksheetOpen] = useState(false);
 
-  /** The georeferences as they stood before the last spreadsheet import. */
-  const [georefUndo, setGeorefUndo] = useState<Record<number, Georeference> | null>(null);
-
   /** A dragged georeference waiting to be confirmed or put back. */
   const [pendingMove, setPendingMove] = useState<{ gbifID: number; lat: number; lon: number } | null>(null);
-
-  useEffect(() => {
-    setGeoreferences(loadGeoreferences(speciesKey));
-  }, [speciesKey]);
-
-  // Every write goes through here so the in-memory copy and the stored copy
-  // can't drift, and so a failed write (quota, private window) is reported
-  // rather than silently losing an afternoon's work.
-  const persistGeoreferences = useCallback(
-    (next: Record<number, Georeference>) => {
-      setGeoreferences(next);
-      if (!saveGeoreferences(speciesKey, next)) {
-        setGeorefMessage({
-          kind: "error",
-          text: "Couldn't save to this browser's storage — export before you close the tab.",
-        });
-      }
-    },
-    [speciesKey]
-  );
 
   // Fetch occurrences (re-fetches when the requested record sets change)
   useEffect(() => {
@@ -1481,13 +1415,16 @@ export default function OccurrenceMapRow({
 
   const handleSaveGeoreference = useCallback(
     (georeference: Georeference) => {
-      persistGeoreferences({ ...georeferences, [georeference.gbifID]: georeference });
+      commitEdits(
+        { georeferences: { ...georeferences, [georeference.gbifID]: georeference } },
+        georeferences[georeference.gbifID] ? "edit a georeference" : "add a georeference"
+      );
       setPickedPoint(null);
       setGeorefDraft(null);
       setEditingFeature(null);
       setGeorefMessage(null);
     },
-    [georeferences, persistGeoreferences]
+    [georeferences, commitEdits]
   );
 
   // Dragging a marker moves the point and leaves everything else — radius,
@@ -1513,7 +1450,7 @@ export default function OccurrenceMapRow({
     if (!pendingMove) return;
     const existing = georeferences[pendingMove.gbifID];
     if (existing) {
-      persistGeoreferences({
+      commitEdits({ georeferences: {
         ...georeferences,
         [pendingMove.gbifID]: {
           ...existing,
@@ -1522,10 +1459,10 @@ export default function OccurrenceMapRow({
           georeferencedDate: new Date().toISOString(),
           georeferencedBy: existing.georeferencedBy || accountEmail || undefined,
         },
-      });
+      } }, "move a georeference");
     }
     setPendingMove(null);
-  }, [pendingMove, georeferences, persistGeoreferences, accountEmail]);
+  }, [pendingMove, georeferences, commitEdits, accountEmail]);
 
   const openGeoreferenceEditor = useCallback(
     (gbifID: number) => {
@@ -1551,6 +1488,58 @@ export default function OccurrenceMapRow({
     [occurrences, cancelHoverClear]
   );
 
+  const confirmExclusion = useCallback(
+    (justification: string) => {
+      if (!pendingExclusion) return;
+      const next = { ...exclusions };
+      for (const gbifID of pendingExclusion) {
+        next[gbifID] = {
+          gbifID,
+          justification,
+          excludedAt: new Date().toISOString(),
+          excludedBy: accountEmail || undefined,
+        };
+      }
+      commitEdits(
+        { exclusions: next },
+        `exclude ${pendingExclusion.length} record${pendingExclusion.length === 1 ? "" : "s"}`
+      );
+      setPendingExclusion(null);
+    },
+    [pendingExclusion, exclusions, commitEdits, accountEmail]
+  );
+
+  /**
+   * Excludes records with the reason already known — what dropping a selection
+   * onto the record it duplicates produces. No dialog: the reason names the
+   * record being kept, which is more specific than anything the assessor would
+   * type, and it stays editable from the row afterwards.
+   */
+  const excludeAs = useCallback(
+    (gbifIDs: number[], justification: string) => {
+      const next = { ...exclusions };
+      for (const gbifID of gbifIDs) {
+        next[gbifID] = {
+          gbifID,
+          justification,
+          excludedAt: new Date().toISOString(),
+          excludedBy: accountEmail || undefined,
+        };
+      }
+      commitEdits({ exclusions: next }, `mark ${gbifIDs.length} as duplicate${gbifIDs.length === 1 ? "" : "s"}`);
+    },
+    [exclusions, commitEdits, accountEmail]
+  );
+
+  const includeAgain = useCallback(
+    (gbifID: number) => {
+      const next = { ...exclusions };
+      delete next[gbifID];
+      commitEdits({ exclusions: next }, "put a record back");
+    },
+    [exclusions, commitEdits]
+  );
+
   const closeEditor = useCallback(() => {
     setEditingFeature(null);
     setPickedPoint(null);
@@ -1561,9 +1550,9 @@ export default function OccurrenceMapRow({
     if (!editingFeature) return;
     const next = { ...georeferences };
     delete next[editingFeature.properties.gbifID];
-    persistGeoreferences(next);
+    commitEdits({ georeferences: next }, "delete a georeference");
     closeEditor();
-  }, [editingFeature, georeferences, persistGeoreferences, closeEditor]);
+  }, [editingFeature, georeferences, commitEdits, closeEditor]);
 
 
   /**
@@ -2191,11 +2180,10 @@ export default function OccurrenceMapRow({
       const replaced = own.filter((g) => georeferences[g.gbifID]).length;
       const next = { ...georeferences };
       for (const g of own) next[g.gbifID] = g;
-      // Snapshot first. An import can replace work done here, and a paste that
-      // silently overwrote a coordinate someone had reasoned their way to would
-      // be exactly the loss this whole feature is supposed to avoid.
-      setGeorefUndo(georeferences);
-      persistGeoreferences(next);
+      commitEdits(
+        { georeferences: next },
+        `bring in ${own.length} georeference${own.length === 1 ? "" : "s"} from the spreadsheet`
+      );
       const passedOver = incoming.length - own.length;
       setGeorefMessage({
         kind: "ok",
@@ -2207,16 +2195,8 @@ export default function OccurrenceMapRow({
             : ""),
       });
     },
-    [georeferences, persistGeoreferences, worksheetIsOwnWork]
+    [georeferences, commitEdits, worksheetIsOwnWork]
   );
-
-  /** Puts the georeferences back as they were before the last import. */
-  const undoWorksheetImport = useCallback(() => {
-    if (!georefUndo) return;
-    persistGeoreferences(georefUndo);
-    setGeorefUndo(null);
-    setGeorefMessage({ kind: "ok", text: "Put the georeferences back as they were before the import." });
-  }, [georefUndo, persistGeoreferences]);
 
   const handleMapMouseMove = useCallback((e: MapLayerMouseEvent, panelId: string) => {
     if (isTouchDevice) return;
@@ -3346,6 +3326,51 @@ export default function OccurrenceMapRow({
             </div>
           )}
           </div>
+          {/* This session's edits, newest first. Clicking one steps back to it,
+              which is undo applied until it's reached. */}
+          {historyOpen && editHistory.length > 0 && (
+            <div className="absolute top-2 right-2 z-[1001] w-72 max-h-[60%] overflow-y-auto rounded-lg bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 shadow-lg text-[11px]">
+              <div className="flex items-center gap-2 px-2 py-1.5 border-b border-zinc-100 dark:border-zinc-700 sticky top-0 bg-white dark:bg-zinc-800">
+                <span className="font-medium text-zinc-700 dark:text-zinc-200">This session</span>
+                <button
+                  onClick={() => setHistoryOpen(false)}
+                  className="ml-auto text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300"
+                >
+                  <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
+              {editHistory.map((line, i) => (
+                <button
+                  key={`${line.at}-${i}`}
+                  onClick={() => {
+                    if (line.undone) redoEdit();
+                    else if (line.stepsBack > 0) jumpBackEdits(line.stepsBack);
+                  }}
+                  disabled={line.stepsBack === 0}
+                  className={`flex w-full items-baseline gap-2 px-2 py-1 text-left hover:bg-zinc-50 dark:hover:bg-zinc-700 disabled:hover:bg-transparent ${
+                    line.undone ? "text-zinc-400 line-through" : "text-zinc-700 dark:text-zinc-200"
+                  }`}
+                  title={
+                    line.undone
+                      ? "Undone — click to put it back"
+                      : line.stepsBack === 0
+                        ? "Where you are now"
+                        : `Step back to just after this`
+                  }
+                >
+                  <span className="flex-1 min-w-0 truncate">{line.label}</span>
+                  {line.stepsBack === 0 && !line.undone && (
+                    <span className="shrink-0 text-[9px] text-emerald-600 dark:text-emerald-400">now</span>
+                  )}
+                  <span className="shrink-0 tabular-nums text-[9px] text-zinc-400">
+                    {line.at ? new Date(line.at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : ""}
+                  </span>
+                </button>
+              ))}
+            </div>
+          )}
           {/* Top-left: the split-view label, then the place search — where a
               map's search box lives everywhere else. */}
           <div className="absolute top-2 left-2 z-[1000] flex flex-col items-start gap-1.5">
@@ -4532,7 +4557,7 @@ export default function OccurrenceMapRow({
                 <div className="flex items-center gap-1.5 shrink-0">
                     {georefMessage && (
                       <span
-                        className={`max-w-[16rem] truncate text-[10px] ${
+                        className={`max-w-[11rem] truncate text-[10px] ${
                           georefMessage.kind === "ok"
                             ? "text-emerald-600 dark:text-emerald-400"
                             : "text-red-600 dark:text-red-400"
@@ -4542,15 +4567,42 @@ export default function OccurrenceMapRow({
                         {georefMessage.text}
                       </span>
                     )}
-                    {georefUndo && (
+
+                    {/* Undo, redo, and what they'd act on. The label matters
+                        more than usual here: the table can hide the very rows an
+                        edit touched, so an unlabelled undo would act off-screen
+                        with nothing to say for itself. */}
+                    <div className="flex items-center rounded border border-zinc-300 dark:border-zinc-600 overflow-hidden">
                       <button
-                        onClick={undoWorksheetImport}
-                        title="Restore the georeferences to what they were before the spreadsheet was brought in"
-                        className="shrink-0 text-[10px] text-blue-600 dark:text-blue-400 hover:underline"
+                        onClick={undoEdit}
+                        disabled={!canUndo}
+                        title={canUndo ? `Undo ${undoLabel ?? "the last edit"} (\u2318Z)` : "Nothing to undo"}
+                        className="px-1.5 py-1 text-xs text-zinc-600 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800 disabled:opacity-30 disabled:cursor-not-allowed"
                       >
-                        Undo import
+                        <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M9 14L4 9l5-5M4 9h11a5 5 0 010 10h-3" />
+                        </svg>
                       </button>
-                    )}
+                      <button
+                        onClick={redoEdit}
+                        disabled={!canRedo}
+                        title={canRedo ? `Redo ${redoLabel ?? "the last undone edit"} (\u21e7\u2318Z)` : "Nothing to redo"}
+                        className="px-1.5 py-1 text-xs text-zinc-600 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800 disabled:opacity-30 disabled:cursor-not-allowed border-l border-zinc-200 dark:border-zinc-700"
+                      >
+                        <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M15 14l5-5-5-5M20 9H9a5 5 0 000 10h3" />
+                        </svg>
+                      </button>
+                      {editHistory.length > 0 && (
+                        <button
+                          onClick={() => setHistoryOpen((v) => !v)}
+                          title="Everything you've changed this session"
+                          className="px-1.5 py-1 text-[10px] tabular-nums text-zinc-500 dark:text-zinc-400 hover:bg-zinc-50 dark:hover:bg-zinc-800 border-l border-zinc-200 dark:border-zinc-700"
+                        >
+                          {editHistory.filter((h) => !h.undone).length}
+                        </button>
+                      )}
+                    </div>
                     <button
                       onClick={() => setWorksheetOpen(true)}
                       title="Move georeferences between here and the spreadsheet — paste the Manual_georeferencing_data sheet in, or copy it back out"
