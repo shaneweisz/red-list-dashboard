@@ -62,6 +62,36 @@ describe("parsePhotonResponse", () => {
     ],
   };
 
+  /**
+   * Photon returns the same OSM object more than once — the same node at two
+   * granularities, or one place matched by two of its names. The id is pin
+   * identity as well as a React key, so a collision dropped the second pin and
+   * pointed rename and dismiss at the first.
+   */
+  it("gives every result its own id, even when Photon repeats an OSM object", () => {
+    const twin = {
+      features: [
+        { geometry: { type: "Point", coordinates: [-71.01, 0.88] },
+          properties: { osm_type: "N", osm_id: 3342806869, name: "Chingaza", country: "Colombia" } },
+        { geometry: { type: "Point", coordinates: [-73.75, 4.53] },
+          properties: { osm_type: "N", osm_id: 3342806869, name: "Chingaza", country: "Colombia" } },
+      ],
+    };
+    const ids = parsePhotonResponse(twin).map((p) => p.id);
+    expect(ids).toHaveLength(2);
+    expect(new Set(ids).size).toBe(2);
+  });
+
+  it("still gives an id when Photon omits the OSM identifiers", () => {
+    const bare = {
+      features: [
+        { geometry: { type: "Point", coordinates: [-71.01, 0.88] },
+          properties: { name: "Somewhere", country: "Colombia" } },
+      ],
+    };
+    expect(parsePhotonResponse(bare)[0].id).toBeTruthy();
+  });
+
   it("reads name, position and feature type", () => {
     const places = parsePhotonResponse(response);
     expect(places).toHaveLength(2);

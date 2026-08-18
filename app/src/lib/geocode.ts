@@ -74,7 +74,12 @@ export function parsePhotonResponse(json: unknown): Place[] {
     // not the [w, s, e, n] every other part of this codebase uses.
     const extent = properties.extent as number[] | undefined;
     places.push({
-      id: `${text(properties.osm_type) ?? "?"}${text(String(properties.osm_id)) ?? places.length}`,
+      // Ends in the position within this result set, because Photon returns
+      // the same OSM object more than once — the same node at different
+      // granularities, or one place matched by two of its names. The id is pin
+      // identity as well as a React key, so a collision silently dropped the
+      // second pin and pointed rename and dismiss at the first.
+      id: `${text(properties.osm_type) ?? "?"}${text(String(properties.osm_id)) ?? "?"}-${places.length}`,
       name,
       context,
       kind: text(properties.osm_value),

@@ -17,6 +17,8 @@ import {
   PROTECTED_AREAS_TILE_URL,
   PROTECTED_AREAS_ATTRIBUTION,
   PROTECTED_AREAS_COLOR,
+  PROTECTED_AREAS_HUE_ROTATION,
+  PROTECTED_AREAS_MAX_ZOOM,
   identifyProtectedAreas,
   protectedPlanetUrl,
   type ProtectedArea,
@@ -2667,9 +2669,21 @@ export default function OccurrenceMapRow({
                   type="raster"
                   tiles={[PROTECTED_AREAS_TILE_URL]}
                   tileSize={256}
+                  maxzoom={PROTECTED_AREAS_MAX_ZOOM}
                   attribution={PROTECTED_AREAS_ATTRIBUTION}
                 >
-                  <Layer id={`wdpa-layer-${panelId}`} type="raster" paint={{ "raster-opacity": 0.5 }} />
+                  {/* Recoloured here rather than by the server: the tiles are
+                      WDPA's own green, which disappears against the terrain
+                      basemap. See PROTECTED_AREAS_HUE_ROTATION. */}
+                  <Layer
+                    id={`wdpa-layer-${panelId}`}
+                    type="raster"
+                    paint={{
+                      "raster-opacity": 0.55,
+                      "raster-hue-rotate": PROTECTED_AREAS_HUE_ROTATION,
+                      "raster-saturation": 0.2,
+                    }}
+                  />
                 </Source>
               )}
               {/* The clicked area, outlined. A boundary you can see the whole

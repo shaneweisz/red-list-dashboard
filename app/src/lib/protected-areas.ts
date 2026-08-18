@@ -17,63 +17,66 @@ const MAP_SERVER =
   "https://data-gis.unep-wcmc.org/server/rest/services/ProtectedSites/The_World_Database_of_Protected_Areas/MapServer";
 
 /**
- * The overlay's own symbology, overriding the service's.
+ * The overlay's own symbology, applied to the service's own tiles.
  *
- * WDPA's default rendering is green fills for terrestrial sites and blue for
- * marine ones — near-invisible over the terrain basemap, which is green, and
- * not much better over satellite. The MapServer supports `dynamicLayers`, so we
- * ask it to draw the same data in a colour used nowhere else on this map, as a
- * thin wash under a strong outline: the boundary is what you're reading, and a
- * heavy fill just hides the ground you're comparing it against.
+ * WDPA renders as green fills — near-invisible over the terrain basemap, which
+ * is green, and not much better over satellite. This used to be fixed by asking
+ * the MapServer to redraw the data via `dynamicLayers`, which stopped working:
+ * that path reads the polygon source live, and UNEP-WCMC's connection to it now
+ * fails most of the time. Measured over a block of twelve tiles it answered
+ * three and returned `"Unable to connect to the data source for layer with
+ * mapLayerId: 1"` for the other nine, in about 140 ms each — fast, intermittent,
+ * and nothing to do with us. The service's pre-rendered tile cache answered all
+ * twelve in about 70 ms, because it never touches that source.
+ *
+ * So the tiles now come from the cache and the recolouring happens in the
+ * browser. The cache draws every site in one hue (100°, fully saturated), so
+ * rotating it is exact rather than a compromise: HUE_ROTATION lands it on
+ * PROTECTED_AREAS_COLOR. The same trick already draws the forest-loss layer.
  */
-const PA_FILL = [219, 39, 119, 46];
-const PA_OUTLINE = [190, 24, 93, 255];
 
-const DYNAMIC_LAYERS = JSON.stringify([
-  {
-    id: 1,
-    source: { type: "mapLayer", mapLayerId: 1 },
-    drawingInfo: {
-      renderer: {
-        type: "simple",
-        symbol: {
-          type: "esriSFS",
-          style: "esriSFSSolid",
-          color: PA_FILL,
-          outline: { type: "esriSLS", style: "esriSLSSolid", color: PA_OUTLINE, width: 1.6 },
-        },
-      },
-    },
-  },
-  {
-    // Sites too small to hold a polygon are published as points; without this
-    // they'd vanish entirely once the polygons are restyled.
-    id: 0,
-    source: { type: "mapLayer", mapLayerId: 0 },
-    drawingInfo: {
-      renderer: {
-        type: "simple",
-        symbol: {
-          type: "esriSMS",
-          style: "esriSMSCircle",
-          color: [219, 39, 119, 170],
-          size: 7,
-          outline: { type: "esriSLS", style: "esriSLSSolid", color: PA_OUTLINE, width: 1 },
-        },
-      },
-    },
-  },
-]);
+/** The single hue the cached tiles are drawn in. */
+const CACHE_HUE_DEGREES = 100;
 
 /** The colour the overlay draws in — shared with the legend and the highlight. */
 export const PROTECTED_AREAS_COLOR = "#db2777";
 export const PROTECTED_AREAS_OUTLINE_COLOR = "#9d174d";
 
-/** The rendered overlay: a transparent PNG per tile, via the {bbox} token. */
-export const PROTECTED_AREAS_TILE_URL =
-  `${MAP_SERVER}/export` +
-  "?bbox={bbox-epsg-3857}&bboxSR=3857&imageSR=3857&size=256,256&dpi=96&format=png32&transparent=true&f=image" +
-  `&dynamicLayers=${encodeURIComponent(DYNAMIC_LAYERS)}`;
+/**
+ * The overlay's tiles, from the service's pre-rendered cache.
+ *
+ * ArcGIS orders its cache path level/row/column, which is {z}/{y}/{x}.
+ */
+export const PROTECTED_AREAS_TILE_URL = `${MAP_SERVER}/tile/{z}/{y}/{x}`;
+
+/**
+ * The deepest level the cache holds. Level 15 is a 404, so without this
+ * MapLibre would ask for tiles that don't exist and the overlay would vanish
+ * exactly when you zoomed in far enough to need it. Below this it overzooms
+ * level 14, which is what the boundary looked like anyway.
+ */
+export const PROTECTED_AREAS_MAX_ZOOM = 14;
+
+/** The hue of a hex colour, in degrees. */
+function hueOf(hex: string): number {
+  const [r, g, b] = [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16) / 255);
+  const max = Math.max(r, g, b);
+  const min = Math.min(r, g, b);
+  if (max === min) return 0;
+  const d = max - min;
+  const h = max === r ? (g - b) / d + (g < b ? 6 : 0) : max === g ? (b - r) / d + 2 : (r - g) / d + 4;
+  return h * 60;
+}
+
+/**
+ * Degrees of hue rotation taking the cache's green to PROTECTED_AREAS_COLOR.
+ *
+ * Derived rather than written down, so changing the colour above changes what
+ * the map draws — a hard-coded rotation would leave the legend and the overlay
+ * disagreeing, which is the one thing this colour exists to prevent.
+ */
+export const PROTECTED_AREAS_HUE_ROTATION =
+  (hueOf(PROTECTED_AREAS_COLOR) - CACHE_HUE_DEGREES + 360) % 360;
 
 export const PROTECTED_AREAS_ATTRIBUTION =
   '<a href="https://www.protectedplanet.net" target="_blank" rel="noopener noreferrer">WDPA</a> &copy; UNEP-WCMC &amp; IUCN';

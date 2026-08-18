@@ -4,7 +4,57 @@ import {
   identifyUrl,
   parseIdentifyResponse,
   protectedPlanetUrl,
+  PROTECTED_AREAS_COLOR,
+  PROTECTED_AREAS_HUE_ROTATION,
+  PROTECTED_AREAS_MAX_ZOOM,
+  PROTECTED_AREAS_TILE_URL,
 } from "../protected-areas";
+
+describe("the overlay's tiles", () => {
+  // ArcGIS orders its cache path level/row/column. Getting {y} and {x} the
+  // usual way round yields tiles from the wrong place, which looks like data
+  // rather than like a bug.
+  it("asks the cache in ArcGIS's level/row/column order", () => {
+    expect(PROTECTED_AREAS_TILE_URL).toMatch(/\/tile\/\{z\}\/\{y\}\/\{x\}$/);
+  });
+
+  // The live-rendered path reads the polygon source and now fails most of the
+  // time; the cache never touches it. Asking for a redraw would bring the
+  // outage straight back.
+  it("doesn't ask the server to redraw the data", () => {
+    expect(PROTECTED_AREAS_TILE_URL).not.toContain("dynamicLayers");
+    expect(PROTECTED_AREAS_TILE_URL).not.toContain("/export");
+  });
+
+  // Level 15 is a 404. Without a ceiling the overlay disappears exactly when
+  // you zoom in far enough to want it.
+  it("stops at the deepest level the cache holds", () => {
+    expect(PROTECTED_AREAS_MAX_ZOOM).toBe(14);
+  });
+});
+
+describe("PROTECTED_AREAS_HUE_ROTATION", () => {
+  /** Rotating the cache's own hue by it has to land on the legend's colour. */
+  it("takes the cache's green to the colour the legend shows", () => {
+    const hue = (hex: string) => {
+      const [r, g, b] = [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16) / 255);
+      const max = Math.max(r, g, b);
+      const min = Math.min(r, g, b);
+      if (max === min) return 0;
+      const d = max - min;
+      const h =
+        max === r ? (g - b) / d + (g < b ? 6 : 0) : max === g ? (b - r) / d + 2 : (r - g) / d + 4;
+      return h * 60;
+    };
+    // The colour the cached tiles actually use, sampled from a tile over
+    // Chingaza National Park: rgba(56, 167, 0, 128).
+    const cacheGreen = hue("#38a700");
+    expect((cacheGreen + PROTECTED_AREAS_HUE_ROTATION) % 360).toBeCloseTo(
+      hue(PROTECTED_AREAS_COLOR),
+      0
+    );
+  });
+});
 
 describe("protectedPlanetUrl", () => {
   it("puts the site id in the path and the parcel in the query", () => {
