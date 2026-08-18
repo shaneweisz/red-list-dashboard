@@ -7,10 +7,10 @@
  * stays small enough to trust.
  *
  * One history over both stores (georeferences and exclusions) rather than one
- * each: actions cross them — dropping records onto a duplicate writes
- * exclusions, importing a spreadsheet writes georeferences — and "undo" means
- * the last thing the assessor did, not the last thing done to a particular
- * store.
+ * each: a single action crosses them — dropping a selection onto the record it
+ * duplicates writes exclusions while the georeference it was dropped on stays —
+ * and "undo" means the last thing the assessor did, not the last thing done to
+ * a particular store.
  *
  * Labels are carried, not optional. The table can hide the very rows an edit
  * touched (the Included column's eye toggle), so an unlabelled undo would act

@@ -1,7 +1,6 @@
 import { describe, it, expect } from "vitest";
 import {
-  georeferencesToCsv,
-  csvToGeoreferences,
+  occurrencesToCsv,
   validateGeoreference,
   parseCoordinatePair,
   uncertaintyCircle,
@@ -23,6 +22,84 @@ const sibundoy: Georeference = {
   georeferenceProtocol: "Point-radius from locality description",
   georeferenceRemarks: "Sibundoy town centre, offset SW; radius covers the valley floor",
 };
+
+const occurrence = (props: Record<string, unknown>, coords?: [number, number]) => ({
+  properties: props,
+  geometry: coords ? { coordinates: coords } : null,
+});
+
+/**
+ * The only way an assessor's work leaves the browser, so what it writes for a
+ * record they placed themselves is the thing worth pinning down.
+ */
+describe("occurrencesToCsv", () => {
+  // Honours quoting, because the fields under test sit after ones that need it
+  // — a naive split on commas reads the wrong column and passes for the wrong
+  // reason.
+  const fields = (line: string): string[] => {
+    const out: string[] = [];
+    let current = "";
+    let quoted = false;
+    for (let i = 0; i < line.length; i++) {
+      const c = line[i];
+      if (quoted) {
+        if (c === '"' && line[i + 1] === '"') { current += '"'; i++; }
+        else if (c === '"') quoted = false;
+        else current += c;
+      } else if (c === '"') quoted = true;
+      else if (c === ",") { out.push(current); current = ""; }
+      else current += c;
+    }
+    out.push(current);
+    return out;
+  };
+
+  const columnOf = (csv: string, header: string) => {
+    const i = fields(csv.split("\n")[0]).indexOf(header);
+    return (row: string) => fields(row)[i];
+  };
+
+  it("writes the assessor's coordinates in place of GBIF's, and says so", () => {
+    const csv = occurrencesToCsv(
+      [occurrence({ gbifID: 1234567890, species: "Dioscorea biplicata" }, [-70, 5])],
+      { 1234567890: sibundoy }
+    );
+    const [, row] = csv.split("\n");
+    const at = columnOf(csv, "decimalLatitude");
+    expect(at(row)).toBe("1.1958");
+    expect(columnOf(csv, "decimalLongitude")(row)).toBe("-76.9256");
+    expect(columnOf(csv, "coordinateUncertaintyInMeters")(row)).toBe("1500");
+    expect(columnOf(csv, "coordinateSource")(row)).toBe("assessor");
+  });
+
+  it("leaves a record the assessor hasn't touched as GBIF published it", () => {
+    const csv = occurrencesToCsv([occurrence({ gbifID: 42 }, [-70, 5])], {});
+    const [, row] = csv.split("\n");
+    expect(columnOf(csv, "decimalLatitude")(row)).toBe("5");
+    expect(columnOf(csv, "decimalLongitude")(row)).toBe("-70");
+    expect(columnOf(csv, "coordinateSource")(row)).toBe("GBIF");
+  });
+
+  // The records with no coordinates are the ones georeferencing exists for, so
+  // they have to survive the export rather than being dropped from it.
+  it("keeps a record with no coordinates at all, marked as such", () => {
+    const csv = occurrencesToCsv([occurrence({ gbifID: 7 })], {});
+    const [, row] = csv.split("\n");
+    expect(columnOf(csv, "decimalLatitude")(row)).toBe("");
+    expect(columnOf(csv, "geodeticDatum")(row)).toBe("");
+    expect(columnOf(csv, "coordinateSource")(row)).toBe("none");
+  });
+
+  // A locality description with a comma in it would otherwise shift every
+  // column after it, silently moving coordinates into the wrong field.
+  it("quotes a field containing a comma or a quote", () => {
+    const csv = occurrencesToCsv(
+      [occurrence({ gbifID: 7, locality: 'Sibundoy, 1.5 km SW ("the valley")' })],
+      {}
+    );
+    expect(csv.split("\n")[1]).toContain('"Sibundoy, 1.5 km SW (""the valley"")"');
+  });
+});
 
 describe("validateGeoreference", () => {
   it("accepts a point with a radius", () => {
@@ -82,92 +159,6 @@ describe("parseCoordinatePair", () => {
       expect(parseCoordinatePair(text)).toBeNull();
     }
   );
-});
-
-describe("CSV round trip", () => {
-  it("restores every field it wrote", () => {
-    const csv = georeferencesToCsv([sibundoy]);
-    const { georeferences, errors } = csvToGeoreferences(csv);
-    expect(errors).toEqual([]);
-    expect(georeferences).toHaveLength(1);
-    expect(georeferences[0]).toEqual(sibundoy);
-  });
-
-  it("writes Darwin Core term names, so a herbarium can read the file", () => {
-    const header = georeferencesToCsv([sibundoy]).split("\n")[0];
-    expect(header.split(",")).toEqual([
-      "gbifID",
-      "occurrenceID",
-      "scientificName",
-      "verbatimLocality",
-      "decimalLatitude",
-      "decimalLongitude",
-      "geodeticDatum",
-      "coordinateUncertaintyInMeters",
-      "georeferencedBy",
-      "georeferencedDate",
-      "georeferenceProtocol",
-      "georeferenceRemarks",
-    ]);
-  });
-
-  it("declares the datum every row is in", () => {
-    const [, row] = georeferencesToCsv([sibundoy]).split("\n");
-    expect(row).toContain("WGS84");
-  });
-
-  it("survives commas and quotes in a locality", () => {
-    const awkward: Georeference = {
-      ...sibundoy,
-      verbatimLocality: 'Pando, Manuripi: entre "Conquista" y su puerto, sobre el río',
-    };
-    const { georeferences, errors } = csvToGeoreferences(georeferencesToCsv([awkward]));
-    expect(errors).toEqual([]);
-    expect(georeferences[0].verbatimLocality).toBe(awkward.verbatimLocality);
-  });
-});
-
-describe("csvToGeoreferences", () => {
-  it("accepts a spreadsheet-edited file with reordered and extra columns", () => {
-    const csv = [
-      "notes,decimalLongitude,gbifID,decimalLatitude,coordinateUncertaintyInMeters",
-      "checked against the map sheet,-76.9256,1234567890,1.1958,1500",
-    ].join("\n");
-    const { georeferences, errors } = csvToGeoreferences(csv);
-    expect(errors).toEqual([]);
-    expect(georeferences[0]).toMatchObject({
-      gbifID: 1234567890,
-      decimalLatitude: 1.1958,
-      decimalLongitude: -76.9256,
-      coordinateUncertaintyInMeters: 1500,
-    });
-  });
-
-  it("rejects bad rows individually, by spreadsheet row number, and keeps the good ones", () => {
-    const csv = [
-      "gbifID,decimalLatitude,decimalLongitude,coordinateUncertaintyInMeters",
-      "1234567890,1.1958,-76.9256,1500",
-      "notanid,1.0,-76.0,1000",
-      "1234567891,999,-76.0,1000",
-      "1234567892,1.0,-76.0,",
-    ].join("\n");
-    const { georeferences, errors } = csvToGeoreferences(csv);
-    expect(georeferences).toHaveLength(1);
-    expect(errors).toHaveLength(3);
-    expect(errors[0]).toMatch(/^Row 3:/);
-    expect(errors[1]).toMatch(/^Row 4:/);
-    expect(errors[2]).toMatch(/^Row 5:/);
-  });
-
-  it("reports a file that isn't a georeference export", () => {
-    const { georeferences, errors } = csvToGeoreferences("species,count\nDioscorea,27");
-    expect(georeferences).toEqual([]);
-    expect(errors[0]).toMatch(/needs at least/i);
-  });
-
-  it("reports an empty file", () => {
-    expect(csvToGeoreferences("").errors[0]).toMatch(/empty/i);
-  });
 });
 
 describe("uncertaintyCircle", () => {
