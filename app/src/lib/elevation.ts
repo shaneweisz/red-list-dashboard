@@ -125,7 +125,12 @@ function loadTile(z: number, x: number, y: number): Promise<Uint8ClampedArray | 
         resolve(null);
       }
     };
-    image.onerror = () => resolve(null);
+    image.onerror = () => {
+      // Don't remember a failure: a dropped tile would otherwise report "no
+      // elevation" at that spot for the rest of the session.
+      tileCache.delete(key);
+      resolve(null);
+    };
     image.src = tileUrl(z, x, y);
   });
   tileCache.set(key, pending);

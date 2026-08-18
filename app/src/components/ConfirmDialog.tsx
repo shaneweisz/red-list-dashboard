@@ -29,13 +29,15 @@ export default function ConfirmDialog({
   onCancel,
 }: ConfirmDialogProps) {
   useEffect(() => {
+    // Escape only. Enter used to confirm from anywhere in the document, which
+    // meant pressing it in a field behind this dialog silently committed a
+    // destructive change — and the confirm button is focused anyway.
     const handler = (e: KeyboardEvent) => {
       if (e.key === "Escape") onCancel();
-      if (e.key === "Enter") onConfirm();
     };
     document.addEventListener("keydown", handler);
     return () => document.removeEventListener("keydown", handler);
-  }, [onCancel, onConfirm]);
+  }, [onCancel]);
 
   return createPortal(
     <div className="fixed inset-0 z-[10001] flex items-center justify-center p-4 bg-black/40" onClick={onCancel}>

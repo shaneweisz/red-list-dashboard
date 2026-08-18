@@ -1064,7 +1064,7 @@ export default function OccurrenceMapRow({
    * was. A modal covers every one of those. Below this width there's nowhere to
    * dock, so it falls back to the modal.
    */
-  const editorDocked = fullscreen && editingFeature != null && viewportWide;
+  const editorDocked = fullscreen && editingFeature != null && viewportWide && !splitView;
 
   /**
    * The georeferencing spreadsheet, when one has been pasted.
@@ -1531,11 +1531,19 @@ export default function OccurrenceMapRow({
     [exclusions, commitEdits, accountEmail]
   );
 
+  /**
+   * Takes a list, not one id. Called once per record, each call would build its
+   * replacement from the same render-time `exclusions` and the last would win —
+   * so putting five records back restored one and left four struck out.
+   */
   const includeAgain = useCallback(
-    (gbifID: number) => {
+    (gbifIDs: number[]) => {
       const next = { ...exclusions };
-      delete next[gbifID];
-      commitEdits({ exclusions: next }, "put a record back");
+      for (const gbifID of gbifIDs) delete next[gbifID];
+      commitEdits(
+        { exclusions: next },
+        `put ${gbifIDs.length} record${gbifIDs.length === 1 ? "" : "s"} back`
+      );
     },
     [exclusions, commitEdits]
   );
@@ -3584,6 +3592,11 @@ export default function OccurrenceMapRow({
           docked panel is rendered beside the map further down. */}
       {editingFeature && !editorDocked && (
         <GeoreferenceEditor
+          // Keyed on the record: the editor holds its inputs in state seeded at
+          // mount, so without this, switching records while it's open leaves
+          // the boxes showing the previous record's coordinates and saves them
+          // under the new record's id.
+          key={editingFeature.properties.gbifID}
           feature={editingFeature}
           existing={georeferences[editingFeature.properties.gbifID]}
           georeferencedBy={accountEmail}
@@ -4817,6 +4830,7 @@ export default function OccurrenceMapRow({
                       {renderMapPanel(includedOccurrences, bbox, null)}
                     </div>
                     <GeoreferenceEditor
+                      key={editingFeature.properties.gbifID}
                       variant="panel"
                       feature={editingFeature}
                       existing={georeferences[editingFeature.properties.gbifID]}

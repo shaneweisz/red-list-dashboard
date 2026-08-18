@@ -71,8 +71,12 @@ export function useAssessorEdits(
 
   const persist = useCallback(
     (edits: AssessorEdits) => {
-      const ok = saveGeoreferences(speciesKey, edits.georeferences) && saveExclusions(speciesKey, edits.exclusions);
-      if (!ok) onStorageError.current?.();
+      // Both attempted, not short-circuited: if the georeferences don't fit,
+      // the exclusions still might, and dropping them too would lose more than
+      // the failure required.
+      const savedGeoreferences = saveGeoreferences(speciesKey, edits.georeferences);
+      const savedExclusions = saveExclusions(speciesKey, edits.exclusions);
+      if (!savedGeoreferences || !savedExclusions) onStorageError.current?.();
     },
     [speciesKey]
   );

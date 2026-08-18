@@ -280,8 +280,8 @@ interface OccurrenceListTableProps {
   /** Excludes records with a justification already known — dropping a
    *  selection onto the record it duplicates writes its own reason. */
   onExcludeAs?: (gbifIDs: number[], justification: string) => void;
-  /** Puts a hand-excluded record back. */
-  onInclude?: (gbifID: number) => void;
+  /** Puts hand-excluded records back, as one edit. */
+  onInclude?: (gbifIDs: number[]) => void;
   /** Fill the height of the column the table is in. */
   fillHeight?: boolean;
   /** How the map and this table are arranged, when the caller offers a choice.
@@ -443,7 +443,9 @@ export default function OccurrenceListTable({
     const ids = [...selectionRef.current];
     if (ids.length === 0) return;
     const toExclude = ids.filter((id) => !exclusionsRef.current?.[id]);
-    if (toExclude.length === 0) ids.forEach((id) => onInclude?.(id));
+    // One call, not one per record: each would rebuild the store from the same
+    // starting point and the last would win, restoring only one of them.
+    if (toExclude.length === 0) onInclude?.(ids);
     else onExclude?.(toExclude);
     setSelection(new Set());
   }, [onExclude, onInclude]);
@@ -547,7 +549,7 @@ export default function OccurrenceListTable({
                     excludeSelection();
                     return;
                   }
-                  if (byHand) onInclude?.(p.gbifID);
+                  if (byHand) onInclude?.([p.gbifID]);
                   else onExclude?.([p.gbifID]);
                 }}
                 title={

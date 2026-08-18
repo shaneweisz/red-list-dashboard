@@ -48,6 +48,7 @@ export default function MapPlaceSearch({ getCentre, onSelect, onPreview }: MapPl
     if (trimmed.length < 2 || coordinates) {
       setResults([]);
       setFailed(false);
+      setLoading(false);
       return;
     }
     const controller = new AbortController();
