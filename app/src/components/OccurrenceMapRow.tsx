@@ -24,6 +24,15 @@ import {
   type ProtectedArea,
 } from "@/lib/protected-areas";
 import { ELEVATION_ATTRIBUTION, elevationAt, formatElevation } from "@/lib/elevation";
+import {
+  BIOMES,
+  ECOREGIONS_ASSET,
+  ECOREGIONS_ATTRIBUTION,
+  SAMPLING_EFFORT_ASSET,
+  SAMPLING_EFFORT_LEGEND,
+  overlayUrl,
+  type EcoregionProperties,
+} from "@/lib/map-overlays";
 import { formatDistance, pathLengthMetres } from "@/lib/geo-distance";
 import {
   clearPointFile,
@@ -311,6 +320,14 @@ type BasemapKey = keyof typeof BASEMAP_STYLES;
  * Three point sets being compared have to be three colours told apart at a
  * glance.
  */
+/** The latitude Web Mercator stops at, and so the top edge of a world PNG. */
+const MERCATOR_LIMIT = 85.051129;
+
+type EcoregionCollection = GeoJSON.FeatureCollection<GeoJSON.Polygon | GeoJSON.MultiPolygon, EcoregionProperties>;
+
+/** Shared by every panel and every species — the layer is global. */
+let ecoregionCache: EcoregionCollection | null = null;
+
 export const POINT_FILE_COLOR = "#2563eb";
 
 export function isAfterAssessment(
@@ -631,8 +648,42 @@ export default function OccurrenceMapRow({
   const [showProtectedAreas, setShowProtectedAreas] = useState(false);
   const [showForestLoss, setShowForestLoss] = useState(false);
   const [showHabitat, setShowHabitat] = useState(false);
+  const [showEcoregions, setShowEcoregions] = useState(false);
+  const [showSamplingEffort, setShowSamplingEffort] = useState(false);
+
+  /**
+   * Ecoregion polygons, fetched the first time the overlay is switched on.
+   *
+   * ~2 MB gzipped for the whole world, which is too much to spend on every
+   * reader of the page and cheap enough to spend once on the reader who asks
+   * for it. Held for the life of the module rather than the component so
+   * switching species doesn't re-fetch it — the layer is global and has nothing
+   * to do with which species is open.
+   */
+  const [ecoregions, setEcoregions] = useState<EcoregionCollection | null>(ecoregionCache);
+  const [ecoregionsLoading, setEcoregionsLoading] = useState(false);
+  const [ecoregionsFailed, setEcoregionsFailed] = useState(false);
+
+  useEffect(() => {
+    if (!showEcoregions || ecoregions || ecoregionsLoading) return;
+    setEcoregionsLoading(true);
+    setEcoregionsFailed(false);
+    fetch(overlayUrl(ECOREGIONS_ASSET))
+      .then((r) => {
+        if (!r.ok) throw new Error(`HTTP ${r.status}`);
+        return r.json();
+      })
+      .then((collection: EcoregionCollection) => {
+        ecoregionCache = collection;
+        setEcoregions(collection);
+      })
+      .catch(() => setEcoregionsFailed(true))
+      .finally(() => setEcoregionsLoading(false));
+  }, [showEcoregions, ecoregions, ecoregionsLoading]);
+
   const [showRangeMetrics, setShowRangeMetrics] = useState(false);
   const [habitatLegendOpen, setHabitatLegendOpen] = useState(false);
+  const [biomeLegendOpen, setBiomeLegendOpen] = useState(false);
   /**
    * What's at the point last clicked: its elevation, and — when the overlay is
    * on — what protects it.
@@ -2278,6 +2329,26 @@ export default function OccurrenceMapRow({
     [pointFileComparison]
   );
 
+  /**
+   * The ecoregion containing the right-clicked point.
+   *
+   * A linear scan of 847 polygons with a bounding-box reject first, which is
+   * fast enough to run during render and avoids carrying a spatial index for a
+   * lookup that happens once per click.
+   */
+  const ecoregionAtPoint = useMemo<EcoregionProperties | null>(() => {
+    if (!pointQuery || !ecoregions) return null;
+    const point: GeoJSON.Feature<GeoJSON.Point> = {
+      type: "Feature",
+      properties: {},
+      geometry: { type: "Point", coordinates: [pointQuery.lng, pointQuery.lat] },
+    };
+    for (const feature of ecoregions.features) {
+      if (booleanPointInPolygon(point, feature)) return feature.properties;
+    }
+    return null;
+  }, [pointQuery, ecoregions]);
+
   const hoveredPointFileRow = useMemo(
     () =>
       pointFileHover
@@ -2627,6 +2698,59 @@ export default function OccurrenceMapRow({
               onDragEnd={() => setPanning(false)}
             >
               <ScaleControl position="bottom-right" />
+              {/* Sampling effort — the very bottom of the stack. It answers
+                  whether a blank area is empty because the species isn't there
+                  or because nobody has looked, which is context for everything
+                  drawn above it.
+
+                  An image source rather than a raster one: the PNG is a single
+                  world-wide Web Mercator image, and MapLibre maps an image
+                  source linearly in Mercator space between its corners, which
+                  is exactly the projection it's already in. At 10 km per source
+                  cell it is deliberately coarse — the pattern is the point, not
+                  any one pixel. */}
+              {showSamplingEffort && (
+                <Source
+                  id={`sampling-effort-${panelId}`}
+                  type="image"
+                  url={overlayUrl(SAMPLING_EFFORT_ASSET)}
+                  coordinates={[
+                    [-180, MERCATOR_LIMIT],
+                    [180, MERCATOR_LIMIT],
+                    [180, -MERCATOR_LIMIT],
+                    [-180, -MERCATOR_LIMIT],
+                  ]}
+                >
+                  <Layer
+                    id={`sampling-effort-layer-${panelId}`}
+                    type="raster"
+                    paint={{ "raster-opacity": 0.6, "raster-fade-duration": 0 }}
+                  />
+                </Source>
+              )}
+              {/* Ecoregions (Dinerstein et al. 2017), drawn in the dataset's
+                  own biome colours. Fill kept faint and the boundary strong:
+                  the useful thing is where one ecoregion ends and the next
+                  begins, and a heavy fill hides the ground being compared. */}
+              {showEcoregions && ecoregions && (
+                <Source
+                  id={`ecoregions-${panelId}`}
+                  type="geojson"
+                  data={ecoregions}
+                  attribution={ECOREGIONS_ATTRIBUTION}
+                >
+                  <Layer
+                    id={`ecoregions-fill-${panelId}`}
+                    type="fill"
+                    paint={{ "fill-color": ["get", "biomeColor"], "fill-opacity": 0.22 }}
+                  />
+                  <Layer
+                    id={`ecoregions-line-${panelId}`}
+                    type="line"
+                    paint={{ "line-color": ["get", "biomeColor"], "line-width": 1, "line-opacity": 0.9 }}
+                  />
+                </Source>
+              )}
               {/* Habitat types (Jung et al.) — bottom of the overlay stack: it
                   covers whole continents, so anything drawn over it stays
                   readable and it never hides a boundary or a point. */}
@@ -3252,6 +3376,31 @@ export default function OccurrenceMapRow({
                         )}
                       </div>
                     )}
+                    {/* The ecoregion under the point. Answered from the
+                        polygons already in the browser, so there's no request
+                        and nothing to wait for — the whole reason for shipping
+                        the layer as a file rather than querying it. */}
+                    {showEcoregions && ecoregionAtPoint && (
+                      <div className="pt-1 border-t border-zinc-100 dark:border-zinc-800">
+                        <span className="flex items-baseline gap-1.5">
+                          <span
+                            className="w-2.5 h-2.5 rounded-sm shrink-0 translate-y-0.5 border border-black/10"
+                            style={{ background: ecoregionAtPoint.biomeColor }}
+                          />
+                          <span>
+                            <span className="font-medium text-zinc-700 dark:text-zinc-200">
+                              {ecoregionAtPoint.name}
+                            </span>
+                            <span className="block text-zinc-400">
+                              {ecoregionAtPoint.biome}
+                            </span>
+                            <span className="block text-zinc-400">
+                              {ecoregionAtPoint.realm} · {ecoregionAtPoint.nnh}
+                            </span>
+                          </span>
+                        </span>
+                      </div>
+                    )}
                     {/* Silent when the point isn't protected: the overlay is
                         already showing you that, and a line saying so on every
                         click is noise on the answer you did ask for. */}
@@ -3399,6 +3548,69 @@ export default function OccurrenceMapRow({
                 )}
                 {!isFullSample && <span className="text-amber-600 dark:text-amber-400"> · partial sample</span>}
               </div>
+            </div>
+          )}
+          {/* Sampling effort is a colour ramp with no numbers worth reading, so
+              the legend says what the ends mean rather than what they measure.
+              It also carries the citation: an image source takes no
+              attribution in the MapLibre style spec, and the licence this
+              dataset is offered under asks for one. */}
+          {showSamplingEffort && !loadingOccurrences && (
+            <div
+              className="bg-white dark:bg-zinc-800 px-2 py-1.5 rounded text-[11px] text-zinc-600 dark:text-zinc-300 shadow flex items-center gap-1.5"
+              title="GBIF records per 10 km cell, all taxa, on a log scale. A gap here means nobody has looked, which is not the same as the species being absent."
+            >
+              <span className="text-zinc-500 dark:text-zinc-400">Sampling effort</span>
+              <span className="flex items-center">
+                {SAMPLING_EFFORT_LEGEND.map((step) => (
+                  <span key={step.color} className="w-3.5 h-2.5" style={{ background: step.color }} />
+                ))}
+              </span>
+              <span className="text-zinc-400">less → more</span>
+              <a
+                href="https://osf.io/qdwfe/"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-zinc-400 hover:underline"
+              >
+                El-Gabbas 2026
+              </a>
+            </div>
+          )}
+          {/* Fourteen biomes is too many to lay flat over a map, so the legend
+              opens only when asked — the same shape the habitat legend uses. */}
+          {showEcoregions && ecoregions && !loadingOccurrences && (
+            <div className="bg-white dark:bg-zinc-800 px-2 py-1.5 rounded text-[11px] text-zinc-600 dark:text-zinc-300 shadow max-w-xs">
+              <button
+                onClick={() => setBiomeLegendOpen((v) => !v)}
+                title={biomeLegendOpen ? "Hide the biomes" : "Show what the ecoregion colours mean"}
+                className="flex items-center gap-1.5 w-full"
+              >
+                <span className="text-zinc-500 dark:text-zinc-400">Ecoregions</span>
+                <span className="text-zinc-400">{ecoregions.features.length} in 14 biomes</span>
+                <span className="text-[9px] ml-auto">{biomeLegendOpen ? "\u25be" : "\u25b8"}</span>
+              </button>
+              {biomeLegendOpen && (
+                <div className="mt-1 pt-1 border-t border-zinc-100 dark:border-zinc-700 space-y-0.5">
+                  {BIOMES.map((biome) => (
+                    <div key={biome.name} className="flex items-center gap-1.5">
+                      <span
+                        className="w-2.5 h-2.5 rounded-sm shrink-0 border border-black/10"
+                        style={{ background: biome.color }}
+                      />
+                      <span className="truncate text-[10px]">{biome.name}</span>
+                    </div>
+                  ))}
+                  <a
+                    href="https://doi.org/10.1093/biosci/bix014"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="block pt-0.5 text-[10px] text-zinc-400 hover:underline"
+                  >
+                    Dinerstein et al. 2017 (CC BY 4.0)
+                  </a>
+                </div>
+              )}
             </div>
           )}
           {/* Forest loss reads as a colour ramp, so it needs one: without the
@@ -3760,6 +3972,8 @@ export default function OccurrenceMapRow({
     showProtectedAreas,
     showForestLoss,
     showHabitat,
+    showEcoregions,
+    showSamplingEffort,
     showRangeMetrics,
     showPowoRangeOverlay,
     ...(hasIucnNativeRange ? [showIucnRangeOverlay] : []),
@@ -4549,6 +4763,43 @@ export default function OccurrenceMapRow({
                         </span>
                       </label>
                     )}
+                    <label
+                      className="flex items-center gap-2 px-3 py-1.5 hover:bg-zinc-50 dark:hover:bg-zinc-800 cursor-pointer text-xs"
+                      title="Terrestrial ecoregions and biomes (Dinerstein et al. 2017) — the ecosystem a record sits in. Right-click anywhere to name it."
+                    >
+                      <input
+                        type="checkbox"
+                        checked={showEcoregions}
+                        onChange={() => setShowEcoregions((v) => !v)}
+                        className="w-3 h-3 rounded accent-emerald-600 shrink-0"
+                      />
+                      <span className="flex-1 min-w-0 text-zinc-700 dark:text-zinc-200 flex items-center gap-1">
+                        Ecoregions
+                        {ecoregionsLoading && (
+                          <svg className="w-3 h-3 animate-spin text-zinc-400" fill="none" viewBox="0 0 24 24">
+                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                          </svg>
+                        )}
+                      </span>
+                      {ecoregionsFailed && (
+                        <span className="text-[10px] text-red-500 shrink-0">unavailable</span>
+                      )}
+                    </label>
+                    <label
+                      className="flex items-center gap-2 px-3 py-1.5 hover:bg-zinc-50 dark:hover:bg-zinc-800 cursor-pointer text-xs"
+                      title="GBIF records per 10 km cell (El-Gabbas 2026). Shows whether a gap in the records is genuinely empty or merely unvisited — the caveat behind a record-based AOO."
+                    >
+                      <input
+                        type="checkbox"
+                        checked={showSamplingEffort}
+                        onChange={() => setShowSamplingEffort((v) => !v)}
+                        className="w-3 h-3 rounded accent-yellow-500 shrink-0"
+                      />
+                      <span className="flex-1 min-w-0 text-zinc-700 dark:text-zinc-200">
+                        Sampling effort
+                      </span>
+                    </label>
                     {assessmentId && canViewRangeMap && (
                       <div>
                         <label
