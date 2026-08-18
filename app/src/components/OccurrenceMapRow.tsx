@@ -23,6 +23,18 @@ import {
 } from "@/lib/protected-areas";
 import { ELEVATION_ATTRIBUTION, elevationAt, formatElevation } from "@/lib/elevation";
 import { formatDistance, pathLengthMetres } from "@/lib/geo-distance";
+import {
+  clearPointFile,
+  comparePointFile,
+  loadPointFile,
+  normaliseCatalogNumber,
+  pointSummary,
+  savePointFile,
+  type IucnPoint,
+  type MatchedRecord,
+  type MatchVia,
+  type PointFileImport,
+} from "@/lib/iucn-point-file";
 import { useAssessorEdits } from "@/hooks/useAssessorEdits";
 import {
   b1Threshold,
@@ -123,6 +135,10 @@ const ConfirmDialog = dynamic(
 );
 const MapPlaceSearch = dynamic(
   () => import("./MapPlaceSearch"),
+  { ssr: false }
+);
+const PointFileDialog = dynamic(
+  () => import("./PointFileDialog"),
   { ssr: false }
 );
 
@@ -285,6 +301,16 @@ type BasemapKey = keyof typeof BASEMAP_STYLES;
  * Determine whether an occurrence record is "new" (recorded after the assessment date).
  * Uses full date comparison when eventDate is available, falls back to year comparison.
  */
+/**
+ * The IUCN point file's colour on the map and in every legend that names it.
+ *
+ * Blue, filled, and used by nothing else here: the violet belongs to the
+ * assessor's own georeferences, and the grey-to-green ramp to GBIF's records.
+ * Three point sets being compared have to be three colours told apart at a
+ * glance.
+ */
+export const POINT_FILE_COLOR = "#2563eb";
+
 export function isAfterAssessment(
   eventDate: string | undefined | null,
   year: number | undefined | null,
@@ -765,6 +791,29 @@ export default function OccurrenceMapRow({
   // GBIF points toggle (on by default)
   const [showGbif, setShowGbif] = useState(true);
 
+  /**
+   * The three point sets are toggled independently rather than being one
+   * choice, because the comparison the assessor is making is between them —
+   * hiding GBIF's to look at the other two is as useful as the reverse.
+   */
+  const [showMyGeoreferences, setShowMyGeoreferences] = useState(true);
+  const [showPointFile, setShowPointFile] = useState(true);
+
+  /**
+   * The IUCN point file loaded for this species, if any.
+   *
+   * Read from its own store, and adjusted during render when the species
+   * changes rather than in an effect — an effect would paint one frame of the
+   * previous species' points over the new species' map.
+   */
+  const [pointFile, setPointFile] = useState<PointFileImport | null>(() => loadPointFile(speciesKey));
+  const [pointFileOpen, setPointFileOpen] = useState(false);
+  const [pointFileLoadedFor, setPointFileLoadedFor] = useState(speciesKey);
+  if (pointFileLoadedFor !== speciesKey) {
+    setPointFileLoadedFor(speciesKey);
+    setPointFile(loadPointFile(speciesKey));
+  }
+
   // Range maps and AOH are both restricted for now — hide their toggles
   // unless the signed-in user is an admin. The real enforcement is
   // server-side (the /range-map and /aoh API routes themselves 403); this is
@@ -911,6 +960,13 @@ export default function OccurrenceMapRow({
    * seeing which point the row is is the whole of what's wanted there.
    */
   const [hoverSource, setHoverSource] = useState<"map" | "list" | null>(null);
+  /** A hovered point from the loaded IUCN point file, which is not a GBIF record. */
+  const [pointFileHover, setPointFileHover] = useState<{
+    row: number;
+    lat: number;
+    lng: number;
+    panelId: string;
+  } | null>(null);
   // Which of the records sharing a point the tooltip is showing, and whether
   // the pointer has moved onto the tooltip itself — without that, reaching for
   // the pager takes the pointer off the point and dismisses the thing.
@@ -2150,9 +2206,123 @@ export default function OccurrenceMapRow({
     [occurrences]
   );
 
+  /** Loaded records by catalogue number, for tying a point file row to one. */
+  const occurrencesByCatalogNo = useMemo(() => {
+    const index = new Map<string, OccurrenceFeature>();
+    for (const o of occurrences) {
+      const key = normaliseCatalogNumber(o.properties.catalogNumber as string | undefined);
+      // First wins: two records under one catalogue number can't be told apart
+      // by it, so guessing between them would be worse than the id match.
+      if (key && !index.has(key)) index.set(key, o);
+    }
+    return index;
+  }, [occurrences]);
+
+  /**
+   * Tie a point in the file back to a record on the map.
+   *
+   * The occurrence id is tried first and is not enough on its own: GBIF
+   * reissues ids when a dataset is re-indexed, so a file compiled a few months
+   * earlier cites ids that no longer resolve. On the Dioscorea biplicata file
+   * five of twelve points still matched by id, where seven matched on
+   * catalogue number — and the five were a subset of the seven.
+   */
+  const matchPointToRecord = useCallback(
+    (point: IucnPoint): MatchedRecord | null => {
+      const at = (o: OccurrenceFeature, via: MatchVia): MatchedRecord => {
+        const coords = o.geometry?.coordinates;
+        return {
+          gbifID: o.properties.gbifID,
+          lat: coords ? coords[1] : null,
+          lon: coords ? coords[0] : null,
+          via,
+        };
+      };
+      const byId = point.gbifID == null ? undefined : occurrencesByGbifId.get(point.gbifID);
+      if (byId) return at(byId, "gbif-id");
+      const byCatalog = occurrencesByCatalogNo.get(normaliseCatalogNumber(point.fields.catalog_no));
+      return byCatalog ? at(byCatalog, "catalog-no") : null;
+    },
+    [occurrencesByGbifId, occurrencesByCatalogNo]
+  );
+
+  /**
+   * Where each point in the file sits relative to what's on the map — against
+   * GBIF's published coordinate, and against the assessor's own georeference
+   * for the same record.
+   */
+  const pointFileComparison = useMemo(
+    () => (pointFile ? comparePointFile(pointFile.points, matchPointToRecord, georeferences) : null),
+    [pointFile, matchPointToRecord, georeferences]
+  );
+
+  /**
+   * The point file as a map layer.
+   *
+   * Every point in the file is drawn, including the ones whose GBIF record
+   * isn't in the loaded sample and the ones with no GBIF record at all —
+   * filtering it to what the map already knows would quietly hide the parts of
+   * the assessment that came from somewhere else.
+   */
+  const pointFileGeoJson = useMemo<GeoJSON.FeatureCollection>(
+    () => ({
+      type: "FeatureCollection",
+      features: (pointFileComparison?.rows ?? []).map((r) => ({
+        type: "Feature" as const,
+        properties: { row: r.point.row },
+        geometry: { type: "Point" as const, coordinates: [r.point.longitude, r.point.latitude] },
+      })),
+    }),
+    [pointFileComparison]
+  );
+
+  const hoveredPointFileRow = useMemo(
+    () =>
+      pointFileHover
+        ? (pointFileComparison?.rows.find((r) => r.point.row === pointFileHover.row) ?? null)
+        : null,
+    [pointFileHover, pointFileComparison]
+  );
+
+  const importPointFile = useCallback(
+    (imported: PointFileImport) => {
+      setPointFile(imported);
+      setShowPointFile(true);
+      if (!savePointFile(speciesKey, imported)) {
+        setGeorefMessage({
+          kind: "error",
+          text: "The point file is on the map but couldn't be saved to this browser's storage — it won't survive a reload.",
+        });
+        return;
+      }
+      setGeorefMessage({
+        kind: "ok",
+        text: `Loaded ${imported.points.length.toLocaleString()} point${imported.points.length === 1 ? "" : "s"} from ${imported.fileName}.`,
+      });
+    },
+    [speciesKey]
+  );
+
+  const removePointFile = useCallback(() => {
+    setPointFile(null);
+    clearPointFile(speciesKey);
+    setPointFileOpen(false);
+  }, [speciesKey]);
+
   const handleMapMouseMove = useCallback((e: MapLayerMouseEvent, panelId: string) => {
     if (isTouchDevice) return;
     const features = e.features;
+    // A point file row isn't a GBIF record and has no entry in the table, so it
+    // gets its own small popup rather than being forced through the occurrence
+    // tooltip. Checked first: where the two layers overlap, the file's point is
+    // the one drawn on top and the one the cursor is visibly over.
+    const filePoint = features?.find((f) => String(f.layer?.id ?? "").startsWith("pointfile-circles-"));
+    if (filePoint) {
+      const [lng, lat] = (filePoint.geometry as GeoJSON.Point).coordinates as [number, number];
+      setPointFileHover({ row: Number(filePoint.properties?.row), lat, lng, panelId });
+      return;
+    }
+    setPointFileHover(null);
     if (features && features.length > 0) {
       const props = features[0].properties;
       if (props) {
@@ -2440,7 +2610,7 @@ export default function OccurrenceMapRow({
               {...mapProps}
               style={{ width: "100%", height: "100%" }}
               mapStyle={BASEMAP_STYLES[basemap].style}
-              interactiveLayerIds={[`occ-circles-${panelId}`, `georef-point-${panelId}`]}
+              interactiveLayerIds={[`occ-circles-${panelId}`, `georef-point-${panelId}`, `pointfile-circles-${panelId}`]}
               onClick={(e: MapLayerMouseEvent) => handleMapClick(e, panelId)}
               onContextMenu={(e: MapLayerMouseEvent) => handleMapContextMenu(e, panelId)}
               onMouseMove={(e: MapLayerMouseEvent) => handleMapMouseMove(e, panelId)}
@@ -2548,12 +2718,32 @@ export default function OccurrenceMapRow({
                   <Layer {...circleLayerStyle} />
                 </Source>
               )}
+              {/* The IUCN point file, when one is loaded — the assessment's
+                  delivered answer, in a colour of its own. Drawn above GBIF's
+                  points and below the assessor's, which is the order they were
+                  produced in. A hollow ring rather than a filled dot so a point
+                  sitting exactly on top of the record it came from still shows
+                  the record underneath it. */}
+              {showPointFile && pointFileGeoJson.features.length > 0 && (
+                <Source id={`pointfile-${panelId}`} type="geojson" data={pointFileGeoJson}>
+                  <Layer
+                    id={`pointfile-circles-${panelId}`}
+                    type="circle"
+                    paint={{
+                      "circle-radius": 5,
+                      "circle-color": POINT_FILE_COLOR,
+                      "circle-stroke-color": "#ffffff",
+                      "circle-stroke-width": 1.5,
+                    }}
+                  />
+                </Source>
+              )}
               {/* The assessor's own georeferences — drawn above the GBIF points
                   in a colour used nowhere else, with the uncertainty radius to
                   scale. They are never merged into the GBIF layer or into any
                   GBIF count: one person's reading of a locality description
                   shouldn't become indistinguishable from a published record. */}
-              {visibleGeoreferences.length > 0 && (
+              {showMyGeoreferences && visibleGeoreferences.length > 0 && (
                 <>
                   <Source id={`georef-circles-${panelId}`} type="geojson" data={georeferenceCirclesGeoJson}>
                     <Layer
@@ -2891,6 +3081,62 @@ export default function OccurrenceMapRow({
                     }}
                   />
                 </Source>
+              )}
+              {/* A hovered point from the loaded file. Its own popup because it
+                  is not a GBIF record: there is no row for it in the table, and
+                  the two distances are the only reason it's on the map. */}
+              {pointFileHover && pointFileHover.panelId === panelId && hoveredPointFileRow && (
+                <MapPopup
+                  longitude={pointFileHover.lng}
+                  latitude={pointFileHover.lat}
+                  anchor="bottom"
+                  offset={10}
+                  maxWidth="290px"
+                  closeButton={false}
+                  closeOnClick={false}
+                  onClose={() => setPointFileHover(null)}
+                  className="occurrence-popup"
+                >
+                  <div className="text-[11px] text-zinc-700 dark:text-zinc-200 space-y-1">
+                    <div className="flex items-center gap-1.5 font-medium">
+                      <span className="w-2 h-2 rounded-full shrink-0" style={{ background: POINT_FILE_COLOR }} />
+                      IUCN point file
+                      <span className="font-normal text-zinc-400">row {hoveredPointFileRow.point.row}</span>
+                    </div>
+                    {pointSummary(hoveredPointFileRow.point).slice(0, 5).map((s) => (
+                      <div key={s.label} className="flex gap-1.5">
+                        <span className="text-zinc-400 shrink-0">{s.label}</span>
+                        <span className="truncate">{s.value}</span>
+                      </div>
+                    ))}
+                    {(hoveredPointFileRow.fromGbif != null || hoveredPointFileRow.fromMine != null) && (
+                      <div className="pt-1 mt-1 border-t border-zinc-200 dark:border-zinc-700 space-y-0.5">
+                        {hoveredPointFileRow.fromGbif != null && (
+                          <div className="flex gap-1.5">
+                            <span className="text-zinc-400 shrink-0">From GBIF&apos;s coordinate</span>
+                            <span className="tabular-nums">{formatDistance(hoveredPointFileRow.fromGbif)}</span>
+                          </div>
+                        )}
+                        {hoveredPointFileRow.fromMine != null && (
+                          <div className="flex gap-1.5">
+                            <span className="text-zinc-400 shrink-0">From your georeference</span>
+                            <span className="tabular-nums font-medium">{formatDistance(hoveredPointFileRow.fromMine)}</span>
+                          </div>
+                        )}
+                      </div>
+                    )}
+                    {hoveredPointFileRow.matched && (
+                      <a
+                        href={`https://www.gbif.org/occurrence/${hoveredPointFileRow.matched.gbifID}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="block pt-0.5 text-blue-600 dark:text-blue-400 hover:underline"
+                      >
+                        Open this record on GBIF
+                      </a>
+                    )}
+                  </div>
+                </MapPopup>
               )}
               {/* What's here: the ground's height, and what protects it. */}
               {pointQuery?.panelId === panelId && (
@@ -3247,6 +3493,35 @@ export default function OccurrenceMapRow({
                   </div>
                 </>
               )}
+              {/* One swatch per point set on the map, so the three colours are
+                  never something to work out from context. Only shown when the
+                  set is both loaded and visible — a legend for a hidden layer
+                  is a legend for something that isn't there. */}
+              {showMyGeoreferences && visibleGeoreferences.length > 0 && (
+                <>
+                  <span className="text-zinc-300 dark:text-zinc-600">|</span>
+                  <div className="flex items-center gap-1" title="Coordinates you worked out here">
+                    <div className="w-3 h-3 rounded-full" style={{ background: "#7c3aed" }} />
+                    <span>Yours ({visibleGeoreferences.length.toLocaleString()})</span>
+                  </div>
+                </>
+              )}
+              {showPointFile && pointFile && pointFile.points.length > 0 && (
+                <>
+                  <span className="text-zinc-300 dark:text-zinc-600">|</span>
+                  <button
+                    onClick={() => setPointFileOpen(true)}
+                    className="flex items-center gap-1 hover:underline"
+                    title={`${pointFile.fileName} — click for how it compares`}
+                  >
+                    <div
+                      className="w-3 h-3 rounded-full border-2 border-white dark:border-zinc-800"
+                      style={{ background: POINT_FILE_COLOR }}
+                    />
+                    <span>Point file ({pointFile.points.length.toLocaleString()})</span>
+                  </button>
+                </>
+              )}
               {/* Toggle color mode / split view (only when assessment year is available) */}
               {!label && assessmentYear && (
                 <>
@@ -3464,6 +3739,8 @@ export default function OccurrenceMapRow({
   // GBIF/range/AOH only count when actually available for this species.
   const overlayToggleValues = [
     showGbif,
+    ...(visibleGeoreferences.length > 0 ? [showMyGeoreferences] : []),
+    ...(pointFile ? [showPointFile] : []),
     ...(assessmentId && canViewRangeMap ? [showRange] : []),
     ...(isAohAvailable ? [showAoh] : []),
     showProtectedAreas,
@@ -3482,6 +3759,16 @@ export default function OccurrenceMapRow({
           : "bg-zinc-50 dark:bg-zinc-800/50"
       }
     >
+      {pointFileOpen && (
+        <PointFileDialog
+          imported={pointFile}
+          comparison={pointFileComparison}
+          onImported={importPointFile}
+          onRemove={removePointFile}
+          scientificName={scientificName}
+          onClose={() => setPointFileOpen(false)}
+        />
+      )}
       {pendingMove && (
         <ConfirmDialog
           title="Move this georeference?"
@@ -4216,6 +4503,38 @@ export default function OccurrenceMapRow({
                       />
                       <span className="flex-1 min-w-0 text-zinc-700 dark:text-zinc-200">GBIF Points</span>
                     </label>
+                    {visibleGeoreferences.length > 0 && (
+                      <label className="flex items-center gap-2 px-3 py-1.5 hover:bg-zinc-50 dark:hover:bg-zinc-800 cursor-pointer text-xs">
+                        <input
+                          type="checkbox"
+                          checked={showMyGeoreferences}
+                          onChange={() => setShowMyGeoreferences((v) => !v)}
+                          className="w-3 h-3 rounded accent-violet-600 shrink-0"
+                        />
+                        <span className="flex-1 min-w-0 text-zinc-700 dark:text-zinc-200">
+                          Your georeferences
+                        </span>
+                        <span className="tabular-nums text-[10px] text-zinc-400">
+                          {visibleGeoreferences.length.toLocaleString()}
+                        </span>
+                      </label>
+                    )}
+                    {pointFile && (
+                      <label className="flex items-center gap-2 px-3 py-1.5 hover:bg-zinc-50 dark:hover:bg-zinc-800 cursor-pointer text-xs">
+                        <input
+                          type="checkbox"
+                          checked={showPointFile}
+                          onChange={() => setShowPointFile((v) => !v)}
+                          className="w-3 h-3 rounded accent-blue-600 shrink-0"
+                        />
+                        <span className="flex-1 min-w-0 text-zinc-700 dark:text-zinc-200 truncate">
+                          IUCN point file
+                        </span>
+                        <span className="tabular-nums text-[10px] text-zinc-400">
+                          {pointFile.points.length.toLocaleString()}
+                        </span>
+                      </label>
+                    )}
                     {assessmentId && canViewRangeMap && (
                       <div>
                         <label
@@ -4546,6 +4865,27 @@ export default function OccurrenceMapRow({
                         </button>
                       )}
                     </div>
+                    <button
+                      onClick={() => setPointFileOpen(true)}
+                      title={
+                        pointFile
+                          ? `${pointFile.fileName} — ${pointFile.points.length.toLocaleString()} points on the map. Click to compare them against your own, or load a different file.`
+                          : "Load the IUCN point file for this species, saved out of the workbook as CSV. It goes on the map as its own layer, to compare against."
+                      }
+                      className="inline-flex items-center gap-1 px-2 py-1 rounded border border-zinc-300 dark:border-zinc-600 text-xs text-zinc-600 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800 transition-colors"
+                    >
+                      <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}
+                           style={pointFile ? { color: POINT_FILE_COLOR } : undefined}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M12 21s7-6.3 7-11a7 7 0 10-14 0c0 4.7 7 11 7 11z" />
+                        <circle cx="12" cy="10" r="2.5" />
+                      </svg>
+                      Point file
+                      {pointFile && (
+                        <span className="tabular-nums text-[10px] text-zinc-400">
+                          {pointFile.points.length.toLocaleString()}
+                        </span>
+                      )}
+                    </button>
                     <button
                       onClick={handleExport}
                       disabled={includedOccurrences.length === 0}
