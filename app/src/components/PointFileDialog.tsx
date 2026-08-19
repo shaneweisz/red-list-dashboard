@@ -3,9 +3,9 @@
 import { useCallback, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { formatDistance } from "@/lib/geo-distance";
-import { POINT_FILE_COLOR } from "./OccurrenceMapRow";
 import {
   biggestDisagreements,
+  POINT_FILE_COLOR,
   decodeUploadedText,
   parseIucnPointFile,
   type PointFileComparison,

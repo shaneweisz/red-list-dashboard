@@ -23,6 +23,15 @@
 import { haversineMetres, type LngLat } from "@/lib/geo-distance";
 
 /** The columns IUCN's point file specification defines, in the workbook's order. */
+/**
+ * The colour the point file draws in, on the map and in every legend naming it.
+ *
+ * Here rather than in the component that renders it: the dialog needs it too,
+ * and importing it back out of OccurrenceMapRow — which dynamically imports the
+ * dialog — made a cycle that only survived because the import was lazy.
+ */
+export const POINT_FILE_COLOR = "#2563eb";
+
 export const IUCN_POINT_FILE_COLUMNS = [
   "sci_name",
   "presence",

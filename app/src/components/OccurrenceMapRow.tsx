@@ -40,6 +40,7 @@ import {
   comparePointFile,
   loadPointFile,
   normaliseCatalogNumber,
+  POINT_FILE_COLOR,
   pointSummary,
   savePointFile,
   type IucnPoint,
@@ -313,14 +314,6 @@ type BasemapKey = keyof typeof BASEMAP_STYLES;
  * Determine whether an occurrence record is "new" (recorded after the assessment date).
  * Uses full date comparison when eventDate is available, falls back to year comparison.
  */
-/**
- * The IUCN point file's colour on the map and in every legend that names it.
- *
- * Blue, filled, and used by nothing else here: the violet belongs to the
- * assessor's own georeferences, and the grey-to-green ramp to GBIF's records.
- * Three point sets being compared have to be three colours told apart at a
- * glance.
- */
 /** The latitude Web Mercator stops at, and so the top edge of a world PNG. */
 const MERCATOR_LIMIT = 85.051129;
 
@@ -328,8 +321,6 @@ type EcoregionCollection = GeoJSON.FeatureCollection<GeoJSON.Polygon | GeoJSON.M
 
 /** Shared by every panel and every species — the layer is global. */
 let ecoregionCache: EcoregionCollection | null = null;
-
-export const POINT_FILE_COLOR = "#2563eb";
 
 export function isAfterAssessment(
   eventDate: string | undefined | null,
