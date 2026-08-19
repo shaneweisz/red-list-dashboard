@@ -7,6 +7,7 @@ import { FaGlobeAmericas, FaArrowLeft } from "react-icons/fa";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { useBrand } from "@/components/BrandProvider";
 import { parseParams, type ViewMode } from "@/hooks/useFilterParams";
+import { prettifyQs } from "@/lib/query-string";
 import { SpeciesCacheProvider } from "@/contexts/SpeciesCacheContext";
 
 const RedListView = dynamic(
@@ -47,7 +48,7 @@ function usePanelViewMode(paramSuffix: string) {
     const key = `view${paramSuffix}`;
     if (mode === "reassessments") params.delete(key);
     else params.set(key, "new-assessments");
-    const qs = params.toString();
+    const qs = prettifyQs(params.toString());
     window.history.pushState(null, "", qs ? `/compare?${qs}` : "/compare");
     window.dispatchEvent(new PopStateEvent("popstate"));
   };

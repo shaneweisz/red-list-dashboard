@@ -30,6 +30,8 @@ import { applySharedFilters, emitSharedParams } from "@/lib/shared-filters";
 import type { SpeciesFilterCriteria } from "@/lib/species-filter";
 import { resolveTaxa, resolveCountries } from "@/lib/filter-vocab";
 import { resolveRegions } from "@/lib/regions";
+import { taxaUrlToken } from "@/lib/taxonomy-utils";
+import { prettifyQs } from "@/lib/query-string";
 
 const arr = (a?: string[]) => (a ?? []).map((s) => s.trim()).filter(Boolean);
 
@@ -47,8 +49,15 @@ export function browseInputToDashboardQuery(input: BrowseInput): string {
 
   // A single flat `taxa` token list (e.g. corals, felidae); the dashboard's
   // parseParams expands each token to its display-root + sub-group as needed.
+  //
+  // resolveTaxa returns INTERNAL node ids, which for a live-drilldown node spell out
+  // the virtual-root prefix and every rank label (`pl-flowering_plants~order:
+  // dioscoreales~family:dioscoreaceae`). Emitting those raw still resolves — the
+  // reader accepts both spellings — but this is the link /browse and /api/mcp hand
+  // back to a person or an agent, i.e. the most-shared URL the app produces, so it
+  // should be the same short form the address bar shows rather than the long one.
   const taxaIds = resolveTaxa(arr(input.taxa)).ids;
-  if (taxaIds.length) p.set("taxa", taxaIds.join(","));
+  if (taxaIds.length) p.set("taxa", taxaIds.map(taxaUrlToken).join(","));
 
   // Categorical filters (categories, threats, systems, trends, movement,
   // growthForms, endemic) — resolved + emitted by the shared registry,
@@ -79,7 +88,7 @@ export function browseInputToDashboardQuery(input: BrowseInput): string {
   if (input.minDescribedYear != null) p.set("minDescribedYear", String(input.minDescribedYear));
   if (input.maxDescribedYear != null) p.set("maxDescribedYear", String(input.maxDescribedYear));
 
-  const qs = p.toString();
+  const qs = prettifyQs(p.toString());
   return qs ? `?${qs}` : "";
 }
 

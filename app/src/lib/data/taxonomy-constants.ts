@@ -33,7 +33,7 @@ export const EXCLUDED_DOMESTICATED_GBIF_KEYS = new Set([
 ]);
 
 /**
- * Maps CSV group names (IUCN Table 1a) to display taxon IDs.
+ * Maps taxon group names (IUCN Table 1a) to display taxon IDs.
  * Groups not listed here map to themselves (e.g., "mammals" → "mammals").
  */
 export const DB_GROUP_TO_TAXON_ID: Record<string, string> = {
@@ -63,7 +63,7 @@ export const DB_GROUP_TO_TAXON_ID: Record<string, string> = {
   mushrooms: "fungi",
 };
 
-/** Map a CSV group name to its display taxon ID. */
+/** Map a taxon group name to its display taxon ID. */
 export function mapTaxonId(group: string): string {
   return DB_GROUP_TO_TAXON_ID[group] ?? group;
 }

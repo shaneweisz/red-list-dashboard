@@ -6,6 +6,7 @@ import { resolveRegions } from "@/lib/regions";
 import { expandTaxaToken, collapseTaxaToTokens, getViewRootForNode, type FilterRank } from "@/lib/taxonomy-utils";
 import { ALL_HABITAT_SEASONS, ALL_HABITAT_IMPORTANCE, ALL_HABITAT_SUITABILITY } from "@/lib/habitat-filter";
 import { parseSpeciesParam } from "@/lib/species-row-key";
+import { prettifyQs } from "@/lib/query-string";
 
 // Both habitat checkbox-dropdowns (Importance, Season) default to "everything
 // checked" (nothing excluded) rather than "nothing checked" — see
@@ -100,13 +101,43 @@ export interface BreakdownParam {
   onlyIds?: number[];
   excludeIds?: number[];
 }
+/**
+ * Parsed from the RIGHT, because the nodeId is the one field that can itself contain
+ * the delimiter: a live-drilldown node id is `mammals~order:rodentia`, so
+ * `bd=mammals~order:rodentia:family:Muridae` split left-to-right yields
+ * nodeId="mammals~order", rank="rodentia" — not a rank, so the whole param was
+ * rejected and the breakdown narrowing silently vanished, leaving the full node list.
+ * (Static ids like `ssc-small-mammal` have no colon and always parsed fine, which is
+ * why this survived: every curated breakdown row worked, only live-drilldown ones
+ * didn't.)
+ *
+ * The tail is fixed-arity, so it can be peeled off unambiguously: an optional
+ * `only|excl:<ids>` pair, then name, then rank — and whatever remains, colons and
+ * all, is the nodeId. Deliberately fixed here rather than by making the writer emit
+ * a colon-free node id: RedListView gates this filter on
+ * `selectedSubgroups.has(breakdownFilter.nodeId)`, and selectedSubgroups holds
+ * INTERNAL ids, so rewriting the nodeId to its URL-token form would make the filter
+ * silently inert instead — the same failure with extra steps.
+ */
 const parseBreakdownParam = (p: URLSearchParams, key: string): BreakdownParam | null => {
   const raw = p.get(key);
   if (!raw) return null;
-  const [nodeId, rank, name, mode, idsCsv] = raw.split(":");
+  const parts = raw.split(":");
+  let mode: string | undefined;
+  let idsCsv: string | undefined;
+  // `:only:1,2` / `:excl:1,2` only exists alongside a nodeId+rank+name, so there are
+  // at least 5 fields when present — which also stops a 3-field `nodeId:rank:name`
+  // from mistaking its own rank for a mode.
+  if (parts.length >= 5 && (parts[parts.length - 2] === "only" || parts[parts.length - 2] === "excl")) {
+    idsCsv = parts.pop();
+    mode = parts.pop();
+  }
+  const name = parts.pop();
+  const rank = parts.pop();
+  const nodeId = parts.join(":");
   if (!nodeId || !name || !FILTER_RANKS.includes(rank as FilterRank)) return null;
   const result: BreakdownParam = { nodeId, rank: rank as FilterRank, name };
-  if ((mode === "only" || mode === "excl") && idsCsv) {
+  if (mode && idsCsv) {
     const ids = idsCsv.split(",").map(Number).filter((n) => !Number.isNaN(n));
     if (ids.length > 0) {
       if (mode === "only") result.onlyIds = ids;
@@ -146,8 +177,19 @@ export function parseParams(search: string, suffix: string = "") {
     const root = getViewRootForNode(id);
     if (root) taxaSet.add(root);
   }
+  // A `col-…` species key IS a Not Evaluated species (assessed rows always key on
+  // `sis-…` — see lib/species-row-key), so a link carrying one but no `view` can only
+  // have meant the Not Evaluated list. Without this a hand-written or truncated
+  // `?species=col-…` lands in the assessed list, which never contains that row, and
+  // the panel silently never opens. `view` still wins when present, and is still
+  // required on its own — it is the list's mode, and most URLs carry no species.
+  const speciesKey = parseSpeciesParam(p.get(k("species")));
+  const impliedView: ViewMode | null = speciesKey?.startsWith("col-") ? "new-assessments" : null;
+
   return {
-    viewMode: (viewParam === "new-assessments" ? "new-assessments" : "reassessments") as ViewMode,
+    viewMode: (viewParam === "new-assessments" ? "new-assessments"
+      : viewParam ? "reassessments"
+      : impliedView ?? "reassessments") as ViewMode,
     layoutMode: (layoutParam === "table1a" || layoutParam === "ssc" || layoutParam === "country" ? layoutParam : null) as LayoutMode,
     // Remembers the layout mode a taxon drill-down exited FROM (see
     // exitCountryModeForTaxon) — survives even while layoutMode itself is
@@ -263,7 +305,7 @@ export function parseParams(search: string, suffix: string = "") {
     mapSortDirection: (p.get(k("mapdir")) === "asc" ? "asc" : "desc") as "asc" | "desc",
     // The row key, namespaced (`sis-…`/`col-…`). parseSpeciesParam also accepts the
     // pre-namespace bare-number form so existing links keep working — see its doc.
-    species: parseSpeciesParam(p.get(k("species"))),
+    species: speciesKey,
     tab: (p.get(k("tab")) || null) as "gbif" | "literature" | "redlist" | "wikipedia" | "cites" | "assessors" | "reviewers" | "col" | "eol" | null,
   };
 }
@@ -369,9 +411,11 @@ export function buildQs(state: {
   if (state.mapViewMode === "list") p.set(k("mapview"), "list");
   if (state.mapSortKey && state.mapSortKey !== "species") p.set(k("mapsort"), state.mapSortKey);
   if (state.mapSortDirection === "asc") p.set(k("mapdir"), "asc");
-  const qs = p.toString();
+  const qs = prettifyQs(p.toString());
   return qs ? `?${qs}` : "";
 }
+
+export { prettifyQs };
 
 // Pure merge: combines this instance's (suffixed) params into whatever's
 // already present in `currentSearch`, rather than replacing the whole query
@@ -390,7 +434,7 @@ export function mergeParamsIntoSearch(
   for (const [ownKey, value] of new URLSearchParams(buildQs(newState, suffix))) {
     current.set(ownKey, value);
   }
-  const qs = current.toString();
+  const qs = prettifyQs(current.toString());
   return qs ? `?${qs}` : "";
 }
 

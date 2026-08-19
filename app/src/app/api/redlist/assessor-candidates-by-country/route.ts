@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getAssessorCandidatesByCountry } from "@/lib/data/species-store";
-import { findNode, getCsvGroupsForNode } from "@/lib/taxonomy-utils";
+import { findNode, getTaxonGroupsForNode } from "@/lib/taxonomy-utils";
 import { CACHE_5M } from "@/lib/cache-headers";
 
 export async function GET(request: NextRequest) {
@@ -16,7 +16,7 @@ export async function GET(request: NextRequest) {
   }
 
   const countries = countriesParam.split(";").filter(Boolean);
-  const groups = getCsvGroupsForNode(taxaId);
+  const groups = getTaxonGroupsForNode(taxaId);
 
   // Extract taxonomy filter from the node (orderNames, classNames, etc.)
   const node = findNode(taxaId);
