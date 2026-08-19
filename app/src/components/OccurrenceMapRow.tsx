@@ -2150,7 +2150,15 @@ export default function OccurrenceMapRow({
       };
       const hit = ecoregions.features.find((f) => booleanPointInPolygon(point, f));
       setSelectedEcoregion(
-        hit ? { properties: hit.properties, geometry: hit.geometry } : null
+        hit
+          ? {
+              properties: hit.properties,
+              geometry: hit.geometry,
+              lng: e.lngLat.lng,
+              lat: e.lngLat.lat,
+              panelId,
+            }
+          : null
       );
     }
     // With the overlay on, a plain click asks what protects this spot — the
@@ -2585,6 +2593,10 @@ export default function OccurrenceMapRow({
   const [selectedEcoregion, setSelectedEcoregion] = useState<{
     properties: EcoregionProperties;
     geometry: GeoJSON.Polygon | GeoJSON.MultiPolygon;
+    /** Where it was clicked — the popup opens there, not in a corner. */
+    lng: number;
+    lat: number;
+    panelId: string;
   } | null>(null);
 
   const selectedEcoregionGeoJson = useMemo<GeoJSON.Feature | null>(
@@ -3280,6 +3292,43 @@ export default function OccurrenceMapRow({
                   />
                 </Source>
               )}
+              {/* The clicked ecoregion, named where it was clicked. */}
+              {showEcoregions && selectedEcoregion && selectedEcoregion.panelId === panelId && (
+                <MapPopup
+                  longitude={selectedEcoregion.lng}
+                  latitude={selectedEcoregion.lat}
+                  anchor="bottom"
+                  offset={10}
+                  maxWidth="260px"
+                  closeOnClick={false}
+                  onClose={() => setSelectedEcoregion(null)}
+                  className="occurrence-popup"
+                >
+                  <div className="text-[11px] text-zinc-700 dark:text-zinc-200 flex items-start gap-1.5">
+                    <span
+                      className="w-2.5 h-2.5 rounded-sm shrink-0 translate-y-1 border border-black/10"
+                      style={{ background: selectedEcoregion.properties.biomeColor }}
+                    />
+                    <div className="min-w-0">
+                      <div className="font-medium">{selectedEcoregion.properties.name}</div>
+                      <div className="text-zinc-400">{selectedEcoregion.properties.biome}</div>
+                      <div className="text-zinc-400">
+                        {selectedEcoregion.properties.realm} · {selectedEcoregion.properties.nnh}
+                      </div>
+                      {selectedEcoregion.properties.oneEarth && (
+                        <a
+                          href={oneEarthEcoregionUrl(selectedEcoregion.properties.oneEarth)}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-blue-600 dark:text-blue-400 hover:underline"
+                        >
+                          Read about it on One Earth
+                        </a>
+                      )}
+                    </div>
+                  </div>
+                </MapPopup>
+              )}
               {/* A hovered point from the loaded file. Its own popup because it
                   is not a GBIF record: there is no row for it in the table, and
                   the two distances are the only reason it's on the map. */}
@@ -3671,48 +3720,6 @@ export default function OccurrenceMapRow({
                   </a>
                 </div>
               )}
-            </div>
-          )}
-          {/* The clicked ecoregion. A card beside the legend rather than a
-              popup at the click: it stays readable while you pan the boundary
-              you just outlined, and it doesn't fight the right-click panel for
-              the same piece of screen. */}
-          {showEcoregions && selectedEcoregion && !loadingOccurrences && (
-            <div className="bg-white dark:bg-zinc-800 px-2 py-1.5 rounded text-[11px] text-zinc-600 dark:text-zinc-300 shadow max-w-xs">
-              <div className="flex items-start gap-1.5">
-                <span
-                  className="w-2.5 h-2.5 rounded-sm shrink-0 translate-y-1 border border-black/10"
-                  style={{ background: selectedEcoregion.properties.biomeColor }}
-                />
-                <div className="min-w-0">
-                  <div className="font-medium text-zinc-800 dark:text-zinc-100">
-                    {selectedEcoregion.properties.name}
-                  </div>
-                  <div className="text-zinc-400">{selectedEcoregion.properties.biome}</div>
-                  <div className="text-zinc-400">
-                    {selectedEcoregion.properties.realm} · {selectedEcoregion.properties.nnh}
-                  </div>
-                  {selectedEcoregion.properties.oneEarth && (
-                    <a
-                      href={oneEarthEcoregionUrl(selectedEcoregion.properties.oneEarth)}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="text-blue-600 dark:text-blue-400 hover:underline"
-                    >
-                      Read about it on One Earth
-                    </a>
-                  )}
-                </div>
-                <button
-                  onClick={() => setSelectedEcoregion(null)}
-                  title="Clear"
-                  className="ml-auto shrink-0 text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300"
-                >
-                  <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                    <path strokeLinecap="round" d="M6 18L18 6M6 6l12 12" />
-                  </svg>
-                </button>
-              </div>
             </div>
           )}
           {/* Forest loss reads as a colour ramp, so it needs one: without the

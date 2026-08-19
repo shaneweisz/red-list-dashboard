@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 import {
   biggestDisagreements,
   comparePointFile,
+  decodeUploadedText,
   detectDelimiter,
   gbifIdFromSource,
   parseCoordinate,
@@ -51,6 +52,38 @@ const row = (over: Partial<Record<string, string>> = {}) => {
 };
 
 const file = (...rows: string[]) => [HEADER, ...rows].join("\n");
+
+describe("decodeUploadedText", () => {
+  const bytes = (...values: number[]) => new Uint8Array(values).buffer;
+
+  it("reads plain UTF-8", () => {
+    expect(decodeUploadedText(new TextEncoder().encode("G. Arbeláez S.").buffer as ArrayBuffer)).toBe(
+      "G. Arbeláez S."
+    );
+  });
+
+  it("strips a UTF-8 byte-order mark", () => {
+    const utf8 = new TextEncoder().encode("sci_name");
+    expect(decodeUploadedText(bytes(0xef, 0xbb, 0xbf, ...utf8))).toBe("sci_name");
+  });
+
+  /**
+   * Excel's plain "CSV (Comma delimited)" writes the system code page, not
+   * UTF-8. Decoded as UTF-8 the collector's name comes out mangled, which is
+   * how it was found: "G. Arbeláez S." arriving as "G. Arbel�ez S.".
+   */
+  it("falls back to Windows-1252 when the bytes aren't valid UTF-8", () => {
+    // 0xE1 is á in Windows-1252 and an incomplete sequence in UTF-8.
+    expect(decodeUploadedText(bytes(0x47, 0x2e, 0x20, 0x41, 0x72, 0x62, 0x65, 0x6c, 0xe1, 0x65, 0x7a))).toBe(
+      "G. Arbeláez"
+    );
+  });
+
+  it("reads UTF-16, which Excel's Unicode Text option writes", () => {
+    expect(decodeUploadedText(bytes(0xff, 0xfe, 0x61, 0x00, 0x62, 0x00))).toBe("ab");
+    expect(decodeUploadedText(bytes(0xfe, 0xff, 0x00, 0x61, 0x00, 0x62))).toBe("ab");
+  });
+});
 
 describe("splitDelimited", () => {
   it("keeps a quoted field containing the delimiter whole", () => {

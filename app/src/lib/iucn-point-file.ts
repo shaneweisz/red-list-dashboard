@@ -78,6 +78,34 @@ export interface PointFileImport {
   extraColumns: string[];
 }
 
+/**
+ * Text out of a file the assessor saved, whatever Excel encoded it as.
+ *
+ * "Save as CSV" does not mean UTF-8. Excel's plain "CSV (Comma delimited)"
+ * writes the system's legacy code page — Windows-1252 on a Western install —
+ * and its "Unicode Text" option writes UTF-16. Decoding either as UTF-8 turns
+ * every accented letter into a replacement character, so "G. Arbeláez S."
+ * arrives as "G. Arbel\ufffdez S." and the collector's name is quietly wrong
+ * everywhere it's shown.
+ *
+ * A byte-order mark settles it outright. Failing that, UTF-8 is tried strictly:
+ * the encoding is self-validating, so a file that decodes cleanly as UTF-8
+ * essentially is UTF-8, and one that doesn't is the legacy code page.
+ */
+export function decodeUploadedText(buffer: ArrayBuffer): string {
+  const bytes = new Uint8Array(buffer);
+  if (bytes[0] === 0xef && bytes[1] === 0xbb && bytes[2] === 0xbf) {
+    return new TextDecoder("utf-8").decode(bytes.subarray(3));
+  }
+  if (bytes[0] === 0xff && bytes[1] === 0xfe) return new TextDecoder("utf-16le").decode(bytes);
+  if (bytes[0] === 0xfe && bytes[1] === 0xff) return new TextDecoder("utf-16be").decode(bytes);
+  try {
+    return new TextDecoder("utf-8", { fatal: true }).decode(bytes);
+  } catch {
+    return new TextDecoder("windows-1252").decode(bytes);
+  }
+}
+
 /** Split one delimited line, honouring quoted fields and doubled quotes. */
 export function splitDelimited(line: string, delimiter: string): string[] {
   const fields: string[] = [];

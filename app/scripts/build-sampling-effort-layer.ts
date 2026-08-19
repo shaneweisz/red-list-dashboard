@@ -157,35 +157,74 @@ function viridis(t: number): [number, number, number] {
  * world, and leaving it clear is also the more honest reading: colour means
  * somebody looked.
  */
+/**
+ * The value the colour ramp tops out at.
+ *
+ * Not the maximum, which is one extraordinary cell: the effort raster runs from
+ * a median of 5 records per non-zero cell to a maximum of 5.7 million, so
+ * scaling to the maximum puts half the data in the bottom eighth of the ramp
+ * and the map reads as dark speckle. Topping out at the 99th percentile spends
+ * the ramp on the range the data actually occupies; the handful of cells above
+ * it clamp, which is what "heavily surveyed" already means.
+ */
+const RAMP_PERCENTILE = 0.99;
+
+function percentile(values: Uint32Array, p: number): number {
+  const nonZero = Array.from(values).filter((v) => v > 0).sort((a, b) => a - b);
+  if (nonZero.length === 0) return 1;
+  return nonZero[Math.min(nonZero.length - 1, Math.floor(nonZero.length * p))];
+}
+
 function render(source: Raster, size: number): { rgba: Uint8Array; max: number } {
   let max = 0;
   for (const v of source.values) if (v > max) max = v;
-  const logMax = Math.log1p(max);
+  const top = Math.max(1, percentile(source.values, RAMP_PERCENTILE));
+  const logTop = Math.log1p(top);
   const rgba = new Uint8Array(size * size * 4);
 
+  // Mercator y of a row edge → latitude.
+  const latAt = (row: number) => {
+    const merc = 1 - (2 * row) / size;
+    return (Math.atan(Math.sinh(Math.PI * merc)) * 180) / Math.PI;
+  };
+  const srcRow = (lat: number) =>
+    Math.min(source.height, Math.max(0, Math.round(((90 - lat) / 180) * source.height)));
+
   for (let y = 0; y < size; y++) {
-    // Pixel centre → Mercator y in [-1, 1] → latitude.
-    const merc = 1 - (2 * (y + 0.5)) / size;
-    const lat = (Math.atan(Math.sinh(Math.PI * merc)) * 180) / Math.PI;
-    const srcY = Math.min(
-      source.height - 1,
-      Math.max(0, Math.floor(((90 - lat) / 180) * source.height))
-    );
+    // Every source row this output row covers, not just the one under its
+    // centre. Point-sampling skipped source cells near the equator, where the
+    // output grid is coarser than the 4320-wide source, and repeated them near
+    // the poles where Mercator stretches — both showing up as the speckle this
+    // layer was criticised for.
+    const y0 = srcRow(latAt(y));
+    const y1 = Math.max(y0 + 1, srcRow(latAt(y + 1)));
+
     for (let x = 0; x < size; x++) {
-      const lon = -180 + (360 * (x + 0.5)) / size;
-      const srcX = Math.min(
-        source.width - 1,
-        Math.max(0, Math.floor(((lon + 180) / 360) * source.width))
-      );
-      const value = source.values[srcY * source.width + srcX];
+      const x0 = Math.floor((x / size) * source.width);
+      const x1 = Math.max(x0 + 1, Math.floor(((x + 1) / size) * source.width));
+
+      let total = 0;
+      let cells = 0;
+      for (let sy = y0; sy < y1 && sy < source.height; sy++) {
+        const row = sy * source.width;
+        for (let sx = x0; sx < x1 && sx < source.width; sx++) {
+          total += source.values[row + sx];
+          cells++;
+        }
+      }
+      if (cells === 0) continue;
+      const value = total / cells;
+      if (value <= 0) continue;
+
+      const t = Math.min(1, Math.log1p(value) / logTop);
       const o = (y * size + x) * 4;
-      if (value === 0) continue; // transparent
-      const [r, g, b] = viridis(Math.log1p(value) / logMax);
+      const [r, g, b] = viridis(t);
       rgba[o] = r;
       rgba[o + 1] = g;
       rgba[o + 2] = b;
-      // Faint where a cell holds a single record, solid where it's well worked.
-      rgba[o + 3] = Math.round(90 + 165 * (Math.log1p(value) / logMax));
+      // A barely-surveyed cell should be a whisper rather than a stain: the
+      // old floor of 90 made a single record as loud as the pattern.
+      rgba[o + 3] = Math.round(30 + 205 * t);
     }
   }
   return { rgba, max };

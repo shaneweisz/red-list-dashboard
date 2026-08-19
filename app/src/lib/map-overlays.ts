@@ -17,7 +17,11 @@
 // to the contents is a change to the name — which is the point: the route
 // caches these forever, and a silently-swapped file would be served stale.
 export const ECOREGIONS_ASSET = "ecoregions-2017-v2.json.gz";
-export const SAMPLING_EFFORT_ASSET = "sampling-effort-n_obs-10km.png";
+// v2 rescales the ramp to the 99th percentile and area-averages the source.
+// v1 normalised to the maximum — one cell holding 5.7 million records against a
+// median of 5 — so half the world sat in the bottom eighth of the colour ramp
+// and read as dark speckle.
+export const SAMPLING_EFFORT_ASSET = "sampling-effort-n_obs-10km-v2.png";
 
 /** Everything /api/overlays will serve. Built by scripts/build-*-layer.ts. */
 export const OVERLAY_ASSETS = [ECOREGIONS_ASSET, SAMPLING_EFFORT_ASSET] as const;

@@ -6,6 +6,7 @@ import { formatDistance } from "@/lib/geo-distance";
 import { POINT_FILE_COLOR } from "./OccurrenceMapRow";
 import {
   biggestDisagreements,
+  decodeUploadedText,
   parseIucnPointFile,
   type PointFileComparison,
   type PointFileImport,
@@ -53,7 +54,8 @@ export default function PointFileDialog({
       setReading(true);
       setFailure(null);
       try {
-        const parsed = parseIucnPointFile(await file.text(), file.name);
+        // Not file.text(), which assumes UTF-8 — see decodeUploadedText.
+        const parsed = parseIucnPointFile(decodeUploadedText(await file.arrayBuffer()), file.name);
         if (parsed.points.length === 0) {
           setFailure(parsed.errors[0] ?? "No points could be read from that file.");
           return;

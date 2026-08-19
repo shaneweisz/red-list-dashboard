@@ -28,7 +28,14 @@ interface MapOccurrenceTooltipProps {
   /** Opens the georeference editor for the record shown. The map point itself
    *  now opens GBIF on click, so this is where correcting it lives. */
   onEditGeoreference?: () => void;
-  /** Images attached to the record. Not drawn — see imageUrl above. */
+  /**
+   * Photographs the publisher attached to the record, from GBIF's media.
+   *
+   * Drawn in a fixed-height strip. The earlier attempt let the picture size
+   * itself, so the panel grew and shrank under the pointer as you paged
+   * between records stacked on one spot; reserving the height means the
+   * fields below it never move.
+   */
   images?: { url: string; title?: string; creator?: string; license?: string; rightsHolder?: string }[];
   /** Position within the records sharing this point, when more than one does. */
   page?: { index: number; total: number; onPrev: () => void; onNext: () => void };
@@ -267,6 +274,48 @@ export default function MapOccurrenceTooltip(props: MapOccurrenceTooltipProps) {
           {props.outsideNativeRange && (
             <div className="text-amber-600 dark:text-amber-400 font-medium pt-0.5">
               🌍 Outside native range{props.country ? ` (${props.country})` : ""}
+            </div>
+          )}
+          {/* A specimen photograph settles identifications a locality string
+              can't. Last in the panel and at a fixed height, so the text above
+              it never moves while it loads. */}
+          {props.images && props.images.length > 0 && (
+            <div className="pt-1">
+              <div className="flex gap-1 h-14 overflow-x-auto">
+                {props.images.map((image) => (
+                  <a
+                    key={image.url}
+                    href={image.url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    onClick={(e) => e.stopPropagation()}
+                    // Credit belongs with the picture: GBIF media carries the
+                    // publisher's own rights statement and it travels with it.
+                    title={[image.title, image.creator, image.rightsHolder, image.license]
+                      .filter(Boolean)
+                      .join(" · ")}
+                    className="block h-14 shrink-0 rounded overflow-hidden bg-zinc-100 dark:bg-zinc-800"
+                  >
+                    <img
+                      src={image.url}
+                      alt={image.title ?? "Specimen photograph"}
+                      loading="lazy"
+                      className="h-14 w-auto object-cover"
+                      onError={(e) => {
+                        // A publisher's dead image link shouldn't leave a
+                        // broken-image glyph sitting in the panel.
+                        e.currentTarget.parentElement?.remove();
+                      }}
+                    />
+                  </a>
+                ))}
+              </div>
+              {props.images[0].creator && (
+                <div className="text-[10px] text-zinc-400 truncate">
+                  © {props.images[0].creator}
+                  {props.images[0].license ? ` · ${props.images[0].license.replace(/^https?:\/\//, "")}` : ""}
+                </div>
+              )}
             </div>
           )}
         </div>
