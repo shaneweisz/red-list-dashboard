@@ -3292,12 +3292,15 @@ export default function OccurrenceMapRow({
                   />
                 </Source>
               )}
+              {/* None of the popups below sets an anchor. MapLibre then picks
+                  the side with room, so one opened near the top of the map
+                  flips underneath its point instead of being cut off by the
+                  map's edge — which is where the answer was least readable. */}
               {/* The clicked ecoregion, named where it was clicked. */}
               {showEcoregions && selectedEcoregion && selectedEcoregion.panelId === panelId && (
                 <MapPopup
                   longitude={selectedEcoregion.lng}
                   latitude={selectedEcoregion.lat}
-                  anchor="bottom"
                   offset={10}
                   maxWidth="260px"
                   closeOnClick={false}
@@ -3336,7 +3339,6 @@ export default function OccurrenceMapRow({
                 <MapPopup
                   longitude={pointFileHover.lng}
                   latitude={pointFileHover.lat}
-                  anchor="bottom"
                   offset={10}
                   maxWidth="290px"
                   closeButton={false}
@@ -3390,7 +3392,6 @@ export default function OccurrenceMapRow({
                 <MapPopup
                   longitude={pointQuery.lng}
                   latitude={pointQuery.lat}
-                  anchor="bottom"
                   offset={10}
                   maxWidth="290px"
                   closeOnClick={false}
