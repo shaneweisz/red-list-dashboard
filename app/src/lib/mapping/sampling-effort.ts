@@ -281,12 +281,16 @@ export const COL_TAXON_KEYS: Record<Exclude<EffortGroup, "all">, string> = {
  */
 export function gbifSearchUrl(
   bounds: [number, number, number, number],
-  group: EffortGroup
+  group: EffortGroup,
+  basisOfRecord?: string[]
 ): string {
   const [w, s, e, n] = bounds.map((v) => Number(v.toFixed(5)));
   const polygon = `POLYGON((${w} ${s},${e} ${s},${e} ${n},${w} ${n},${w} ${s}))`;
   const params = new URLSearchParams({ geometry: polygon, hasCoordinate: "true" });
   if (group !== "all") params.set("taxonKey", COL_TAXON_KEYS[group]);
+  // Repeated rather than comma-joined, which is the form the site emits for
+  // itself when you tick more than one.
+  for (const basis of basisOfRecord ?? []) params.append("basisOfRecord", basis);
   return `https://www.gbif.org/occurrence/search?${params}`;
 }
 

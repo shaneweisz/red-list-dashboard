@@ -3591,11 +3591,22 @@ export default function OccurrenceMapRow({
                                   present. */}
                               {gbifCellByBasis.length > 0 && (
                                 <span className="block pl-2 border-l border-zinc-200 dark:border-zinc-700">
+                                  {/* Each kind is its own search. Whether the
+                                      looking here was photographs or herbarium
+                                      sheets is usually the question, so the
+                                      answer should be one click rather than a
+                                      filter to set again on GBIF. */}
                                   {gbifCellByBasis.slice(0, 4).map((b) => (
-                                    <span key={b.basis} className="block text-zinc-400">
+                                    <a
+                                      key={b.basis}
+                                      href={gbifSearchUrl(effortCellAtPoint.bounds, effortLayer.group, [b.basis])}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      className="block text-zinc-400 hover:text-blue-600 dark:hover:text-blue-400 hover:underline"
+                                    >
                                       <span className="tabular-nums">{b.count.toLocaleString()}</span>{" "}
                                       {(BASIS_LABELS[b.basis] ?? b.basis.replace(/_/g, " ").toLowerCase())}
-                                    </span>
+                                    </a>
                                   ))}
                                 </span>
                               )}
