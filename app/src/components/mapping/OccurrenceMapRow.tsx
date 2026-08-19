@@ -313,6 +313,34 @@ const BASEMAP_STYLES: Record<string, { label: string; style: MaplibreStyle }> = 
       '&copy; <a href="https://opentopomap.org">OpenTopoMap</a> (<a href="https://creativecommons.org/licenses/by-sa/3.0/">CC-BY-SA</a>)'
     ),
   },
+  /**
+   * Two quiet basemaps, for reading a data layer rather than a place.
+   *
+   * Streets and Terrain both colour the ground — green for vegetation, white
+   * for ice, blue for water — which is fine when the map is the subject and
+   * actively misleading when something is drawn on top of it: a sampling-effort
+   * ramp or a biome fill has to compete with colour that means something else
+   * entirely. These carry the coastlines and nothing else.
+   *
+   * Deliberately unlabelled. Place names are what Streets is for, and are worth
+   * having while georeferencing; here they would be clutter over the surface
+   * being read.
+   */
+  plain: {
+    label: "Plain",
+    style: makeRasterStyle(
+      "https://a.basemaps.cartocdn.com/light_nolabels/{z}/{x}/{y}.png",
+      '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/attributions">CARTO</a>'
+    ),
+  },
+  /** Dark, where a bright ramp reads best — the effort layer especially. */
+  dark: {
+    label: "Dark",
+    style: makeRasterStyle(
+      "https://a.basemaps.cartocdn.com/dark_nolabels/{z}/{x}/{y}.png",
+      '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/attributions">CARTO</a>'
+    ),
+  },
 };
 type BasemapKey = keyof typeof BASEMAP_STYLES;
 
