@@ -16,24 +16,25 @@
 // v2 adds the One Earth page slugs. The bucket refuses overwrites, so a change
 // to the contents is a change to the name — which is the point: the route
 // caches these forever, and a silently-swapped file would be served stale.
+import { EFFORT_GROUPS, effortAsset } from "./sampling-effort";
+
 export const ECOREGIONS_ASSET = "ecoregions-2017-v2.json.gz";
-// v3 recolours to the ramp the paper itself plots with (colorRamps::matlab.like2),
-// so this overlay and El-Gabbas's published figures read alike. v2 rescaled the
-// ramp to the 99th percentile and area-averaged the source; v1 normalised to the
-// maximum — one cell holding 5.7 million records against a median of 5 — so half
-// the world sat in the bottom eighth of the ramp and read as dark speckle.
-export const SAMPLING_EFFORT_ASSET = "sampling-effort-n_obs-10km-v3.png";
+/**
+ * Everything /api/overlays will serve, built by scripts/mapping/build-*-layer.ts.
+ *
+ * The effort layer is one asset per taxonomic group rather than a single
+ * surface — see lib/mapping/sampling-effort.ts for why the taxon matters.
+ */
+export const OVERLAY_ASSETS: readonly string[] = [
+  ECOREGIONS_ASSET,
+  ...EFFORT_GROUPS.map(effortAsset),
+];
 
-/** Everything /api/overlays will serve. Built by scripts/build-*-layer.ts. */
-export const OVERLAY_ASSETS = [ECOREGIONS_ASSET, SAMPLING_EFFORT_ASSET] as const;
-
-export type OverlayAsset = (typeof OVERLAY_ASSETS)[number];
-
-export function isOverlayAsset(name: string): name is OverlayAsset {
-  return (OVERLAY_ASSETS as readonly string[]).includes(name);
+export function isOverlayAsset(name: string): boolean {
+  return OVERLAY_ASSETS.includes(name);
 }
 
-export const overlayUrl = (asset: OverlayAsset) => `/api/overlays/${asset}`;
+export const overlayUrl = (asset: string) => `/api/overlays/${asset}`;
 
 /**
  * Attribution for both layers.
@@ -97,19 +98,3 @@ export const BIOMES: { name: string; color: string }[] = [
   { name: "Mangroves", color: "#FE01C4" },
 ];
 
-/**
- * What a sampling-effort colour means, for the legend.
- *
- * The raster is GBIF records per 10 km cell on a log scale, so the legend is
- * deliberately qualitative: the number under any one pixel matters much less
- * than whether a blank area on the record map is genuinely empty or merely
- * unvisited.
- */
-export const SAMPLING_EFFORT_LEGEND = [
-  { label: "Barely surveyed", color: "#0000BF" },
-  { label: "", color: "#0090FF" },
-  { label: "", color: "#00E0E0" },
-  { label: "", color: "#40E000" },
-  { label: "", color: "#FFD000" },
-  { label: "Heavily surveyed", color: "#BF0000" },
-];

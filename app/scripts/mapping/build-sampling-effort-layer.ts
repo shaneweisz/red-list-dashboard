@@ -34,13 +34,35 @@ const { zstdDecompressSync } = zlib as unknown as {
 import { mkdirSync, writeFileSync } from "fs";
 import * as path from "path";
 
-/** The all-groups cumulative products, by metric and resolution in km. */
-const OSF_FILES: Record<string, Record<number, string>> = {
+/**
+ * One OSF component per taxonomic group, plus the all-groups one.
+ *
+ * The published dataset is taxon-stratified: `qdwfe` is only its all-groups
+ * component, and nine siblings hold the same products per group. Which matters
+ * scientifically — all-groups effort is dominated by birds and casual
+ * observation, so a cell can be heavily worked for vertebrates and never
+ * botanised. Judging whether a plant's range gap is real wants the plant
+ * surface, not the average of everything.
+ */
+const GROUP_NODES: Record<string, string> = {
+  all: "qdwfe",
+  amphibia: "g3bxc",
+  arachnida: "wzt42",
+  aves: "3u8x7",
+  fungi: "as68b",
+  insecta: "58ze7",
+  mammalia: "m2tvk",
+  mollusca: "k9pdu",
+  reptilia: "hkyvs",
+  tracheophyta: "2j98g",
+};
+
+
+/** The all-groups products, which sit flat at the root of their component. */
+const ALL_GROUP_FILES: Record<string, Record<number, string>> = {
   n_obs: { 1: "n_obs_1.tif", 5: "n_obs_5.tif", 10: "n_obs_10.tif", 20: "n_obs_20.tif" },
   n_sp: { 1: "n_sp_1.tif", 5: "n_sp_5.tif", 10: "n_sp_10.tif", 20: "n_sp_20.tif" },
 };
-
-const OSF_NODE = "qdwfe";
 
 interface Raster {
   width: number;
@@ -126,45 +148,6 @@ function readGeoTiff(buf: Buffer): Raster {
  * quantity rather than as a category, which is what separates it from the
  * habitat and ecosystem layers.
  */
-/**
- * The paper's own ramp, so a layer here and a figure there read alike.
- *
- * El-Gabbas plots these rasters with `colorRamps::matlab.like2`, the MATLAB
- * jet-like sequence — blue through cyan and green to yellow and red. These
- * stops follow it.
- *
- * One caveat, recorded rather than argued: a jet ramp is not perceptually
- * uniform. The cyan-to-green step reads as an edge the data doesn't contain,
- * and it separates poorly under the commoner colour-vision deficiencies —
- * which is exactly why viridis, used here before, exists. Matching the
- * published figures was judged worth that, because an assessor comparing this
- * overlay against the paper shouldn't have to translate between two colour
- * schemes.
- */
-const MATLAB_LIKE_2: [number, number, number][] = [
-  [0, 0, 191],    // deep blue
-  [0, 48, 255],
-  [0, 144, 255],
-  [0, 224, 224],  // cyan
-  [64, 224, 0],   // green
-  [192, 240, 0],
-  [255, 208, 0],  // yellow
-  [255, 96, 0],   // orange
-  [191, 0, 0],    // deep red
-];
-
-function effortColour(t: number): [number, number, number] {
-  const x = Math.max(0, Math.min(1, t)) * (MATLAB_LIKE_2.length - 1);
-  const i = Math.min(MATLAB_LIKE_2.length - 2, Math.floor(x));
-  const f = x - i;
-  const a = MATLAB_LIKE_2[i];
-  const b = MATLAB_LIKE_2[i + 1];
-  return [
-    Math.round(a[0] + (b[0] - a[0]) * f),
-    Math.round(a[1] + (b[1] - a[1]) * f),
-    Math.round(a[2] + (b[2] - a[2]) * f),
-  ];
-}
 
 /**
  * Warps the plate carrée source into Web Mercator and colours it.
@@ -179,31 +162,28 @@ function effortColour(t: number): [number, number, number] {
  * somebody looked.
  */
 /**
- * The value the colour ramp tops out at.
+ * Warps the source into Web Mercator and writes the counts themselves.
  *
- * Not the maximum, which is one extraordinary cell: the effort raster runs from
- * a median of 5 records per non-zero cell to a maximum of 5.7 million, so
- * scaling to the maximum puts half the data in the bottom eighth of the ramp
- * and the map reads as dark speckle. Topping out at the 99th percentile spends
- * the ramp on the range the data actually occupies; the handful of cells above
- * it clamp, which is what "heavily surveyed" already means.
+ * The pixels carry data, not colour: a cell's record count goes into RGB as a
+ * plain 24-bit integer, and alpha marks whether there is a count at all. The
+ * largest cell in the global raster holds 5,725,330 records against a ceiling
+ * of 16,777,215, so every value survives exactly — no log, no clamping, no
+ * palette baked into the file.
+ *
+ * That is what lets the map say "1,240 records in this cell" rather than only
+ * showing an orange square, and it makes the colour ramp and its normalisation
+ * a style decision instead of a rebuild — this layer had already been rendered
+ * three times over nothing but scaling and colour choices.
+ *
+ * The technique is the one lib/mapping/elevation.ts already reads terrain with:
+ * browsers decode PNG natively, so the values come back off a canvas with no
+ * decoder to ship.
  */
-const RAMP_PERCENTILE = 0.99;
-
-function percentile(values: Uint32Array, p: number): number {
-  const nonZero = Array.from(values).filter((v) => v > 0).sort((a, b) => a - b);
-  if (nonZero.length === 0) return 1;
-  return nonZero[Math.min(nonZero.length - 1, Math.floor(nonZero.length * p))];
-}
-
-function render(source: Raster, size: number): { rgba: Uint8Array; max: number } {
+function encodeValues(source: Raster, size: number): { rgba: Uint8Array; max: number } {
   let max = 0;
   for (const v of source.values) if (v > max) max = v;
-  const top = Math.max(1, percentile(source.values, RAMP_PERCENTILE));
-  const logTop = Math.log1p(top);
   const rgba = new Uint8Array(size * size * 4);
 
-  // Mercator y of a row edge → latitude.
   const latAt = (row: number) => {
     const merc = 1 - (2 * row) / size;
     return (Math.atan(Math.sinh(Math.PI * merc)) * 180) / Math.PI;
@@ -212,11 +192,9 @@ function render(source: Raster, size: number): { rgba: Uint8Array; max: number }
     Math.min(source.height, Math.max(0, Math.round(((90 - lat) / 180) * source.height)));
 
   for (let y = 0; y < size; y++) {
-    // Every source row this output row covers, not just the one under its
-    // centre. Point-sampling skipped source cells near the equator, where the
-    // output grid is coarser than the 4320-wide source, and repeated them near
-    // the poles where Mercator stretches — both showing up as the speckle this
-    // layer was criticised for.
+    // Every source row this output row covers. Point-sampling skipped cells
+    // near the equator and repeated them near the poles, which showed up as
+    // speckle.
     const y0 = srcRow(latAt(y));
     const y1 = Math.max(y0 + 1, srcRow(latAt(y + 1)));
 
@@ -234,18 +212,17 @@ function render(source: Raster, size: number): { rgba: Uint8Array; max: number }
         }
       }
       if (cells === 0) continue;
-      const value = total / cells;
+      // Mean, rounded: the honest reading of "records per cell" over an area
+      // covering several source cells.
+      const value = Math.round(total / cells);
       if (value <= 0) continue;
 
-      const t = Math.min(1, Math.log1p(value) / logTop);
       const o = (y * size + x) * 4;
-      const [r, g, b] = effortColour(t);
-      rgba[o] = r;
-      rgba[o + 1] = g;
-      rgba[o + 2] = b;
-      // A barely-surveyed cell should be a whisper rather than a stain: the
-      // old floor of 90 made a single record as loud as the pattern.
-      rgba[o + 3] = Math.round(30 + 205 * t);
+      rgba[o] = (value >> 16) & 0xff;
+      rgba[o + 1] = (value >> 8) & 0xff;
+      rgba[o + 2] = value & 0xff;
+      // Alpha is presence, not opacity — the client decides how to draw it.
+      rgba[o + 3] = 255;
     }
   }
   return { rgba, max };
@@ -295,6 +272,64 @@ function crc32(buf: Buffer): number {
   return (c ^ 0xffffffff) | 0;
 }
 
+/**
+ * A fetch that backs off rather than giving up.
+ *
+ * A group total is the sum of its descendants, which for birds means 42 files
+ * from one host, and OSF starts refusing part-way through — returning an HTML
+ * error page where JSON was expected. Retrying with a growing pause is both
+ * what recovers the build and the polite thing to do to a free archive: the
+ * alternative is hammering it and calling the result a failure.
+ */
+async function politeFetch(url: string, attempt = 0): Promise<Response> {
+  const response = await fetch(url);
+  if (response.ok) return response;
+  if (attempt >= 5) throw new Error(`OSF returned ${response.status} for ${url}`);
+  const wait = 2000 * 2 ** attempt;
+  console.log(`    OSF said ${response.status}; waiting ${wait / 1000}s…`);
+  await new Promise((r) => setTimeout(r, wait));
+  return politeFetch(url, attempt + 1);
+}
+
+/** A courtesy gap between requests, so a 42-file group isn't a burst. */
+const PAUSE_MS = 350;
+const pause = () => new Promise((r) => setTimeout(r, PAUSE_MS));
+
+/** The OSF listing pages; a folder can hold hundreds of files. */
+async function listFiles(url: string) {
+  const out: { name: string; kind: string; download: string; folderUrl: string }[] = [];
+  let next: string | null = url;
+  while (next) {
+    const page = (await (await politeFetch(next)).json()) as {
+      data?: { attributes: { name: string; kind: string }; links: { download?: string };
+               relationships?: { files?: { links: { related: { href: string } } } } }[];
+      links?: { next?: string | null };
+    };
+    for (const f of page.data ?? []) {
+      out.push({
+        name: f.attributes.name,
+        kind: f.attributes.kind,
+        download: f.links.download ?? "",
+        folderUrl: f.relationships?.files?.links.related.href ?? "",
+      });
+    }
+    next = page.links?.next ?? null;
+  }
+  return out;
+}
+
+async function findInFolder(url: string, name: string): Promise<string> {
+  const entry = (await listFiles(url)).find((f) => f.name === name);
+  if (!entry) throw new Error(`${name} not found on OSF`);
+  return entry.download;
+}
+
+async function findFolder(url: string, name: string): Promise<string> {
+  const entry = (await listFiles(url)).find((f) => f.name === name && f.kind === "folder");
+  if (!entry) throw new Error(`folder ${name} not found on OSF`);
+  return `${entry.folderUrl}?page[size]=100`;
+}
+
 async function main() {
   // Flags take a value, so both have to come out before what's left can be read
   // positionally — dropping only the "--name" left its value to be mistaken for
@@ -307,28 +342,67 @@ async function main() {
     if (argv[i].startsWith("--")) flags.set(argv[i], argv[++i] ?? "");
     else positional.push(argv[i]);
   }
+  const group = flags.get("--group") ?? "all";
   const metric = positional[0] ?? "n_obs";
   const resolution = Number(positional[1] ?? 10);
-  const out = flags.get("--out") ?? `sampling-effort-${metric}-${resolution}km.png`;
-  const size = Number(flags.get("--size") ?? 2048);
+  // 4096 across the world is 9.8 km per pixel at the equator, which is what a
+  // 10 km source actually carries. The old 2048 threw away half of it.
+  const size = Number(flags.get("--size") ?? 4096);
+  const out = flags.get("--out") ?? `sampling-effort-${group}-${metric}-${resolution}km.png`;
 
-  const name = OSF_FILES[metric]?.[resolution];
-  if (!name) throw new Error(`no product for ${metric} at ${resolution}km`);
+  const node = GROUP_NODES[group];
+  if (!node) throw new Error(`unknown group "${group}" — one of ${Object.keys(GROUP_NODES).join(", ")}`);
 
-  console.log(`Finding ${name} on OSF project ${OSF_NODE}…`);
-  const listing = await fetch(`https://api.osf.io/v2/nodes/${OSF_NODE}/files/osfstorage/`);
-  const files = (await listing.json()) as { data: { attributes: { name: string }; links: { download: string } }[] };
-  const entry = files.data.find((f) => f.attributes.name === name);
-  if (!entry) throw new Error(`${name} not found on the OSF project`);
+  let download: string;
+  if (group === "all") {
+    const name = ALL_GROUP_FILES[metric]?.[resolution];
+    if (!name) throw new Error(`no all-groups product for ${metric} at ${resolution}km`);
+    console.log(`Finding ${name} on OSF component ${node}…`);
+    download = await findInFolder(`https://api.osf.io/v2/nodes/${node}/files/osfstorage/?page[size]=100`, name);
+  } else {
+    // A group has no raster of its own: the published components hold one file
+    // per descendant clade and year, and the author's own accessor builds a
+    // group total by combining the descendants' totals. Record counts add, so
+    // summing them is the same surface.
+    const folder = `res_${resolution}_${metric}`;
+    console.log(`Finding ${folder} on OSF component ${node}…`);
+    const folderUrl = await findFolder(`https://api.osf.io/v2/nodes/${node}/files/osfstorage/?page[size]=100`, folder);
+    const parts = (await listFiles(folderUrl)).filter((f) =>
+      f.name.endsWith(`_total_res_${resolution}.tif`)
+    );
+    if (parts.length === 0) throw new Error(`no descendant totals in ${folder}`);
+    console.log(`  summing ${parts.length} descendant totals`);
 
-  console.log(`Downloading ${entry.links.download}…`);
-  const buf = Buffer.from(await (await fetch(entry.links.download)).arrayBuffer());
+    let summed: Raster | null = null;
+    for (const part of parts) {
+      const bytes = Buffer.from(await (await politeFetch(part.download)).arrayBuffer());
+      await pause();
+      const raster = readGeoTiff(bytes);
+      if (!summed) {
+        summed = raster;
+      } else {
+        if (raster.width !== summed.width || raster.height !== summed.height) {
+          throw new Error(`${part.name} is ${raster.width}×${raster.height}, expected ${summed.width}×${summed.height}`);
+        }
+        for (let i = 0; i < summed.values.length; i++) summed.values[i] += raster.values[i];
+      }
+      process.stdout.write(`    ${part.name.padEnd(48)}\r`);
+    }
+    console.log(`  summed ${parts.length} rasters${" ".repeat(40)}`);
+    return await finish(summed!, size, out);
+  }
+
+  console.log(`Downloading ${download}…`);
+  const buf = Buffer.from(await (await politeFetch(download)).arrayBuffer());
   console.log(`  ${(buf.length / 1e6).toFixed(2)} MB`);
 
   const raster = readGeoTiff(buf);
-  console.log(`Decoded ${raster.width} × ${raster.height}`);
+  await finish(raster, size, out);
+}
 
-  const { rgba, max } = render(raster, size);
+async function finish(raster: Raster, size: number, out: string) {
+  console.log(`Decoded ${raster.width} × ${raster.height}`);
+  const { rgba, max } = encodeValues(raster, size);
   const png = encodePng(rgba, size);
   mkdirSync(path.dirname(out), { recursive: true });
   writeFileSync(out, png);

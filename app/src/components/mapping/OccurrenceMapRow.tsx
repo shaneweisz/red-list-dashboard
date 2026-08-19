@@ -25,11 +25,18 @@ import {
 } from "@/lib/mapping/protected-areas";
 import { ELEVATION_ATTRIBUTION, elevationAt, formatElevation } from "@/lib/mapping/elevation";
 import {
+  EFFORT_GROUP_LABELS,
+  EFFORT_GROUPS,
+  EFFORT_LEGEND,
+  effortGroupFor,
+  formatEffort,
+  type EffortGroup,
+} from "@/lib/mapping/sampling-effort";
+import { useSamplingEffort, effortAt } from "@/hooks/mapping/useSamplingEffort";
+import {
   BIOMES,
   ECOREGIONS_ASSET,
   ECOREGIONS_ATTRIBUTION,
-  SAMPLING_EFFORT_ASSET,
-  SAMPLING_EFFORT_LEGEND,
   oneEarthEcoregionUrl,
   overlayUrl,
   type EcoregionProperties,
@@ -642,6 +649,26 @@ export default function OccurrenceMapRow({
   const [showHabitat, setShowHabitat] = useState(false);
   const [showEcoregions, setShowEcoregions] = useState(false);
   const [showSamplingEffort, setShowSamplingEffort] = useState(false);
+
+  /**
+   * The effort surface this species can honestly be shown against.
+   *
+   * Null withholds the layer entirely rather than falling back to all-taxa:
+   * the dataset has no fish group, and nothing covering crustaceans, corals,
+   * mosses or the algae, so for those an all-groups surface would answer a
+   * question nobody asked — "is this sea well surveyed?" when what was
+   * surveyed was seabirds.
+   */
+  const nativeEffortGroup = effortGroupFor(taxonGroup);
+  const [effortGroup, setEffortGroup] = useState<EffortGroup | null>(nativeEffortGroup);
+  const [effortGroupFor_, setEffortGroupFor] = useState(speciesKey);
+  if (effortGroupFor_ !== speciesKey) {
+    setEffortGroupFor(speciesKey);
+    setEffortGroup(nativeEffortGroup);
+  }
+  const { layer: effortLayer, loading: effortLoading } = useSamplingEffort(
+    showSamplingEffort && nativeEffortGroup ? effortGroup : null
+  );
 
   /**
    * Ecoregion polygons, fetched the first time the overlay is switched on.
@@ -2750,11 +2777,11 @@ export default function OccurrenceMapRow({
                   is exactly the projection it's already in. At 10 km per source
                   cell it is deliberately coarse — the pattern is the point, not
                   any one pixel. */}
-              {showSamplingEffort && (
+              {showSamplingEffort && effortLayer && (
                 <Source
                   id={`sampling-effort-${panelId}`}
                   type="image"
-                  url={overlayUrl(SAMPLING_EFFORT_ASSET)}
+                  url={effortLayer.url}
                   coordinates={[
                     [-180, MERCATOR_LIMIT],
                     [180, MERCATOR_LIMIT],
@@ -3477,6 +3504,32 @@ export default function OccurrenceMapRow({
                         )}
                       </div>
                     )}
+                    {/* How much collecting has happened here at all. The
+                        counts came down with the layer, so this is a lookup in
+                        an array rather than a request — the reason for shipping
+                        values instead of a picture. */}
+                    {showSamplingEffort && effortLayer && (
+                      <div className="pt-1 border-t border-zinc-100 dark:border-zinc-800">
+                        {(() => {
+                          const records = effortAt(effortLayer, pointQuery.lng, pointQuery.lat);
+                          return records == null ? (
+                            <span className="text-zinc-400">
+                              No {EFFORT_GROUP_LABELS[effortLayer.group].toLowerCase()} records
+                              collected in this 10 km cell.
+                            </span>
+                          ) : (
+                            <span>
+                              <span className="font-medium text-zinc-700 dark:text-zinc-200">
+                                {formatEffort(records)}
+                              </span>
+                              <span className="block text-zinc-400">
+                                {EFFORT_GROUP_LABELS[effortLayer.group]}, all years
+                              </span>
+                            </span>
+                          );
+                        })()}
+                      </div>
+                    )}
                     {/* The ecoregion under the point. Answered from the
                         polygons already in the browser, so there's no request
                         and nothing to wait for — the whole reason for shipping
@@ -3656,15 +3709,18 @@ export default function OccurrenceMapRow({
               It also carries the citation: an image source takes no
               attribution in the MapLibre style spec, and the licence this
               dataset is offered under asks for one. */}
-          {showSamplingEffort && !loadingOccurrences && (
+          {showSamplingEffort && effortLayer && !loadingOccurrences && (
             <div
               className="bg-white dark:bg-zinc-800 px-2 py-1.5 rounded text-[11px] text-zinc-600 dark:text-zinc-300 shadow flex items-center gap-1.5"
               title="GBIF records per 10 km cell, all taxa, on a log scale. A gap here means nobody has looked, which is not the same as the species being absent."
             >
-              <span className="text-zinc-500 dark:text-zinc-400">Sampling effort</span>
+              <span className="text-zinc-500 dark:text-zinc-400">
+                Sampling effort
+                {effortLayer ? ` · ${EFFORT_GROUP_LABELS[effortLayer.group]}` : ""}
+              </span>
               <span className="flex items-center">
-                {SAMPLING_EFFORT_LEGEND.map((step) => (
-                  <span key={step.color} className="w-3.5 h-2.5" style={{ background: step.color }} />
+                {EFFORT_LEGEND.map((step) => (
+                  <span key={step} className="w-3.5 h-2.5" style={{ background: step }} />
                 ))}
               </span>
               <span className="text-zinc-400">less → more</span>
@@ -4074,7 +4130,7 @@ export default function OccurrenceMapRow({
     showForestLoss,
     showHabitat,
     showEcoregions,
-    showSamplingEffort,
+    ...(nativeEffortGroup ? [showSamplingEffort] : []),
     showRangeMetrics,
     showPowoRangeOverlay,
     ...(hasIucnNativeRange ? [showIucnRangeOverlay] : []),
@@ -4887,20 +4943,51 @@ export default function OccurrenceMapRow({
                         <span className="text-[10px] text-red-500 shrink-0">unavailable</span>
                       )}
                     </label>
-                    <label
-                      className="flex items-center gap-2 px-3 py-1.5 hover:bg-zinc-50 dark:hover:bg-zinc-800 cursor-pointer text-xs"
-                      title="GBIF records per 10 km cell (El-Gabbas 2026). Shows whether a gap in the records is genuinely empty or merely unvisited — the caveat behind a record-based AOO."
-                    >
-                      <input
-                        type="checkbox"
-                        checked={showSamplingEffort}
-                        onChange={() => setShowSamplingEffort((v) => !v)}
-                        className="w-3 h-3 rounded accent-yellow-500 shrink-0"
-                      />
-                      <span className="flex-1 min-w-0 text-zinc-700 dark:text-zinc-200">
-                        Sampling effort
-                      </span>
-                    </label>
+                    {/* Withheld entirely where the dataset has no matching
+                        taxon — see lib/mapping/sampling-effort.ts. A fish
+                        judged against seabird effort is worse than no layer. */}
+                    {nativeEffortGroup && (
+                      <div>
+                        <label
+                          className="flex items-center gap-2 px-3 py-1.5 hover:bg-zinc-50 dark:hover:bg-zinc-800 cursor-pointer text-xs"
+                          title="GBIF records per 10 km cell (El-Gabbas 2026). Shows whether a gap in the records is genuinely empty or merely unvisited — the caveat behind a record-based AOO."
+                        >
+                          <input
+                            type="checkbox"
+                            checked={showSamplingEffort}
+                            onChange={() => setShowSamplingEffort((v) => !v)}
+                            className="w-3 h-3 rounded accent-yellow-500 shrink-0"
+                          />
+                          <span className="flex-1 min-w-0 text-zinc-700 dark:text-zinc-200 flex items-center gap-1">
+                            Sampling effort
+                            {effortLoading && (
+                              <svg className="w-3 h-3 animate-spin text-zinc-400" fill="none" viewBox="0 0 24 24">
+                                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                              </svg>
+                            )}
+                          </span>
+                        </label>
+                        {/* One taxon at a time, not several: two effort
+                            surfaces drawn over each other give a colour that
+                            can't be read back to either. */}
+                        {showSamplingEffort && (
+                          <select
+                            value={effortGroup ?? nativeEffortGroup}
+                            onChange={(e) => setEffortGroup(e.target.value as EffortGroup)}
+                            className="mx-3 mb-1.5 w-[calc(100%-1.5rem)] rounded border border-zinc-300 dark:border-zinc-600 bg-white dark:bg-zinc-800 px-1.5 py-1 text-[11px] text-zinc-700 dark:text-zinc-200"
+                            title="Which taxon's collecting effort to show. All taxa is dominated by birds and casual observation, so the matching group is usually the honest comparison."
+                          >
+                            {EFFORT_GROUPS.map((g) => (
+                              <option key={g} value={g}>
+                                {EFFORT_GROUP_LABELS[g]}
+                                {g === nativeEffortGroup ? " (this species)" : ""}
+                              </option>
+                            ))}
+                          </select>
+                        )}
+                      </div>
+                    )}
                     {assessmentId && canViewRangeMap && (
                       <div>
                         <label
