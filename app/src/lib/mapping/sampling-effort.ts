@@ -100,8 +100,12 @@ export function effortGroupFor(taxonGroup: string | undefined): EffortGroup | nu
 }
 
 /** The published asset for a group. */
+// v5 reads the source cell under each pixel instead of averaging the cells it
+// touches. v4 straddled two 1/12° cells and reported their mean as a count, so
+// a hillside east of Bogotá inherited the city's collecting and read 6,709
+// where GBIF holds 1,442.
 export const effortAsset = (group: EffortGroup) =>
-  `sampling-effort-${group}-n_obs-10km-v4.png`;
+  `sampling-effort-${group}-n_obs-10km-v5.png`;
 
 // ---------------------------------------------------------------------------
 // PIXEL ENCODING
