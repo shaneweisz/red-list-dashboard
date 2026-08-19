@@ -241,23 +241,46 @@ export const GBIF_TAXON_KEYS: Record<Exclude<EffortGroup, "all">, number[]> = {
 };
 
 /**
- * The GBIF occurrence search for one cell, filtered to the taxon shown.
+ * The GBIF occurrence search for one cell.
  *
- * The count it returns will not equal the count on the map, and shouldn't be
- * expected to: this layer is a fixed snapshot published with the paper, GBIF
- * grows daily, and the raster's 10 km grid and this Mercator pixel are not the
- * same shape. The map's figure says how worked this ground was when the dataset
- * was built; the link says what is there now.
+ * Geometry only, and deliberately so. Two spellings of a taxon filter were
+ * tried against the website — taxonKey and taxon_key — and both were swallowed
+ * into its scientific-name filter, which returns nothing and looks like an
+ * empty cell rather than a broken link. The key itself is fine: 7707728 is
+ * still Tracheophyta, accepted, in GBIF's own API. It is the website's
+ * parameter naming that isn't guessable from here, and gbif.org answers
+ * automated browsers with a bot challenge, so it can't be settled by trying.
+ *
+ * A link that shows every record in the cell is honestly labelled and always
+ * right. The taxon-filtered figure comes from the API instead, in
+ * gbifCountUrl, where the filter is verifiable.
  */
-export function gbifSearchUrl(
+export function gbifSearchUrl(bounds: [number, number, number, number]): string {
+  const [w, s, e, n] = bounds.map((v) => Number(v.toFixed(5)));
+  const polygon = `POLYGON((${w} ${s},${e} ${s},${e} ${n},${w} ${n},${w} ${s}))`;
+  return `https://www.gbif.org/occurrence/search?${new URLSearchParams({
+    geometry: polygon,
+    has_coordinate: "true",
+  })}`;
+}
+
+/**
+ * What GBIF holds in a cell now, for the taxon shown — the API, not the site.
+ *
+ * The API's parameter names are documented and were checked against real
+ * responses, so the taxon filter here is known to bite: the same call returns
+ * 1,442 vascular-plant records for a cell east of Bogot\u00e1 and 609 million
+ * worldwide for the phylum.
+ */
+export function gbifCountUrl(
   bounds: [number, number, number, number],
   group: EffortGroup
 ): string {
   const [w, s, e, n] = bounds.map((v) => Number(v.toFixed(5)));
   const polygon = `POLYGON((${w} ${s},${e} ${s},${e} ${n},${w} ${n},${w} ${s}))`;
-  const params = new URLSearchParams({ geometry: polygon, has_coordinate: "true" });
+  const params = new URLSearchParams({ geometry: polygon, hasCoordinate: "true", limit: "0" });
   if (group !== "all") {
-    for (const key of GBIF_TAXON_KEYS[group]) params.append("taxon_key", String(key));
+    for (const key of GBIF_TAXON_KEYS[group]) params.append("taxonKey", String(key));
   }
-  return `https://www.gbif.org/occurrence/search?${params}`;
+  return `https://api.gbif.org/v1/occurrence/search?${params}`;
 }

@@ -33,7 +33,7 @@ import {
   gbifSearchUrl,
   type EffortGroup,
 } from "@/lib/mapping/sampling-effort";
-import { useSamplingEffort, effortAt, effortCell } from "@/hooks/mapping/useSamplingEffort";
+import { useSamplingEffort, effortAt, effortCell, useGbifCellCount } from "@/hooks/mapping/useSamplingEffort";
 import {
   BIOMES,
   ECOREGIONS_ASSET,
@@ -2411,6 +2411,19 @@ export default function OccurrenceMapRow({
    * fast enough to run during render and avoids carrying a spatial index for a
    * lookup that happens once per click.
    */
+  /** The effort cell under the right-clicked point, if the layer is on. */
+  const effortCellAtPoint = useMemo(
+    () =>
+      pointQuery && effortLayer && showSamplingEffort
+        ? effortCell(effortLayer, pointQuery.lng, pointQuery.lat)
+        : null,
+    [pointQuery, effortLayer, showSamplingEffort]
+  );
+  const { count: gbifCellCount, loading: gbifCellCountLoading } = useGbifCellCount(
+    effortCellAtPoint?.bounds ?? null,
+    effortLayer?.group ?? null
+  );
+
   const ecoregionAtPoint = useMemo<EcoregionProperties | null>(() => {
     if (!pointQuery || !ecoregions) return null;
     const point: GeoJSON.Feature<GeoJSON.Point> = {
@@ -3537,42 +3550,41 @@ export default function OccurrenceMapRow({
                         counts came down with the layer, so this is a lookup in
                         an array rather than a request — the reason for shipping
                         values instead of a picture. */}
-                    {showSamplingEffort && effortLayer && (
+                    {showSamplingEffort && effortLayer && effortCellAtPoint && (
                       <div className="pt-1 border-t border-zinc-100 dark:border-zinc-800">
                         {(() => {
                           const records = effortAt(effortLayer, pointQuery.lng, pointQuery.lat);
-                          const cell = effortCell(effortLayer, pointQuery.lng, pointQuery.lat);
-                          if (records == null || !cell) {
-                            return (
-                              <span className="text-zinc-400">
-                                No {EFFORT_GROUP_LABELS[effortLayer.group].toLowerCase()} records
-                                collected here.
-                              </span>
-                            );
-                          }
                           return (
-                            <span>
+                            <>
                               <span className="font-medium text-zinc-700 dark:text-zinc-200">
-                                {formatEffort(records, cell.widthKm)}
+                                {records == null
+                                  ? `No ${EFFORT_GROUP_LABELS[effortLayer.group].toLowerCase()} records when this was published`
+                                  : formatEffort(records, effortCellAtPoint.widthKm)}
                               </span>
                               <span className="block text-zinc-400">
                                 {EFFORT_GROUP_LABELS[effortLayer.group]}, all years
                               </span>
-                              {/* Opens what GBIF holds there now. Deliberately
-                                  not presented as the same number: this layer
-                                  is a snapshot published with the paper, GBIF
-                                  grows daily, and its 10 km grid and this
-                                  Mercator pixel aren't the same shape. */}
+                              {/* The layer is a snapshot published with the
+                                  paper; this is what GBIF holds today. They
+                                  differ by a lot and neither is wrong, so both
+                                  are shown and both are labelled. */}
+                              <span className="block text-zinc-500 dark:text-zinc-400">
+                                {gbifCellCountLoading
+                                  ? "Counting on GBIF…"
+                                  : gbifCellCount == null
+                                    ? ""
+                                    : `${gbifCellCount.toLocaleString()} on GBIF today`}
+                              </span>
                               <a
-                                href={gbifSearchUrl(cell.bounds, effortLayer.group)}
+                                href={gbifSearchUrl(effortCellAtPoint.bounds)}
                                 target="_blank"
                                 rel="noopener noreferrer"
-                                title="Search GBIF for the records in this cell. The total there won't match the figure above — that one is the published snapshot, this is what's there today."
+                                title="Every record GBIF holds in this cell, all taxa. The count above is filtered to this layer's group; the search is not, because the site's taxon filter can't be set reliably from a link."
                                 className="block text-blue-600 dark:text-blue-400 hover:underline"
                               >
-                                Inspect these records on GBIF
+                                Browse this cell on GBIF
                               </a>
-                            </span>
+                            </>
                           );
                         })()}
                       </div>

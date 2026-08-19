@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { overlayUrl } from "@/lib/mapping/map-overlays";
 import {
   decodeEffort,
+  gbifCountUrl,
   effortAsset,
   effortColour,
   rampTop,
@@ -219,4 +220,48 @@ export function effortAt(
   if (x < 0 || x >= size || y < 0 || y >= size) return null;
   const value = counts[y * size + x];
   return value > 0 ? value : null;
+}
+
+/**
+ * How many records GBIF holds in a cell right now, for the taxon shown.
+ *
+ * Asked on demand rather than with the layer: it is one request per cell the
+ * assessor actually asks about, against seventeen million cells nobody will.
+ *
+ * It exists because the layer's own figure is a snapshot published with the
+ * paper and GBIF has moved since — on a cell east of Bogotá the layer says 2
+ * and GBIF holds 1,442. Both are true about different moments, and showing them
+ * side by side is the only way that reads as information rather than as a bug.
+ */
+export function useGbifCellCount(
+  bounds: [number, number, number, number] | null,
+  group: EffortGroup | null
+) {
+  const [count, setCount] = useState<number | null>(null);
+  const [loading, setLoading] = useState(false);
+
+  const key = bounds ? `${bounds.join(",")}|${group}` : null;
+  useEffect(() => {
+    if (!bounds || !group) {
+      setCount(null);
+      return;
+    }
+    const controller = new AbortController();
+    setLoading(true);
+    setCount(null);
+    fetch(gbifCountUrl(bounds, group), { signal: controller.signal })
+      .then((r) => (r.ok ? r.json() : Promise.reject(new Error(String(r.status)))))
+      .then((d: { count?: number }) => setCount(d.count ?? null))
+      .catch(() => {
+        // A failed count leaves the snapshot figure and the link, which are the
+        // parts that don't depend on the network being there.
+      })
+      .finally(() => setLoading(false));
+    return () => controller.abort();
+    // Keyed on the cell and taxon rather than the array identity, which is
+    // rebuilt on every render and would refetch forever.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [key]);
+
+  return { count, loading };
 }
