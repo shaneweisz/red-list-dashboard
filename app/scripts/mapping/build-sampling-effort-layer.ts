@@ -179,6 +179,9 @@ function readGeoTiff(buf: Buffer): Raster {
  * browsers decode PNG natively, so the values come back off a canvas with no
  * decoder to ship.
  */
+/** GDAL_NODATA in the published rasters; uint32 max, not a count. */
+const NODATA = 4294967295;
+
 function encodeValues(source: Raster, size: number): { rgba: Uint8Array; max: number } {
   let max = 0;
   for (const v of source.values) if (v > max) max = v;
@@ -195,27 +198,22 @@ function encodeValues(source: Raster, size: number): { rgba: Uint8Array; max: nu
     // Every source row this output row covers. Point-sampling skipped cells
     // near the equator and repeated them near the poles, which showed up as
     // speckle.
-    const y0 = srcRow(latAt(y));
-    const y1 = Math.max(y0 + 1, srcRow(latAt(y + 1)));
-
     for (let x = 0; x < size; x++) {
-      const x0 = Math.floor((x / size) * source.width);
-      const x1 = Math.max(x0 + 1, Math.floor(((x + 1) / size) * source.width));
-
-      let total = 0;
-      let cells = 0;
-      for (let sy = y0; sy < y1 && sy < source.height; sy++) {
-        const row = sy * source.width;
-        for (let sx = x0; sx < x1 && sx < source.width; sx++) {
-          total += source.values[row + sx];
-          cells++;
-        }
-      }
-      if (cells === 0) continue;
-      // Mean, rounded: the honest reading of "records per cell" over an area
-      // covering several source cells.
-      const value = Math.round(total / cells);
-      if (value <= 0) continue;
+      // The source cell containing this pixel's centre, not the mean of every
+      // cell it touches.
+      //
+      // Averaging was added to kill speckle at 2048, where a pixel covered
+      // several source cells. At 4096 a pixel is barely wider than a cell, so
+      // it straddles two — and a mean of two counts is not a count. Over Bogotá
+      // it read 6,709: the average of a city cell holding 12,553 and the
+      // hillside beside it holding 864, reported as the number of records in
+      // the hillside. Nearest keeps the figure a real count of a real cell,
+      // which is what the panel claims it is and what a link to GBIF can be
+      // checked against.
+      const sy = Math.min(source.height - 1, srcRow(latAt(y + 0.5)));
+      const sx = Math.min(source.width - 1, Math.floor(((x + 0.5) / size) * source.width));
+      const value = source.values[sy * source.width + sx];
+      if (!Number.isFinite(value) || value <= 0 || value === NODATA) continue;
 
       const o = (y * size + x) * 4;
       rgba[o] = (value >> 16) & 0xff;
