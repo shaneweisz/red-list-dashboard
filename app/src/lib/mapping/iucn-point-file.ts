@@ -20,7 +20,7 @@
  * case, or carrying extras still reads.
  */
 
-import { haversineMetres, type LngLat } from "@/lib/geo-distance";
+import { haversineMetres, type LngLat } from "@/lib/mapping/geo-distance";
 
 /** The columns IUCN's point file specification defines, in the workbook's order. */
 /**

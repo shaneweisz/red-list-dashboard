@@ -2,9 +2,9 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { QUALITY_FLAG_LABELS, type QualityFlag } from "@/lib/coordinate-cleaning";
+import { QUALITY_FLAG_LABELS, type QualityFlag } from "@/lib/mapping/coordinate-cleaning";
 import { formatGbifIssue } from "@/lib/gbif";
-import type { Georeference } from "@/lib/georeferences";
+import type { Georeference } from "@/lib/mapping/georeferences";
 
 /**
  * A single GBIF occurrence, as returned by /api/occurrences. Shared with

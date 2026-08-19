@@ -9,7 +9,7 @@
  */
 import { NextRequest, NextResponse } from "next/server";
 import { S3Client, GetObjectCommand } from "@aws-sdk/client-s3";
-import { isOverlayAsset } from "@/lib/map-overlays";
+import { isOverlayAsset } from "@/lib/mapping/map-overlays";
 
 let r2Client: S3Client | null = null;
 

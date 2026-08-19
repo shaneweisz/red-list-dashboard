@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
-import { EXCLUSION_REASONS } from "@/lib/georeferences";
+import { EXCLUSION_REASONS } from "@/lib/mapping/georeferences";
 
 interface ExclusionDialogProps {
   /** The records being struck out — one, or a set selected together. */

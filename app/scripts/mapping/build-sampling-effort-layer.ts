@@ -19,9 +19,9 @@
  * once here, serve a plain image.
  *
  * Usage:
- *   npx tsx scripts/build-sampling-effort-layer.ts                 # n_obs at 10km
- *   npx tsx scripts/build-sampling-effort-layer.ts n_sp 5          # species, 5km
- *   npx tsx scripts/build-sampling-effort-layer.ts --out /tmp/x.png
+ *   npx tsx scripts/mapping/build-sampling-effort-layer.ts                 # n_obs at 10km
+ *   npx tsx scripts/mapping/build-sampling-effort-layer.ts n_sp 5          # species, 5km
+ *   npx tsx scripts/mapping/build-sampling-effort-layer.ts --out /tmp/x.png
  */
 
 import * as zlib from "zlib";

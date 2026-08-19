@@ -2,7 +2,7 @@
 
 import dynamic from "next/dynamic";
 
-const OccurrenceMapRow = dynamic(() => import("@/components/OccurrenceMapRow"), { ssr: false });
+const OccurrenceMapRow = dynamic(() => import("@/components/mapping/OccurrenceMapRow"), { ssr: false });
 
 /**
  * Client half of the standalone occurrence page. The species is resolved on

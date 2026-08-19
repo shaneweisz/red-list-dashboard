@@ -2,7 +2,7 @@
 
 import { useCallback, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { formatDistance } from "@/lib/geo-distance";
+import { formatDistance } from "@/lib/mapping/geo-distance";
 import {
   biggestDisagreements,
   POINT_FILE_COLOR,
@@ -10,7 +10,7 @@ import {
   parseIucnPointFile,
   type PointFileComparison,
   type PointFileImport,
-} from "@/lib/iucn-point-file";
+} from "@/lib/mapping/iucn-point-file";
 
 interface PointFileDialogProps {
   /** The file loaded for this species, if one has been. */

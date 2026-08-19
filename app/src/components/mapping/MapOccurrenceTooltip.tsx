@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useMap } from "react-map-gl/maplibre";
-import { QUALITY_FLAG_LABELS, type QualityFlag } from "@/lib/coordinate-cleaning";
+import { QUALITY_FLAG_LABELS, type QualityFlag } from "@/lib/mapping/coordinate-cleaning";
 
 interface MapOccurrenceTooltipProps {
   lat: number;

@@ -13,7 +13,7 @@ import {
   undo as undoIn,
   undoLabel as undoLabelOf,
   type History,
-} from "@/lib/edit-history";
+} from "@/lib/mapping/edit-history";
 import {
   loadExclusions,
   loadGeoreferences,
@@ -21,7 +21,7 @@ import {
   saveGeoreferences,
   type Exclusion,
   type Georeference,
-} from "@/lib/georeferences";
+} from "@/lib/mapping/georeferences";
 
 /** Everything the assessor has added to a species, as one document. */
 export interface AssessorEdits {

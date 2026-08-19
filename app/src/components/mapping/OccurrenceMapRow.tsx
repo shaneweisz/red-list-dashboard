@@ -6,8 +6,8 @@ import Link from "next/link";
 import type { MapRef, ViewStateChangeEvent, MapLayerMouseEvent } from "react-map-gl/maplibre";
 import type maplibregl from "maplibre-gl";
 import { taxonGroupCountsPreservedSpecimens } from "@/lib/gbif";
-import { InatObservation, getThumbUrl, InatPhotoWithPreview } from "./InatPhotoCard";
-import { QualityFlag, QUALITY_FLAG_LABELS, QUALITY_FLAG_DESCRIPTIONS, QUALITY_FLAG_SOURCES } from "@/lib/coordinate-cleaning";
+import { InatObservation, getThumbUrl, InatPhotoWithPreview } from "@/components/InatPhotoCard";
+import { QualityFlag, QUALITY_FLAG_LABELS, QUALITY_FLAG_DESCRIPTIONS, QUALITY_FLAG_SOURCES } from "@/lib/mapping/coordinate-cleaning";
 import { CATEGORY_COLORS, normalizeCategory } from "@/config/taxa";
 import { FaInfoCircle } from "react-icons/fa";
 import booleanPointInPolygon from "@turf/boolean-point-in-polygon";
@@ -22,8 +22,8 @@ import {
   identifyProtectedAreas,
   protectedPlanetUrl,
   type ProtectedArea,
-} from "@/lib/protected-areas";
-import { ELEVATION_ATTRIBUTION, elevationAt, formatElevation } from "@/lib/elevation";
+} from "@/lib/mapping/protected-areas";
+import { ELEVATION_ATTRIBUTION, elevationAt, formatElevation } from "@/lib/mapping/elevation";
 import {
   BIOMES,
   ECOREGIONS_ASSET,
@@ -33,8 +33,8 @@ import {
   oneEarthEcoregionUrl,
   overlayUrl,
   type EcoregionProperties,
-} from "@/lib/map-overlays";
-import { formatDistance, pathLengthMetres } from "@/lib/geo-distance";
+} from "@/lib/mapping/map-overlays";
+import { formatDistance, pathLengthMetres } from "@/lib/mapping/geo-distance";
 import {
   clearPointFile,
   comparePointFile,
@@ -47,16 +47,16 @@ import {
   type MatchedRecord,
   type MatchVia,
   type PointFileImport,
-} from "@/lib/iucn-point-file";
-import { useAssessorEdits } from "@/hooks/useAssessorEdits";
+} from "@/lib/mapping/iucn-point-file";
+import { useAssessorEdits } from "@/hooks/mapping/useAssessorEdits";
 import {
   b1Threshold,
   b2Threshold,
   computeAoo,
   computeEoo,
   formatAreaKm2,
-} from "@/lib/range-metrics";
-import type { Place } from "@/lib/geocode";
+} from "@/lib/mapping/range-metrics";
+import type { Place } from "@/lib/mapping/geocode";
 import {
   FOREST_LOSS_ATTRIBUTION,
   FOREST_LOSS_CAVEAT,
@@ -69,7 +69,7 @@ import {
   FOREST_LOSS_SOURCE_NOTE,
   FOREST_LOSS_TILE_URL,
   FOREST_LOSS_URL,
-} from "@/lib/forest-loss";
+} from "@/lib/mapping/forest-loss";
 import {
   HABITAT_ATTRIBUTION,
   HABITAT_LEGEND,
@@ -77,12 +77,12 @@ import {
   HABITAT_TILE_URL,
   identifyHabitat,
   type HabitatClass,
-} from "@/lib/habitat-map";
+} from "@/lib/mapping/habitat-map";
 import {
   occurrencesToCsv,
   uncertaintyCircle,
   type Georeference,
-} from "@/lib/georeferences";
+} from "@/lib/mapping/georeferences";
 
 // Fixed page size for iNat photo grid (2 columns x 5 rows)
 const INAT_PAGE_SIZE = 10;
@@ -121,11 +121,11 @@ const MapOccurrenceTooltip = dynamic(
   { ssr: false }
 );
 const RangeMapLayer = dynamic(
-  () => import("./RangeMapLayer"),
+  () => import("@/components/RangeMapLayer"),
   { ssr: false }
 );
 const AohMapLayer = dynamic(
-  () => import("./AohMapLayer"),
+  () => import("@/components/AohMapLayer"),
   { ssr: false }
 );
 // The list (table) view of the same occurrences — only pulled in when the user
@@ -143,7 +143,7 @@ const ExclusionDialog = dynamic(
   { ssr: false }
 );
 const ConfirmDialog = dynamic(
-  () => import("./ConfirmDialog"),
+  () => import("@/components/ConfirmDialog"),
   { ssr: false }
 );
 const MapPlaceSearch = dynamic(
@@ -894,10 +894,10 @@ export default function OccurrenceMapRow({
   const [showRange, setShowRange] = useState(false);
   const [rangeLoading, setRangeLoading] = useState(false);
   const [rangeNotFound, setRangeNotFound] = useState(false);
-  const [rangeCategories, setRangeCategories] = useState<import("./RangeMapLayer").RangeCategory[]>([]);
+  const [rangeCategories, setRangeCategories] = useState<import("@/components/RangeMapLayer").RangeCategory[]>([]);
   const [visibleCategories, setVisibleCategories] = useState<Set<string> | undefined>(undefined);
   const [rangeCategoriesExpanded, setRangeCategoriesExpanded] = useState(false);
-  const [rangeSimplification, setRangeSimplification] = useState<import("./RangeMapLayer").SimplificationInfo | null>(null);
+  const [rangeSimplification, setRangeSimplification] = useState<import("@/components/RangeMapLayer").SimplificationInfo | null>(null);
   // Currently-visible range polygons (post category-filtering), reported up from
   // RangeMapLayer — paired with filteredOccurrences below to compute the
   // in-range/out-of-range breakdown shown in the corner stats table.
@@ -1395,7 +1395,7 @@ export default function OccurrenceMapRow({
   const [countryPolygons, setCountryPolygons] = useState<CountryPolygon[] | null>(null);
   useEffect(() => {
     if (!(showPowoRangeOverlay || showIucnRangeOverlay) || countryPolygons) return;
-    import("@/lib/coordinate-cleaning-refdata/countries.json").then((mod) => {
+    import("@/lib/mapping/coordinate-cleaning-refdata/countries.json").then((mod) => {
       setCountryPolygons(mod.default as unknown as CountryPolygon[]);
     });
   }, [showPowoRangeOverlay, showIucnRangeOverlay, countryPolygons]);

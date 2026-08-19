@@ -6,8 +6,8 @@ import {
   formatKind,
   searchPlaces,
   type Place,
-} from "@/lib/geocode";
-import { parseCoordinatePair } from "@/lib/georeferences";
+} from "@/lib/mapping/geocode";
+import { parseCoordinatePair } from "@/lib/mapping/georeferences";
 
 interface MapPlaceSearchProps {
   /** Where the map is looking, so results near it rank first. Read at search

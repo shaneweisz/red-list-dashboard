@@ -49,7 +49,7 @@ function visibleTab(tab: DetailTab | null | undefined): DetailTab {
 
 // Dynamically import OccurrenceMapRow to avoid SSR issues with Leaflet
 const OccurrenceMapRow = dynamic(
-  () => import("../OccurrenceMapRow"),
+  () => import("@/components/mapping/OccurrenceMapRow"),
   { ssr: false }
 );
 

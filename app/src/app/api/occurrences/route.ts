@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { CACHE_5M } from "@/lib/cache-headers";
-import { getQualityFlags } from "@/lib/coordinate-cleaning";
+import { getQualityFlags } from "@/lib/mapping/coordinate-cleaning";
 import { GBIF_CHECKLIST_KEY, GBIF_GEOSPATIAL_ISSUES } from "@/lib/gbif";
 
 export const dynamic = "force-dynamic";

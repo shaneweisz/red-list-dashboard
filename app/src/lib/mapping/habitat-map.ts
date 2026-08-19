@@ -15,7 +15,7 @@
  * would mean building a tile pyramid first.
  */
 
-import { habitatCodeLabel } from "./habitat-classification";
+import { habitatCodeLabel } from "@/lib/habitat-classification";
 
 const IMAGE_SERVER =
   "https://data-gis.unep-wcmc.org/server/rest/services/NatureMap/NatureMap_HabitatTypes/ImageServer";

@@ -23,19 +23,19 @@
  *   - app/data/overlays/ populated by the two build scripts
  *
  * Usage:
- *   npx tsx scripts/build-ecoregions-layer.ts
- *   npx tsx scripts/build-sampling-effort-layer.ts --out data/overlays/sampling-effort-n_obs-10km.png
- *   npx tsx scripts/upload-overlays-to-r2.ts
+ *   npx tsx scripts/mapping/build-ecoregions-layer.ts
+ *   npx tsx scripts/mapping/build-sampling-effort-layer.ts --out data/overlays/sampling-effort-n_obs-10km.png
+ *   npx tsx scripts/mapping/upload-overlays-to-r2.ts
  */
 
 import * as fs from "fs";
 import * as path from "path";
 import { S3Client, PutObjectCommand, HeadObjectCommand } from "@aws-sdk/client-s3";
-import { loadEnvFiles } from "./utils";
+import { loadEnvFiles } from "../utils";
 
 export const OVERLAY_PREFIX = "overlays";
 
-const OVERLAYS_DIR = path.join(__dirname, "..", "data", "overlays");
+const OVERLAYS_DIR = path.join(__dirname, "..", "..", "data", "overlays");
 
 /** Content types by extension — R2 serves what we tell it to. */
 const CONTENT_TYPES: Record<string, string> = {
@@ -85,7 +85,7 @@ async function main() {
     // therefore a no-op rather than an error — re-running this after adding one
     // new layer shouldn't fail on the layers that haven't changed. Changing a
     // file means giving it a new name, which is a code change in
-    // lib/map-overlays.ts and reviewable as one.
+    // lib/mapping/map-overlays.ts and reviewable as one.
     try {
       await client.send(new HeadObjectCommand({ Bucket: bucket, Key: key }));
       console.log(`  already published, left alone → ${key}`);

@@ -6,10 +6,10 @@ import {
   parseCoordinatePair,
   validateGeoreference,
   type Georeference,
-} from "@/lib/georeferences";
+} from "@/lib/mapping/georeferences";
 import type { OccurrenceFeature } from "./OccurrenceListTable";
-import { formatKind, searchPlaces, GEOCODER_ATTRIBUTION, type Place } from "@/lib/geocode";
-import { haversineMetres } from "@/lib/geo-distance";
+import { formatKind, searchPlaces, GEOCODER_ATTRIBUTION, type Place } from "@/lib/mapping/geocode";
+import { haversineMetres } from "@/lib/mapping/geo-distance";
 
 interface GeoreferenceEditorProps {
   /**

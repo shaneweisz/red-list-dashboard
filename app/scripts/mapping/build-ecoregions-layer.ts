@@ -23,10 +23,10 @@
  * maxRecordCount is 2000.
  *
  * Usage:
- *   npx tsx scripts/build-ecoregions-layer.ts              # default 0.1° simplification
- *   npx tsx scripts/build-ecoregions-layer.ts --offset 0.05
- *   npx tsx scripts/build-ecoregions-layer.ts --out /tmp/eco.json
- *   npx tsx scripts/build-ecoregions-layer.ts --no-links   # skip the One Earth check
+ *   npx tsx scripts/mapping/build-ecoregions-layer.ts              # default 0.1° simplification
+ *   npx tsx scripts/mapping/build-ecoregions-layer.ts --offset 0.05
+ *   npx tsx scripts/mapping/build-ecoregions-layer.ts --out /tmp/eco.json
+ *   npx tsx scripts/mapping/build-ecoregions-layer.ts --no-links   # skip the One Earth check
  */
 
 import { gzipSync } from "zlib";
@@ -131,7 +131,7 @@ function round(value: unknown): unknown {
 async function main() {
   const offset = Number(ARG("--offset") ?? DEFAULT_OFFSET);
   const out =
-    ARG("--out") ?? path.join(__dirname, "..", "data", "overlays", "ecoregions-2017-v2.json");
+    ARG("--out") ?? path.join(__dirname, "..", "..", "data", "overlays", "ecoregions-2017-v2.json");
 
   const params = new URLSearchParams({
     where: "1=1",
