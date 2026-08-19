@@ -3576,13 +3576,13 @@ export default function OccurrenceMapRow({
                                     : `${gbifCellCount.toLocaleString()} on GBIF today`}
                               </span>
                               <a
-                                href={gbifSearchUrl(effortCellAtPoint.bounds)}
+                                href={gbifSearchUrl(effortCellAtPoint.bounds, effortLayer.group)}
                                 target="_blank"
                                 rel="noopener noreferrer"
-                                title="Every record GBIF holds in this cell, all taxa. The count above is filtered to this layer's group; the search is not, because the site's taxon filter can't be set reliably from a link."
+                                title="Open this cell on GBIF, filtered to the same taxon. The total there is today's; the figure above is the snapshot this layer was published with."
                                 className="block text-blue-600 dark:text-blue-400 hover:underline"
                               >
-                                Browse this cell on GBIF
+                                Inspect these records on GBIF
                               </a>
                             </>
                           );

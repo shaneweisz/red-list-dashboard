@@ -241,27 +241,53 @@ export const GBIF_TAXON_KEYS: Record<Exclude<EffortGroup, "all">, number[]> = {
 };
 
 /**
- * The GBIF occurrence search for one cell.
+ * Catalogue of Life keys for the groups this layer offers.
  *
- * Geometry only, and deliberately so. Two spellings of a taxon filter were
- * tried against the website — taxonKey and taxon_key — and both were swallowed
- * into its scientific-name filter, which returns nothing and looks like an
- * empty cell rather than a broken link. The key itself is fine: 7707728 is
- * still Tracheophyta, accepted, in GBIF's own API. It is the website's
- * parameter naming that isn't guessable from here, and gbif.org answers
- * automated browsers with a bot challenge, so it can't be settled by trying.
+ * The website and the v1 API do not share a keyspace. gbif.org went CoL-first
+ * in June 2026 and its occurrence search takes CoL ids — the same alphanumeric
+ * keys this dashboard already routes on, so 6CX6F is Dioscorea biplicata in
+ * both. The v1 API still takes the old numeric backbone keys, which is why
+ * GBIF_TAXON_KEYS above and this table both exist and disagree.
  *
- * A link that shows every record in the cell is honestly labelled and always
- * right. The taxon-filtered figure comes from the API instead, in
- * gbifCountUrl, where the filter is verifiable.
+ * Resolved through ChecklistBank against the release gbif.org serves, and
+ * spot-checked against a URL the site itself produced: clicking Vertebrata
+ * there gives taxonKey=8V4V3, which ChecklistBank confirms is Vertebrata.
+ *
+ * Reptilia needs no workaround here. CoL holds it as an accepted class (RP),
+ * where the v1 backbone has no usable node for it at all.
  */
-export function gbifSearchUrl(bounds: [number, number, number, number]): string {
+export const COL_TAXON_KEYS: Record<Exclude<EffortGroup, "all">, string> = {
+  tracheophyta: "TP",
+  aves: "V2",
+  mammalia: "6224G",
+  reptilia: "RP",
+  amphibia: "PH",
+  insecta: "H6",
+  arachnida: "CCQKT",
+  mollusca: "M2L",
+  fungi: "F",
+};
+
+/**
+ * The GBIF occurrence search for one cell, filtered to the taxon shown.
+ *
+ * Both parameters are camelCase, which is what the site emits for itself. Two
+ * earlier attempts failed for a reason worth recording: the names were right
+ * the first time and the key was wrong — a numeric v1 key the CoL-first site
+ * couldn't resolve, so it fell through into the scientific-name filter and
+ * returned nothing. The lesson wasn't "guess again", it was that a link whose
+ * result nobody here can see needs a number beside it, which is what the live
+ * count is for.
+ */
+export function gbifSearchUrl(
+  bounds: [number, number, number, number],
+  group: EffortGroup
+): string {
   const [w, s, e, n] = bounds.map((v) => Number(v.toFixed(5)));
   const polygon = `POLYGON((${w} ${s},${e} ${s},${e} ${n},${w} ${n},${w} ${s}))`;
-  return `https://www.gbif.org/occurrence/search?${new URLSearchParams({
-    geometry: polygon,
-    has_coordinate: "true",
-  })}`;
+  const params = new URLSearchParams({ geometry: polygon, hasCoordinate: "true" });
+  if (group !== "all") params.set("taxonKey", COL_TAXON_KEYS[group]);
+  return `https://www.gbif.org/occurrence/search?${params}`;
 }
 
 /**
