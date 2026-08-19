@@ -30,7 +30,7 @@
 
 import * as fs from "fs";
 import * as path from "path";
-import { S3Client, PutObjectCommand } from "@aws-sdk/client-s3";
+import { S3Client, PutObjectCommand, HeadObjectCommand } from "@aws-sdk/client-s3";
 import { loadEnvFiles } from "./utils";
 
 export const OVERLAY_PREFIX = "overlays";
@@ -74,14 +74,32 @@ async function main() {
     .filter((name) => !name.endsWith(".json") || name.endsWith(".json.gz"));
   if (files.length === 0) throw new Error(`Nothing to upload in ${OVERLAYS_DIR}`);
 
+  let uploaded = 0;
   for (const name of files) {
     const filePath = path.join(OVERLAYS_DIR, name);
+    const key = `${OVERLAY_PREFIX}/${name}`;
+
+    // The bucket refuses overwrites, and that is the behaviour we want: the
+    // route caches these files forever, so quietly swapping one's contents
+    // would serve a stale copy indefinitely. A name already present is
+    // therefore a no-op rather than an error — re-running this after adding one
+    // new layer shouldn't fail on the layers that haven't changed. Changing a
+    // file means giving it a new name, which is a code change in
+    // lib/map-overlays.ts and reviewable as one.
+    try {
+      await client.send(new HeadObjectCommand({ Bucket: bucket, Key: key }));
+      console.log(`  already published, left alone → ${key}`);
+      continue;
+    } catch {
+      // Not there yet; upload it below.
+    }
+
     const body = fs.readFileSync(filePath);
     const extension = path.extname(name);
     await client.send(
       new PutObjectCommand({
         Bucket: bucket,
-        Key: `${OVERLAY_PREFIX}/${name}`,
+        Key: key,
         Body: body,
         ContentType: CONTENT_TYPES[extension] ?? "application/octet-stream",
         // Set on the object so the header survives however it's fetched. These
@@ -90,9 +108,10 @@ async function main() {
         ...(name.endsWith(".gz") ? { ContentEncoding: "gzip" } : {}),
       })
     );
-    console.log(`  ${(body.length / 1024 / 1024).toFixed(2)} MB → ${bucket}/${OVERLAY_PREFIX}/${name}`);
+    uploaded++;
+    console.log(`  ${(body.length / 1024 / 1024).toFixed(2)} MB → ${bucket}/${key}`);
   }
-  console.log(`Uploaded ${files.length} overlay file${files.length === 1 ? "" : "s"}.`);
+  console.log(`Uploaded ${uploaded} of ${files.length} overlay file${files.length === 1 ? "" : "s"}.`);
 }
 
 main().catch((error) => {

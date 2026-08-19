@@ -26,6 +26,7 @@
  *   npx tsx scripts/build-ecoregions-layer.ts              # default 0.1° simplification
  *   npx tsx scripts/build-ecoregions-layer.ts --offset 0.05
  *   npx tsx scripts/build-ecoregions-layer.ts --out /tmp/eco.json
+ *   npx tsx scripts/build-ecoregions-layer.ts --no-links   # skip the One Earth check
  */
 
 import { gzipSync } from "zlib";
@@ -49,6 +50,56 @@ const DEFAULT_OFFSET = 0.1;
 /** Coordinate precision. 4dp is ~11 m — far finer than the simplification. */
 const COORD_DECIMALS = 4;
 
+/**
+ * One Earth publishes a page per ecoregion at /ecoregions/<slug>/, which is the
+ * readable write-up an assessor would actually want — the Navigator's own
+ * content, reachable without its Cesium tiles.
+ *
+ * The slug is the name lowercased and hyphenated, but not reliably: of a
+ * twelve-name sample three didn't resolve, either because One Earth names the
+ * ecoregion differently ("Western Java montane rain forests") or because it
+ * isn't really an ecoregion at all ("Rock and Ice"). A link that 404s a quarter
+ * of the time is worse than no link, so every slug is checked here, once, and
+ * only the ones that answer are carried into the file.
+ */
+function oneEarthSlug(name: string): string {
+  return name
+    .normalize("NFD")
+    // Strip the combining marks left by NFD, so "páramo" becomes "paramo".
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-|-$/g, "");
+}
+
+async function resolveOneEarthSlugs(names: string[]): Promise<Map<string, string>> {
+  const found = new Map<string, string>();
+  const CONCURRENCY = 6;
+  let index = 0;
+  let checked = 0;
+
+  async function worker() {
+    while (index < names.length) {
+      const name = names[index++];
+      const slug = oneEarthSlug(name);
+      try {
+        const response = await fetch(`https://www.oneearth.org/ecoregions/${slug}/`, {
+          method: "HEAD",
+          redirect: "follow",
+        });
+        if (response.status === 200) found.set(name, slug);
+      } catch {
+        // Treated as absent: a link we couldn't confirm doesn't get shipped.
+      }
+      checked++;
+      if (checked % 100 === 0) console.log(`  checked ${checked}/${names.length}…`);
+    }
+  }
+
+  await Promise.all(Array.from({ length: CONCURRENCY }, worker));
+  return found;
+}
+
 interface EcoregionProperties {
   /** Ecoregion name, e.g. "Northern Andean páramo". */
   name: string;
@@ -62,6 +113,8 @@ interface EcoregionProperties {
   color: string;
   /** The dataset's own colour for its biome — what the overlay draws with. */
   biomeColor: string;
+  /** One Earth's page for this ecoregion, where one exists. */
+  oneEarth?: string;
 }
 
 const ARG = (flag: string): string | undefined => {
@@ -78,7 +131,7 @@ function round(value: unknown): unknown {
 async function main() {
   const offset = Number(ARG("--offset") ?? DEFAULT_OFFSET);
   const out =
-    ARG("--out") ?? path.join(__dirname, "..", "data", "overlays", "ecoregions-2017.json");
+    ARG("--out") ?? path.join(__dirname, "..", "data", "overlays", "ecoregions-2017-v2.json");
 
   const params = new URLSearchParams({
     where: "1=1",
@@ -107,6 +160,14 @@ async function main() {
     throw new Error(`Only ${features.length} ecoregions returned; expected ~847`);
   }
 
+  const names = [...new Set(features.map((f) => f.properties.ECO_NAME).filter(Boolean))];
+  let oneEarth = new Map<string, string>();
+  if (!process.argv.includes("--no-links")) {
+    console.log(`Checking One Earth for ${names.length} ecoregion pages…`);
+    oneEarth = await resolveOneEarthSlugs(names);
+    console.log(`  ${oneEarth.size} of ${names.length} have a page`);
+  }
+
   const trimmed = {
     type: "FeatureCollection" as const,
     features: features.map((f) => {
@@ -118,6 +179,7 @@ async function main() {
         nnh: p.NNH_NAME ?? "",
         color: p.COLOR ?? "#cccccc",
         biomeColor: p.COLOR_BIO ?? p.COLOR ?? "#cccccc",
+        ...(oneEarth.has(p.ECO_NAME) ? { oneEarth: oneEarth.get(p.ECO_NAME) } : {}),
       };
       return { type: "Feature" as const, properties, geometry: round(f.geometry) };
     }),

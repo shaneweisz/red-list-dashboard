@@ -30,6 +30,7 @@ import {
   ECOREGIONS_ATTRIBUTION,
   SAMPLING_EFFORT_ASSET,
   SAMPLING_EFFORT_LEGEND,
+  oneEarthEcoregionUrl,
   overlayUrl,
   type EcoregionProperties,
 } from "@/lib/map-overlays";
@@ -2137,6 +2138,21 @@ export default function OccurrenceMapRow({
       }
     }
     setPointQuery(null);
+    // Same bargain as the protected areas: with the overlay on, the shapes are
+    // right there, so clicking one should tell you which it is. Answered from
+    // the polygons already loaded, so there's nothing to wait for. Clicking off
+    // every ecoregion clears the selection rather than leaving it stranded.
+    if (showEcoregions && ecoregions) {
+      const point: GeoJSON.Feature<GeoJSON.Point> = {
+        type: "Feature",
+        properties: {},
+        geometry: { type: "Point", coordinates: [e.lngLat.lng, e.lngLat.lat] },
+      };
+      const hit = ecoregions.features.find((f) => booleanPointInPolygon(point, f));
+      setSelectedEcoregion(
+        hit ? { properties: hit.properties, geometry: hit.geometry } : null
+      );
+    }
     // With the overlay on, a plain click asks what protects this spot — the
     // shapes are right there, so clicking one should answer for it. Everything
     // else about a location is on the right button.
@@ -2172,7 +2188,7 @@ export default function OccurrenceMapRow({
         });
       })
       .catch(() => undefined);
-  }, [measure, showProtectedAreas, editorDocked]);
+  }, [measure, showProtectedAreas, editorDocked, showEcoregions, ecoregions]);
 
   /**
    * Right-click asks what this spot is: its coordinates, the ground elevation,
@@ -2322,7 +2338,11 @@ export default function OccurrenceMapRow({
       type: "FeatureCollection",
       features: (pointFileComparison?.rows ?? []).map((r) => ({
         type: "Feature" as const,
-        properties: { row: r.point.row },
+        // The matched record's id, not the file's: a row that matched on
+        // catalogue number cites an id GBIF has since retired, and opening
+        // that would land on a missing record. Falls back to the cited id when
+        // nothing matched, since that is still where the assessor got it.
+        properties: { row: r.point.row, gbifID: r.matched?.gbifID ?? r.point.gbifID ?? null },
         geometry: { type: "Point" as const, coordinates: [r.point.longitude, r.point.latitude] },
       })),
     }),
@@ -2561,6 +2581,24 @@ export default function OccurrenceMapRow({
     };
   }, [showRangeMetrics, rangeMetricPoints]);
 
+  /** The ecoregion clicked on the map, outlined and named until dismissed. */
+  const [selectedEcoregion, setSelectedEcoregion] = useState<{
+    properties: EcoregionProperties;
+    geometry: GeoJSON.Polygon | GeoJSON.MultiPolygon;
+  } | null>(null);
+
+  const selectedEcoregionGeoJson = useMemo<GeoJSON.Feature | null>(
+    () =>
+      selectedEcoregion
+        ? { type: "Feature", properties: {}, geometry: selectedEcoregion.geometry }
+        : null,
+    [selectedEcoregion]
+  );
+
+  // A different species is a different map; an ecoregion picked out on the last
+  // one has nothing to say about this one.
+  useEffect(() => setSelectedEcoregion(null), [speciesKey]);
+
   /** The boundary of whichever listed protected area is being pointed at. */
   const highlightedAreaGeoJson = useMemo<GeoJSON.Feature | null>(() => {
     const area = pointQuery?.areas[pointQuery.highlight];
@@ -2748,6 +2786,28 @@ export default function OccurrenceMapRow({
                     id={`ecoregions-line-${panelId}`}
                     type="line"
                     paint={{ "line-color": ["get", "biomeColor"], "line-width": 1, "line-opacity": 0.9 }}
+                  />
+                </Source>
+              )}
+              {/* The clicked ecoregion, outlined. Same treatment as a clicked
+                  protected area — white casing under a strong line, so the
+                  boundary reads over whatever basemap is underneath. */}
+              {showEcoregions && selectedEcoregionGeoJson && (
+                <Source id={`ecoregion-highlight-${panelId}`} type="geojson" data={selectedEcoregionGeoJson}>
+                  <Layer
+                    id={`ecoregion-highlight-fill-${panelId}`}
+                    type="fill"
+                    paint={{ "fill-color": "#059669", "fill-opacity": 0.18 }}
+                  />
+                  <Layer
+                    id={`ecoregion-highlight-casing-${panelId}`}
+                    type="line"
+                    paint={{ "line-color": "#ffffff", "line-width": 4.5, "line-opacity": 0.9 }}
+                  />
+                  <Layer
+                    id={`ecoregion-highlight-line-${panelId}`}
+                    type="line"
+                    paint={{ "line-color": "#059669", "line-width": 2 }}
                   />
                 </Source>
               )}
@@ -3611,6 +3671,48 @@ export default function OccurrenceMapRow({
                   </a>
                 </div>
               )}
+            </div>
+          )}
+          {/* The clicked ecoregion. A card beside the legend rather than a
+              popup at the click: it stays readable while you pan the boundary
+              you just outlined, and it doesn't fight the right-click panel for
+              the same piece of screen. */}
+          {showEcoregions && selectedEcoregion && !loadingOccurrences && (
+            <div className="bg-white dark:bg-zinc-800 px-2 py-1.5 rounded text-[11px] text-zinc-600 dark:text-zinc-300 shadow max-w-xs">
+              <div className="flex items-start gap-1.5">
+                <span
+                  className="w-2.5 h-2.5 rounded-sm shrink-0 translate-y-1 border border-black/10"
+                  style={{ background: selectedEcoregion.properties.biomeColor }}
+                />
+                <div className="min-w-0">
+                  <div className="font-medium text-zinc-800 dark:text-zinc-100">
+                    {selectedEcoregion.properties.name}
+                  </div>
+                  <div className="text-zinc-400">{selectedEcoregion.properties.biome}</div>
+                  <div className="text-zinc-400">
+                    {selectedEcoregion.properties.realm} · {selectedEcoregion.properties.nnh}
+                  </div>
+                  {selectedEcoregion.properties.oneEarth && (
+                    <a
+                      href={oneEarthEcoregionUrl(selectedEcoregion.properties.oneEarth)}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-blue-600 dark:text-blue-400 hover:underline"
+                    >
+                      Read about it on One Earth
+                    </a>
+                  )}
+                </div>
+                <button
+                  onClick={() => setSelectedEcoregion(null)}
+                  title="Clear"
+                  className="ml-auto shrink-0 text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300"
+                >
+                  <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
             </div>
           )}
           {/* Forest loss reads as a colour ramp, so it needs one: without the

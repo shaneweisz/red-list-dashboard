@@ -13,7 +13,10 @@
  * pointed at anything else in the bucket.
  */
 
-export const ECOREGIONS_ASSET = "ecoregions-2017.json.gz";
+// v2 adds the One Earth page slugs. The bucket refuses overwrites, so a change
+// to the contents is a change to the name — which is the point: the route
+// caches these forever, and a silently-swapped file would be served stale.
+export const ECOREGIONS_ASSET = "ecoregions-2017-v2.json.gz";
 export const SAMPLING_EFFORT_ASSET = "sampling-effort-n_obs-10km.png";
 
 /** Everything /api/overlays will serve. Built by scripts/build-*-layer.ts. */
@@ -51,7 +54,19 @@ export interface EcoregionProperties {
   color: string;
   /** The dataset's own colour for the biome — what the overlay draws with. */
   biomeColor: string;
+  /**
+   * One Earth's page for this ecoregion, where one exists.
+   *
+   * Only the 760 of 847 whose page was confirmed at build time carry this —
+   * One Earth names some ecoregions differently and a few ("Rock and Ice")
+   * aren't really ecoregions at all. Absent means don't offer a link.
+   */
+  oneEarth?: string;
 }
+
+/** One Earth's write-up of an ecoregion — the Navigator's content, as a page. */
+export const oneEarthEcoregionUrl = (slug: string) =>
+  `https://www.oneearth.org/ecoregions/${slug}/`;
 
 /**
  * The 14 biomes, in the dataset's own order, with its own colours.
