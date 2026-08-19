@@ -201,7 +201,63 @@ export function rampTop(counts: Uint32Array): number {
   return 1;
 }
 
-/** How a cell's count reads next to the elevation and ecoregion. */
-export function formatEffort(count: number): string {
-  return `${count.toLocaleString()} record${count === 1 ? "" : "s"} in this 10 km cell`;
+/**
+ * How a cell's count reads next to the elevation and ecoregion.
+ *
+ * The width is given rather than assumed. The surface is Web Mercator, so a
+ * pixel is a fixed span in projected space and a shrinking one on the ground —
+ * 9.8 km at the equator, about 6.9 km at 45°, 4.9 km at 60°. Calling every one
+ * of them "10 km", as this did, is only true on the equator.
+ */
+export function formatEffort(count: number, cellKm: number): string {
+  const width = cellKm >= 10 ? Math.round(cellKm) : Math.round(cellKm * 10) / 10;
+  return `${count.toLocaleString()} record${count === 1 ? "" : "s"} in this ${width} km cell`;
+}
+
+/**
+ * GBIF's taxon keys for the groups this layer offers, so a cell can be opened
+ * as an occurrence search.
+ *
+ * Every one verified by querying it and checking what comes back, because a
+ * wrong key here doesn't fail — it quietly widens the search. Two caught that
+ * way: a name lookup for Reptilia returns Chordata by HIGHERRANK, which would
+ * have opened every vertebrate; and Amphibia has no match at all through
+ * species/match though the backbone holds it as class 131.
+ *
+ * Reptilia has no usable node of its own since the CoL migration — it is
+ * paraphyletic — so it is assembled from its orders. Rhynchocephalia is left
+ * out: one living species, and its absence is invisible at this scale.
+ */
+export const GBIF_TAXON_KEYS: Record<Exclude<EffortGroup, "all">, number[]> = {
+  tracheophyta: [7707728],
+  aves: [212],
+  mammalia: [359],
+  reptilia: [11592253, 11418114, 11493978], // Squamata, Testudines, Crocodylia
+  amphibia: [131],
+  insecta: [216],
+  arachnida: [367],
+  mollusca: [52],
+  fungi: [5],
+};
+
+/**
+ * The GBIF occurrence search for one cell, filtered to the taxon shown.
+ *
+ * The count it returns will not equal the count on the map, and shouldn't be
+ * expected to: this layer is a fixed snapshot published with the paper, GBIF
+ * grows daily, and the raster's 10 km grid and this Mercator pixel are not the
+ * same shape. The map's figure says how worked this ground was when the dataset
+ * was built; the link says what is there now.
+ */
+export function gbifSearchUrl(
+  bounds: [number, number, number, number],
+  group: EffortGroup
+): string {
+  const [w, s, e, n] = bounds.map((v) => Number(v.toFixed(5)));
+  const polygon = `POLYGON((${w} ${s},${e} ${s},${e} ${n},${w} ${n},${w} ${s}))`;
+  const params = new URLSearchParams({ geometry: polygon, has_coordinate: "true" });
+  if (group !== "all") {
+    for (const key of GBIF_TAXON_KEYS[group]) params.append("taxon_key", String(key));
+  }
+  return `https://www.gbif.org/occurrence/search?${params}`;
 }

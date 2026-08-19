@@ -168,6 +168,43 @@ export function useSamplingEffort(group: EffortGroup | null) {
  * projection in reverse. Null where the layer has nothing there — which is
  * unsurveyed, not zero-with-confidence.
  */
+/**
+ * The ground bounds of the cell under a coordinate, and how wide it is.
+ *
+ * Needed to open the cell on GBIF, and to say how big it actually is: a
+ * Mercator pixel is a fixed span in projected space, so its width on the
+ * ground falls away with latitude.
+ */
+export function effortCell(
+  layer: SamplingEffortLayer,
+  lng: number,
+  lat: number
+): { bounds: [number, number, number, number]; widthKm: number } | null {
+  const { size } = layer;
+  const clamped = Math.max(-85.051129, Math.min(85.051129, lat));
+  const rad = (clamped * Math.PI) / 180;
+  const x = Math.floor(((lng + 180) / 360) * size);
+  const merc = Math.log(Math.tan(rad) + 1 / Math.cos(rad)) / Math.PI;
+  const y = Math.floor(((1 - merc) / 2) * size);
+  if (x < 0 || x >= size || y < 0 || y >= size) return null;
+
+  const lngAt = (px: number) => (px / size) * 360 - 180;
+  const latAt = (py: number) => {
+    const m = 1 - (2 * py) / size;
+    return (Math.atan(Math.sinh(Math.PI * m)) * 180) / Math.PI;
+  };
+  const west = lngAt(x);
+  const east = lngAt(x + 1);
+  // y counts down from the north, so the row's lower edge is the larger y.
+  const north = latAt(y);
+  const south = latAt(y + 1);
+  const midLat = ((north + south) / 2) * (Math.PI / 180);
+  return {
+    bounds: [west, south, east, north],
+    widthKm: ((east - west) / 360) * 40075 * Math.cos(midLat),
+  };
+}
+
 export function effortAt(
   layer: SamplingEffortLayer,
   lng: number,

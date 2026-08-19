@@ -30,9 +30,10 @@ import {
   EFFORT_LEGEND,
   effortGroupFor,
   formatEffort,
+  gbifSearchUrl,
   type EffortGroup,
 } from "@/lib/mapping/sampling-effort";
-import { useSamplingEffort, effortAt } from "@/hooks/mapping/useSamplingEffort";
+import { useSamplingEffort, effortAt, effortCell } from "@/hooks/mapping/useSamplingEffort";
 import {
   BIOMES,
   ECOREGIONS_ASSET,
@@ -3540,19 +3541,37 @@ export default function OccurrenceMapRow({
                       <div className="pt-1 border-t border-zinc-100 dark:border-zinc-800">
                         {(() => {
                           const records = effortAt(effortLayer, pointQuery.lng, pointQuery.lat);
-                          return records == null ? (
-                            <span className="text-zinc-400">
-                              No {EFFORT_GROUP_LABELS[effortLayer.group].toLowerCase()} records
-                              collected in this 10 km cell.
-                            </span>
-                          ) : (
+                          const cell = effortCell(effortLayer, pointQuery.lng, pointQuery.lat);
+                          if (records == null || !cell) {
+                            return (
+                              <span className="text-zinc-400">
+                                No {EFFORT_GROUP_LABELS[effortLayer.group].toLowerCase()} records
+                                collected here.
+                              </span>
+                            );
+                          }
+                          return (
                             <span>
                               <span className="font-medium text-zinc-700 dark:text-zinc-200">
-                                {formatEffort(records)}
+                                {formatEffort(records, cell.widthKm)}
                               </span>
                               <span className="block text-zinc-400">
                                 {EFFORT_GROUP_LABELS[effortLayer.group]}, all years
                               </span>
+                              {/* Opens what GBIF holds there now. Deliberately
+                                  not presented as the same number: this layer
+                                  is a snapshot published with the paper, GBIF
+                                  grows daily, and its 10 km grid and this
+                                  Mercator pixel aren't the same shape. */}
+                              <a
+                                href={gbifSearchUrl(cell.bounds, effortLayer.group)}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                title="Search GBIF for the records in this cell. The total there won't match the figure above — that one is the published snapshot, this is what's there today."
+                                className="block text-blue-600 dark:text-blue-400 hover:underline"
+                              >
+                                Inspect these records on GBIF
+                              </a>
                             </span>
                           );
                         })()}
