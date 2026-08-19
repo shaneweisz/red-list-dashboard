@@ -126,18 +126,39 @@ function readGeoTiff(buf: Buffer): Raster {
  * quantity rather than as a category, which is what separates it from the
  * habitat and ecosystem layers.
  */
-const VIRIDIS: [number, number, number][] = [
-  [68, 1, 84], [72, 40, 120], [62, 74, 137], [49, 104, 142],
-  [38, 130, 142], [31, 158, 137], [53, 183, 121], [110, 206, 88],
-  [181, 222, 43], [253, 231, 37],
+/**
+ * The paper's own ramp, so a layer here and a figure there read alike.
+ *
+ * El-Gabbas plots these rasters with `colorRamps::matlab.like2`, the MATLAB
+ * jet-like sequence — blue through cyan and green to yellow and red. These
+ * stops follow it.
+ *
+ * One caveat, recorded rather than argued: a jet ramp is not perceptually
+ * uniform. The cyan-to-green step reads as an edge the data doesn't contain,
+ * and it separates poorly under the commoner colour-vision deficiencies —
+ * which is exactly why viridis, used here before, exists. Matching the
+ * published figures was judged worth that, because an assessor comparing this
+ * overlay against the paper shouldn't have to translate between two colour
+ * schemes.
+ */
+const MATLAB_LIKE_2: [number, number, number][] = [
+  [0, 0, 191],    // deep blue
+  [0, 48, 255],
+  [0, 144, 255],
+  [0, 224, 224],  // cyan
+  [64, 224, 0],   // green
+  [192, 240, 0],
+  [255, 208, 0],  // yellow
+  [255, 96, 0],   // orange
+  [191, 0, 0],    // deep red
 ];
 
-function viridis(t: number): [number, number, number] {
-  const x = Math.max(0, Math.min(1, t)) * (VIRIDIS.length - 1);
-  const i = Math.min(VIRIDIS.length - 2, Math.floor(x));
+function effortColour(t: number): [number, number, number] {
+  const x = Math.max(0, Math.min(1, t)) * (MATLAB_LIKE_2.length - 1);
+  const i = Math.min(MATLAB_LIKE_2.length - 2, Math.floor(x));
   const f = x - i;
-  const a = VIRIDIS[i];
-  const b = VIRIDIS[i + 1];
+  const a = MATLAB_LIKE_2[i];
+  const b = MATLAB_LIKE_2[i + 1];
   return [
     Math.round(a[0] + (b[0] - a[0]) * f),
     Math.round(a[1] + (b[1] - a[1]) * f),
@@ -218,7 +239,7 @@ function render(source: Raster, size: number): { rgba: Uint8Array; max: number }
 
       const t = Math.min(1, Math.log1p(value) / logTop);
       const o = (y * size + x) * 4;
-      const [r, g, b] = viridis(t);
+      const [r, g, b] = effortColour(t);
       rgba[o] = r;
       rgba[o + 1] = g;
       rgba[o + 2] = b;
