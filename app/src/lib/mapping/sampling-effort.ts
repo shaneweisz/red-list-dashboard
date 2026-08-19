@@ -304,7 +304,16 @@ export function gbifCountUrl(
 ): string {
   const [w, s, e, n] = bounds.map((v) => Number(v.toFixed(5)));
   const polygon = `POLYGON((${w} ${s},${e} ${s},${e} ${n},${w} ${n},${w} ${s}))`;
-  const params = new URLSearchParams({ geometry: polygon, hasCoordinate: "true", limit: "0" });
+  // Faceted, so the same request that gives the total also breaks it down —
+  // "24 records" and "24 human observations, no specimens" are different
+  // evidence about whether anyone has actually collected here.
+  const params = new URLSearchParams({
+    geometry: polygon,
+    hasCoordinate: "true",
+    limit: "0",
+    facet: "basisOfRecord",
+    facetLimit: "12",
+  });
   if (group !== "all") {
     for (const key of GBIF_TAXON_KEYS[group]) params.append("taxonKey", String(key));
   }

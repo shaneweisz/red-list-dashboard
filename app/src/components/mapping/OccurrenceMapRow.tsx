@@ -13,6 +13,10 @@ import { FaInfoCircle } from "react-icons/fa";
 import booleanPointInPolygon from "@turf/boolean-point-in-polygon";
 import type { Feature, Polygon, MultiPolygon } from "geojson";
 import type { OccurrenceFeature as OccurrenceFeatureType } from "./OccurrenceListTable";
+// The table's own labels, so a basis of record is worded the same wherever it
+// appears. A value import from a module the map otherwise loads lazily, which
+// is fine: it's a plain object with no component behind it.
+import { BASIS_LABELS } from "./OccurrenceListTable";
 import {
   PROTECTED_AREAS_TILE_URL,
   PROTECTED_AREAS_ATTRIBUTION,
@@ -2419,7 +2423,11 @@ export default function OccurrenceMapRow({
         : null,
     [pointQuery, effortLayer, showSamplingEffort]
   );
-  const { count: gbifCellCount, loading: gbifCellCountLoading } = useGbifCellCount(
+  const {
+    count: gbifCellCount,
+    byBasis: gbifCellByBasis,
+    loading: gbifCellCountLoading,
+  } = useGbifCellCount(
     effortCellAtPoint?.bounds ?? null,
     effortLayer?.group ?? null
   );
@@ -3575,6 +3583,22 @@ export default function OccurrenceMapRow({
                                     ? ""
                                     : `${gbifCellCount.toLocaleString()} on GBIF today`}
                               </span>
+                              {/* Broken down, because the total alone doesn't
+                                  say what kind of looking happened here. A
+                                  cell of photographs and a cell of herbarium
+                                  sheets are different evidence about whether
+                                  a plant would have been collected if it were
+                                  present. */}
+                              {gbifCellByBasis.length > 0 && (
+                                <span className="block pl-2 border-l border-zinc-200 dark:border-zinc-700">
+                                  {gbifCellByBasis.slice(0, 4).map((b) => (
+                                    <span key={b.basis} className="block text-zinc-400">
+                                      <span className="tabular-nums">{b.count.toLocaleString()}</span>{" "}
+                                      {(BASIS_LABELS[b.basis] ?? b.basis.replace(/_/g, " ").toLowerCase())}
+                                    </span>
+                                  ))}
+                                </span>
+                              )}
                               <a
                                 href={gbifSearchUrl(effortCellAtPoint.bounds, effortLayer.group)}
                                 target="_blank"

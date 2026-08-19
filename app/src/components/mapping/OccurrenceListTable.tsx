@@ -187,7 +187,7 @@ function saveColumnPrefs(prefs: ColumnPrefs) {
 }
 
 
-const BASIS_LABELS: Record<string, string> = {
+export const BASIS_LABELS: Record<string, string> = {
   HUMAN_OBSERVATION: "Human observation",
   MACHINE_OBSERVATION: "Machine observation",
   OBSERVATION: "Observation",

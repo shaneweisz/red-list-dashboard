@@ -238,20 +238,31 @@ export function useGbifCellCount(
   group: EffortGroup | null
 ) {
   const [count, setCount] = useState<number | null>(null);
+  const [byBasis, setByBasis] = useState<{ basis: string; count: number }[]>([]);
   const [loading, setLoading] = useState(false);
 
   const key = bounds ? `${bounds.join(",")}|${group}` : null;
   useEffect(() => {
     if (!bounds || !group) {
       setCount(null);
+      setByBasis([]);
       return;
     }
     const controller = new AbortController();
     setLoading(true);
     setCount(null);
+    setByBasis([]);
     fetch(gbifCountUrl(bounds, group), { signal: controller.signal })
       .then((r) => (r.ok ? r.json() : Promise.reject(new Error(String(r.status)))))
-      .then((d: { count?: number }) => setCount(d.count ?? null))
+      .then((d: { count?: number; facets?: { field: string; counts?: { name: string; count: number }[] }[] }) => {
+        setCount(d.count ?? null);
+        const facet = (d.facets ?? []).find((f) => f.field === "BASIS_OF_RECORD");
+        setByBasis(
+          (facet?.counts ?? [])
+            .map((c) => ({ basis: c.name, count: c.count }))
+            .sort((a, b) => b.count - a.count)
+        );
+      })
       .catch(() => {
         // A failed count leaves the snapshot figure and the link, which are the
         // parts that don't depend on the network being there.
@@ -263,5 +274,5 @@ export function useGbifCellCount(
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [key]);
 
-  return { count, loading };
+  return { count, byBasis, loading };
 }
