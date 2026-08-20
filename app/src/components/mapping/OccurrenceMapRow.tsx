@@ -2629,24 +2629,46 @@ export default function OccurrenceMapRow({
    * Guidelines ask for when using aggregated data (§12.1.12.1) and what nobody
    * wants to redo in a second tool.
    */
+  /**
+   * The points EOO and AOO are measured over: whichever record layers are
+   * switched on.
+   *
+   * Following the layers rather than always using GBIF's is what makes the
+   * figures checkable. Compared against GeoCAT on the same thirteen-point file
+   * this read 839,266 km² and 32 km² where GeoCAT gave 839,580.502 and 48 —
+   * not because the maths differed (fed the same points it agrees exactly) but
+   * because the uploaded file was never among the points. Turning GBIF's
+   * records off and leaving the point file on now reproduces GeoCAT.
+   */
   const rangeMetricPoints = useMemo(() => {
     const points: { lon: number; lat: number }[] = [];
     let ownCount = 0;
-    for (const o of includedOccurrences) {
-      // The assessor's own coordinates first, and — the part that matters —
-      // whether or not GBIF has any. A record georeferenced by hand is
-      // precisely one GBIF couldn't place, so requiring GBIF geometry dropped
-      // exactly the points the georeferencing work exists to add.
-      const mine = georeferences[o.properties.gbifID];
-      if (mine) {
-        points.push({ lon: mine.decimalLongitude, lat: mine.decimalLatitude });
-        ownCount += 1;
-        continue;
+    if (showGbif || showMyGeoreferences) {
+      for (const o of includedOccurrences) {
+        // The assessor's own coordinates first, and — the part that matters —
+        // whether or not GBIF has any. A record georeferenced by hand is
+        // precisely one GBIF couldn't place, so requiring GBIF geometry dropped
+        // exactly the points the georeferencing work exists to add.
+        const mine = georeferences[o.properties.gbifID];
+        if (mine) {
+          if (showMyGeoreferences) {
+            points.push({ lon: mine.decimalLongitude, lat: mine.decimalLatitude });
+            ownCount += 1;
+          }
+          continue;
+        }
+        if (showGbif && o.geometry) {
+          points.push({ lon: o.geometry.coordinates[0], lat: o.geometry.coordinates[1] });
+        }
       }
-      if (o.geometry) points.push({ lon: o.geometry.coordinates[0], lat: o.geometry.coordinates[1] });
     }
-    return { points, ownCount };
-  }, [includedOccurrences, georeferences]);
+    if (showPointFile && pointFile) {
+      for (const point of pointFile.points) {
+        points.push({ lon: point.longitude, lat: point.latitude });
+      }
+    }
+    return { points, ownCount, fromPointFile: showPointFile && pointFile ? pointFile.points.length : 0 };
+  }, [includedOccurrences, georeferences, showGbif, showMyGeoreferences, showPointFile, pointFile]);
 
   const rangeMetrics = useMemo(() => {
     if (!showRangeMetrics || rangeMetricPoints.points.length === 0) return null;
@@ -3789,6 +3811,11 @@ export default function OccurrenceMapRow({
               <div className="text-[10px] text-zinc-400 pt-0.5">
                 {rangeMetrics.aoo.cellCount.toLocaleString()} cells of 2 km × 2 km ·{" "}
                 {rangeMetrics.eoo.pointCount.toLocaleString()} records
+                {rangeMetricPoints.fromPointFile > 0 && (
+                  <span style={{ color: POINT_FILE_COLOR }}>
+                    {" "}· {rangeMetricPoints.fromPointFile.toLocaleString()} from the point file
+                  </span>
+                )}
                 {rangeMetrics.ownCount > 0 && (
                   <span className="text-violet-600 dark:text-violet-400">
                     {" "}· {rangeMetrics.ownCount.toLocaleString()} yours
