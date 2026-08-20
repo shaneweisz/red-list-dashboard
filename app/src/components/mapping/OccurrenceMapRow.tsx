@@ -779,6 +779,16 @@ export default function OccurrenceMapRow({
   const [measure, setMeasure] = useState<[number, number][] | null>(null);
   /** True while the map is being panned, so the cursor can say so. */
   const [panning, setPanning] = useState(false);
+  /**
+   * True while the pointer is over a record — a GBIF point, one of the
+   * assessor's own, or a point-file row.
+   *
+   * The points are clickable (they open the record on GBIF) and nothing said
+   * so: the cursor stayed an arrow over them and only turned into a hand if
+   * the tooltip happened to slide under the pointer, so the hand came and went
+   * for reasons that had nothing to do with what was underneath it.
+   */
+  const [hoveringPoint, setHoveringPoint] = useState(false);
   // Whether there's room to dock a 22rem panel beside the map and still have a
   // map worth looking at.
   const [viewportWide, setViewportWide] = useState(false);
@@ -2481,6 +2491,9 @@ export default function OccurrenceMapRow({
   const handleMapMouseMove = useCallback((e: MapLayerMouseEvent, panelId: string) => {
     if (isTouchDevice) return;
     const features = e.features;
+    // Set from the same hit test that drives the tooltip, so the cursor and
+    // the panel can never disagree about whether there's a record here.
+    setHoveringPoint(!!features && features.length > 0);
     // A point file row isn't a GBIF record and has no entry in the table, so it
     // gets its own small popup rather than being forced through the occurrence
     // tooltip. Checked first: where the two layers overlap, the file's point is
@@ -2541,6 +2554,7 @@ export default function OccurrenceMapRow({
   }, [isTouchDevice, occurrencesByGbifId, tooltipHeld, hoveredFeature, clearHoverSoon, cancelHoverClear, unpinTooltip]);
 
   const handleMapMouseLeave = useCallback(() => {
+    setHoveringPoint(false);
     if (tooltipHeld) return;
     clearHoverSoon();
   }, [tooltipHeld, clearHoverSoon]);
@@ -2833,7 +2847,15 @@ export default function OccurrenceMapRow({
               // a crosshair while measuring — the map cursor everyone already
               // knows from Google Maps. The hand it replaces claimed the map
               // was one big button.
-              cursor={measure || editorDocked ? "crosshair" : panning ? "move" : "default"}
+              cursor={
+                measure || editorDocked
+                  ? "crosshair"
+                  : panning
+                    ? "move"
+                    : hoveringPoint
+                      ? "pointer"
+                      : "default"
+              }
               onDragStart={() => setPanning(true)}
               onDragEnd={() => setPanning(false)}
             >

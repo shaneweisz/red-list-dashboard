@@ -185,45 +185,61 @@ export default function MapOccurrenceTooltip(props: MapOccurrenceTooltipProps) {
         {arrow}
         <div className="rounded-lg overflow-hidden">
         <div className="p-2 text-xs space-y-0.5">
-          {props.page && props.page.total > 1 && (
+          {/* The controls row. Laid out as a label that gives way and a
+              button group that never does: the label used to be free to push
+              the buttons along, so at "10 of 120 records here" the row grew
+              past the panel and the close button was clipped off its edge by
+              the panel's own overflow-hidden. */}
+          {((props.page && props.page.total > 1) || props.onClose) && (
             <div className="flex items-center gap-1 pb-1 mb-1 border-b border-zinc-100 dark:border-zinc-800 text-[10px] text-zinc-500 dark:text-zinc-400">
-              <span className="tabular-nums">
-                {props.page.index + 1} of {props.page.total} records here
-              </span>
+              {props.page && props.page.total > 1 && (
+                <span
+                  className="tabular-nums truncate min-w-0"
+                  title={`Record ${props.page.index + 1} of ${props.page.total} at this point`}
+                >
+                  {props.page.index + 1} of {props.page.total} here
+                </span>
+              )}
               {props.pinned && (
-                <span className="text-[9px] text-zinc-400" title="Click anywhere outside to close">
+                <span className="text-[9px] text-zinc-400 shrink-0" title="Click anywhere outside to close">
                   pinned
                 </span>
               )}
-              <button
-                onClick={props.page.onPrev}
-                title="Previous record at this point"
-                className="ml-auto p-0.5 hover:text-zinc-700 dark:hover:text-zinc-200"
-              >
-                <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
-                </svg>
-              </button>
-              <button
-                onClick={props.page.onNext}
-                title="Next record at this point"
-                className="p-0.5 hover:text-zinc-700 dark:hover:text-zinc-200"
-              >
-                <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
-                </svg>
-              </button>
-              {props.onClose && (
-                <button
-                  onClick={props.onClose}
-                  title="Close (or click anywhere outside)"
-                  className="p-0.5 hover:text-zinc-700 dark:hover:text-zinc-200"
-                >
-                  <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-                  </svg>
-                </button>
-              )}
+              <div className="ml-auto flex items-center shrink-0">
+                {props.page && props.page.total > 1 && (
+                  <>
+                    <button
+                      onClick={props.page.onPrev}
+                      title="Previous record at this point"
+                      className="p-0.5 hover:text-zinc-700 dark:hover:text-zinc-200"
+                    >
+                      <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
+                      </svg>
+                    </button>
+                    <button
+                      onClick={props.page.onNext}
+                      title="Next record at this point"
+                      className="p-0.5 hover:text-zinc-700 dark:hover:text-zinc-200"
+                    >
+                      <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+                      </svg>
+                    </button>
+                  </>
+                )}
+                {props.onClose && (
+                  <button
+                    onClick={props.onClose}
+                    title="Close (or click anywhere outside)"
+                    className="p-0.5 hover:text-zinc-700 dark:hover:text-zinc-200"
+                  >
+                    <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                  </button>
+                )}
+              </div>
             </div>
           )}
           <div className="font-medium italic text-zinc-900 dark:text-zinc-100">
