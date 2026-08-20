@@ -35,6 +35,7 @@ export function buildVocabulary(): Vocabulary {
       countries: "ISO code or name.",
       assessors: "latest-assessment assessor name (substring match, e.g. Smith).",
       reviewers: "latest-assessment reviewer name (substring match).",
+      facilitators: "latest-assessment facilitator name (substring match) — the person behind an organisational assessor, e.g. bird assessments are all assessed by BirdLife International.",
       outdated: "yes | no (assessment >10 years old).",
       search: "free-text scientific or common name (incl. synonyms / old names).",
       minObs: "min GBIF occurrence count (e.g. 100).",

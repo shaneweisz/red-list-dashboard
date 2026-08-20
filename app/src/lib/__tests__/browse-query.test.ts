@@ -67,4 +67,34 @@ describe("runBrowseQuery", () => {
     const r = await runBrowseQuery({ taxa: ["corals"], region: ["Europe"] });
     expect(r.total).toBe(1);
   });
+  // The BirdLife case the facilitator filter exists for: every bird assessment
+  // credits the organisation as assessor, so only the facilitator names a person.
+  it("filters on facilitator, which assessor cannot reach for org-credited assessments", async () => {
+    const birds = [
+      row({ species_key: "sis-1", scientific_name: "Corvus alpha", taxon_group: "birds", class_name: "aves", order_name: "passeriformes", family: "corvidae",
+            latest_assessors: "BirdLife International", latest_reviewers: "Jones, B.", latest_facilitators: "Rutherford, C.A." }),
+      row({ species_key: "sis-2", scientific_name: "Corvus beta", taxon_group: "birds", class_name: "aves", order_name: "passeriformes", family: "corvidae",
+            latest_assessors: "BirdLife International", latest_reviewers: "Jones, B.", latest_facilitators: "Hermes, C." }),
+    ];
+    querySpecies.mockResolvedValue({ species: birds, truncated: false, tooLarge: false, neTotal: null });
+
+    const byFacilitator = await runBrowseQuery({ taxa: ["birds"], facilitators: ["Rutherford"] });
+    expect(byFacilitator.total).toBe(1);
+    expect(byFacilitator.species[0].scientific_name).toBe("Corvus alpha");
+    expect(byFacilitator.interpreted).toContain("Facilitator: Rutherford");
+
+    // The same query through the assessor filter can't separate them at all.
+    querySpecies.mockResolvedValue({ species: birds, truncated: false, tooLarge: false, neTotal: null });
+    const byAssessor = await runBrowseQuery({ taxa: ["birds"], assessors: ["BirdLife"] });
+    expect(byAssessor.total).toBe(2);
+  });
+
+  it("leaves rows with no facilitator out when the filter is set", async () => {
+    querySpecies.mockResolvedValue({
+      species: [row({ species_key: "sis-3", latest_facilitators: null })],
+      truncated: false, tooLarge: false, neTotal: null,
+    });
+    const r = await runBrowseQuery({ taxa: ["corals"], facilitators: ["Rutherford"] });
+    expect(r.total).toBe(0);
+  });
 });

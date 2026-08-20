@@ -55,6 +55,7 @@ export async function GET(req: NextRequest) {
     outdated: outdatedRaw === "yes" ? "yes" : outdatedRaw === "no" ? "no" : null,
     assessors: parseList(sp, "assessors"),
     reviewers: parseList(sp, "reviewers"),
+    facilitators: parseList(sp, "facilitators"),
     minObs: intParam("minObs"), maxObs: intParam("maxObs"),
     minAssessmentYear: intParam("minAssessmentYear"), maxAssessmentYear: intParam("maxAssessmentYear"),
     minDescribedYear: intParam("minDescribedYear"), maxDescribedYear: intParam("maxDescribedYear"),

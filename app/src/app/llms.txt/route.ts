@@ -76,6 +76,9 @@ ${filters}
 countries: ISO alpha-2 code or name (e.g. IN or India)
 region (IUCN region — expands to its countries): ${IUCN_REGION_ORDER.join(", ")}
 assessors / reviewers: name of the latest-assessment assessor/reviewer (substring, e.g. assessors=Smith)
+facilitators: name of the latest-assessment facilitator (substring, e.g. facilitators=Rutherford) — the person who ran
+  the assessment where the credited assessor is an organisation. Bird assessments are all assessed by "BirdLife
+  International", so facilitators is the only way to find the individual who worked on one.
 search:  scientific or common name (incl. synonyms)
 outdated: yes | no  (assessment more than 10 years old)
 minObs / maxObs: GBIF occurrence-count bounds

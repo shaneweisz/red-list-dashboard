@@ -18,7 +18,7 @@
  * registry because they don't share one shape across surfaces:
  *   - taxa           — expands to display-root + sub-group tokens
  *   - countries/region — region expands INTO the country set (one param)
- *   - assessors/reviewers — substring match on a parsed name list (not a species attr)
+ *   - assessors/reviewers/facilitators — substring match on a parsed name list (not a species attr)
  *   - search, the exact numeric/outdated params — already 1:1 and bucket-free
  */
 import { z } from "zod";

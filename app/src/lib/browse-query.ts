@@ -37,6 +37,7 @@ export interface BrowseInput extends SharedFilterInput {
   outdated?: "yes" | "no" | null;
   assessors?: string[];
   reviewers?: string[];
+  facilitators?: string[];
   minObs?: number;
   maxObs?: number;
   minAssessmentYear?: number;
@@ -82,6 +83,7 @@ type Row = FilterableSpecies & {
   family?: string | null;
   latest_assessors?: string | null;
   latest_reviewers?: string | null;
+  latest_facilitators?: string | null;
   described_year?: number | null;
   matched_synonym?: string | null;
 };
@@ -96,7 +98,7 @@ function searchHitToRow(h: SearchResult): Row {
     population_trend: null, movement_pattern: null, threat_codes: null,
     growth_forms: null, scientific_name: h.scientific_name, common_name: h.common_name,
     gbif_occurrence_count: null, assessment_date: h.assessment_date, taxon_group: h.taxon_group,
-    latest_assessors: null, latest_reviewers: null, described_year: null,
+    latest_assessors: null, latest_reviewers: null, latest_facilitators: null, described_year: null,
     matched_synonym: h.matched_synonym ?? null,
   };
 }
@@ -111,6 +113,7 @@ export async function runBrowseQuery(input: BrowseInput): Promise<BrowseResult> 
   const regions = resolveRegions(regionRaw);
   const assessors = arr(input.assessors);
   const reviewers = arr(input.reviewers);
+  const facilitators = arr(input.facilitators);
   const search = (input.search ?? "").trim();
   const { outdated = null, minObs, maxObs, minAssessmentYear, maxAssessmentYear, minDescribedYear, maxDescribedYear } = input;
 
@@ -163,6 +166,10 @@ export async function runBrowseQuery(input: BrowseInput): Promise<BrowseResult> 
       const q = reviewers.map((a) => a.toLowerCase());
       matched = matched.filter((r) => parseAssessors(r.latest_reviewers).some((a) => q.some((x) => a.toLowerCase().includes(x))));
     }
+    if (facilitators.length) {
+      const q = facilitators.map((a) => a.toLowerCase());
+      matched = matched.filter((r) => parseAssessors(r.latest_facilitators).some((a) => q.some((x) => a.toLowerCase().includes(x))));
+    }
     if (minDescribedYear != null || maxDescribedYear != null) {
       matched = matched.filter((r) => r.described_year != null
         && (minDescribedYear == null || r.described_year >= minDescribedYear)
@@ -197,6 +204,7 @@ export async function runBrowseQuery(input: BrowseInput): Promise<BrowseResult> 
   if (search) interpreted.push(`Name search: "${search}"`);
   if (assessors.length) interpreted.push(`Assessor: ${assessors.join(", ")}`);
   if (reviewers.length) interpreted.push(`Reviewer: ${reviewers.join(", ")}`);
+  if (facilitators.length) interpreted.push(`Facilitator: ${facilitators.join(", ")}`);
   if (minObs != null) interpreted.push(`GBIF observations ≥ ${minObs.toLocaleString()}`);
   if (maxObs != null) interpreted.push(`GBIF observations ≤ ${maxObs.toLocaleString()}`);
   if (minAssessmentYear != null) interpreted.push(`Assessed in or after ${minAssessmentYear}`);

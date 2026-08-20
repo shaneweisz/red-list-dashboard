@@ -9,11 +9,21 @@ const FilterBarChart = dynamic(
 );
 
 type ChartEntry = { code: string; count: number; label: string };
-type ViewMode = "assessors" | "reviewers";
+type ViewMode = "assessors" | "reviewers" | "facilitators";
+
+/** Tab order, label and bar colour for each credit type the chart can show. */
+const MODES: ReadonlyArray<{ mode: ViewMode; label: string; color: string }> = [
+  { mode: "assessors", label: "Assessors", color: "#fb923c" },
+  { mode: "reviewers", label: "Reviewers", color: "#818cf8" },
+  // Facilitators: the individuals behind an organisational assessor (all bird
+  // assessments are assessed by "BirdLife International").
+  { mode: "facilitators", label: "Facilitators", color: "#2dd4bf" },
+];
 
 interface AssessorChartProps {
   allAssessors: ChartEntry[];
   allReviewers: ChartEntry[];
+  allFacilitators: ChartEntry[];
   /** The selected items for the currently active tab */
   selectedItems: Set<string>;
   onBarClick: (data: { payload?: { code?: string } }, event: React.MouseEvent) => void;
@@ -32,6 +42,7 @@ const PAGE_SIZE = 10;
 export default function AssessorChart({
   allAssessors,
   allReviewers,
+  allFacilitators,
   selectedItems,
   onBarClick,
   onItemToggle,
@@ -45,8 +56,14 @@ export default function AssessorChart({
   const [page, setPage] = useState(0);
   const [searchPage, setSearchPage] = useState(0);
 
-  const activeData = viewMode === "assessors" ? allAssessors : allReviewers;
-  const activeLabel = viewMode === "assessors" ? "assessors" : "reviewers";
+  const byMode: Record<ViewMode, ChartEntry[]> = {
+    assessors: allAssessors,
+    reviewers: allReviewers,
+    facilitators: allFacilitators,
+  };
+  const activeData = byMode[viewMode];
+  const activeLabel = viewMode;
+  const activeColor = MODES.find(m => m.mode === viewMode)!.color;
 
   // Global max for consistent bar scaling across pages
   const globalMax = activeData.length > 0 ? activeData[0].count : 0;
@@ -83,28 +100,21 @@ export default function AssessorChart({
     <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-3 flex flex-col">
       <div className="flex items-center gap-2 mb-1.5">
         {showToggle ? (
-          /* Toggle between Assessors and Reviewers */
+          /* Toggle between Assessors, Reviewers and Facilitators */
           <div className="inline-flex rounded-md bg-zinc-100 dark:bg-zinc-800 p-0.5 shrink-0">
-            <button
-              onClick={() => handleViewModeChange("assessors")}
-              className={`px-2 py-0.5 text-xs font-semibold rounded transition-colors ${
-                viewMode === "assessors"
-                  ? "bg-white dark:bg-zinc-700 text-zinc-900 dark:text-zinc-100 shadow-sm"
-                  : "text-zinc-500 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-300"
-              }`}
-            >
-              Assessors
-            </button>
-            <button
-              onClick={() => handleViewModeChange("reviewers")}
-              className={`px-2 py-0.5 text-xs font-semibold rounded transition-colors ${
-                viewMode === "reviewers"
-                  ? "bg-white dark:bg-zinc-700 text-zinc-900 dark:text-zinc-100 shadow-sm"
-                  : "text-zinc-500 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-300"
-              }`}
-            >
-              Reviewers
-            </button>
+            {MODES.map(({ mode, label }) => (
+              <button
+                key={mode}
+                onClick={() => handleViewModeChange(mode)}
+                className={`px-2 py-0.5 text-xs font-semibold rounded transition-colors ${
+                  viewMode === mode
+                    ? "bg-white dark:bg-zinc-700 text-zinc-900 dark:text-zinc-100 shadow-sm"
+                    : "text-zinc-500 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-300"
+                }`}
+              >
+                {label}
+              </button>
+            ))}
           </div>
         ) : (
           <span className="text-sm font-semibold text-zinc-900 dark:text-zinc-100 shrink-0">{title}</span>
@@ -188,7 +198,7 @@ export default function AssessorChart({
             dataKey="code"
             selectedItems={selectedItems}
             onBarClick={onBarClick}
-            barColor={viewMode === "assessors" ? "#fb923c" : "#818cf8"}
+            barColor={activeColor}
             yAxisWidth={150}
             leftMargin={-30}
             rightMargin={55}
