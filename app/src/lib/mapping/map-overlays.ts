@@ -43,6 +43,9 @@ export const overlayUrl = (asset: string) => `/api/overlays/${asset}`;
  * courtesy. The sampling-effort README likewise grants use of "the code,
  * pre-computed raster products, or derived outputs" on condition of citation.
  */
+/** Dinerstein et al. 2017, the paper RESOLVE Ecoregions 2017 comes from. */
+export const ECOREGIONS_PAPER_URL = "https://doi.org/10.1093/biosci/bix014";
+
 export const ECOREGIONS_ATTRIBUTION =
   'Ecoregions: <a href="https://doi.org/10.1093/biosci/bix014" target="_blank" rel="noopener noreferrer">Dinerstein et al. (2017)</a>, RESOLVE Ecoregions 2017 (CC BY 4.0)';
 

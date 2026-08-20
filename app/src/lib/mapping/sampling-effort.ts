@@ -20,6 +20,9 @@
  * Diversity and Distributions. https://doi.org/10.1111/ddi.70205
  */
 
+/** The paper the surface comes from, cited wherever the layer is offered. */
+export const EFFORT_PAPER_URL = "https://doi.org/10.1111/ddi.70205";
+
 /** The nine published groups, plus the all-groups surface. */
 export const EFFORT_GROUPS = [
   "all",
