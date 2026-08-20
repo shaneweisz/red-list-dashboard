@@ -25,9 +25,6 @@ export const GEOREFERENCE_SCHEMA_VERSION = 1;
 
 const STORAGE_PREFIX = "redlist-georefs";
 
-/** WGS84 throughout — the datum GBIF publishes in and IUCN assessments use. */
-export const GEODETIC_DATUM = "WGS84";
-
 /**
  * How a locality was resolved to a point. Free text is allowed (the list is a
  * convenience, not a controlled vocabulary), but these are the tools assessors
@@ -174,88 +171,6 @@ export function parseCoordinatePair(text: string): { lat: number; lon: number } 
   if (lat < -90 || lat > 90 || lon < -180 || lon > 180) return null;
   return { lat, lon };
 }
-
-function escapeCsvField(value: string): string {
-  if (value.includes(",") || value.includes('"') || value.includes("\n") || value.includes("\r")) {
-    return `"${value.replace(/"/g, '""')}"`;
-  }
-  return value;
-}
-
-/**
- * One row per record the filters left in, in Darwin Core terms: GBIF's own
- * fields, with the assessor's coordinates substituted where they supplied any
- * and `georeferencedBy`/`georeferenceRemarks` saying so. Exporting only the
- * georeferenced handful would leave out the evidence they sit in.
- */
-export function occurrencesToCsv(
-  rows: {
-    properties: Record<string, unknown>;
-    geometry: { coordinates: [number, number] } | null;
-  }[],
-  georeferences: Record<number, Georeference>
-): string {
-  const header = OCCURRENCE_CSV_COLUMNS.map((c) => c.header).join(",");
-  const lines = rows.map((row) => {
-    const p = row.properties;
-    const mine = georeferences[Number(p.gbifID)];
-    const lat = mine?.decimalLatitude ?? row.geometry?.coordinates[1] ?? null;
-    const lon = mine?.decimalLongitude ?? row.geometry?.coordinates[0] ?? null;
-    return OCCURRENCE_CSV_COLUMNS.map((c) =>
-      escapeCsvField(c.get(p, { lat, lon, mine }))
-    ).join(",");
-  });
-  return [header, ...lines].join("\n");
-}
-
-const str = (v: unknown): string => {
-  if (v == null) return "";
-  if (Array.isArray(v)) return v.join("; ");
-  return String(v);
-};
-
-const OCCURRENCE_CSV_COLUMNS: {
-  header: string;
-  get: (
-    p: Record<string, unknown>,
-    ctx: { lat: number | null; lon: number | null; mine?: Georeference }
-  ) => string;
-}[] = [
-  { header: "gbifID", get: (p) => str(p.gbifID) },
-  { header: "occurrenceID", get: (p) => str(p.occurrenceID) },
-  { header: "scientificName", get: (p) => str(p.species) },
-  { header: "basisOfRecord", get: (p) => str(p.basisOfRecord) },
-  { header: "eventDate", get: (p) => str(p.eventDate) },
-  { header: "year", get: (p) => str(p.year) },
-  { header: "country", get: (p) => str(p.country) },
-  { header: "countryCode", get: (p) => str(p.countryCode) },
-  { header: "stateProvince", get: (p) => str(p.stateProvince) },
-  { header: "locality", get: (p) => str(p.locality || p.verbatimLocality) },
-  { header: "decimalLatitude", get: (_p, c) => (c.lat == null ? "" : String(c.lat)) },
-  { header: "decimalLongitude", get: (_p, c) => (c.lon == null ? "" : String(c.lon)) },
-  { header: "geodeticDatum", get: (_p, c) => (c.lat == null ? "" : GEODETIC_DATUM) },
-  {
-    header: "coordinateUncertaintyInMeters",
-    get: (p, c) => str(c.mine ? c.mine.coordinateUncertaintyInMeters : p.coordinateUncertaintyInMeters),
-  },
-  { header: "elevation", get: (p) => str(p.elevation ?? p.verbatimElevation) },
-  { header: "recordedBy", get: (p) => str(p.recordedBy) },
-  { header: "identifiedBy", get: (p) => str(p.identifiedBy) },
-  { header: "institutionCode", get: (p) => str(p.institutionCode) },
-  { header: "collectionCode", get: (p) => str(p.collectionCode) },
-  { header: "catalogNumber", get: (p) => str(p.catalogNumber) },
-  { header: "datasetName", get: (p) => str(p.datasetName) },
-  { header: "establishmentMeans", get: (p) => str(p.establishmentMeans) },
-  { header: "gbifIssues", get: (p) => str(p.gbifIssues) },
-  // Whose coordinates the row carries, and the assessor's note on them.
-  { header: "georeferencedBy", get: (_p, c) => str(c.mine?.georeferencedBy) },
-  { header: "georeferencedDate", get: (_p, c) => str(c.mine?.georeferencedDate) },
-  { header: "georeferenceRemarks", get: (_p, c) => str(c.mine?.georeferenceRemarks) },
-  {
-    header: "coordinateSource",
-    get: (_p, c) => (c.mine ? "assessor" : c.lat == null ? "none" : "GBIF"),
-  },
-];
 
 /**
  * A ring of points approximating a circle of `radiusMeters` around a position,

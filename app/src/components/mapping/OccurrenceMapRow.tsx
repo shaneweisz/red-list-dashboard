@@ -91,7 +91,6 @@ import {
   type HabitatClass,
 } from "@/lib/mapping/habitat-map";
 import {
-  occurrencesToCsv,
   uncertaintyCircle,
   type Georeference,
 } from "@/lib/mapping/georeferences";
@@ -1718,45 +1717,6 @@ export default function OccurrenceMapRow({
     closeEditor();
   }, [editingFeature, georeferences, commitEdits, closeEditor]);
 
-
-  /**
-   * Exports the table as it stands: every record the filters left in, minus
-   * anything struck out by hand, with the assessor's coordinates in place of
-   * GBIF's where they supplied any. Exporting only the georeferenced handful
-   * would separate them from the evidence they were read against.
-   *
-   * Built in the browser — the assessor's own work over public GBIF fields,
-   * with no Red List data in it, so there's nothing to gate.
-   */
-  const handleExport = useCallback(() => {
-    if (includedOccurrences.length === 0) return;
-    setGeorefMessage(null);
-    try {
-      const stamped: Record<number, Georeference> = Object.fromEntries(
-        Object.entries(georeferences).map(([id, g]) => [
-          Number(id),
-          { ...g, georeferencedBy: g.georeferencedBy || accountEmail || undefined },
-        ])
-      );
-      const csv = occurrencesToCsv(includedOccurrences, stamped);
-      const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
-      const url = URL.createObjectURL(blob);
-      const link = document.createElement("a");
-      link.href = url;
-      link.download = `${(scientificName ?? speciesKey).toLowerCase().replace(/[^a-z0-9]+/g, "-")}-occurrences.csv`;
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      URL.revokeObjectURL(url);
-      const mine = includedOccurrences.filter((o) => georeferences[o.properties.gbifID]).length;
-      setGeorefMessage({
-        kind: "ok",
-        text: `Exported ${includedOccurrences.length.toLocaleString()} record${includedOccurrences.length === 1 ? "" : "s"}${mine > 0 ? `, ${mine} with your coordinates` : ""}.`,
-      });
-    } catch {
-      setGeorefMessage({ kind: "error", text: "Export failed." });
-    }
-  }, [includedOccurrences, georeferences, speciesKey, scientificName, accountEmail]);
 
   // Would this record survive everything except the GBIF-flagged check? Used
   // to say what that one check is deciding on its own, the same way the other
@@ -5408,11 +5368,7 @@ export default function OccurrenceMapRow({
                   than filters, kept together so they don't scatter when
                   some of them are hidden. */}
               <div className="ml-auto flex items-center gap-1.5 shrink-0">
-                                {/* Export. On the toolbar rather than in a dropdown
-                    because it's an action, not a filter — and ungated: the
-                    table is the assessor's own work over public GBIF fields,
-                    with no Red List data in it. */}
-                <div className="flex items-center gap-1.5 shrink-0">
+                                <div className="flex items-center gap-1.5 shrink-0">
                     {georefMessage && (
                       <span
                         className={`max-w-[11rem] truncate text-[10px] ${
@@ -5470,31 +5426,19 @@ export default function OccurrenceMapRow({
                       }
                       className="inline-flex items-center gap-1 px-2 py-1 rounded border border-zinc-300 dark:border-zinc-600 text-xs text-zinc-600 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800 transition-colors"
                     >
-                      <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}
+                      {/* An upload arrow rather than a map pin: the button's
+                          job is getting the file in, and a pin said "another
+                          layer" beside a row of layer toggles. */}
+                      <svg className="w-3.5 h-3.5 text-zinc-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}
                            style={pointFile ? { color: POINT_FILE_COLOR } : undefined}>
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M12 21s7-6.3 7-11a7 7 0 10-14 0c0 4.7 7 11 7 11z" />
-                        <circle cx="12" cy="10" r="2.5" />
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M4 16v2a2 2 0 002 2h12a2 2 0 002-2v-2M7 8l5-5 5 5M12 3v12" />
                       </svg>
-                      Point file
+                      Import CSV
                       {pointFile && (
                         <span className="tabular-nums text-[10px] text-zinc-400">
                           {pointFile.points.length.toLocaleString()}
                         </span>
                       )}
-                    </button>
-                    <button
-                      onClick={handleExport}
-                      disabled={includedOccurrences.length === 0}
-                      title={`Download the ${includedOccurrences.length.toLocaleString()} record${includedOccurrences.length === 1 ? "" : "s"} currently in the table as a Darwin Core CSV, with your own coordinates in place of GBIF's wherever you've added them.`}
-                      className="inline-flex items-center gap-1 px-2 py-1 rounded border border-zinc-300 dark:border-zinc-600 text-xs text-zinc-600 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
-                    >
-                      <svg className="w-3.5 h-3.5 text-zinc-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M4 16v2a2 2 0 002 2h12a2 2 0 002-2v-2M7 10l5 5 5-5M12 15V3" />
-                      </svg>
-                      Export CSV
-                      <span className="tabular-nums text-[10px] text-zinc-400">
-                        {includedOccurrences.length.toLocaleString()}
-                      </span>
                     </button>
                 </div>
                 {/* The map/list arrangement is chosen from the table's own
