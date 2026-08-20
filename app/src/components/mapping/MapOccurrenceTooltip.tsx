@@ -112,6 +112,21 @@ export default function MapOccurrenceTooltip(props: MapOccurrenceTooltipProps) {
   // the point covers the very area you're comparing it against. Flips to the
   // left when there isn't room on the right.
   const showLeft = fixedX + tooltipWidth + 24 > containerRect.right;
+  /**
+   * Kept inside the map horizontally, the way it already was vertically.
+   *
+   * Choosing a side isn't enough on its own: zoomed in, a record near a corner
+   * put the panel past the map's edge and the close button went with it, since
+   * the button sits in the panel's own top row rather than floating. The edge
+   * is computed here and clamped, so there is no arrangement that hides it.
+   */
+  const panelLeft = Math.max(
+    containerRect.left + 4,
+    Math.min(
+      showLeft ? fixedX - 12 - tooltipWidth : fixedX + 12,
+      containerRect.right - tooltipWidth - 4
+    )
+  );
   // Keep it inside the map vertically. The estimate only covers the first
   // frame, before the panel has been measured.
   const height = panelHeight || 160;
@@ -148,9 +163,12 @@ export default function MapOccurrenceTooltip(props: MapOccurrenceTooltipProps) {
       data-occurrence-tooltip=""
       style={{
         position: "fixed",
-        left: showLeft ? fixedX - 12 : fixedX + 12,
+        left: panelLeft,
         top: clampedY,
-        transform: showLeft ? "translate(-100%, -50%)" : "translate(0, -50%)",
+        // Only the vertical half-shift: the horizontal edge is already the
+        // clamped value, so translating it again would undo the clamp.
+        transform: "translateY(-50%)",
+        width: tooltipWidth,
         zIndex: 10000,
         // Interactive when it has controls: you have to be able to reach the
         // pager — or the edit link — without the tooltip vanishing on the way.
