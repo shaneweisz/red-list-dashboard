@@ -210,13 +210,19 @@ export function getColNoMatch(): Map<number, ColNoMatch> {
   if (colNoMatchCache) return colNoMatchCache;
   const out = new Map<number, ColNoMatch>();
   if (fs.existsSync(COL_NO_MATCH_PATH)) {
-    // Tuple-encoded on disk ([reason, detail?, detailId?]) — one entry per
-    // flagged species, so the shipped file stays small.
+    // Short-keyed on disk (r/d/i/c/n, absent fields omitted) — one entry per
+    // flagged species, so the shipped file stays small. See build-col-no-match.
     const file = JSON.parse(fs.readFileSync(COL_NO_MATCH_PATH, "utf-8")) as {
-      species: Record<string, [string, string?, number?]>;
+      species: Record<string, { r: string; d?: string; i?: number; c?: string; n?: string }>;
     };
-    for (const [id, [reason, detail, detailId]] of Object.entries(file.species ?? {})) {
-      out.set(Number(id), { reason, ...(detail != null ? { detail } : {}), ...(detailId != null ? { detailId } : {}) });
+    for (const [id, e] of Object.entries(file.species ?? {})) {
+      out.set(Number(id), {
+        reason: e.r,
+        ...(e.d != null ? { detail: e.d } : {}),
+        ...(e.i != null ? { detailId: e.i } : {}),
+        ...(e.c != null ? { colId: e.c } : {}),
+        ...(e.n != null ? { colName: e.n } : {}),
+      });
     }
   }
   colNoMatchCache = out;

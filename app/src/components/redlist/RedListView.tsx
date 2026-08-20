@@ -16,7 +16,7 @@ import { CATEGORY_COLORS, TAXA_BY_ID, THREATENED_CATEGORIES } from "@/config/tax
 import { speciesMatchesNode, getNodeDef, getViewRootForNode, findNode, matchesBreakdownName, breakdownDisplayName } from "@/lib/taxonomy-utils";
 import { dynamicNodeDisplayName } from "@/lib/dynamic-taxon";
 import ReviewerChart from "./ReviewerChart";
-import { NO_MATCH_REASONS, NO_MATCH_REASON_SHORT, NO_MATCH_REASON_SUMMARY, noMatchExplanation } from "@/lib/col-no-match";
+import { NO_MATCH_REASONS, NO_MATCH_REASON_SHORT, NO_MATCH_REASON_SUMMARY, noMatchExplanation, colTaxonUrl } from "@/lib/col-no-match";
 import { parseAssessors } from "@/lib/parseAssessors";
 import { iucnRegionCountries, countryToIucnRegion } from "@/lib/regions";
 import { useFilterParams } from "@/hooks/useFilterParams";
@@ -4534,16 +4534,6 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
                   )}
                 </div>
 
-                {/* Possible Taxonomic Revision — assessed-only: the flag is a
-                    property of an IUCN assessment's name, so it has no meaning
-                    in the Not Evaluated (new-assessments) view, whose rows are
-                    CoL species with no assessment to disagree with. */}
-                {!isNewAssessments && (
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                    {taxonomicRevisionCard}
-                  </div>
-                )}
-
                 {/* Realm, Movement, and Trend as three columns in one row. */}
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                   {/* Realm */}
@@ -4694,6 +4684,16 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
                   )}
                 </div>
 
+                {/* Possible Taxonomic Revision — assessed-only: the flag is a
+                    property of an IUCN assessment's name, so it has no meaning
+                    in the Not Evaluated (new-assessments) view, whose rows are
+                    CoL species with no assessment to disagree with. */}
+                {!isNewAssessments && (
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    {taxonomicRevisionCard}
+                  </div>
+                )}
+
             </>
           )}
 
@@ -4725,7 +4725,7 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
               </svg>
             </div>
-            {(selectedTaxa.size > 0 || selectedSubgroups.size > 0 || selectedCategories.size > 0 || selectedYearRanges.size > 0 || selectedAssessmentYears.size > 0 || selectedDescribedYears.size > 0 || selectedObsRanges.size > 0 || selectedAssessmentCounts.size > 0 || selectedCountries.size > 0 || selectedSystems.size > 0 || endemicsOnly || selectedGrowthForms.size > 0 || selectedPopulationTrends.size > 0 || selectedMovementPatterns.size > 0 || selectedThreats.size > 0 || selectedCriteria.size > 0 || selectedHabitat.size > 0 || habitatBreadth || habitatImportanceActive || habitatSeasonsActive || habitatSuitabilityActive || selectedAssessors.size > 0 || selectedReviewers.size > 0 || selectedFacilitators.size > 0 || showOnlyStarred || exactFilters.outdated || exactFilters.minObs != null || exactFilters.maxObs != null || exactFilters.minAssessmentYear != null || exactFilters.maxAssessmentYear != null || exactFilters.minDescribedYear != null || exactFilters.maxDescribedYear != null) && (
+            {(selectedTaxa.size > 0 || selectedSubgroups.size > 0 || selectedCategories.size > 0 || selectedYearRanges.size > 0 || selectedAssessmentYears.size > 0 || selectedDescribedYears.size > 0 || selectedObsRanges.size > 0 || selectedAssessmentCounts.size > 0 || selectedCountries.size > 0 || selectedSystems.size > 0 || endemicsOnly || selectedGrowthForms.size > 0 || selectedPopulationTrends.size > 0 || selectedMovementPatterns.size > 0 || selectedThreats.size > 0 || selectedCriteria.size > 0 || selectedHabitat.size > 0 || habitatBreadth || colMatch || selectedColReasons.size > 0 || habitatImportanceActive || habitatSeasonsActive || habitatSuitabilityActive || selectedAssessors.size > 0 || selectedReviewers.size > 0 || selectedFacilitators.size > 0 || showOnlyStarred || exactFilters.outdated || exactFilters.minObs != null || exactFilters.maxObs != null || exactFilters.minAssessmentYear != null || exactFilters.maxAssessmentYear != null || exactFilters.minDescribedYear != null || exactFilters.maxDescribedYear != null) && (
               <button
                 onClick={() => {
                   clearAllFiltersAndTaxa();
@@ -4969,6 +4969,31 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
                 </button>
               );
             })}
+            {/* Taxonomic-revision chips. colReasons implies flagged, so when
+                reasons are picked they ARE the chips — a redundant "Flagged"
+                chip beside them would need its own × that means something
+                different (clear the toggle, keep the reasons?), which is a
+                distinction without a use. */}
+            {selectedColReasons.size === 0 && colMatch && (
+              <button
+                onClick={() => setColMatch(null)}
+                className="px-3 py-1.5 text-sm font-medium rounded-full bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-500 flex items-center gap-1 hover:opacity-80"
+              >
+                {colMatch === "flagged" ? "⚑ Possible taxonomic revision" : "Clean CoL match"}
+                <span className="text-sm">×</span>
+              </button>
+            )}
+            {Array.from(selectedColReasons).map(reason => (
+              <button
+                key={`col-reason-${reason}`}
+                onClick={() => setColReasons(prev => { const next = new Set(prev); next.delete(reason); return next; })}
+                title={NO_MATCH_REASON_SUMMARY[reason] ?? reason}
+                className="px-3 py-1.5 text-sm font-medium rounded-full bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-500 flex items-center gap-1 hover:opacity-80"
+              >
+                ⚑ {NO_MATCH_REASON_SHORT[reason] ?? reason}
+                <span className="text-sm">×</span>
+              </button>
+            ))}
             {habitatBreadth && (
               <button
                 onClick={() => setHabitatBreadth(null)}
@@ -5336,22 +5361,23 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
                               "Possible Taxonomic Revision" filter card. Only
                               the ~4% of assessed species without a clean 1:1
                               CoL match carry one, so this is a rare marker,
-                              not a per-row decoration. Clicking it filters the
-                              list to that reason, the same as clicking its bar. */}
+                              not a per-row decoration. It opens the CoL record
+                              that disagrees with the assessment: the tooltip
+                              says what CoL did, and the obvious next question
+                              is "show me", which the filter chart already
+                              answers for the "give me all of these" case. */}
                           {s.col_no_match && (
-                            <HoverTooltip text={`Possible taxonomic revision: ${noMatchExplanation(s.col_no_match)}`}>
-                              <button
-                                type="button"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  const reason = s.col_no_match!.reason;
-                                  setColReasons(prev => (prev.size === 1 && prev.has(reason)) ? new Set<string>() : new Set([reason]));
-                                }}
-                                aria-label={`Possible taxonomic revision — ${NO_MATCH_REASON_SUMMARY[s.col_no_match.reason] ?? s.col_no_match.reason}`}
-                                className="ml-1 align-middle text-amber-600 dark:text-amber-500 hover:text-amber-700 dark:hover:text-amber-400 text-xs cursor-pointer"
+                            <HoverTooltip text={`${noMatchExplanation(s.col_no_match, s.scientific_name)} Open in Catalogue of Life ↗`}>
+                              <a
+                                href={colTaxonUrl(s.col_no_match, s.scientific_name)}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                onClick={(e) => e.stopPropagation()}
+                                aria-label={`Possible taxonomic revision — ${NO_MATCH_REASON_SUMMARY[s.col_no_match.reason] ?? s.col_no_match.reason}. Open in Catalogue of Life`}
+                                className="ml-1 align-middle text-amber-600 dark:text-amber-500 hover:text-amber-700 dark:hover:text-amber-400 text-xs"
                               >
                                 ⚑
-                              </button>
+                              </a>
                             </HoverTooltip>
                           )}
                           {s.common_name && (

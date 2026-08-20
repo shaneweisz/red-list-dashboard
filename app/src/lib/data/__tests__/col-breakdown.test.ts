@@ -3,7 +3,7 @@
  * being the single most complex piece of logic behind the described-count
  * breakdown's "why doesn't this species have a clean 1:1 CoL match"
  * diagnostic — every reason a user actually sees in the UI (TaxaSummary.tsx's
- * NO_MATCH_REASON_LABEL) traces back to exactly one branch here. It's a pure
+ * noMatchSentence, lib/col-no-match.ts) traces back to exactly one branch here. It's a pure
  * function of a plain row object, so this needs no DuckDB connection or
  * fixture data — just the row shapes computeBreakdownEntry's diagRows query
  * actually produces (see that query's SELECT list in col-breakdown.ts).
@@ -49,7 +49,7 @@ describe("classifyNoMatch", () => {
     });
     expect(result).toEqual({
       id: 1, name: "Testus example", reason: "infraspecific",
-      detail: "Arctocephalus philippii", detailId: 42,
+      detail: "Arctocephalus philippii", detailId: 42, colId: "ABC123",
     });
   });
 
@@ -60,7 +60,7 @@ describe("classifyNoMatch", () => {
     });
     expect(result).toEqual({
       id: 1, name: "Testus example", reason: "infraspecific",
-      detail: "Some unassessed parent", detailId: undefined,
+      detail: "Some unassessed parent", colId: "ABC123",
     });
   });
 
@@ -87,6 +87,9 @@ describe("classifyNoMatch", () => {
     expect(result).toEqual({
       id: 1, name: "Testus example", reason: "lumped",
       detail: "Testus winnerus", detailId: 99,
+      // The CoL record the ⚑ deep-links to, plus CoL's own accepted name for it
+      // — what lets the UI say "both are now called X" (see noMatchSentence).
+      colId: "ABC123", colName: "Testus realus",
     });
   });
 

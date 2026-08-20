@@ -42,9 +42,12 @@ export interface ColNoMatchFile {
   /** Reason counts, so the dashboard can size its chart without walking the map. */
   counts: Record<string, number>;
   total: number;
-  /** sis_taxon_id → [reason, detail?, detailId?] — a tuple, not an object, to
-   *  keep the shipped file small (it carries one entry per flagged species). */
-  species: Record<string, [string, string?, number?]>;
+  /** sis_taxon_id → the flag, with short keys (r/d/i/c/n) and absent fields
+   *  omitted — one entry per flagged species, so the shipped file stays small.
+   *  r = reason, d = detail (the species it's lumped with / demoted under),
+   *  i = that species' own SIS id, c = the CoL id this assessment links to,
+   *  n = CoL's own accepted name for that col_id. */
+  species: Record<string, { r: string; d?: string; i?: number; c?: string; n?: string }>;
 }
 
 export async function run(): Promise<void> {
@@ -96,9 +99,15 @@ export async function run(): Promise<void> {
   const species: ColNoMatchFile["species"] = {};
   for (const d of details) {
     counts[d.reason] = (counts[d.reason] ?? 0) + 1;
-    species[String(d.id)] = d.detailId != null ? [d.reason, d.detail, d.detailId]
-      : d.detail != null ? [d.reason, d.detail]
-      : [d.reason];
+    species[String(d.id)] = {
+      r: d.reason,
+      ...(d.detail != null ? { d: d.detail } : {}),
+      ...(d.detailId != null ? { i: d.detailId } : {}),
+      ...(d.colId != null ? { c: d.colId } : {}),
+      // CoL's accepted name is only worth shipping when it says something the
+      // other fields don't — otherwise it's the same string twice per entry.
+      ...(d.colName != null && d.colName !== d.name && d.colName !== d.detail ? { n: d.colName } : {}),
+    };
   }
   const out: ColNoMatchFile = { counts, total: details.length, species };
   fs.writeFileSync(outPath, JSON.stringify(out));

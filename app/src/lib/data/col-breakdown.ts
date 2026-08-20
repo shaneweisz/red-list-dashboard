@@ -28,6 +28,14 @@ export interface NoMatchDetail {
   detail?: string;
   /** That species' own assessed id, so the frontend can link to it too ("lumped"/"infraspecific", only when the parent is itself IUCN-assessed). */
   detailId?: number;
+  /** The CoL id this assessment links to, so the UI can deep-link to the CoL
+   *  record that disagrees with it. Absent only for "no_link" (there isn't one). */
+  colId?: string;
+  /** CoL's OWN accepted name for that col_id, when the species/ universe has it.
+   *  Differs from `detail` when CoL's accepted name is neither this species nor
+   *  the assessed one that won the tie-break (e.g. a lump under a third name), so
+   *  the UI can name the species the two were merged INTO rather than guess. */
+  colName?: string;
 }
 
 // Heuristic "split from" flag for Not Evaluated species — see SPLIT_CANDIDATES_SQL
@@ -89,20 +97,23 @@ export function classifyNoMatch(row: Record<string, unknown>): NoMatchDetail {
   const parentAssessedId = row.parent_assessed_id as number | null;
   const parentAssessedName = row.parent_assessed_name as string | null;
   if (!linkedColId) return { id, name, reason: "no_link" };
+  // Every remaining reason has a col_id to point at, and — where species/ knows
+  // the name — CoL's own accepted spelling of it.
+  const ref = { colId: linkedColId, ...(linkedName ? { colName: linkedName } : {}) };
   if (!linkedName) {
-    if (bkRank === "species") return { id, name, reason: "provisional" };
+    if (bkRank === "species") return { id, name, reason: "provisional", ...ref };
     if (bkRank) {
       if (parentAssessedName) {
-        return { id, name, reason: "infraspecific", detail: parentAssessedName, detailId: parentAssessedId != null ? Number(parentAssessedId) : undefined };
+        return { id, name, reason: "infraspecific", detail: parentAssessedName, detailId: parentAssessedId != null ? Number(parentAssessedId) : undefined, ...ref };
       }
-      if (parentName) return { id, name, reason: "infraspecific", detail: parentName };
+      if (parentName) return { id, name, reason: "infraspecific", detail: parentName, ...ref };
     }
-    return { id, name, reason: "missing_from_backbone" };
+    return { id, name, reason: "missing_from_backbone", ...ref };
   }
-  if (winnerName) return { id, name, reason: "lumped", detail: winnerName, detailId: winnerId != null ? Number(winnerId) : undefined };
-  if (!linkedInBase) return { id, name, reason: "not_in_base" };
-  if (linkedExtinct) return { id, name, reason: "extinct_unconfirmed" };
-  return { id, name, reason: "classified_elsewhere" };
+  if (winnerName) return { id, name, reason: "lumped", detail: winnerName, detailId: winnerId != null ? Number(winnerId) : undefined, ...ref };
+  if (!linkedInBase) return { id, name, reason: "not_in_base", ...ref };
+  if (linkedExtinct) return { id, name, reason: "extinct_unconfirmed", ...ref };
+  return { id, name, reason: "classified_elsewhere", ...ref };
 }
 
 // Precomputes a col_id -> likely-former-parent lookup, once per caller lifetime

@@ -22,12 +22,12 @@ import { prettifyQs } from "@/lib/query-string";
 import { sisRowKey } from "@/lib/species-row-key";
 // Reason labels are shared with the main dashboard's taxonomic-revision flag —
 // see lib/col-no-match.ts (both surfaces must explain a reason the same way).
-import { NO_MATCH_REASON_LABEL } from "@/lib/col-no-match";
+import { noMatchSentence } from "@/lib/col-no-match";
 
 // See scripts/build-taxa-summary.ts's classifyNoMatch for what each reason means.
 // Modular/additive on top of colBreakdown[].noMatchIds — safe to drop independently
 // of the count-only CoL Match / No CoL Match mechanism it rides alongside.
-type NoMatchDetail = { id: number; name: string; reason: string; detail?: string; detailId?: number };
+type NoMatchDetail = { id: number; name: string; reason: string; detail?: string; detailId?: number; colId?: string; colName?: string };
 
 // See scripts/build-taxa-summary.ts's SPLIT_CANDIDATES_SQL for the mechanism and its
 // caveats — a name-pattern heuristic (former-subspecies synonym → promoted species),
@@ -671,26 +671,29 @@ function SpeciesListPanel({
                       )}
                     </td>
                     <td className="py-1 pr-2 text-zinc-300">
-                      {detail && (
-                        <>
-                          {NO_MATCH_REASON_LABEL[detail.reason] ?? detail.reason}
-                          {detail.detail && (
-                            detail.detailId != null ? (
-                              <>
-                                {" "}
+                      {detail && (() => {
+                        // Subject-free framing: the Name column beside this one
+                        // already says which species it is (see noMatchSentence).
+                        const sentence = noMatchSentence(detail, null);
+                        return (
+                          <>
+                            {sentence.before}
+                            {sentence.detail && (
+                              detail.detailId != null ? (
                                 <a
                                   href={speciesHref(nodeId, sisRowKey(detail.detailId), "reassessments")}
                                   target="_blank"
                                   rel="noopener noreferrer"
                                   className="text-blue-300 hover:text-blue-200 underline"
                                 >
-                                  {detail.detail}
+                                  {sentence.detail}
                                 </a>
-                              </>
-                            ) : ` ${detail.detail}`
-                          )}
-                        </>
-                      )}
+                              ) : sentence.detail
+                            )}
+                            {sentence.after}
+                          </>
+                        );
+                      })()}
                       {split && (
                         <span
                           title="Heuristic: Catalogue of Life still records this name as a former subspecies of the linked species — not a confirmed taxonomic changelog."
