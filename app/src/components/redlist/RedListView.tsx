@@ -1433,12 +1433,17 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
   const [yearsChartMode, setYearsChartMode] = useState<"range" | "year">(
     () => (selectedAssessmentYears.size > 0 ? "year" : "range")
   );
-  // If the URL hydrates with specific years selected after mount, surface the year view.
+  // If the URL hydrates with specific years — or an explicit year range — after
+  // mount, surface the year view. The range case matters for shared links: the
+  // from/to inputs live in this view, so a link carrying a range would otherwise
+  // open with its own filter's control hidden.
   useEffect(() => {
-    if (selectedAssessmentYears.size > 0) {
+    if (selectedAssessmentYears.size > 0
+      || exactFilters.minAssessmentYear != null
+      || exactFilters.maxAssessmentYear != null) {
       setYearsChartMode("year");
     }
-  }, [selectedAssessmentYears]);
+  }, [selectedAssessmentYears, exactFilters.minAssessmentYear, exactFilters.maxAssessmentYear]);
 
   // Restore the remembered Range/Year choice — after mount, not in the state
   // initializer, so server and first client render agree. Skipped when the URL
