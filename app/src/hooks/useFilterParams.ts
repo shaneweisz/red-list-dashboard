@@ -82,8 +82,18 @@ export const OWN_PARAM_NAMES = [
   "habitatImportance", "habitatSeasons", "habitatSuitability", "bd", "endemics", "growthForms",
   "assessors", "reviewers", "facilitators", "search", "outdated", "minObs", "maxObs",
   "minAssessmentYear", "maxAssessmentYear", "minDescribedYear", "maxDescribedYear",
-  "species", "tab", "sort", "dir", "mapview", "mapsort", "mapdir",
+  "species", "tab", "sort", "dir", "sort2", "dir2", "mapview", "mapsort", "mapdir",
 ];
+
+/** Columns the species table can be sorted by. */
+export type SortField = "year" | "category" | "totalGbif" | "newGbif" | "pctNewGbif" | "describedYear";
+
+const SORT_FIELDS: SortField[] = ["year", "category", "totalGbif", "newGbif", "pctNewGbif", "describedYear"];
+
+/** Narrow a raw `sort=`/`sort2=` param to a SortField, or null if unrecognised. */
+function parseSortField(raw: string | null): SortField | null {
+  return SORT_FIELDS.find((f) => f === raw) ?? null;
+}
 
 // `bd=ssc-small-mammal:order:rodentia` — narrows a node's species list to one
 // breakdown row (see TaxaSummary.tsx's BreakdownList). nodeId:rank:name, colon-joined
@@ -288,16 +298,13 @@ export function parseParams(search: string, suffix: string = "") {
     maxAssessmentYear: numParam(p, k("maxAssessmentYear")),
     minDescribedYear: numParam(p, k("minDescribedYear")),
     maxDescribedYear: numParam(p, k("maxDescribedYear")),
-    sortField: (
-      sortParam === "category" ? "category" :
-      sortParam === "year" ? "year" :
-      sortParam === "totalGbif" ? "totalGbif" :
-      sortParam === "newGbif" ? "newGbif" :
-      sortParam === "pctNewGbif" ? "pctNewGbif" :
-      sortParam === "describedYear" ? "describedYear" :
-      null
-    ) as "year" | "category" | "totalGbif" | "newGbif" | "pctNewGbif" | "describedYear" | null,
+    sortField: parseSortField(sortParam),
     sortDirection: (p.get(k("dir")) === "asc" ? "asc" : "desc") as "asc" | "desc",
+    // Secondary sort — applied within ties on the primary (shift/cmd-click a
+    // second column header). Ignored when it names the same column as the
+    // primary, which would be a no-op tiebreaker.
+    sortField2: parseSortField(p.get(k("sort2"))),
+    sortDirection2: (p.get(k("dir2")) === "asc" ? "asc" : "desc") as "asc" | "desc",
     mapViewMode: (p.get(k("mapview")) === "list" ? "list" : "map") as MapViewMode,
     mapSortKey: (
       p.get(k("mapsort")) === "name" ? "name" :
@@ -351,8 +358,10 @@ export function buildQs(state: {
   maxAssessmentYear?: number | null;
   minDescribedYear?: number | null;
   maxDescribedYear?: number | null;
-  sortField: "year" | "category" | "totalGbif" | "newGbif" | "pctNewGbif" | "describedYear" | null;
+  sortField: SortField | null;
   sortDirection: "asc" | "desc";
+  sortField2: SortField | null;
+  sortDirection2: "asc" | "desc";
   mapViewMode?: MapViewMode;
   mapSortKey?: MapSortKey;
   mapSortDirection?: "asc" | "desc";
@@ -413,6 +422,11 @@ export function buildQs(state: {
     if (state.sortDirection !== "desc") p.set(k("dir"), state.sortDirection);
   } else if (state.sortDirection !== "desc") {
     p.set(k("dir"), state.sortDirection);
+  }
+  // Secondary sort is only meaningful alongside a primary that differs from it.
+  if (state.sortField2 && state.sortField2 !== (state.sortField ?? "year")) {
+    p.set(k("sort2"), state.sortField2);
+    if (state.sortDirection2 !== "desc") p.set(k("dir2"), state.sortDirection2);
   }
   if (state.mapViewMode === "list") p.set(k("mapview"), "list");
   if (state.mapSortKey && state.mapSortKey !== "species") p.set(k("mapsort"), state.mapSortKey);
@@ -957,9 +971,20 @@ export function useFilterParams(paramSuffix: string = "") {
   );
 
   const setSort = useCallback(
-    (field: "year" | "category" | "totalGbif" | "newGbif" | "pctNewGbif" | "describedYear" | null, direction: "asc" | "desc") => {
+    (field: SortField | null, direction: "asc" | "desc") => {
       setState(prev => {
         const next = { ...prev, sortField: field, sortDirection: direction };
+        queueMicrotask(() => syncUrl(next, false));
+        return next;
+      });
+    },
+    [syncUrl]
+  );
+
+  const setSort2 = useCallback(
+    (field: SortField | null, direction: "asc" | "desc") => {
+      setState(prev => {
+        const next = { ...prev, sortField2: field, sortDirection2: direction };
         queueMicrotask(() => syncUrl(next, false));
         return next;
       });
@@ -1044,6 +1069,8 @@ export function useFilterParams(paramSuffix: string = "") {
         ...EMPTY_EXACT_FILTERS,
         sortField: null,
         sortDirection: "desc" as const,
+        sortField2: null,
+        sortDirection2: "desc" as const,
         species: null,
         tab: null,
       };
@@ -1085,6 +1112,8 @@ export function useFilterParams(paramSuffix: string = "") {
         ...EMPTY_EXACT_FILTERS,
         sortField: null,
         sortDirection: "desc" as const,
+        sortField2: null,
+        sortDirection2: "desc" as const,
         species: null,
         tab: null,
       };
@@ -1127,6 +1156,8 @@ export function useFilterParams(paramSuffix: string = "") {
     setExactFilters,
     sortField: state.sortField,
     sortDirection: state.sortDirection,
+    sortField2: state.sortField2,
+    sortDirection2: state.sortDirection2,
     mapViewMode: state.mapViewMode,
     mapSortKey: state.mapSortKey,
     mapSortDirection: state.mapSortDirection,
@@ -1164,6 +1195,7 @@ export function useFilterParams(paramSuffix: string = "") {
     setSelectedFacilitators,
     setSearchFilter,
     setSort,
+    setSort2,
     setMapViewMode,
     setMapSort,
     fromPopstateRef,

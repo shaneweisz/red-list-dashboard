@@ -8,7 +8,7 @@ import {
   ZoomableGroup,
 } from "react-simple-maps";
 import { geoCentroid } from "d3-geo";
-import { IUCN_REGION_ORDER, matchingRegion } from "@/lib/regions";
+import { IUCN_REGION_ORDER, matchingRegions, iucnRegionCountries } from "@/lib/regions";
 import CountryStatsList from "./CountryStatsList";
 import type { MapViewMode, MapSortKey } from "@/hooks/useFilterParams";
 
@@ -225,7 +225,8 @@ interface WorldMapProps {
   // Label for the species count in tooltips (default: "# Assessed")
   speciesLabel?: string;
   // Callback when a region is selected from the dropdown (sets country filter)
-  onRegionFilter?: (region: string) => void;
+  /** Set the country selection from the region picker (a union of whole regions). */
+  onRegionsChange?: (countries: Set<string>) => void;
   // Whether the "endemics only" filter is active (single-country species)
   endemicsOnly?: boolean;
   // Callback to toggle the endemics-only filter
@@ -270,7 +271,7 @@ const DEFAULT_ZOOM = 1.5;
 const MIN_ZOOM = 1.0;
 const MAX_ZOOM = 8.0;
 
-function WorldMap({ selectedCountries, onCountrySelect, selectedTaxon, precomputedStats, precomputedStatsTotal, selectedTaxa, speciesLabel = "# Assessed", onRegionFilter, endemicsOnly = false, onEndemicsToggle, footer, showGbifToggle = true, showOutdatedMode = true, showColorModeDropdown = true, mapViewMode, onMapViewModeChange, mapSortKey, mapSortDirection, onMapSortChange, selectOnHover = false, onCountryHover }: WorldMapProps) {
+function WorldMap({ selectedCountries, onCountrySelect, selectedTaxon, precomputedStats, precomputedStatsTotal, selectedTaxa, speciesLabel = "# Assessed", onRegionsChange, endemicsOnly = false, onEndemicsToggle, footer, showGbifToggle = true, showOutdatedMode = true, showColorModeDropdown = true, mapViewMode, onMapViewModeChange, mapSortKey, mapSortDirection, onMapSortChange, selectOnHover = false, onCountryHover }: WorldMapProps) {
   const [hoveredCountry, setHoveredCountry] = useState<string | null>(null);
   const [hoveredCountryCode, setHoveredCountryCode] = useState<string | null>(null);
   const [speciesStats, setSpeciesStats] = useState<CountryStats>(precomputedStats || {});
@@ -465,12 +466,41 @@ function WorldMap({ selectedCountries, onCountrySelect, selectedTaxon, precomput
   // since outdated counts are computed alongside species counts, not fetched separately)
   const activeStats = colorMode === "occurrences" ? (occurrenceStats || {}) : speciesStats;
 
-  // Which region (if any) is currently selected as a whole — shared by the
-  // region <select>'s own value (below) and the list view (which narrows its
-  // rows to this region, same as the map already implicitly does via the blue
-  // highlight over the whole region's shapes). See matchingRegion's own doc
-  // comment for exactly what "as a whole" means.
-  const activeRegion = useMemo(() => matchingRegion(selectedCountries) ?? "", [selectedCountries]);
+  // Which regions (if any) are currently selected as a whole — shared by the
+  // region control's own checked state (below) and the list view (which narrows
+  // its rows to them, same as the map already implicitly does via the blue
+  // highlight over those regions' shapes). See matchingRegions' own doc comment
+  // for exactly what "as a whole" means.
+  const activeRegions = useMemo(() => matchingRegions(selectedCountries), [selectedCountries]);
+
+  // Region picker popover — a checkbox list rather than a <select> so more than
+  // one region can be active at once ("North America + South America"), which a
+  // native single-value select cannot express. Ticking a box unions that
+  // region's countries into the same selectedCountries set an individual
+  // country click writes, so nothing downstream needs a separate region concept.
+  const [regionMenuOpen, setRegionMenuOpen] = useState(false);
+  const regionMenuRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!regionMenuOpen) return;
+    const handler = (e: MouseEvent) => {
+      if (regionMenuRef.current && !regionMenuRef.current.contains(e.target as Node)) {
+        setRegionMenuOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [regionMenuOpen]);
+
+  const toggleRegion = useCallback((region: string) => {
+    const codes = iucnRegionCountries(region);
+    const next = new Set(selectedCountries);
+    // Ticking adds the whole region; unticking removes exactly what ticking
+    // added, so a region toggled on and back off leaves any individually
+    // picked countries elsewhere untouched.
+    if (codes.every((c) => next.has(c))) codes.forEach((c) => next.delete(c));
+    else codes.forEach((c) => next.add(c));
+    onRegionsChange?.(next);
+  }, [selectedCountries, onRegionsChange]);
 
   // Calculate max value for heatmap scaling (unused in "outdated" mode, which uses a fixed 0-100% gradient)
   const maxValue = Object.values(activeStats).reduce(
@@ -594,17 +624,53 @@ function WorldMap({ selectedCountries, onCountrySelect, selectedTaxon, precomput
               Endemics
             </button>
           )}
-          {onRegionFilter && (
-            <select
-              value={activeRegion}
-              onChange={(e) => onRegionFilter(e.target.value)}
-              className="text-[10px] bg-zinc-100 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-md px-1.5 py-0.5 text-zinc-700 dark:text-zinc-300 focus:outline-none focus:ring-1 focus:ring-blue-500 max-w-[96px] truncate"
-            >
-              <option value="">All Regions</option>
-              {IUCN_REGION_ORDER.map(region => (
-                <option key={region} value={region}>{region}</option>
-              ))}
-            </select>
+          {onRegionsChange && (
+            <div className="relative" ref={regionMenuRef}>
+              <button
+                type="button"
+                onClick={() => setRegionMenuOpen(prev => !prev)}
+                aria-expanded={regionMenuOpen}
+                title={activeRegions.length ? activeRegions.join(", ") : "Filter by IUCN region"}
+                className={`text-[10px] border rounded-md px-1.5 py-0.5 max-w-[110px] truncate focus:outline-none focus:ring-1 focus:ring-blue-500 ${
+                  activeRegions.length
+                    ? "bg-blue-500 text-white border-blue-500"
+                    : "bg-zinc-100 dark:bg-zinc-800 border-zinc-200 dark:border-zinc-700 text-zinc-700 dark:text-zinc-300"
+                }`}
+              >
+                {activeRegions.length === 0
+                  ? "All Regions"
+                  : activeRegions.length === 1
+                    ? activeRegions[0]
+                    : `${activeRegions.length} regions`} ▾
+              </button>
+              {regionMenuOpen && (
+                <div className="absolute right-0 top-full mt-1 z-30 bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-lg shadow-lg py-1 w-56 max-h-72 overflow-y-auto">
+                  {IUCN_REGION_ORDER.map(region => (
+                    <label
+                      key={region}
+                      className="flex items-center gap-2 px-3 py-1.5 text-xs text-zinc-700 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-700/50 cursor-pointer"
+                    >
+                      <input
+                        type="checkbox"
+                        checked={activeRegions.includes(region)}
+                        onChange={() => toggleRegion(region)}
+                        className="rounded border-zinc-300 dark:border-zinc-600 text-blue-600 focus:ring-blue-500"
+                      />
+                      {region}
+                    </label>
+                  ))}
+                  {activeRegions.length > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => onRegionsChange(new Set())}
+                      className="w-full text-left px-3 py-1.5 mt-1 border-t border-zinc-200 dark:border-zinc-700 text-xs text-zinc-500 hover:bg-zinc-50 dark:hover:bg-zinc-700/50"
+                    >
+                      Clear regions
+                    </button>
+                  )}
+                </div>
+              )}
+            </div>
           )}
         </div>
       </div>
@@ -664,7 +730,7 @@ function WorldMap({ selectedCountries, onCountrySelect, selectedTaxon, precomput
       )}
 
       {/* List view: sortable table alternative, same stats/selection/click-through.
-          Narrowed to activeRegion's countries when a whole region is selected —
+          Narrowed to activeRegions' countries when whole regions are selected —
           same scope the map already implies via its blue region highlight.
           Shares this relative wrapper with the map below (rather than each
           having its own) so the Map/List toggle can overlay bottom-left of
@@ -677,7 +743,7 @@ function WorldMap({ selectedCountries, onCountrySelect, selectedTaxon, precomput
           onCountrySelect={onCountrySelect}
           speciesLabel={speciesLabel}
           showOutdatedMode={showOutdatedMode}
-          regionFilter={activeRegion || null}
+          regionsFilter={activeRegions}
           sortKey={sortKey}
           sortDir={sortDir}
           onSortChange={setSort}

@@ -17,8 +17,9 @@ import { speciesMatchesNode, getNodeDef, getViewRootForNode, findNode, matchesBr
 import { dynamicNodeDisplayName } from "@/lib/dynamic-taxon";
 import ReviewerChart from "./ReviewerChart";
 import { parseAssessors } from "@/lib/parseAssessors";
-import { iucnRegionCountries, countryToIucnRegion } from "@/lib/regions";
-import { useFilterParams } from "@/hooks/useFilterParams";
+import { iucnRegionCountries, matchingRegions } from "@/lib/regions";
+import { useFilterParams, type SortField, type MapViewMode } from "@/hooks/useFilterParams";
+import { readViewPreference, writeViewPreference } from "@/lib/view-preference";
 import { parseHabitatEntries, matchesHabitatFilter as matchesHabitatCriteria, coarseKnownCategories, isRestrictiveSelection, ALL_HABITAT_SEASONS, ALL_HABITAT_IMPORTANCE, ALL_HABITAT_SUITABILITY } from "@/lib/habitat-filter";
 import { type RedListSpecies } from "@/hooks/useRedListSpeciesQuery";
 import { useSpeciesCache } from "@/contexts/SpeciesCacheContext";
@@ -361,6 +362,52 @@ const HABITAT_SEASON_OPTIONS: { value: string; short: string }[] = [
 
 // Importance dropdown options — same checkbox-multi-select shape as season,
 // covering all 3 possible parseHabitatEntries().importance values.
+// Allowed values for the remembered view toggles — passed to readViewPreference
+// so a stale or hand-edited localStorage value can never reach a component.
+const YEARS_CHART_MODES = ["range", "year"] as const;
+const CREDIT_CHART_MODES = ["assessors", "reviewers", "facilitators"] as const;
+const MAP_VIEW_MODES = ["map", "list"] as const;
+type CreditChartMode = (typeof CREDIT_CHART_MODES)[number];
+
+const CATEGORY_ORDER: Record<string, number> = {
+  EX: 0, EW: 1, CR: 2, EN: 3, VU: 4, NT: 5, LC: 6, DD: 7, NE: 8,
+};
+
+/**
+ * Ascending comparison of two species on one sortable column.
+ *
+ * Shared by the primary and the user-chosen secondary sort so "sort by X then
+ * within that by Y" orders on Y exactly the way sorting by Y alone would.
+ * Direction is applied by the caller (negating this) rather than passed in, so
+ * the two levels can carry independent directions.
+ *
+ * Missing values compare as -1 throughout, which parks them at the bottom under
+ * the desc default — matching how the table reads "no data" as "least".
+ */
+function compareBy(field: SortField, a: Species, b: Species): number {
+  switch (field) {
+    case "year": {
+      const dateA = a.assessment_date ? new Date(a.assessment_date).getTime() : 0;
+      const dateB = b.assessment_date ? new Date(b.assessment_date).getTime() : 0;
+      return dateA - dateB;
+    }
+    case "category":
+      return (CATEGORY_ORDER[a.category] ?? 99) - (CATEGORY_ORDER[b.category] ?? 99);
+    case "totalGbif":
+      return (a.gbif_occurrence_count ?? -1) - (b.gbif_occurrence_count ?? -1);
+    case "newGbif":
+      return (a.gbif_observations_after_assessment_year ?? -1) - (b.gbif_observations_after_assessment_year ?? -1);
+    case "pctNewGbif": {
+      const pct = (s: Species) =>
+        (s.gbif_occurrence_count && s.gbif_occurrence_count > 0 && s.gbif_observations_after_assessment_year != null)
+          ? s.gbif_observations_after_assessment_year / s.gbif_occurrence_count : -1;
+      return pct(a) - pct(b);
+    }
+    case "describedYear":
+      return (a.described_year ?? -1) - (b.described_year ?? -1);
+  }
+}
+
 const HABITAT_IMPORTANCE_OPTIONS: { value: string; short: string }[] = [
   { value: "Major", short: "Major" },
   { value: "Not major", short: "Minor" },
@@ -701,6 +748,7 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
     selectedGrowthForms, setSelectedGrowthForms,
     selectedAssessors, setSelectedAssessors,
     selectedFacilitators, setSelectedFacilitators,
+    sortField2, sortDirection2, setSort2,
     selectedReviewers, setSelectedReviewers,
     searchFilter, setSearchFilter,
     exactFilters, setExactFilters,
@@ -1029,7 +1077,36 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
   // — halves the vertical space these together take up, at the cost of one
   // click to see the other list. Local-only UI state, not URL-synced (same as
   // e.g. habitatPage above) since it's a view toggle, not a filter.
-  const [assessorReviewerMode, setAssessorReviewerMode] = useState<"assessors" | "reviewers" | "facilitators">("assessors");
+  const [assessorReviewerMode, setAssessorReviewerMode] = useState<CreditChartMode>("assessors");
+  // Restore the remembered Assessors/Reviewers/Facilitators tab after mount
+  // (see the years toggle above for why it is an effect and not an initializer).
+  // The tab is display-only — it changes which names are charted, never which
+  // species the table shows — so there is no shared-link ambiguity to guard.
+  useEffect(() => {
+    const stored = readViewPreference("creditChartMode", CREDIT_CHART_MODES);
+    if (stored) setAssessorReviewerMode(stored);
+  }, []);
+  const changeCreditChartMode = useCallback((mode: CreditChartMode) => {
+    setAssessorReviewerMode(mode);
+    writeViewPreference("creditChartMode", mode);
+  }, []);
+
+  // Map/List is URL state (mapview=), so the stored preference applies only
+  // when the URL is silent about it — a link that says "list" stays a list for
+  // whoever opens it, regardless of what they last chose here.
+  const mapPrefRestored = useRef(false);
+  useEffect(() => {
+    if (mapPrefRestored.current) return;
+    mapPrefRestored.current = true;
+    if (new URLSearchParams(window.location.search).has("mapview")) return;
+    const stored = readViewPreference("countryViewMode", MAP_VIEW_MODES);
+    if (stored && stored !== mapViewMode) setMapViewMode(stored);
+  }, [mapViewMode, setMapViewMode]);
+
+  const changeMapViewMode = useCallback((mode: MapViewMode) => {
+    setMapViewMode(mode);
+    writeViewPreference("countryViewMode", mode);
+  }, [setMapViewMode]);
 
   // Breadth/Importance/Season/Suitability dropdown menus in the Habitat card header
   // (replacing a wall of individual toggle buttons — Breadth is a single-select
@@ -1356,12 +1433,38 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
   const [yearsChartMode, setYearsChartMode] = useState<"range" | "year">(
     () => (selectedAssessmentYears.size > 0 ? "year" : "range")
   );
-  // If the URL hydrates with specific years selected after mount, surface the year view.
+  // If the URL hydrates with specific years — or an explicit year range — after
+  // mount, surface the year view. The range case matters for shared links: the
+  // from/to inputs live in this view, so a link carrying a range would otherwise
+  // open with its own filter's control hidden.
   useEffect(() => {
-    if (selectedAssessmentYears.size > 0) {
+    if (selectedAssessmentYears.size > 0
+      || exactFilters.minAssessmentYear != null
+      || exactFilters.maxAssessmentYear != null) {
       setYearsChartMode("year");
     }
-  }, [selectedAssessmentYears]);
+  }, [selectedAssessmentYears, exactFilters.minAssessmentYear, exactFilters.maxAssessmentYear]);
+
+  // Restore the remembered Range/Year choice — after mount, not in the state
+  // initializer, so server and first client render agree. Skipped when the URL
+  // already implies a view (specific years, or an explicit year range), which
+  // must win so a shared link renders the same for whoever opens it.
+  const yearsPrefRestored = useRef(false);
+  useEffect(() => {
+    if (yearsPrefRestored.current) return;
+    yearsPrefRestored.current = true;
+    if (selectedAssessmentYears.size > 0) return;
+    if (exactFilters.minAssessmentYear != null || exactFilters.maxAssessmentYear != null) return;
+    const stored = readViewPreference("yearsChartMode", YEARS_CHART_MODES);
+    if (stored) setYearsChartMode(stored);
+  }, [selectedAssessmentYears, exactFilters.minAssessmentYear, exactFilters.maxAssessmentYear]);
+
+  // One place that both moves the toggle and remembers it, so the two can't
+  // drift apart (every caller goes through this rather than setYearsChartMode).
+  const changeYearsChartMode = useCallback((mode: "range" | "year") => {
+    setYearsChartMode(mode);
+    writeViewPreference("yearsChartMode", mode);
+  }, []);
   // Paginate the by-year chart: show 10 years at a time, defaulting to the most recent
   const YEARS_PAGE_SIZE = 10;
   const [yearsPage, setYearsPage] = useState(0);
@@ -2228,12 +2331,11 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
   }, [taxaFilteredSpecies, selectedCategories, selectedCountries, selectedYearRanges, selectedObsRanges, selectedSystems, selectedPopulationTrends, selectedMovementPatterns, selectedThreats, selectedCriteria, matchesSearch, matchesAssessorsFilter, matchesReviewersFilter, matchesFacilitatorsFilter, matchesObsRangeFilter, selectedAssessmentCounts, matchesAssessmentCountFilter, matchesYearRangeFilter, selectedAssessmentYears, matchesAssessmentYearFilter, habitatBreadth, selectedHabitatImportance, selectedHabitatSeasons, selectedHabitatSuitability, habitatImportanceActive, habitatSeasonsActive, habitatSuitabilityActive]);
 
   // Handle region filter — select all countries in the chosen region
-  const handleRegionFilter = useCallback((region: string) => {
-    if (!region) {
-      setSelectedCountries(new Set());
-      return;
-    }
-    setSelectedCountries(new Set(iucnRegionCountries(region)));
+  // The region picker hands back a whole country set (a union of the regions
+  // ticked), so this is a straight assignment — regions are not their own piece
+  // of state, they are just a fast way to select countries.
+  const handleRegionsChange = useCallback((countries: Set<string>) => {
+    setSelectedCountries(countries);
   }, [setSelectedCountries]);
 
   // Assessor / reviewer / facilitator charts all count names over the same
@@ -2304,9 +2406,6 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
 
   // ── Client-side filtering and sorting ──────────────────────────────
   const { filteredSpecies, sortedSpecies } = useMemo(() => {
-    const CATEGORY_ORDER: Record<string, number> = {
-      EX: 0, EW: 1, CR: 2, EN: 3, VU: 4, NT: 5, LC: 6, DD: 7, NE: 8,
-    };
     const filtered = taxaFilteredSpecies.filter((s) => {
       const matchesCategory = selectedCategories.size === 0 || selectedCategories.has(s.category);
       const matchesYear = s.category === "NE" || (matchesYearRangeFilter(s.assessment_date) && matchesAssessmentYearFilter(s.assessment_date));
@@ -2341,45 +2440,33 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
         if (aIdx !== -1 && bIdx !== -1) return aIdx - bIdx;
       }
 
-      let comparison = 0;
-      if (isNewAssessments && !sortField) {
-        // Default sort for new-assessments: by total GBIF desc
-        comparison = (a.gbif_occurrence_count ?? -1) - (b.gbif_occurrence_count ?? -1);
-      } else if (!sortField || sortField === "year") {
-        const dateA = a.assessment_date ? new Date(a.assessment_date).getTime() : 0;
-        const dateB = b.assessment_date ? new Date(b.assessment_date).getTime() : 0;
-        comparison = dateA - dateB;
-      } else if (sortField === "category") {
-        comparison = (CATEGORY_ORDER[a.category] ?? 99) - (CATEGORY_ORDER[b.category] ?? 99);
-      } else if (sortField === "totalGbif") {
-        comparison = (a.gbif_occurrence_count ?? -1) - (b.gbif_occurrence_count ?? -1);
-      } else if (sortField === "newGbif") {
-        comparison = (a.gbif_observations_after_assessment_year ?? -1) - (b.gbif_observations_after_assessment_year ?? -1);
-      } else if (sortField === "pctNewGbif") {
-        const pctA = (a.gbif_occurrence_count && a.gbif_occurrence_count > 0 && a.gbif_observations_after_assessment_year != null)
-          ? a.gbif_observations_after_assessment_year / a.gbif_occurrence_count : -1;
-        const pctB = (b.gbif_occurrence_count && b.gbif_occurrence_count > 0 && b.gbif_observations_after_assessment_year != null)
-          ? b.gbif_observations_after_assessment_year / b.gbif_occurrence_count : -1;
-        comparison = pctA - pctB;
-      } else if (sortField === "describedYear") {
-        // Nulls (no known year) sort to the bottom regardless of direction below.
-        comparison = (a.described_year ?? -1) - (b.described_year ?? -1);
-      }
-
-      // Apply primary sort direction
-      const primary = sortDirection === "asc" ? comparison : -comparison;
+      // Primary, then the user's chosen secondary (shift/cmd-click a second
+      // header), then total GBIF desc, then row key. compareBy is shared by the
+      // first two so "sort by X then Y" means the same thing at either level.
+      // With no explicit sort, new-assessments defaults to total GBIF desc and
+      // everything else to assessment date desc.
+      const primaryField: SortField = sortField ?? (isNewAssessments ? "totalGbif" : "year");
+      const primaryCmp = compareBy(primaryField, a, b);
+      const primary = sortDirection === "asc" ? primaryCmp : -primaryCmp;
       if (primary !== 0) return primary;
 
-      // Secondary sort: total GBIF desc (always, regardless of primary direction)
+      if (sortField2 && sortField2 !== primaryField) {
+        const secondaryCmp = compareBy(sortField2, a, b);
+        const secondary = sortDirection2 === "asc" ? secondaryCmp : -secondaryCmp;
+        if (secondary !== 0) return secondary;
+      }
+
+      // Implicit tiebreaker: total GBIF desc, then stable row-key order. Kept
+      // below the explicit secondary so the old behaviour still applies once
+      // the user's own columns have run out of discriminating power.
       const gbifCmp = (b.gbif_occurrence_count ?? -1) - (a.gbif_occurrence_count ?? -1);
       if (gbifCmp !== 0) return gbifCmp;
 
-      // Tertiary tiebreaker: stable row-key order
       return a.species_key.localeCompare(b.species_key);
     });
 
     return { filteredSpecies: filtered, sortedSpecies: sorted };
-  }, [taxaFilteredSpecies, selectedCategories, selectedCountries, selectedSystems, selectedPopulationTrends, selectedMovementPatterns, selectedThreats, selectedCriteria, matchesHabitatFilter, endemicsOnly, selectedGrowthForms, searchFilter, showOnlyStarred, pinnedSet, pinnedSpecies, sortField, sortDirection, matchesAssessorsFilter, matchesReviewersFilter, matchesFacilitatorsFilter, isNewAssessments, matchesObsRangeFilter, matchesAssessmentCountFilter, matchesYearRangeFilter, matchesAssessmentYearFilter, matchesDescribedYearFilter]);
+  }, [taxaFilteredSpecies, selectedCategories, selectedCountries, selectedSystems, selectedPopulationTrends, selectedMovementPatterns, selectedThreats, selectedCriteria, matchesHabitatFilter, endemicsOnly, selectedGrowthForms, searchFilter, showOnlyStarred, pinnedSet, pinnedSpecies, sortField, sortDirection, sortField2, sortDirection2, matchesAssessorsFilter, matchesReviewersFilter, matchesFacilitatorsFilter, isNewAssessments, matchesObsRangeFilter, matchesAssessmentCountFilter, matchesYearRangeFilter, matchesAssessmentYearFilter, matchesDescribedYearFilter]);
 
   // Giant aggregates (insects, invertebrates…) are capped at 400k server-side; surface
   // a banner so the list reads as "showing N of M — drill into a sub-group for the rest".
@@ -2462,7 +2549,50 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
 
 
   // Handle sort toggle
-  const handleSort = (field: "year" | "category" | "totalGbif" | "newGbif" | "pctNewGbif" | "describedYear") => {
+  // The ↓/↑ arrow in a sortable column header, plus a ①/② rank badge once a
+  // secondary sort is active — with only one sort running the badge is noise, so
+  // it appears only when there is actually an order to disambiguate.
+  const SortIndicator = ({ field }: { field: SortField }) => {
+    const effectivePrimary: SortField = sortField ?? (isNewAssessments ? "totalGbif" : "year");
+    const isPrimary = field === effectivePrimary;
+    const isSecondary = !isPrimary && sortField2 === field;
+    if (!isPrimary && !isSecondary) return null;
+
+    const direction = isPrimary ? sortDirection : sortDirection2;
+    const showRank = !!sortField2 && sortField2 !== effectivePrimary;
+    // New-assessments keeps its existing emerald accent; everything else red.
+    const color = isNewAssessments && isPrimary ? "text-emerald-500" : "text-red-500";
+    return (
+      <span className={`${color} whitespace-nowrap`}>
+        {showRank && <span className="text-[9px] align-super mr-0.5">{isPrimary ? "①" : "②"}</span>}
+        {direction === "desc" ? "↓" : "↑"}
+      </span>
+    );
+  };
+
+  // Plain click drives the primary sort (desc → asc → off, as before).
+  // Shift or Cmd/Ctrl+click drives the SECONDARY sort — "sort within the first"
+  // — on the same three-step cycle. Cmd/Ctrl is accepted alongside Shift
+  // because it already means "add this to the selection" on every chart in this
+  // dashboard, so it is the modifier people reach for first here too.
+  const handleSort = (field: SortField, event?: React.MouseEvent) => {
+    const isSecondary = !!event && (event.shiftKey || event.metaKey || event.ctrlKey);
+
+    if (isSecondary) {
+      // A secondary that matches the primary would be a no-op tiebreaker;
+      // promote it to primary instead of silently doing nothing.
+      if (field === (sortField ?? "year")) {
+        setSort(field, sortDirection === "desc" ? "asc" : "desc");
+      } else if (sortField2 === field) {
+        if (sortDirection2 === "desc") setSort2(field, "asc");
+        else setSort2(null, "desc");
+      } else {
+        setSort2(field, "desc");
+      }
+      setCurrentPage(1);
+      return;
+    }
+
     const currentField = sortField === null ? "year" : sortField;
     if (currentField === field) {
       if (sortDirection === "desc") {
@@ -2473,6 +2603,9 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
     } else {
       setSort(field, "desc");
     }
+    // Clearing/changing the primary leaves a secondary on a now-identical
+    // column meaningless — drop it rather than let it linger invisibly.
+    if (sortField2 === field) setSort2(null, "desc");
     setCurrentPage(1);
   };
 
@@ -3069,9 +3202,9 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
       speciesLabel={isNewAssessments ? "# Unassessed" : undefined}
       showOutdatedMode={!isNewAssessments}
       showGbifToggle={false}
-      onRegionFilter={handleRegionFilter}
+      onRegionsChange={handleRegionsChange}
       mapViewMode={mapViewMode}
-      onMapViewModeChange={setMapViewMode}
+      onMapViewModeChange={changeMapViewMode}
       mapSortKey={mapSortKey}
       mapSortDirection={mapSortDirection}
       onMapSortChange={setMapSort}
@@ -3147,12 +3280,12 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
           speciesLabel={isNewAssessments ? "# Unassessed" : undefined}
           showOutdatedMode={!isNewAssessments}
           showColorModeDropdown={!isNewAssessments}
-          onRegionFilter={handleRegionFilter}
+          onRegionsChange={handleRegionsChange}
           endemicsOnly={endemicsOnly}
           onEndemicsToggle={isNewAssessments ? undefined : () => setEndemicsOnly(!endemicsOnly)}
           showGbifToggle={showGbifToggle}
           mapViewMode={mapViewMode}
-          onMapViewModeChange={setMapViewMode}
+          onMapViewModeChange={changeMapViewMode}
           mapSortKey={mapSortKey}
           mapSortDirection={mapSortDirection}
           onMapSortChange={setMapSort}
@@ -4018,7 +4151,7 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
                   {!(isSingleSpecies && singleSpecies) && (
                     <select
                       value={yearsChartMode}
-                      onChange={(e) => setYearsChartMode(e.target.value as "range" | "year")}
+                      onChange={(e) => changeYearsChartMode(e.target.value as "range" | "year")}
                       aria-label="Year chart view"
                       className="text-xs font-semibold bg-zinc-100 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-md px-1.5 py-0.5 text-zinc-700 dark:text-zinc-300 focus:outline-none focus:ring-1 focus:ring-blue-500 cursor-pointer"
                     >
@@ -4028,6 +4161,47 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
                   )}
                 </div>
               </div>
+              {/* Explicit year range. The chart itself only offers whole years
+                  (cmd-click to pick several); a range like 2017–2019 was
+                  previously reachable only by hand-editing minAssessmentYear /
+                  maxAssessmentYear into the URL. Same two params, so a range
+                  set here still shows up as the existing chips and still
+                  round-trips through a shared link. */}
+              {!(isSingleSpecies && singleSpecies) && yearsChartMode === "year" && (
+                <div className="flex items-center gap-1.5 mb-1 text-xs text-zinc-500 dark:text-zinc-400">
+                  <span>Range</span>
+                  <input
+                    type="number"
+                    inputMode="numeric"
+                    placeholder="from"
+                    value={exactFilters.minAssessmentYear ?? ""}
+                    onChange={(e) => setExactFilters({ minAssessmentYear: e.target.value === "" ? null : Number(e.target.value) })}
+                    aria-label="Assessed from year"
+                    className="w-16 rounded border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 px-1.5 py-0.5 text-xs tabular-nums text-zinc-700 dark:text-zinc-300 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                  />
+                  <span>–</span>
+                  <input
+                    type="number"
+                    inputMode="numeric"
+                    placeholder="to"
+                    value={exactFilters.maxAssessmentYear ?? ""}
+                    onChange={(e) => setExactFilters({ maxAssessmentYear: e.target.value === "" ? null : Number(e.target.value) })}
+                    aria-label="Assessed to year"
+                    className="w-16 rounded border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 px-1.5 py-0.5 text-xs tabular-nums text-zinc-700 dark:text-zinc-300 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                  />
+                  {(exactFilters.minAssessmentYear != null || exactFilters.maxAssessmentYear != null) && (
+                    <button
+                      type="button"
+                      onClick={() => setExactFilters({ minAssessmentYear: null, maxAssessmentYear: null })}
+                      className="ml-0.5 px-1 rounded hover:bg-zinc-100 dark:hover:bg-zinc-800"
+                      aria-label="Clear year range"
+                      title="Clear year range"
+                    >
+                      ×
+                    </button>
+                  )}
+                </div>
+              )}
               <div className="flex-1 min-h-[150px] flex flex-col">
                 {speciesLoading && assessedSpecies.length === 0 ? (
                   <div className="flex-1 flex items-center justify-center"><Spinner /></div>
@@ -4491,7 +4665,7 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
                       allReviewers={reviewerChartData}
                       allFacilitators={facilitatorChartData}
                       viewMode={assessorReviewerMode}
-                      onViewModeChange={setAssessorReviewerMode}
+                      onViewModeChange={changeCreditChartMode}
                       selectedItems={creditSelection[assessorReviewerMode].selected}
                       onBarClick={makeAssessorClick(creditSelection[assessorReviewerMode].setter)}
                       onItemToggle={makeAssessorToggle(creditSelection[assessorReviewerMode].setter)}
@@ -4661,25 +4835,25 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
             ))}
             {(() => {
               if (selectedCountries.size === 0) return null;
-              // Check if selected countries exactly match a single IUCN region
-              const regions = new Set<string>();
-              selectedCountries.forEach(c => regions.add(countryToIucnRegion(c)));
-              if (regions.size === 1) {
-                const region = [...regions][0];
-                if (region !== "Other") {
-                  const regionCodes = iucnRegionCountries(region);
-                  if (regionCodes.length === selectedCountries.size && regionCodes.every(c => selectedCountries.has(c))) {
-                    return (
-                      <button
-                        onClick={() => setSelectedCountries(new Set())}
-                        className="px-3 py-1.5 text-sm font-medium rounded-full bg-green-100 text-green-600 dark:bg-green-900/30 dark:text-green-400 flex items-center gap-1 hover:opacity-80"
-                      >
-                        {region}
-                        <span className="text-sm">×</span>
-                      </button>
-                    );
-                  }
-                }
+              // A selection that exactly covers whole IUCN regions reads as those
+              // regions rather than as their countries — two ticked regions is two
+              // pills, not the nineteen country pills it expands to underneath.
+              const regions = matchingRegions(selectedCountries);
+              if (regions.length > 0) {
+                return regions.map(region => (
+                  <button
+                    key={`region-${region}`}
+                    onClick={() => setSelectedCountries(prev => {
+                      const next = new Set(prev);
+                      iucnRegionCountries(region).forEach(c => next.delete(c));
+                      return next;
+                    })}
+                    className="px-3 py-1.5 text-sm font-medium rounded-full bg-green-100 text-green-600 dark:bg-green-900/30 dark:text-green-400 flex items-center gap-1 hover:opacity-80"
+                  >
+                    {region}
+                    <span className="text-sm">×</span>
+                  </button>
+                ));
               }
               // Otherwise show individual country pills
               return Array.from(selectedCountries).map(code => (
@@ -4966,58 +5140,50 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
                 {!isNewAssessments && (
                 <th
                   className="px-2 md:px-4 py-3 text-left text-xs font-medium text-zinc-500 uppercase tracking-wider cursor-pointer hover:text-zinc-700 dark:hover:text-zinc-300 select-none whitespace-nowrap"
-                  onClick={() => handleSort("category")}
+                  onClick={(e) => handleSort("category", e)}
                 >
                   <span className="flex items-center gap-1">
                     Category
-                    {sortField === "category" && (
-                      <span className="text-red-500">{sortDirection === "desc" ? "↓" : "↑"}</span>
-                    )}
+                    <SortIndicator field="category" />
                   </span>
                 </th>
                 )}
                 {!isNewAssessments && (
                 <th
                   className="px-2 md:px-4 py-3 text-left text-xs font-medium text-zinc-500 uppercase tracking-wider cursor-pointer hover:text-zinc-700 dark:hover:text-zinc-300 select-none whitespace-nowrap"
-                  onClick={() => handleSort("year")}
+                  onClick={(e) => handleSort("year", e)}
                 >
                   <span className="flex items-center gap-1">
                     Assess. Date
-                    {(sortField === "year" || sortField === null) && (
-                      <span className="text-red-500">{sortDirection === "desc" ? "↓" : "↑"}</span>
-                    )}
+                    <SortIndicator field="year" />
                   </span>
                 </th>
                 )}
                 {isNewAssessments && (
                 <th
                   className="px-2 md:px-4 py-3 text-left text-xs font-medium text-zinc-500 uppercase tracking-wider cursor-pointer hover:text-zinc-700 dark:hover:text-zinc-300 select-none whitespace-nowrap"
-                  onClick={() => handleSort("describedYear")}
+                  onClick={(e) => handleSort("describedYear", e)}
                 >
                   <span className="flex items-center gap-1">
                     Year Described
-                    {sortField === "describedYear" && (
-                      <span className="text-emerald-500">{sortDirection === "desc" ? "↓" : "↑"}</span>
-                    )}
+                    <SortIndicator field="describedYear" />
                   </span>
                 </th>
                 )}
                 <th
                   className="px-3 md:px-4 py-3 text-right text-xs font-medium text-zinc-500 uppercase tracking-wider min-w-[60px] cursor-pointer hover:text-zinc-700 dark:hover:text-zinc-300 select-none"
-                  onClick={() => handleSort("totalGbif")}
+                  onClick={(e) => handleSort("totalGbif", e)}
                 >
                   <span className="flex items-center justify-end gap-1">
                     {isNewAssessments ? "GBIF Observations" : "GBIF Total"}
                     <GbifInfoTooltip />
-                    {(sortField === "totalGbif" || (isNewAssessments && sortField === null)) && (
-                      <span className={isNewAssessments ? "text-emerald-500" : "text-red-500"}>{sortDirection === "desc" ? "↓" : "↑"}</span>
-                    )}
+                    <SortIndicator field="totalGbif" />
                   </span>
                 </th>
                 {!isNewAssessments && (
                 <th
                   className="px-3 md:px-4 py-3 text-right text-xs font-medium text-zinc-500 uppercase tracking-wider min-w-[60px] cursor-pointer hover:text-zinc-700 dark:hover:text-zinc-300 select-none"
-                  onClick={() => handleSort("newGbif")}
+                  onClick={(e) => handleSort("newGbif", e)}
                 >
                   <span className="flex items-center justify-end gap-1">
                     GBIF Since Assess.
@@ -5027,22 +5193,18 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
                         <path d="M12 16v-4M12 8h.01" />
                       </svg>
                     </HoverTooltip>
-                    {sortField === "newGbif" && (
-                      <span className="text-red-500">{sortDirection === "desc" ? "↓" : "↑"}</span>
-                    )}
+                    <SortIndicator field="newGbif" />
                   </span>
                 </th>
                 )}
                 {!isNewAssessments && (
                 <th
                   className="px-3 md:px-4 py-3 text-right text-xs font-medium text-zinc-500 uppercase tracking-wider min-w-[60px] cursor-pointer hover:text-zinc-700 dark:hover:text-zinc-300 select-none"
-                  onClick={() => handleSort("pctNewGbif")}
+                  onClick={(e) => handleSort("pctNewGbif", e)}
                 >
                   <span className="flex items-center justify-end gap-1">
                     % GBIF Since Assess.
-                    {sortField === "pctNewGbif" && (
-                      <span className="text-red-500">{sortDirection === "desc" ? "↓" : "↑"}</span>
-                    )}
+                    <SortIndicator field="pctNewGbif" />
                   </span>
                 </th>
                 )}
@@ -5509,6 +5671,24 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
               <div className="text-xs md:text-sm text-zinc-500">
                 {(currentPage - 1) * PAGE_SIZE + 1}-{Math.min(currentPage * PAGE_SIZE, totalFiltered)} of {totalFiltered}
               </div>
+              {/* Secondary-sort hint. Shown only while a secondary is NOT set, so
+                  it teaches the gesture and then gets out of the way — the ①/②
+                  header badges carry the state once it is in use. Hidden on
+                  small screens, where the modifier gesture isn't available. */}
+              {!sortField2 && (
+                <span className="hidden lg:inline text-xs text-zinc-400 dark:text-zinc-500">
+                  ⇧ or ⌘/Ctrl+click a second column to sort within the first
+                </span>
+              )}
+              {sortField2 && (
+                <button
+                  onClick={() => { setSort2(null, "desc"); setCurrentPage(1); }}
+                  className="hidden lg:inline text-xs text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300 underline decoration-dotted"
+                  title="Remove the secondary sort"
+                >
+                  Clear 2nd sort
+                </button>
+              )}
               <label className="flex items-center gap-1.5 text-xs md:text-sm text-zinc-500">
                 <span>Rows</span>
                 <select
