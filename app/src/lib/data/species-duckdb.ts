@@ -14,7 +14,7 @@ import * as path from "path";
 import { DuckDBInstance, type DuckDBConnection } from "@duckdb/node-api";
 import { NODE_INDEX, getTaxonGroupsForNode, getAncestors, stripNodePrefix } from "@/lib/taxonomy-utils";
 import { canonicalizeTaxonId, mapTaxonId } from "@/lib/data/taxonomy-constants";
-import { getTaxaSummary } from "@/lib/data/species-store";
+import { getTaxaSummary, getColNoMatch } from "@/lib/data/species-store";
 import { isDynamicNodeId, dynamicNodeFilter, buildDynamicNodeId, rankOrderFor, isLiveDrilldownNode, type DynamicSegment } from "@/lib/dynamic-taxon";
 import { filterToSql, sqlStrList } from "@/lib/taxonomy-sql";
 import { sisRowKey, colRowKey, type SpeciesRowKey } from "@/lib/species-row-key";
@@ -163,6 +163,12 @@ const str = (v: unknown): string | null => (v == null ? null : String(v));
 export function toSpeciesRow(r: Record<string, unknown>) {
   const sisTaxonId = Number(r.id);
   const taxonGroup = String(r.taxon_group);
+  // Possible-taxonomic-revision flag: null for the ~96% of assessed species with
+  // a clean 1:1 CoL match. A precomputed in-memory lookup (getColNoMatch), not a
+  // parquet join — it's one small file read once per process, and stamping it here
+  // means every consumer of a species row (list, filter chart, detail panel) sees
+  // the same flag without its own fetch.
+  const colNoMatch = getColNoMatch().get(sisTaxonId) ?? null;
   return {
     // Namespaced row key — see lib/species-row-key. Assessed species always have a
     // SIS id, so this branch is always `sis-…`; NE rows get `col-…` in querySpecies.
@@ -206,6 +212,9 @@ export function toSpeciesRow(r: Record<string, unknown>) {
     criteria: r.criteria ?? null,
     threat_codes: splitList(r.threat_codes),
     habitat_codes: splitList(r.habitat_codes),
+    // Why this species has no clean 1:1 Catalogue of Life match — see
+    // lib/col-no-match.ts. null = it has one.
+    col_no_match: colNoMatch,
     // Count of distinct assessment years on record (>=2 means reassessed at
     // least once). null for NE rows, which have no assessment history.
     assessment_count: num(r.assessment_count),

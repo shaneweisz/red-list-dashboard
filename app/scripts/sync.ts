@@ -17,6 +17,8 @@
  *   Phase 11: build-synonym-index   (→ synonym-index.parquet, search)
  *   Phase 12: build-col-taxon-ids   (taxonomy tree + backbone.parquet → src/config/col-taxon-ids.json, committed to git)
  *   Phase 13: build-taxa-summary    (CSVs + CoL artifacts → taxa-summary.json, incl. col counts)
+ *   Phase 13a: build-col-no-match   (CoL artifacts → col-no-match.json, the dashboard-wide
+ *                                    "possible taxonomic revision" flag)
  *   Phase 13b: check-sync-regressions (diff per-group numbers against the live sync)
  *   Phase 14: upload-range-maps     (IUCN DB → R2, skips existing; skipped by --skip-redlist)
  *   Phase 15: upload-aoh-maps       (STAR GeoTIFFs → R2, skips existing; skipped by --skip-redlist)
@@ -52,6 +54,7 @@ import { run as fetchGbifNewCounts } from "./fetch-gbif-new-counts";
 import { run as fetchLumpedOwnCounts } from "./fetch-lumped-own-counts";
 import { run as fetchGbifCountryData } from "./fetch-gbif-country-data";
 import { run as buildTaxaSummary } from "./build-taxa-summary";
+import { run as buildColNoMatch } from "./build-col-no-match";
 import { run as checkSyncRegressions } from "./check-sync-regressions";
 import { run as buildSpeciesParquet } from "./build-parquet";
 import { run as fetchColXr, resolveXrDataset, currentReleaseOnDisk, writeReleaseMetadata } from "./fetch-col-xr";
@@ -250,6 +253,13 @@ async function main() {
     console.log("\nPhase 13: build-taxa-summary");
     console.log("═".repeat(60));
     await buildTaxaSummary();
+
+    // Phase 13a: the same no-1:1-CoL-match diagnostic Phase 13 computes per SSC
+    // group, run once unscoped so the main dashboard can flag and filter by it.
+    // Reads the same CoL artifacts, so it belongs here rather than earlier.
+    console.log("\nPhase 13a: build-col-no-match");
+    console.log("═".repeat(60));
+    await buildColNoMatch();
 
     // A taxonomy migration moves numbers everywhere, which makes it exactly the
     // situation where a group quietly collapsing hides in the noise. Reported

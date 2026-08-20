@@ -9,6 +9,7 @@ import * as fs from "fs";
 import * as path from "path";
 import { readCsv } from "./csv";
 import { countryToRegion } from "../regions";
+import type { ColNoMatch } from "../col-no-match";
 
 // =============================================================================
 // PATHS
@@ -20,6 +21,7 @@ const TAXA_SUMMARY_PATH = path.join(DATA_DIR, "taxa-summary.json");
 const TABLE1A_CHILDREN_SUMMARIES_PATH = path.join(DATA_DIR, "table1a-children-summaries.json");
 const SSC_GROUP_CHILDREN_SUMMARIES_PATH = path.join(DATA_DIR, "ssc-group-children-summaries.json");
 const COUNTRY_STATS_PATH = path.join(DATA_DIR, "country-stats.json");
+const COL_NO_MATCH_PATH = path.join(DATA_DIR, "col-no-match.json");
 
 // =============================================================================
 // TYPES
@@ -113,6 +115,7 @@ const historyCache = new Map<string, HistoryMap>();
 let taxaSummaryCache: TaxaSummaryRow[] | null = null;
 let nodeChildrenSummariesCache: Record<string, NodeSummary[]> | null = null;
 let countryStatsCache: Record<string, { species: number; outdated: number }> | null = null;
+let colNoMatchCache: Map<number, ColNoMatch> | null = null;
 
 /** @internal Reset all module-level caches (for tests only). */
 export function _resetCaches(): void {
@@ -121,6 +124,7 @@ export function _resetCaches(): void {
   taxaSummaryCache = null;
   nodeChildrenSummariesCache = null;
   countryStatsCache = null;
+  colNoMatchCache = null;
 }
 
 function loadRedlistForGroup(group: string): RedlistRow[] {
@@ -190,6 +194,33 @@ export function getCountryStats(): Record<string, { species: number; outdated: n
     countryStatsCache = JSON.parse(content) as Record<string, { species: number; outdated: number }>;
   }
   return countryStatsCache;
+}
+
+/**
+ * sis_taxon_id → why this assessed species has no clean 1:1 Catalogue of Life
+ * match, for the ~4% of assessments that don't (data/col-no-match.json, built
+ * by scripts/build-col-no-match.ts). Stamped onto every assessed species row
+ * (species-duckdb.ts) so the dashboard can flag a possible taxonomic revision
+ * inline and filter by reason, without a second round trip.
+ *
+ * Returns an empty map when the file is absent — a sync predating the script
+ * still serves species, just with every row unflagged, rather than 500ing.
+ */
+export function getColNoMatch(): Map<number, ColNoMatch> {
+  if (colNoMatchCache) return colNoMatchCache;
+  const out = new Map<number, ColNoMatch>();
+  if (fs.existsSync(COL_NO_MATCH_PATH)) {
+    // Tuple-encoded on disk ([reason, detail?, detailId?]) — one entry per
+    // flagged species, so the shipped file stays small.
+    const file = JSON.parse(fs.readFileSync(COL_NO_MATCH_PATH, "utf-8")) as {
+      species: Record<string, [string, string?, number?]>;
+    };
+    for (const [id, [reason, detail, detailId]] of Object.entries(file.species ?? {})) {
+      out.set(Number(id), { reason, ...(detail != null ? { detail } : {}), ...(detailId != null ? { detailId } : {}) });
+    }
+  }
+  colNoMatchCache = out;
+  return out;
 }
 
 // =============================================================================

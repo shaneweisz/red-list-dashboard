@@ -202,34 +202,23 @@ export interface BreakdownQueryContext {
 }
 
 /**
- * One breakdown entry (colDescribed/colNe split by name, plus the no-match
- * diagnostic) for a single narrowed filter. Callers must have already built
- * ctx.assessedCidsTable and, if ctx.hasBackbone, the split_candidates/
- * col_to_assessed temp tables (see the file doc comment for why building them
- * is the caller's responsibility, not this function's).
+ * The "which assessed species here have no clean 1:1 CoL match, and why"
+ * diagnostic on its own — shared between computeBreakdownEntry (one breakdown
+ * name at a time) and scripts/build-col-no-match.ts, which runs it ONCE over
+ * every assessed species to build the dashboard-wide flag. Both call sites must
+ * classify identically, so the query lives here rather than being written twice.
+ *
+ * `speciesWhere`/`assessedWhere` scope the CoL universe and the assessed set
+ * respectively (they differ: only the species/ side takes a nodeId, so a
+ * CoL-species-name override can't wrongly zero out an IUCN-sourced match — see
+ * computeBreakdownEntry). Pass "true" for both to diagnose everything.
  */
-export async function computeBreakdownEntry(
+export async function computeNoMatchDetails(
   ctx: BreakdownQueryContext,
-  name: string,
-  narrowed: NodeFilter,
-  nodeId: string | undefined,
-): Promise<BreakdownEntry> {
-  const { conn, speciesGlob, assessedPath, linkPath, universeSql: universe, assessedCidsTable, excludedColIdsSql: EXCLUDED_COL_IDS_SQL, hasBackbone } = ctx;
-
-  const bRows = await (await conn.run(`
-    SELECT count(*) FILTER (in_base AND ${universe} AND col_id NOT IN ${EXCLUDED_COL_IDS_SQL}) AS n,
-           count(*) FILTER (in_base AND ${universe} AND col_id NOT IN ${EXCLUDED_COL_IDS_SQL} AND col_id NOT IN (SELECT col_id FROM ${assessedCidsTable})) AS ne
-    FROM read_parquet('${speciesGlob}', hive_partitioning=true)
-    WHERE ${filterToSql(narrowed, nodeId)}`)).getRowObjects();
-  // IUCN's own count of assessed species matching this one name — via filterToSql
-  // WITHOUT nodeId, so a Bison-style CoL species-name override (which only makes
-  // sense for CoL-sourced rows) doesn't wrongly zero out an IUCN-sourced match
-  // (assessed.parquet still says "Bison bison", never CoL's lumped "Bos bison").
-  // Compared against count-neCount on the frontend to flag likely splits/lumps/
-  // coverage gaps the CoL-derived figures paper over (see BreakdownList in
-  // TaxaSummary.tsx).
-  const trueRows = await (await conn.run(`
-    SELECT count(*) AS n FROM read_parquet('${assessedPath}') WHERE ${filterToSql(narrowed)}`)).getRowObjects();
+  speciesWhere: string,
+  assessedWhere: string,
+): Promise<NoMatchDetail[]> {
+  const { conn, speciesGlob, assessedPath, linkPath, universeSql: universe, excludedColIdsSql: EXCLUDED_COL_IDS_SQL, hasBackbone } = ctx;
   // The specific assessed species (sis_taxon_id) behind that gap, plus enough
   // context (its own primary CoL link, and who "won" that link if it lost a tie)
   // to classify WHY each one doesn't have a clean match — see classifyNoMatch.
@@ -237,9 +226,9 @@ export async function computeBreakdownEntry(
   // (shared between species/ and assessed.parquet, e.g. scientific_name) never
   // collide. Two assessed species can share one col_id (a genuine CoL lump — e.g.
   // Wild Pig SG's Sus bucculentus (EX) is CoL-synonymized into Sus scrofa (LC),
-  // both linked to the same accepted col_id) — count(*) over distinct col_ids
-  // (bRows above) only "sees" that pair once, so trueAssessed can exceed
-  // count-neCount even when every assessed id technically has SOME link.
+  // both linked to the same accepted col_id) — a count(*) over distinct col_ids
+  // only "sees" that pair once, so computeBreakdownEntry's trueAssessed can exceed
+  // its count-neCount even when every assessed id technically has SOME link.
   // ROW_NUMBER picks one canonical "CoL Match" winner per col_id (preferring an
   // accepted-name match over a synonym-derived one); every other candidate for
   // that col_id, and every id with no valid link at all, ends up unmatched —
@@ -247,10 +236,10 @@ export async function computeBreakdownEntry(
   const diagRows = await (await conn.run(`
     WITH matched_species AS (
       SELECT col_id FROM read_parquet('${speciesGlob}', hive_partitioning=true)
-      WHERE in_base AND ${universe} AND col_id NOT IN ${EXCLUDED_COL_IDS_SQL} AND ${filterToSql(narrowed, nodeId)}
+      WHERE in_base AND ${universe} AND col_id NOT IN ${EXCLUDED_COL_IDS_SQL} AND ${speciesWhere}
     ),
     matched_assessed AS (
-      SELECT id, scientific_name FROM read_parquet('${assessedPath}') WHERE ${filterToSql(narrowed)}
+      SELECT id, scientific_name FROM read_parquet('${assessedPath}') WHERE ${assessedWhere}
     ),
     primary_links AS (
       -- Primary link only (excludes 'iucn_synonym_covered' — a bookkeeping alias
@@ -302,7 +291,7 @@ export async function computeBreakdownEntry(
     -- huge same-set reordering diff (build time) or a jittery UI (live).
     ORDER BY ma.id`)).getRowObjects();
   // Note: trueAssessed - noMatchIds.length (the "CoL Match" count shown in the
-  // popover) is NOT expected to equal count - neCount above — the latter's
+  // popover) is NOT expected to equal computeBreakdownEntry's count - neCount — the latter's
   // "linked" definition (assessedCidsTable) includes col_ids only reachable via
   // an 'iucn_synonym_covered' bookkeeping alias (an NE-dedup mechanism, not a
   // real second described species), which noMatchIds deliberately excludes so
@@ -310,7 +299,39 @@ export async function computeBreakdownEntry(
   // col_ids at once. Both are correct; they answer different questions (CoL's
   // own described-vs-assessed split, vs. which specific IUCN-assessed species
   // have a clean 1:1 CoL match).
-  const noMatchDetails = diagRows.map((r) => classifyNoMatch(r));
+  return diagRows.map((r) => classifyNoMatch(r));
+}
+
+/**
+ * One breakdown entry (colDescribed/colNe split by name, plus the no-match
+ * diagnostic) for a single narrowed filter. Callers must have already built
+ * ctx.assessedCidsTable and, if ctx.hasBackbone, the split_candidates/
+ * col_to_assessed temp tables (see the file doc comment for why building them
+ * is the caller's responsibility, not this function's).
+ */
+export async function computeBreakdownEntry(
+  ctx: BreakdownQueryContext,
+  name: string,
+  narrowed: NodeFilter,
+  nodeId: string | undefined,
+): Promise<BreakdownEntry> {
+  const { conn, speciesGlob, assessedPath, universeSql: universe, assessedCidsTable, excludedColIdsSql: EXCLUDED_COL_IDS_SQL, hasBackbone } = ctx;
+
+  const bRows = await (await conn.run(`
+    SELECT count(*) FILTER (in_base AND ${universe} AND col_id NOT IN ${EXCLUDED_COL_IDS_SQL}) AS n,
+           count(*) FILTER (in_base AND ${universe} AND col_id NOT IN ${EXCLUDED_COL_IDS_SQL} AND col_id NOT IN (SELECT col_id FROM ${assessedCidsTable})) AS ne
+    FROM read_parquet('${speciesGlob}', hive_partitioning=true)
+    WHERE ${filterToSql(narrowed, nodeId)}`)).getRowObjects();
+  // IUCN's own count of assessed species matching this one name — via filterToSql
+  // WITHOUT nodeId, so a Bison-style CoL species-name override (which only makes
+  // sense for CoL-sourced rows) doesn't wrongly zero out an IUCN-sourced match
+  // (assessed.parquet still says "Bison bison", never CoL's lumped "Bos bison").
+  // Compared against count-neCount on the frontend to flag likely splits/lumps/
+  // coverage gaps the CoL-derived figures paper over (see BreakdownList in
+  // TaxaSummary.tsx).
+  const trueRows = await (await conn.run(`
+    SELECT count(*) AS n FROM read_parquet('${assessedPath}') WHERE ${filterToSql(narrowed)}`)).getRowObjects();
+  const noMatchDetails = await computeNoMatchDetails(ctx, filterToSql(narrowed, nodeId), filterToSql(narrowed));
   // "Split from" candidates for this name's NE species — a lookup against the
   // once-per-caller-lifetime split_candidates table, not a fresh backbone.parquet
   // scan. Deliberately scoped to the SAME NE universe as bRows.ne (in_base,

@@ -2,6 +2,8 @@
 // by RedListView. (The data is fetched inline in RedListView; this module is the
 // canonical type definition imported across the app.)
 
+import type { ColNoMatch } from "@/lib/col-no-match";
+
 export interface RedListSpecies {
   /**
    * This row's identity everywhere in the UI — selection, pinning, React keys,
@@ -54,6 +56,13 @@ export interface RedListSpecies {
   criteria: string | null;
   threat_codes: string[];
   habitat_codes: string[];
+  /**
+   * Why this species has no clean 1:1 Catalogue of Life match — a possible sign
+   * that its taxonomy has been revised since it was assessed (CoL lumped it,
+   * demoted it to a subspecies, doesn't list it yet…). null for the ~96% of
+   * assessed species with a clean match, and for NE rows. See lib/col-no-match.
+   */
+  col_no_match?: ColNoMatch | null;
   // Count of distinct assessment years on record (>=2 means reassessed at
   // least once). null for NE rows, which have no assessment history.
   assessment_count: number | null;
