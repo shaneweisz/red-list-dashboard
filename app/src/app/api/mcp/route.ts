@@ -54,6 +54,7 @@ const FILTERS = {
   region: z.string().optional().describe("An IUCN region (expands to its countries), e.g. 'Sub-Saharan Africa'."),
   assessors: z.array(z.string()).optional().describe("Latest-assessment assessor name (substring match)."),
   reviewers: z.array(z.string()).optional().describe("Latest-assessment reviewer name (substring match)."),
+  facilitators: z.array(z.string()).optional().describe("Latest-assessment facilitator name (substring match). The individual who ran the assessment when the credited assessor is an organisation — e.g. every bird assessment is assessed by 'BirdLife International', and only the facilitator names a person."),
   outdated: z.enum(["yes", "no"]).optional().describe("Assessment older than 10 years."),
   minObs: z.number().optional(), maxObs: z.number().optional(),
   minAssessmentYear: z.number().optional(), maxAssessmentYear: z.number().optional(),

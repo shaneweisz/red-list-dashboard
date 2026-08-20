@@ -21,7 +21,7 @@
  *    dashboard's parseParams expands each token to its display-root + sub-group
  *    (corals → invertebrates + inv-corals) — see taxonomy-utils. A scientific-rank
  *    taxon (`felidae`) has no node and is matched by class/order/family.
- *  - `assessors`/`reviewers`: both surfaces case-insensitively SUBSTRING-match the
+ *  - `assessors`/`reviewers`/`facilitators`: both surfaces case-insensitively SUBSTRING-match the
  *    name (the dashboard predicate mirrors /browse), so a partial name selects the
  *    same species set in each.
  */
@@ -77,6 +77,8 @@ export function browseInputToDashboardQuery(input: BrowseInput): string {
   if (assessors.length) p.set("assessors", assessors.join("|"));
   const reviewers = arr(input.reviewers);
   if (reviewers.length) p.set("reviewers", reviewers.join("|"));
+  const facilitators = arr(input.facilitators);
+  if (facilitators.length) p.set("facilitators", facilitators.join("|"));
 
   // Exact numeric / outdated params (URL-only; feed the same predicate the
   // dashboard runs, so the result matches the bucket-free /browse query).

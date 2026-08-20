@@ -64,10 +64,11 @@ describe("browseInputToDashboardQuery", () => {
     expect(p.get("maxDescribedYear")).toBe("2000");
   });
 
-  it("joins assessors/reviewers with the dashboard's pipe delimiter", () => {
-    const p = params({ taxa: ["mammals"], assessors: ["Smith"], reviewers: ["Jones"] });
+  it("joins assessors/reviewers/facilitators with the dashboard's pipe delimiter", () => {
+    const p = params({ taxa: ["mammals"], assessors: ["Smith"], reviewers: ["Jones"], facilitators: ["Rutherford"] });
     expect(p.get("assessors")).toBe("Smith");
     expect(p.get("reviewers")).toBe("Jones");
+    expect(p.get("facilitators")).toBe("Rutherford");
   });
 
   it("emits systems / trends", () => {

@@ -533,6 +533,14 @@ export interface AssessmentHistoryEntry {
   criteria: string | null;
   assessors: string | null;
   reviewers: string | null;
+  /**
+   * RedListFacilitators (credit type 4) — the person who actually ran the
+   * assessment when the credited assessor is an organisation. BirdLife
+   * International is the assessor on every bird assessment, so for birds this
+   * is the only field that names an individual (100% coverage); across all
+   * taxa it is populated on ~38% of latest assessments.
+   */
+  facilitators: string | null;
 }
 
 export type AssessmentHistoryMap = Record<string, AssessmentHistoryEntry[]>;
@@ -553,13 +561,15 @@ export async function fetchAssessmentHistory(
         a.assessment_date,
         a.criteria,
         ac_assessors.supplementary_fields->>'full' as assessors,
-        ac_reviewers.supplementary_fields->>'full' as reviewers
+        ac_reviewers.supplementary_fields->>'full' as reviewers,
+        ac_facilitators.supplementary_fields->>'full' as facilitators
       FROM taxons t
       JOIN assessments a ON a.taxon_id = t.id
       JOIN assessment_scopes ascope ON ascope.assessment_id = a.id
       JOIN red_list_category_lookup rlc ON rlc.id = a.red_list_category_id
       LEFT JOIN assessment_credits ac_assessors ON ac_assessors.assessment_id = a.id AND ac_assessors.credit_type_id = 1
       LEFT JOIN assessment_credits ac_reviewers ON ac_reviewers.assessment_id = a.id AND ac_reviewers.credit_type_id = 2
+      LEFT JOIN assessment_credits ac_facilitators ON ac_facilitators.assessment_id = a.id AND ac_facilitators.credit_type_id = 4
       WHERE t.${query.filterColumn} = ANY($1)
         AND t.latest = true
         AND a.suppress = false
@@ -595,6 +605,7 @@ export async function fetchAssessmentHistory(
         criteria: row.criteria || null,
         assessors: row.assessors || null,
         reviewers: row.reviewers || null,
+        facilitators: row.facilitators || null,
       });
     }
   }

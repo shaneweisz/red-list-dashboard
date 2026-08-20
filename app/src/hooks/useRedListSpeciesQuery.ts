@@ -31,12 +31,21 @@ export interface RedListSpecies {
   gbif_species_key: string | null;
   gbif_occurrence_count: number | null;
   gbif_observations_after_assessment_year: number | null;
-  // Latest assessment's assessors/reviewers, inline in the species list (drives
-  // the assessor/reviewer filter). The full history array is fetched lazily into
-  // previous_assessments when a detail panel opens — empty in the list response.
+  // Latest assessment's assessors/reviewers/facilitators, inline in the species
+  // list (drives the assessor/reviewer/facilitator filter). The full history
+  // array is fetched lazily into previous_assessments when a detail panel opens
+  // — empty in the list response.
   latest_assessors: string | null;
   latest_reviewers: string | null;
-  previous_assessments: { id: number; year: string; category: string; date: string | null; criteria: string | null; assessors: string | null; reviewers: string | null }[];
+  /**
+   * RedListFacilitators — who actually ran the assessment when the credited
+   * assessor is an organisation rather than a person. BirdLife International is
+   * the assessor on every bird assessment, so this is the only field naming the
+   * individuals who did the work. null on the ~62% of latest assessments that
+   * credit no facilitator at all.
+   */
+  latest_facilitators: string | null;
+  previous_assessments: { id: number; year: string; category: string; date: string | null; criteria: string | null; assessors: string | null; reviewers: string | null; facilitators: string | null }[];
   systems: string[];
   growth_forms: string[];
   movement_pattern: string | null;
