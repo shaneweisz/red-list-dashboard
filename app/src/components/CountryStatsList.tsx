@@ -50,7 +50,7 @@ interface CountryStatsListProps {
   onSortChange?: (key: SortKey, dir: SortDir) => void;
 }
 
-const PAGE_SIZE = 15;
+const PAGE_SIZE = 10;
 
 function percentOutdatedOf(species: number, outdated: number): number {
   return species > 0 ? (outdated / species) * 100 : 0;
