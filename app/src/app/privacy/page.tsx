@@ -57,6 +57,18 @@ export default function PrivacyPage() {
         </p>
 
         <p>
+          <strong>What stays in your browser.</strong> Some of what you do here
+          is remembered on your own device using your browser&rsquo;s local
+          storage: species you pin, columns you show or hide in the occurrence
+          table, any georeferencing you do, and which view a few charts open in
+          (Range vs Year, Assessors vs Reviewers vs Facilitators, Map vs List).
+          This never leaves your browser &mdash; it is not sent to us, not
+          shared with anyone, and identifies nobody. It exists only because you
+          chose those settings, so it does not require a consent banner. Clearing
+          your browser data for this site removes all of it.
+        </p>
+
+        <p>
           <strong>If you sign in.</strong> Signing in is optional — everything
           the dashboard shows by default is public, and you do not need an
           account to use it. If you do sign in with Google, Microsoft or GitHub,
