@@ -72,6 +72,18 @@ export default function MapOccurrenceTooltip(props: MapOccurrenceTooltipProps) {
   // the arrow's position need the real number. Observed rather than read once,
   // since paging between records at a point changes it under us.
   const [panelHeight, setPanelHeight] = useState(0);
+  /**
+   * Photograph URLs the browser couldn't load, so they can be left out of the
+   * render.
+   *
+   * A dead publisher image link used to be dealt with by removing its node
+   * from the document in the error handler. That takes a node React owns out
+   * from under it, and the next time React unmounts that subtree — moving the
+   * pointer off the record, or paging to the next one at the same point — it
+   * tries to remove a child that is no longer there and throws
+   * NotFoundError, which takes the whole page down.
+   */
+  const [brokenImages, setBrokenImages] = useState<string[]>([]);
   const observerRef = useRef<ResizeObserver | null>(null);
   const panelRef = useCallback((el: HTMLDivElement | null) => {
     observerRef.current?.disconnect();
@@ -105,6 +117,8 @@ export default function MapOccurrenceTooltip(props: MapOccurrenceTooltipProps) {
   // Convert container-relative position to viewport-fixed position
   const fixedX = containerRect.left + pos.x;
   const fixedY = containerRect.top + pos.y;
+
+  const shownImages = (props.images ?? []).filter((i) => !brokenImages.includes(i.url));
 
   const tooltipWidth = 220;
   // Beside the point rather than above it: the map is far wider than it is
@@ -313,10 +327,10 @@ export default function MapOccurrenceTooltip(props: MapOccurrenceTooltipProps) {
           {/* A specimen photograph settles identifications a locality string
               can't. Last in the panel and at a fixed height, so the text above
               it never moves while it loads. */}
-          {props.images && props.images.length > 0 && (
+          {shownImages.length > 0 && (
             <div className="pt-1">
               <div className="flex gap-1 h-14 overflow-x-auto">
-                {props.images.map((image) => (
+                {shownImages.map((image) => (
                   <a
                     key={image.url}
                     href={image.url}
@@ -335,19 +349,23 @@ export default function MapOccurrenceTooltip(props: MapOccurrenceTooltipProps) {
                       alt={image.title ?? "Specimen photograph"}
                       loading="lazy"
                       className="h-14 w-auto object-cover"
-                      onError={(e) => {
+                      onError={() => {
                         // A publisher's dead image link shouldn't leave a
-                        // broken-image glyph sitting in the panel.
-                        e.currentTarget.parentElement?.remove();
+                        // broken-image glyph sitting in the panel — but it has
+                        // to go by not being rendered, not by being pulled out
+                        // of the DOM behind React's back.
+                        setBrokenImages((prev) =>
+                          prev.includes(image.url) ? prev : [...prev, image.url]
+                        );
                       }}
                     />
                   </a>
                 ))}
               </div>
-              {props.images[0].creator && (
+              {shownImages[0].creator && (
                 <div className="text-[10px] text-zinc-400 truncate">
-                  © {props.images[0].creator}
-                  {props.images[0].license ? ` · ${props.images[0].license.replace(/^https?:\/\//, "")}` : ""}
+                  © {shownImages[0].creator}
+                  {shownImages[0].license ? ` · ${shownImages[0].license.replace(/^https?:\/\//, "")}` : ""}
                 </div>
               )}
             </div>
