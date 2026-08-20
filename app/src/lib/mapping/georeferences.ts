@@ -26,6 +26,16 @@ export const GEOREFERENCE_SCHEMA_VERSION = 1;
 const STORAGE_PREFIX = "redlist-georefs";
 
 /**
+ * The radius a georeference gets when none is given.
+ *
+ * Deliberately coarse. It stands in for "somewhere in the place this locality
+ * names", which is what a description resolved by eye actually says, and a
+ * tighter default would claim a precision nobody supplied. It is meant to be
+ * corrected in the Uncertainty column, not relied on.
+ */
+export const DEFAULT_GEOREFERENCE_RADIUS_M = 5000;
+
+/**
  * How a locality was resolved to a point. Free text is allowed (the list is a
  * convenience, not a controlled vocabulary), but these are the tools assessors
  * actually name in georeferenceProtocol.

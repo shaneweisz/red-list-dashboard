@@ -253,6 +253,113 @@ interface ColumnDef {
   headerExtra?: React.ReactNode;
 }
 
+/**
+ * Typing a position straight into the Coordinates cell.
+ *
+ * This is the whole georeferencing gesture now: click the cell, type where the
+ * locality description puts the record, press Enter. It replaced a modal — and
+ * before that a docked side panel — that asked for latitude, longitude, radius
+ * and a note in four separate boxes before it would accept anything.
+ *
+ * It takes what a gazetteer, GEOLocate or Google Earth actually puts on the
+ * clipboard: "1.1958, -76.9256". A third number is read as the uncertainty
+ * radius in metres, for when it's known at the time of typing; the radius is
+ * otherwise edited in its own cell, where it's shown.
+ */
+function CoordinateCellEditor({
+  initial,
+  onCommit,
+  onClear,
+}: {
+  initial: string;
+  onCommit: (edit: { lat: number; lon: number; uncertainty?: number } | null) => void;
+  onClear?: () => void;
+}) {
+  const [text, setText] = useState(initial);
+  const parsed = parseCoordinateCell(text);
+  const empty = text.trim() === "";
+  return (
+    <div className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
+      <input
+        autoFocus
+        value={text}
+        onChange={(e) => setText(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") { e.preventDefault(); onCommit(parsed); }
+          if (e.key === "Escape") { e.preventDefault(); onCommit(null); }
+        }}
+        // Committing on blur as well as Enter: clicking away from a cell you
+        // have typed into should keep what you typed, not discard it.
+        onBlur={() => onCommit(parsed)}
+        placeholder="lat, lon"
+        title="Latitude, longitude in decimal degrees. A third number is read as the uncertainty radius in metres. Enter to keep, Escape to cancel."
+        className={`w-32 rounded border bg-white dark:bg-zinc-900 px-1 py-0.5 text-[11px] tabular-nums ${
+          parsed || empty
+            ? "border-violet-400 text-violet-700 dark:text-violet-300"
+            : "border-red-400 text-red-600 dark:text-red-400"
+        }`}
+      />
+      {onClear && (
+        <button
+          onMouseDown={(e) => { e.preventDefault(); onClear(); }}
+          title="Drop your coordinates and go back to what GBIF published"
+          className="text-[10px] text-zinc-400 hover:text-red-600"
+        >
+          clear
+        </button>
+      )}
+    </div>
+  );
+}
+
+/** The uncertainty radius, typed in metres straight into its own cell. */
+function RadiusCellEditor({
+  initial,
+  onCommit,
+}: {
+  initial: string;
+  onCommit: (metres: number | null) => void;
+}) {
+  const [text, setText] = useState(initial);
+  const value = Number(text.trim());
+  const valid = text.trim() !== "" && Number.isFinite(value) && value > 0;
+  return (
+    <input
+      autoFocus
+      value={text}
+      onChange={(e) => setText(e.target.value)}
+      onClick={(e) => e.stopPropagation()}
+      onKeyDown={(e) => {
+        if (e.key === "Enter") { e.preventDefault(); onCommit(valid ? value : null); }
+        if (e.key === "Escape") { e.preventDefault(); onCommit(null); }
+      }}
+      onBlur={() => onCommit(valid ? value : null)}
+      placeholder="metres"
+      title="Radius in metres. Enter to keep, Escape to cancel."
+      className={`w-16 rounded border bg-white dark:bg-zinc-900 px-1 py-0.5 text-[11px] text-right tabular-nums ${
+        valid ? "border-violet-400 text-violet-700 dark:text-violet-300" : "border-red-400 text-red-600"
+      }`}
+    />
+  );
+}
+
+/**
+ * "lat, lon" or "lat, lon, radius" — the forms people paste or type.
+ *
+ * Null for anything that isn't a position, so a half-typed cell shows as not
+ * yet valid rather than being committed as a coordinate.
+ */
+function parseCoordinateCell(
+  text: string
+): { lat: number; lon: number; uncertainty?: number } | null {
+  const parts = text.trim().split(/[,;\s]+/).filter(Boolean).map(Number);
+  if (parts.length < 2 || parts.length > 3 || parts.some((n) => !Number.isFinite(n))) return null;
+  const [lat, lon, uncertainty] = parts;
+  if (lat < -90 || lat > 90 || lon < -180 || lon > 180) return null;
+  if (uncertainty != null && uncertainty <= 0) return null;
+  return uncertainty != null ? { lat, lon, uncertainty } : { lat, lon };
+}
+
 interface OccurrenceListTableProps {
   /** Every loaded record, filtered or not — see `excludedIds`. */
   occurrences: OccurrenceFeature[];
@@ -264,8 +371,17 @@ interface OccurrenceListTableProps {
   isOutsideNativeRange: (countryCode: string | null | undefined) => boolean;
   /** The assessor's own georeferences, keyed by gbifID. */
   georeferences?: Record<number, Georeference>;
-  /** Opens the georeference editor for a record. Absent = feature unavailable. */
-  onEditGeoreference?: (feature: OccurrenceFeature) => void;
+  /**
+   * Saves coordinates typed into the Coordinates cell. Absent = feature
+   * unavailable.
+   *
+   * Coordinates, and nothing else: a georeference is made by typing a position
+   * where the position is shown, rather than by opening something. The radius
+   * and the note are edited in their own cells, the same way.
+   */
+  onSaveGeoreference?: (feature: OccurrenceFeature, edit: { lat: number; lon: number; uncertainty?: number }) => void;
+  /** Clears the assessor's coordinates for a record, leaving GBIF's alone. */
+  onClearGeoreference?: (feature: OccurrenceFeature) => void;
   /** The record currently highlighted on the map, so its row can match. */
   hoveredGbifId?: number | null;
   /** Pointer entered/left a row — the map highlights the matching record. */
@@ -306,7 +422,8 @@ export default function OccurrenceListTable({
   loading,
   isOutsideNativeRange,
   georeferences,
-  onEditGeoreference,
+  onSaveGeoreference,
+  onClearGeoreference,
   hoveredGbifId,
   onHoverRow,
   excludedIds,
@@ -319,6 +436,10 @@ export default function OccurrenceListTable({
   onTogglePanelLayout,
 }: OccurrenceListTableProps) {
   // Default sort: newest first, matching GBIF's own default result order.
+  /** The record whose Coordinates cell is open for typing, if any. */
+  const [editingCoords, setEditingCoords] = useState<number | null>(null);
+  /** The record whose Uncertainty cell is open for typing, if any. */
+  const [editingRadius, setEditingRadius] = useState<number | null>(null);
   const [sortKey, setSortKey] = useState<string>("date");
   const [sortAsc, setSortAsc] = useState(false);
 
@@ -639,21 +760,39 @@ export default function OccurrenceListTable({
         // separate one to hunt for.
         render: (p, f) => {
           const mine = georeferences?.[p.gbifID];
-          const editable = isGeoreferenceable(p) && onEditGeoreference;
-          const open = (e: React.MouseEvent) => {
+          const editable = isGeoreferenceable(p) && !!onSaveGeoreference;
+          if (editable && editingCoords === p.gbifID) {
+            return (
+              <CoordinateCellEditor
+                initial={
+                  mine
+                    ? `${mine.decimalLatitude}, ${mine.decimalLongitude}`
+                    : f.geometry
+                      ? `${f.geometry.coordinates[1]}, ${f.geometry.coordinates[0]}`
+                      : ""
+                }
+                onCommit={(edit) => {
+                  setEditingCoords(null);
+                  if (edit) onSaveGeoreference?.(f, edit);
+                }}
+                onClear={mine ? () => { setEditingCoords(null); onClearGeoreference?.(f); } : undefined}
+              />
+            );
+          }
+          const startEditing = (e: React.MouseEvent) => {
             e.stopPropagation();
-            onEditGeoreference?.(f);
+            setEditingCoords(p.gbifID);
           };
           if (mine) {
-            // Your note sits with your coordinates, and clicking either reopens
-            // the editor — the reasoning is part of the georeference, not a
-            // footnote to it.
+            // Your note sits with your coordinates, and clicking either opens
+            // the cell for typing — the reasoning is part of the georeference,
+            // not a footnote to it.
             return (
               <button
-                onClick={open}
+                onClick={startEditing}
                 title={`Your georeference: ${mine.decimalLatitude}, ${mine.decimalLongitude} ± ${mine.coordinateUncertaintyInMeters} m${
                   mine.georeferenceRemarks ? ` — ${mine.georeferenceRemarks}` : ""
-                }. Click to edit, or drag the point on the map.`}
+                }. Click to retype it, or drag the point on the map.`}
                 className="block text-left text-violet-600 dark:text-violet-400 hover:underline"
               >
                 <span className="block truncate">
@@ -668,11 +807,11 @@ export default function OccurrenceListTable({
           if (!f.geometry) {
             return editable ? (
               <button
-                onClick={open}
-                title="GBIF has no coordinates for this record — only a locality description. Click to georeference it yourself."
-                className="text-amber-600 dark:text-amber-400 hover:underline decoration-dotted"
+                onClick={startEditing}
+                title="GBIF has no coordinates for this record — only a locality description. Click here and type the position you read it as, as \u201clat, lon\u201d."
+                className="text-violet-600 dark:text-violet-400 hover:underline decoration-dotted"
               >
-                Add georeference
+                Add georeference?
               </button>
             ) : (
               <span className="text-amber-600 dark:text-amber-400">Not georeferenced</span>
@@ -685,9 +824,9 @@ export default function OccurrenceListTable({
           // correcting by hand.
           return editable ? (
             <button
-              onClick={open}
-              title="GBIF flags these coordinates. Click to supply your own."
-              className="text-amber-600 dark:text-amber-400 hover:underline decoration-dotted"
+              onClick={startEditing}
+              title="GBIF flags these coordinates. Click here and type your own."
+              className="text-violet-600 dark:text-violet-400 hover:underline decoration-dotted"
             >
               {text} +
             </button>
@@ -702,11 +841,46 @@ export default function OccurrenceListTable({
         title: "coordinateUncertaintyInMeters",
         className: "whitespace-nowrap tabular-nums",
         align: "right",
-        value: (p) => p.coordinateUncertaintyInMeters ?? null,
-        render: (p) => {
-          const u = p.coordinateUncertaintyInMeters;
+        // Yours where you've supplied a position, GBIF's otherwise — the same
+        // rule the Coordinates column follows, so the two always describe the
+        // same point.
+        value: (p) =>
+          georeferences?.[p.gbifID]?.coordinateUncertaintyInMeters ?? p.coordinateUncertaintyInMeters ?? null,
+        render: (p, f) => {
+          const mine = georeferences?.[p.gbifID];
+          const u = mine?.coordinateUncertaintyInMeters ?? p.coordinateUncertaintyInMeters;
+          const format = (m: number) => (m >= 1000 ? `${(m / 1000).toFixed(1)} km` : `${m} m`);
+          if (mine && onSaveGeoreference) {
+            if (editingRadius === p.gbifID) {
+              return (
+                <RadiusCellEditor
+                  initial={String(mine.coordinateUncertaintyInMeters)}
+                  onCommit={(metres) => {
+                    setEditingRadius(null);
+                    if (metres != null)
+                      onSaveGeoreference(f, {
+                        lat: mine.decimalLatitude,
+                        lon: mine.decimalLongitude,
+                        uncertainty: metres,
+                      });
+                  }}
+                />
+              );
+            }
+            // Editable in place, because typing coordinates alone leaves this
+            // at a default that has to be visible to be corrected.
+            return (
+              <button
+                onClick={(e) => { e.stopPropagation(); setEditingRadius(p.gbifID); }}
+                title="The radius around your point, in metres — how much ground the locality description actually covers. Click to change it."
+                className="text-violet-600 dark:text-violet-400 hover:underline decoration-dotted"
+              >
+                {format(mine.coordinateUncertaintyInMeters)}
+              </button>
+            );
+          }
           if (u == null) return null;
-          return u >= 1000 ? `${(u / 1000).toFixed(1)} km` : `${u} m`;
+          return format(u);
         },
       },
       {
@@ -857,7 +1031,7 @@ export default function OccurrenceListTable({
         ),
       },
     ],
-    [isOutsideNativeRange, georeferences, onEditGeoreference, excludedIds, exclusions, selection, onExclude, onInclude, showExcluded, excludeSelection]
+    [isOutsideNativeRange, georeferences, onSaveGeoreference, onClearGeoreference, editingCoords, editingRadius, excludedIds, exclusions, selection, onExclude, onInclude, showExcluded, excludeSelection]
   );
 
   // The catalogue in the reader's own order, then the subset actually drawn.

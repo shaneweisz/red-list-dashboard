@@ -8,10 +8,10 @@
  * the page, so the only thing the browser waits on is GBIF itself.
  */
 import { notFound } from "next/navigation";
-import Link from "next/link";
 import type { Metadata } from "next";
 import { getSpeciesByGbifKey } from "@/lib/data/species-duckdb";
 import OccurrencePanel from "./OccurrencePanel";
+import MappingHeader from "./MappingHeader";
 
 export const dynamic = "force-dynamic";
 
@@ -37,15 +37,10 @@ export default async function OccurrencesPage({ params }: { params: Promise<{ ke
 
   return (
     <div className="h-screen flex flex-col bg-white dark:bg-zinc-900">
-      <div className="flex items-baseline gap-2 px-3 py-2 border-b border-zinc-200 dark:border-zinc-700 shrink-0">
-        <Link href="/" className="text-sm font-medium italic text-zinc-800 dark:text-zinc-100 truncate hover:underline">
-          {species.scientific_name}
-        </Link>
-        {species.common_name && (
-          <span className="text-xs text-zinc-500 dark:text-zinc-400 truncate">{species.common_name}</span>
-        )}
-        <span className="text-[11px] text-zinc-400 shrink-0">GBIF occurrences</span>
-      </div>
+      <MappingHeader
+        scientificName={species.scientific_name}
+        commonName={species.common_name}
+      />
       <div className="flex-1 min-h-0">
         <OccurrencePanel
           speciesKey={species.gbif_species_key}

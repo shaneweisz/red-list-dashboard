@@ -94,6 +94,7 @@ import {
 } from "@/lib/mapping/habitat-map";
 import {
   uncertaintyCircle,
+  DEFAULT_GEOREFERENCE_RADIUS_M,
   type Georeference,
 } from "@/lib/mapping/georeferences";
 
@@ -145,10 +146,6 @@ const AohMapLayer = dynamic(
 // actually switches to it.
 const OccurrenceListTable = dynamic(
   () => import("./OccurrenceListTable"),
-  { ssr: false }
-);
-const GeoreferenceEditor = dynamic(
-  () => import("./GeoreferenceEditor"),
   { ssr: false }
 );
 const ExclusionDialog = dynamic(
@@ -848,15 +845,6 @@ export default function OccurrenceMapRow({
    * for reasons that had nothing to do with what was underneath it.
    */
   const [hoveringPoint, setHoveringPoint] = useState(false);
-  // Whether there's room to dock a 22rem panel beside the map and still have a
-  // map worth looking at.
-  const [viewportWide, setViewportWide] = useState(false);
-  useEffect(() => {
-    const check = () => setViewportWide(window.innerWidth >= 1100);
-    check();
-    window.addEventListener("resize", check);
-    return () => window.removeEventListener("resize", check);
-  }, []);
   /**
    * Places pinned from the search, kept until each is dismissed by its own ×.
    *
@@ -1277,20 +1265,6 @@ export default function OccurrenceMapRow({
       }),
   });
   const [historyOpen, setHistoryOpen] = useState(false);
-  const [editingFeature, setEditingFeature] = useState<OccurrenceFeature | null>(null);
-  /** A point picked by clicking the map while the editor is docked. */
-  const [pickedPoint, setPickedPoint] = useState<{ lat: number; lon: number } | null>(null);
-  /** The editor's unsaved values, so the map can draw them as they're typed. */
-  const [georefDraft, setGeorefDraft] = useState<{ lat: number | null; lon: number | null; uncertainty: number | null } | null>(null);
-  /**
-   * Docked beside the map rather than over it, whenever there's room.
-   *
-   * Georeferencing is a map task: you look the locality up, compare it with
-   * where the neighbouring records are, and put the point where you believe it
-   * was. A modal covers every one of those. Below this width there's nowhere to
-   * dock, so it falls back to the modal.
-   */
-  const editorDocked = fullscreen && editingFeature != null && viewportWide && !splitView;
 
   /** A dragged georeference waiting to be confirmed or put back. */
   const [pendingMove, setPendingMove] = useState<{ gbifID: number; lat: number; lon: number } | null>(null);
@@ -1629,15 +1603,58 @@ export default function OccurrenceMapRow({
     [visibleGeoreferences]
   );
 
+  /**
+   * A position typed into the Coordinates cell.
+   *
+   * Everything the old editor asked for and this doesn't is carried over or
+   * defaulted: the radius keeps whatever it already had, or GBIF's own figure
+   * for the record where there is one, or DEFAULT_GEOREFERENCE_RADIUS_M — which
+   * is deliberately coarse, because a locality description resolved by eye is
+   * coarse, and the Uncertainty cell is right there to sharpen it.
+   */
+  const saveGeoreferenceInline = useCallback(
+    (feature: OccurrenceFeature, edit: { lat: number; lon: number; uncertainty?: number }) => {
+      const p = feature.properties;
+      const existing = georeferences[p.gbifID];
+      const radius =
+        edit.uncertainty ??
+        existing?.coordinateUncertaintyInMeters ??
+        p.coordinateUncertaintyInMeters ??
+        DEFAULT_GEOREFERENCE_RADIUS_M;
+      handleSaveGeoreference({
+        ...existing,
+        gbifID: p.gbifID,
+        occurrenceID: p.occurrenceID ?? existing?.occurrenceID,
+        scientificName: p.species ?? scientificName ?? existing?.scientificName,
+        verbatimLocality: p.locality ?? p.verbatimLocality ?? existing?.verbatimLocality,
+        decimalLatitude: edit.lat,
+        decimalLongitude: edit.lon,
+        coordinateUncertaintyInMeters: radius,
+        georeferencedBy: existing?.georeferencedBy || accountEmail || undefined,
+        georeferencedDate: new Date().toISOString(),
+        georeferenceProtocol: existing?.georeferenceProtocol ?? "Typed from the locality description",
+      });
+    },
+    // handleSaveGeoreference is declared just below and is stable per render.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [georeferences, accountEmail, scientificName]
+  );
+
+  const clearGeoreference = useCallback(
+    (feature: OccurrenceFeature) => {
+      const next = { ...georeferences };
+      delete next[feature.properties.gbifID];
+      commitEdits({ georeferences: next }, "delete a georeference");
+    },
+    [georeferences, commitEdits]
+  );
+
   const handleSaveGeoreference = useCallback(
     (georeference: Georeference) => {
       commitEdits(
         { georeferences: { ...georeferences, [georeference.gbifID]: georeference } },
         georeferences[georeference.gbifID] ? "edit a georeference" : "add a georeference"
       );
-      setPickedPoint(null);
-      setGeorefDraft(null);
-      setEditingFeature(null);
       setGeorefMessage(null);
     },
     [georeferences, commitEdits]
@@ -1679,14 +1696,6 @@ export default function OccurrenceMapRow({
     }
     setPendingMove(null);
   }, [pendingMove, georeferences, commitEdits, accountEmail]);
-
-  const openGeoreferenceEditor = useCallback(
-    (gbifID: number) => {
-      const record = occurrences.find((o) => o.properties.gbifID === gbifID);
-      if (record) setEditingFeature(record);
-    },
-    [occurrences]
-  );
 
   const handleMarkerHover = useCallback(
     (gbifID: number) => {
@@ -1763,20 +1772,6 @@ export default function OccurrenceMapRow({
     },
     [exclusions, commitEdits]
   );
-
-  const closeEditor = useCallback(() => {
-    setEditingFeature(null);
-    setPickedPoint(null);
-    setGeorefDraft(null);
-  }, []);
-
-  const handleDeleteGeoreference = useCallback(() => {
-    if (!editingFeature) return;
-    const next = { ...georeferences };
-    delete next[editingFeature.properties.gbifID];
-    commitEdits({ georeferences: next }, "delete a georeference");
-    closeEditor();
-  }, [editingFeature, georeferences, commitEdits, closeEditor]);
 
 
   // Would this record survive everything except the GBIF-flagged check? Used
@@ -2196,12 +2191,6 @@ export default function OccurrenceMapRow({
 
   // Map event handlers
   const handleMapClick = useCallback((e: MapLayerMouseEvent, panelId: string) => {
-    // Placing owns the click while the editor is docked: clicking the map IS
-    // how you say where the specimen was.
-    if (editorDocked) {
-      setPickedPoint({ lat: Number(e.lngLat.lat.toFixed(5)), lon: Number(e.lngLat.lng.toFixed(5)) });
-      return;
-    }
     // Measuring owns the left click while it's on. Two points, never more,
     // and the first one stays put: it's the deliberate one — you right-clicked
     // that spot and asked to measure from it — so every click after the second
@@ -2278,7 +2267,7 @@ export default function OccurrenceMapRow({
         });
       })
       .catch(() => undefined);
-  }, [measure, showProtectedAreas, editorDocked, showEcoregions, ecoregions]);
+  }, [measure, showProtectedAreas, showEcoregions, ecoregions]);
 
   /**
    * Right-click asks what this spot is: its coordinates, the ground elevation,
@@ -2495,10 +2484,6 @@ export default function OccurrenceMapRow({
         });
         return;
       }
-      setGeorefMessage({
-        kind: "ok",
-        text: `Loaded ${imported.points.length.toLocaleString()} point${imported.points.length === 1 ? "" : "s"} from ${imported.fileName}.`,
-      });
     },
     [speciesKey]
   );
@@ -2869,7 +2854,7 @@ export default function OccurrenceMapRow({
               // knows from Google Maps. The hand it replaces claimed the map
               // was one big button.
               cursor={
-                measure || editorDocked
+                measure
                   ? "crosshair"
                   : panning
                     ? "move"
@@ -3184,14 +3169,6 @@ export default function OccurrenceMapRow({
                     yourGeoreference={
                       mine ? { protocol: mine.georeferenceProtocol, remarks: mine.georeferenceRemarks } : undefined
                     }
-                    onEditGeoreference={
-                      mine
-                        ? () => {
-                            closeTooltip();
-                            openGeoreferenceEditor(shown.properties.gbifID);
-                          }
-                        : undefined
-                    }
                     images={shown.properties.images}
                     page={
                       hoveredGroup.length > 1
@@ -3296,49 +3273,6 @@ export default function OccurrenceMapRow({
                   </div>
                 </MapLibreMarker>
               ))}
-              {/* The unsaved georeference, drawn as it's typed. Seeing the
-                  radius on the ground is most of what tells you whether the
-                  number is right — a label saying "1900 m" and a circle that
-                  spans three valleys don't agree. */}
-              {georefDraft?.lat != null && georefDraft?.lon != null &&
-               Number.isFinite(georefDraft.lat) && Number.isFinite(georefDraft.lon) && (
-                <>
-                  {georefDraft.uncertainty != null && georefDraft.uncertainty > 0 && (
-                    <Source
-                      id={`georef-draft-circle-${panelId}`}
-                      type="geojson"
-                      data={{
-                        type: "Feature",
-                        properties: {},
-                        geometry: uncertaintyCircle(georefDraft.lat, georefDraft.lon, georefDraft.uncertainty),
-                      }}
-                    >
-                      <Layer
-                        id={`georef-draft-fill-${panelId}`}
-                        type="fill"
-                        paint={{ "fill-color": "#7c3aed", "fill-opacity": 0.12 }}
-                      />
-                      <Layer
-                        id={`georef-draft-line-${panelId}`}
-                        type="line"
-                        paint={{ "line-color": "#7c3aed", "line-width": 1, "line-dasharray": [2, 2] }}
-                      />
-                    </Source>
-                  )}
-                  <MapLibreMarker longitude={georefDraft.lon} latitude={georefDraft.lat} anchor="center">
-                    <div
-                      style={{
-                        width: 16,
-                        height: 16,
-                        borderRadius: "50%",
-                        background: "#7c3aed",
-                        border: "2px dashed #ffffff",
-                        boxShadow: "0 1px 3px rgba(0,0,0,0.4)",
-                      }}
-                    />
-                  </MapLibreMarker>
-                </>
-              )}
               {/* Extent of occurrence and area of occupancy, drawn so the
                   numbers can be checked against the ground rather than taken on
                   trust — a hull reaching across an ocean usually means an
@@ -3482,7 +3416,7 @@ export default function OccurrenceMapRow({
                   <div className="text-[11px] text-zinc-700 dark:text-zinc-200 space-y-1">
                     <div className="flex items-center gap-1.5 font-medium">
                       <span className="w-2 h-2 rounded-full shrink-0" style={{ background: POINT_FILE_COLOR }} />
-                      IUCN point file
+                      Imported CSV record
                       <span className="font-normal text-zinc-400">row {hoveredPointFileRow.point.row}</span>
                     </div>
                     {pointSummary(hoveredPointFileRow.point).slice(0, 5).map((s) => (
@@ -3817,133 +3751,6 @@ export default function OccurrenceMapRow({
               </button>
             </div>
           )}
-          {/* EOO and AOO, laid out the way GeoCAT lays them out — the tool
-              an assessor will be checking these numbers against. Its switch
-              comes with it: the toggle used to live in the Overlays dropdown,
-              two clicks away from the figures it governs.
-
-              The badge is the threshold the area reaches, not a category.
-              Criterion B also requires at least two of (a) severe
-              fragmentation or few locations, (b) continuing decline, (c)
-              extreme fluctuations, and none of those come from points on a
-              map — so where GeoCAT shows a green LC, this shows nothing. */}
-          {!loadingOccurrences && (
-            <div className="bg-white dark:bg-zinc-800 rounded-lg shadow-md border border-zinc-200 dark:border-zinc-700 px-2.5 py-2 text-[11px] text-zinc-700 dark:text-zinc-200 w-56">
-              <button
-                onClick={() => setShowRangeMetrics((v) => !v)}
-                className="flex items-center gap-2 w-full text-left"
-                title={
-                  "Extent of occurrence (minimum convex polygon) and area of occupancy, computed from the record layers currently switched on \u2014 GeoCAT's method, so the two can be compared directly."
-                }
-              >
-                <span
-                  className={`relative shrink-0 w-8 h-[18px] rounded-full transition-colors ${
-                    showRangeMetrics ? "bg-lime-500" : "bg-zinc-300 dark:bg-zinc-600"
-                  }`}
-                >
-                  <span
-                    className={`absolute top-[2px] w-[14px] h-[14px] rounded-full bg-white shadow-sm transition-all ${
-                      showRangeMetrics ? "left-[16px]" : "left-[2px]"
-                    }`}
-                  />
-                </span>
-                <span className="font-medium">Enables EOO/AOO</span>
-              </button>
-              {rangeMetrics && (
-                <div className="mt-2 space-y-2">
-                  {([
-                    {
-                      label: "Extent of Occurrence",
-                      areaKm2: rangeMetrics.eoo.areaKm2,
-                      threshold: b1Threshold(rangeMetrics.eoo.areaKm2),
-                      criterion: "B1",
-                    },
-                    {
-                      label: "Area of Occupancy",
-                      areaKm2: rangeMetrics.aoo.areaKm2,
-                      threshold: b2Threshold(rangeMetrics.aoo.areaKm2),
-                      criterion: "B2",
-                    },
-                  ] as const).map((metric) => (
-                    <div key={metric.label} className="flex items-start gap-2">
-                      <div className="flex-1 min-w-0">
-                        <div className="text-zinc-500 dark:text-zinc-400">{metric.label}</div>
-                        <div
-                          className="font-semibold tabular-nums"
-                          title={`${metric.areaKm2.toLocaleString(undefined, { maximumFractionDigits: 3 })} km\u00b2`}
-                        >
-                          {formatAreaKm2(metric.areaKm2)}
-                        </div>
-                      </div>
-                      {metric.threshold && (
-                        <span
-                          className="shrink-0 w-7 h-7 rounded-full grid place-items-center text-[10px] font-bold text-white"
-                          style={{ background: CATEGORY_COLORS[metric.threshold] }}
-                          title={`Meets criterion ${metric.criterion}'s area threshold for ${metric.threshold}. On its own that is not a listing.`}
-                        >
-                          {metric.threshold}
-                        </span>
-                      )}
-                    </div>
-                  ))}
-                  <div className="text-[10px] text-zinc-400 leading-snug">
-                    AOO based on user defined cell width ({aooCellKm} km),{" "}
-                    <button
-                      onClick={() => setAooCellOpen((v) => !v)}
-                      className="underline text-amber-600 dark:text-amber-500 hover:text-amber-700"
-                    >
-                      change
-                    </button>
-                    {aooCellOpen && (
-                      <span className="flex items-center gap-1 pt-1">
-                        <input
-                          type="number"
-                          min={0.1}
-                          step={0.5}
-                          value={aooCellKm}
-                          onChange={(e) => {
-                            const next = Number(e.target.value);
-                            if (Number.isFinite(next) && next > 0) setAooCellKm(next);
-                          }}
-                          className="w-14 rounded border border-zinc-300 dark:border-zinc-600 bg-white dark:bg-zinc-900 px-1 py-0.5 text-[10px] tabular-nums"
-                        />
-                        <span>km</span>
-                        {aooCellKm !== 2 && (
-                          <button
-                            onClick={() => setAooCellKm(2)}
-                            className="underline hover:text-zinc-600 dark:hover:text-zinc-300"
-                            title="2 km is the Red List standard \u2014 the only width comparable with a published assessment"
-                          >
-                            reset to 2 km
-                          </button>
-                        )}
-                      </span>
-                    )}
-                  </div>
-                  <div className="text-[10px] text-zinc-400 leading-snug">
-                    {rangeMetrics.aoo.cellCount.toLocaleString()} cells ·{" "}
-                    {rangeMetrics.eoo.pointCount.toLocaleString()} records
-                    {rangeMetricPoints.fromPointFile > 0 && (
-                      <span style={{ color: POINT_FILE_COLOR }}>
-                        {" "}· {rangeMetricPoints.fromPointFile.toLocaleString()} from the point file
-                      </span>
-                    )}
-                    {rangeMetrics.ownCount > 0 && (
-                      <span className="text-violet-600 dark:text-violet-400">
-                        {" "}· {rangeMetrics.ownCount.toLocaleString()} yours
-                      </span>
-                    )}
-                    {!isFullSample && <span className="text-amber-600 dark:text-amber-400"> · partial sample</span>}
-                  </div>
-                </div>
-              )}
-              {showRangeMetrics && !rangeMetrics && (
-                <div className="mt-1.5 text-[10px] text-zinc-400">
-                  No records on the map to measure.
-                </div>
-              )}
-            </div>
-          )}
           {/* Sampling effort is a colour ramp with no numbers worth reading, so
               the legend says what the ends mean rather than what they measure.
               It also carries the citation: an image source takes no
@@ -4142,7 +3949,7 @@ export default function OccurrenceMapRow({
                       className="w-3 h-3 rounded-full border-2 border-white dark:border-zinc-800"
                       style={{ background: POINT_FILE_COLOR }}
                     />
-                    <span>Point file ({pointFile.points.length.toLocaleString()})</span>
+                    <span>Imported CSV records ({pointFile.points.length.toLocaleString()})</span>
                   </button>
                 </>
               )}
@@ -4314,9 +4121,11 @@ export default function OccurrenceMapRow({
                 )}
               </div>
             )}
-            {/* Basemap toggle, then the record layers under it — the two
-                choices you make while looking at the map rather than before
-                opening it. */}
+            {/* The record layers first, then what they measure, then the
+                basemap under both — the layers are the subject, and the
+                basemap is only the paper they're drawn on. */}
+            {!loadingOccurrences && mounted && renderRecordLayers()}
+            {mounted && renderRangeMetrics()}
             {!loadingOccurrences && mounted && (
               <div className="flex flex-col gap-0.5 bg-white dark:bg-zinc-800 rounded-lg shadow-md border border-zinc-200 dark:border-zinc-700 p-1">
                 {(Object.entries(BASEMAP_STYLES) as [BasemapKey, (typeof BASEMAP_STYLES)[BasemapKey]][]).map(([key, opt]) => (
@@ -4334,7 +4143,6 @@ export default function OccurrenceMapRow({
                 ))}
               </div>
             )}
-            {!loadingOccurrences && mounted && renderRecordLayers()}
           </div>
         </div>
       </div>
@@ -4387,6 +4195,146 @@ export default function OccurrenceMapRow({
    * A function rather than a const so it can be called from renderMap without
    * caring which of the values below it are declared by then.
    */
+  /**
+   * EOO and AOO, and the switch that turns them on.
+   *
+   * In the same column as the record layers, directly under them, because
+   * that's what they measure: turn the point file off and the figures follow.
+   * They sat bottom-left before, diagonally opposite the toggles that decide
+   * what goes into them.
+   */
+  const renderRangeMetrics = () => (
+    <>
+    {/* EOO and AOO, laid out the way GeoCAT lays them out — the tool
+        an assessor will be checking these numbers against. Its switch
+        comes with it: the toggle used to live in the Overlays dropdown,
+        two clicks away from the figures it governs.
+
+        The badge is the threshold the area reaches, not a category.
+        Criterion B also requires at least two of (a) severe
+        fragmentation or few locations, (b) continuing decline, (c)
+        extreme fluctuations, and none of those come from points on a
+        map — so where GeoCAT shows a green LC, this shows nothing. */}
+    {!loadingOccurrences && (
+      <div className="bg-white dark:bg-zinc-800 rounded-lg shadow-md border border-zinc-200 dark:border-zinc-700 px-2.5 py-2 text-[11px] text-zinc-700 dark:text-zinc-200 w-56">
+        <button
+          onClick={() => setShowRangeMetrics((v) => !v)}
+          className="flex items-center gap-2 w-full text-left"
+          title={
+            "Extent of occurrence (minimum convex polygon) and area of occupancy, computed from the record layers currently switched on \u2014 GeoCAT's method, so the two can be compared directly."
+          }
+        >
+          <span
+            className={`relative shrink-0 w-8 h-[18px] rounded-full transition-colors ${
+              showRangeMetrics ? "bg-lime-500" : "bg-zinc-300 dark:bg-zinc-600"
+            }`}
+          >
+            <span
+              className={`absolute top-[2px] w-[14px] h-[14px] rounded-full bg-white shadow-sm transition-all ${
+                showRangeMetrics ? "left-[16px]" : "left-[2px]"
+              }`}
+            />
+          </span>
+          <span className="font-medium">Enables EOO/AOO</span>
+        </button>
+        {rangeMetrics && (
+          <div className="mt-2 space-y-2">
+            {([
+              {
+                label: "Extent of Occurrence",
+                areaKm2: rangeMetrics.eoo.areaKm2,
+                threshold: b1Threshold(rangeMetrics.eoo.areaKm2),
+                criterion: "B1",
+              },
+              {
+                label: "Area of Occupancy",
+                areaKm2: rangeMetrics.aoo.areaKm2,
+                threshold: b2Threshold(rangeMetrics.aoo.areaKm2),
+                criterion: "B2",
+              },
+            ] as const).map((metric) => (
+              <div key={metric.label} className="flex items-start gap-2">
+                <div className="flex-1 min-w-0">
+                  <div className="text-zinc-500 dark:text-zinc-400">{metric.label}</div>
+                  <div
+                    className="font-semibold tabular-nums"
+                    title={`${metric.areaKm2.toLocaleString(undefined, { maximumFractionDigits: 3 })} km\u00b2`}
+                  >
+                    {formatAreaKm2(metric.areaKm2)}
+                  </div>
+                </div>
+                {metric.threshold && (
+                  <span
+                    className="shrink-0 w-7 h-7 rounded-full grid place-items-center text-[10px] font-bold text-white"
+                    style={{ background: CATEGORY_COLORS[metric.threshold] }}
+                    title={`Meets criterion ${metric.criterion}'s area threshold for ${metric.threshold}. On its own that is not a listing.`}
+                  >
+                    {metric.threshold}
+                  </span>
+                )}
+              </div>
+            ))}
+            <div className="text-[10px] text-zinc-400 leading-snug">
+              AOO based on user defined cell width ({aooCellKm} km),{" "}
+              <button
+                onClick={() => setAooCellOpen((v) => !v)}
+                className="underline text-amber-600 dark:text-amber-500 hover:text-amber-700"
+              >
+                change
+              </button>
+              {aooCellOpen && (
+                <span className="flex items-center gap-1 pt-1">
+                  <input
+                    type="number"
+                    min={0.1}
+                    step={0.5}
+                    value={aooCellKm}
+                    onChange={(e) => {
+                      const next = Number(e.target.value);
+                      if (Number.isFinite(next) && next > 0) setAooCellKm(next);
+                    }}
+                    className="w-14 rounded border border-zinc-300 dark:border-zinc-600 bg-white dark:bg-zinc-900 px-1 py-0.5 text-[10px] tabular-nums"
+                  />
+                  <span>km</span>
+                  {aooCellKm !== 2 && (
+                    <button
+                      onClick={() => setAooCellKm(2)}
+                      className="underline hover:text-zinc-600 dark:hover:text-zinc-300"
+                      title="2 km is the Red List standard \u2014 the only width comparable with a published assessment"
+                    >
+                      reset to 2 km
+                    </button>
+                  )}
+                </span>
+              )}
+            </div>
+            <div className="text-[10px] text-zinc-400 leading-snug">
+              {rangeMetrics.aoo.cellCount.toLocaleString()} cells ·{" "}
+              {rangeMetrics.eoo.pointCount.toLocaleString()} records
+              {rangeMetricPoints.fromPointFile > 0 && (
+                <span style={{ color: POINT_FILE_COLOR }}>
+                  {" "}· {rangeMetricPoints.fromPointFile.toLocaleString()} imported
+                </span>
+              )}
+              {rangeMetrics.ownCount > 0 && (
+                <span className="text-violet-600 dark:text-violet-400">
+                  {" "}· {rangeMetrics.ownCount.toLocaleString()} yours
+                </span>
+              )}
+              {!isFullSample && <span className="text-amber-600 dark:text-amber-400"> · partial sample</span>}
+            </div>
+          </div>
+        )}
+        {showRangeMetrics && !rangeMetrics && (
+          <div className="mt-1.5 text-[10px] text-zinc-400">
+            No records on the map to measure.
+          </div>
+        )}
+      </div>
+    )}
+    </>
+  );
+
   const renderRecordLayers = () => (
     <div className="flex flex-col bg-white dark:bg-zinc-800 rounded-lg shadow-md border border-zinc-200 dark:border-zinc-700 py-1 w-44">
       <div className="px-2 pb-0.5 text-[9px] uppercase tracking-wide text-zinc-400 dark:text-zinc-500">
@@ -4426,7 +4374,7 @@ export default function OccurrenceMapRow({
             className="w-3 h-3 rounded accent-blue-600 shrink-0"
           />
           <span className="flex-1 min-w-0 text-zinc-700 dark:text-zinc-200 truncate">
-            IUCN point file
+            Imported CSV records
           </span>
           <span className="tabular-nums text-[10px] text-zinc-400">
             {pointFile.points.length.toLocaleString()}
@@ -4591,22 +4539,6 @@ export default function OccurrenceMapRow({
       )}
       {/* The modal is the fallback for a viewport with nowhere to dock; the
           docked panel is rendered beside the map further down. */}
-      {editingFeature && !editorDocked && (
-        <GeoreferenceEditor
-          // Keyed on the record: the editor holds its inputs in state seeded at
-          // mount, so without this, switching records while it's open leaves
-          // the boxes showing the previous record's coordinates and saves them
-          // under the new record's id.
-          key={editingFeature.properties.gbifID}
-          feature={editingFeature}
-          existing={georeferences[editingFeature.properties.gbifID]}
-          georeferencedBy={accountEmail}
-          scientificName={scientificName}
-          onSave={handleSaveGeoreference}
-          onDelete={handleDeleteGeoreference}
-          onClose={closeEditor}
-        />
-      )}
       <div className={fullscreen ? "p-2 flex-1 min-h-0 flex flex-col" : "p-2"}>
         <div className={`flex flex-col gap-2${fullscreen ? " flex-1 min-h-0" : ""}`}>
           {/* Filter dropdowns + sample-size summary, merged into one row (summary on
@@ -5583,8 +5515,8 @@ export default function OccurrenceMapRow({
                       onClick={() => setPointFileOpen(true)}
                       title={
                         pointFile
-                          ? `${pointFile.fileName} — ${pointFile.points.length.toLocaleString()} points on the map. Click to compare them against your own, or load a different file.`
-                          : "Load the IUCN point file for this species, saved out of the workbook as CSV. It goes on the map as its own layer, to compare against."
+                          ? `${pointFile.fileName} — ${pointFile.points.length.toLocaleString()} records on the map. Click to compare them against your own, or load a different file.`
+                          : "Import a CSV of point records — one row per record, with decimal latitude and longitude columns. It goes on the map as its own layer, to compare against."
                       }
                       className="inline-flex items-center gap-1 px-2 py-1 rounded border border-zinc-300 dark:border-zinc-600 text-xs text-zinc-600 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800 transition-colors"
                     >
@@ -5596,11 +5528,6 @@ export default function OccurrenceMapRow({
                         <path strokeLinecap="round" strokeLinejoin="round" d="M4 16v2a2 2 0 002 2h12a2 2 0 002-2v-2M7 8l5-5 5 5M12 3v12" />
                       </svg>
                       Import CSV
-                      {pointFile && (
-                        <span className="tabular-nums text-[10px] text-zinc-400">
-                          {pointFile.points.length.toLocaleString()}
-                        </span>
-                      )}
                     </button>
                 </div>
                 {/* The map/list arrangement is chosen from the table's own
@@ -5778,27 +5705,6 @@ export default function OccurrenceMapRow({
                       {renderMapPanel(postAssessmentOccs, bbox, `After ${splitDate} (${postAssessmentOccs.length})`, "after")}
                     </div>
                   </div>
-                ) : editorDocked ? (
-                  /* Map and editor side by side: the whole point of docking is
-                     that the map stays usable while you georeference. */
-                  <div className="flex flex-1 min-h-0 gap-0">
-                    <div className="flex-1 min-w-0 flex flex-col">
-                      {renderMapPanel(includedOccurrences, bbox, null)}
-                    </div>
-                    <GeoreferenceEditor
-                      key={editingFeature.properties.gbifID}
-                      variant="panel"
-                      feature={editingFeature}
-                      existing={georeferences[editingFeature.properties.gbifID]}
-                      georeferencedBy={accountEmail}
-                      scientificName={scientificName}
-                      pickedPoint={pickedPoint}
-                      onDraftChange={setGeorefDraft}
-                      onSave={handleSaveGeoreference}
-                      onDelete={handleDeleteGeoreference}
-                      onClose={closeEditor}
-                    />
-                  </div>
                 ) : (
                   renderMapPanel(includedOccurrences, bbox, null)
                 )}
@@ -5897,7 +5803,8 @@ export default function OccurrenceMapRow({
                   loading={loadingOccurrences}
                   isOutsideNativeRange={isOutsideNativeRangeForList}
                   georeferences={georeferences}
-                  onEditGeoreference={setEditingFeature}
+                  onSaveGeoreference={saveGeoreferenceInline}
+                  onClearGeoreference={clearGeoreference}
                   hoveredGbifId={hoveredFeature?.properties.gbifID ?? null}
                   onHoverRow={handleHoverRow}
                   excludedIds={excludedIds}

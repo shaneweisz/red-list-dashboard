@@ -25,9 +25,6 @@ interface MapOccurrenceTooltipProps {
   locality?: string;
   /** Present when these coordinates are the assessor's own, not GBIF's. */
   yourGeoreference?: { protocol?: string; remarks?: string };
-  /** Opens the georeference editor for the record shown. The map point itself
-   *  now opens GBIF on click, so this is where correcting it lives. */
-  onEditGeoreference?: () => void;
   /**
    * Photographs the publisher attached to the record, from GBIF's media.
    *
@@ -186,7 +183,7 @@ export default function MapOccurrenceTooltip(props: MapOccurrenceTooltipProps) {
         zIndex: 10000,
         // Interactive when it has controls: you have to be able to reach the
         // pager — or the edit link — without the tooltip vanishing on the way.
-        pointerEvents: props.page || props.onEditGeoreference ? "auto" : "none",
+        pointerEvents: props.page ? "auto" : "none",
       }}
       onMouseEnter={props.onPointerEnter}
       onMouseLeave={props.onPointerLeave}
@@ -297,15 +294,6 @@ export default function MapOccurrenceTooltip(props: MapOccurrenceTooltipProps) {
                   ◆ Your georeference
                   {props.yourGeoreference.protocol ? ` · ${props.yourGeoreference.protocol}` : ""}
                 </span>
-                {props.onEditGeoreference && (
-                  <button
-                    onClick={props.onEditGeoreference}
-                    title="Edit these coordinates, their uncertainty and your notes. You can also drag the point on the map."
-                    className="ml-auto shrink-0 text-[10px] font-normal underline decoration-dotted hover:text-violet-800 dark:hover:text-violet-300"
-                  >
-                    Edit
-                  </button>
-                )}
               </div>
               {props.yourGeoreference.remarks && (
                 <div className="text-[10px] text-zinc-500 dark:text-zinc-400">

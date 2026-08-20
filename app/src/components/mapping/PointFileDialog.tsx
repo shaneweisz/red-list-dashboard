@@ -24,7 +24,7 @@ interface PointFileDialogProps {
 }
 
 /**
- * Loading the IUCN point file for a species, and what it says next to the map.
+ * Loading a CSV of point records for a species, and what it says next to the map.
  *
  * The file is the assessment's finished answer — the sheet that goes to IUCN —
  * so the useful thing isn't that it can be displayed but that it can be
@@ -82,7 +82,7 @@ export default function PointFileDialog({
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-baseline gap-2 px-4 py-3 border-b border-zinc-200 dark:border-zinc-700">
-          <h2 className="text-sm font-medium text-zinc-900 dark:text-zinc-100">IUCN point file</h2>
+          <h2 className="text-sm font-medium text-zinc-900 dark:text-zinc-100">Import CSV records</h2>
           {scientificName && (
             <span className="text-xs italic text-zinc-500 dark:text-zinc-400">{scientificName}</span>
           )}
@@ -100,9 +100,10 @@ export default function PointFileDialog({
         <div className="px-4 py-3 space-y-3">
           {!imported && (
             <p className="text-xs text-zinc-500 dark:text-zinc-400">
-              Save the point file sheet out of the georeferencing workbook as CSV, and load it here.
-              It goes onto the map as its own layer, in its own colour — it is never merged into your
-              georeferences, and nothing in it is changed by anything you do here.
+              A CSV with one row per record and decimal latitude/longitude columns. The IUCN
+              point-file columns are read as they stand; so are plain <code>decimalLatitude</code> and
+              <code>decimalLongitude</code>. It goes onto the map as its own layer, in its own colour —
+              it is never merged into your georeferences, and nothing in it is changed here.
             </p>
           )}
 
