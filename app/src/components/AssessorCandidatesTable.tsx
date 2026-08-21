@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useMemo } from "react";
 import { countriesToRegions, regionColor, countryToRegion } from "@/lib/regions";
-import { ALPHA2_TO_NAME } from "@/components/WorldMap";
+import { ALPHA2_TO_NAME } from "@/lib/countries";
 import { getViewRootForNode } from "@/lib/taxonomy-utils";
 
 interface AssessorCountryCandidate {

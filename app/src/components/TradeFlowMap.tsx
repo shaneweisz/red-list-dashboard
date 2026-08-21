@@ -9,7 +9,7 @@ import {
 } from "react-simple-maps";
 import { geoNaturalEarth1 } from "d3-geo";
 import { useTheme } from "next-themes";
-import { ALPHA2_TO_NAME } from "./WorldMap";
+import { ALPHA2_TO_NAME } from "@/lib/countries";
 import { countryName, fmtQty } from "./cites-utils";
 
 const GEO_URL =

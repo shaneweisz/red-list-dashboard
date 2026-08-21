@@ -3,7 +3,8 @@
 import React, { useState, useMemo, useRef, useEffect } from "react";
 import { createPortal } from "react-dom";
 import { FaFilter } from "react-icons/fa";
-import { ALPHA2_TO_NAME, type CountryStats } from "./WorldMap";
+import { type CountryStats } from "./WorldMap";
+import { ALPHA2_TO_NAME } from "@/lib/countries";
 import { iucnRegionCountries } from "@/lib/regions";
 
 type SortKey = "name" | "species" | "outdated" | "percentOutdated";
