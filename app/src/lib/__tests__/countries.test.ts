@@ -8,6 +8,7 @@
  * the properties that made the drift invisible.
  */
 import { describe, it, expect } from "vitest";
+import { readFileSync } from "node:fs";
 import { NAME_TO_ALPHA2, ALPHA2_TO_NAME, resolveCountryToAlpha2 } from "../countries";
 import { EMBEDDED_TERRITORIES } from "../map-territories";
 
@@ -47,6 +48,19 @@ describe("country lookup tables", () => {
   it("puts French Guiana in South America, where the Red List does", () => {
     expect(resolveCountryToAlpha2("French Guiana")).toBe("GF");
     expect(resolveCountryToAlpha2("Guyane")).toBeNull(); // not an IUCN spelling
+  });
+
+  it("can name every country that carries Red List data", () => {
+    // The map's country search offers one entry per ALPHA2_TO_NAME code, so a
+    // code with data and no display name is a country nobody can search for.
+    // Antarctica, Gibraltar, Bouvet Island, the U.S. Minor Outlying Islands
+    // and DT are exactly that case — they have no shape at 50m, so a list
+    // built from shape names skipped them entirely.
+    const stats = JSON.parse(
+      readFileSync(new URL("../../../data/country-stats.json", import.meta.url), "utf8"),
+    ) as Record<string, { species: number }>;
+    const unnamed = Object.keys(stats).filter((c) => stats[c].species > 0 && !ALPHA2_TO_NAME[c]);
+    expect(unnamed, "codes with assessed species but no display name").toEqual([]);
   });
 
   it("names DT, which is IUCN's own code rather than an ISO one", () => {

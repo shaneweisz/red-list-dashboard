@@ -138,9 +138,4 @@ export function splitEmbeddedTerritories<T>(features: T[]): T[] {
   return out as unknown as T[];
 }
 
-/** The territories split out above, for tests and for the search/zoom lists. */
-export const EMBEDDED_TERRITORY_NAMES: readonly string[] = Object.values(EMBEDDED_TERRITORIES)
-  .flat()
-  .map((t) => t.name);
-
 export { EMBEDDED_TERRITORIES };

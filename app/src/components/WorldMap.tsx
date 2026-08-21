@@ -7,18 +7,50 @@ import {
   Geography,
   ZoomableGroup,
 } from "react-simple-maps";
-import { geoCentroid } from "d3-geo";
+import { geoArea, geoCentroid } from "d3-geo";
 import { IUCN_REGION_ORDER, matchingRegions, iucnRegionCountries } from "@/lib/regions";
 import { NAME_TO_ALPHA2, ALPHA2_TO_NAME } from "@/lib/countries";
-import { splitEmbeddedTerritories, EMBEDDED_TERRITORY_NAMES } from "@/lib/map-territories";
+import { splitEmbeddedTerritories } from "@/lib/map-territories";
 import CountryStatsList from "./CountryStatsList";
 import type { MapViewMode, MapSortKey } from "@/hooks/useFilterParams";
 
 // Using the recommended TopoJSON from react-simple-maps
 const GEO_URL = "https://cdn.jsdelivr.net/npm/world-atlas@2/countries-50m.json";
 
-// Sorted list of country names for search
-const COUNTRY_NAMES_SORTED = Object.keys(NAME_TO_ALPHA2).sort();
+// What the shapes call each country, so a search for "Cabo Verde" or
+// "Dem. Rep. Congo" still finds it under its full name. More than one shape
+// can share a code (Ashmore and Cartier is drawn separately from Australia).
+const SHAPE_NAMES_BY_CODE: Record<string, string[]> = {};
+for (const [name, code] of Object.entries(NAME_TO_ALPHA2)) {
+  (SHAPE_NAMES_BY_CODE[code] ||= []).push(name);
+}
+
+// Every country the app can filter by — not just the ones the shapes draw.
+// Antarctica, Gibraltar, Bouvet Island, the U.S. Minor Outlying Islands and
+// IUCN's "Disputed Territory" all carry Red List data but have no shape at
+// this resolution, and were missing from search altogether while this list was
+// built from shape names. They select like any other country; they just have
+// nowhere to zoom to.
+const SEARCHABLE_COUNTRIES = Object.entries(ALPHA2_TO_NAME)
+  .map(([code, label]) => ({
+    code,
+    label,
+    haystack: [label, ...(SHAPE_NAMES_BY_CODE[code] ?? [])].join(" ").toLowerCase(),
+  }))
+  .sort((a, b) => a.label.localeCompare(b.label));
+
+// Zoom depth by country size, keyed by code rather than shape name — a country
+// can be drawn under several labels, and one label ("Kosovo") can stand for a
+// country that isn't small at all.
+const SMALL_COUNTRY_CODES = new Set([
+  "AD", "AG", "AI", "AS", "AW", "AX", "BB", "BH", "BL", "BM", "BN", "BQ", "BV", "BZ",
+  "CC", "CV", "CW", "CX", "CY", "DJ", "DM", "FM", "FO", "GD", "GG", "GI", "GM", "GP",
+  "GW", "HK", "IM", "JE", "JM", "KI", "KM", "KN", "KW", "KY", "LB", "LC", "LI", "LS",
+  "LU", "MC", "ME", "MF", "MH", "MK", "MO", "MP", "MQ", "MS", "MT", "MU", "MV", "NF",
+  "NR", "NU", "PM", "PN", "PW", "QA", "RE", "SC", "SG", "SH", "SI", "SJ", "SM", "ST",
+  "SX", "SZ", "TC", "TK", "TO", "TT", "TV", "VA", "VC", "VG", "VI", "WF", "WS", "YT",
+]);
+const LARGE_COUNTRY_CODES = new Set(["RU", "CA", "US", "CN", "BR", "AU", "IN", "AR"]);
 
 export interface CountryStats {
   [countryCode: string]: {
@@ -197,39 +229,27 @@ function WorldMap({ selectedCountries, onCountrySelect, selectedTaxon, precomput
   const searchContainerRef = useRef<HTMLDivElement>(null);
   const mapContainerRef = useRef<HTMLDivElement>(null);
 
-  // Matches (and shows) the full country name, so "Democratic Republic" finds
-  // the shape labelled "Dem. Rep. Congo". Zooming still keys off the shape's
-  // own name, which is how the centroid cache below is built.
   const filteredCountries = useMemo(() => {
     if (!searchQuery.trim()) return [];
     const q = searchQuery.toLowerCase();
-    return COUNTRY_NAMES_SORTED
-      .map(name => ({ name, label: ALPHA2_TO_NAME[NAME_TO_ALPHA2[name]] ?? name }))
-      .filter(({ name, label }) => label.toLowerCase().includes(q) || name.toLowerCase().includes(q))
-      .slice(0, 8);
+    return SEARCHABLE_COUNTRIES.filter(c => c.haystack.includes(q)).slice(0, 8);
   }, [searchQuery]);
 
-  const handleZoomToCountry = useCallback((countryName: string) => {
-    const coords = centroidsRef.current[countryName];
+  // Selecting always works; zooming only when the country has a shape to
+  // centre on (Antarctica is drawn but excluded from the map, and Gibraltar,
+  // Tuvalu and Bouvet Island aren't drawn at this resolution at all).
+  const handleSelectCountry = useCallback((code: string, label: string) => {
+    const coords = centroidsRef.current[code];
     if (coords) {
       setCenter(coords);
-      // Zoom level depends on country size - small countries zoom more
-      const smallCountries = new Set(["Singapore", "Luxembourg", "Cyprus", "Jamaica", "Trinidad and Tobago", "Brunei", "Qatar", "Kuwait", "Lebanon", "Djibouti", "eSwatini", "Lesotho", "Gambia", "Guinea-Bissau", "Slovenia", "Montenegro", "Kosovo", "Macedonia", "Andorra", "Antigua and Barb.", "Bahrain", "Barbados", "Belize", "Cabo Verde", "Comoros", "Dominica", "Grenada", "Kiribati", "Liechtenstein", "Maldives", "Malta", "Marshall Is.", "Mauritius", "Micronesia", "Monaco", "Nauru", "Palau", "Samoa", "San Marino", "São Tomé and Principe", "Seychelles", "St. Kitts and Nevis", "Saint Lucia", "St. Vin. and Gren.", "Tonga", "Tuvalu", "Vatican", "American Samoa", "Anguilla", "Aruba", "Bermuda", "British Virgin Is.", "Cayman Is.", "Curaçao", "Faeroe Is.", "Guernsey", "Hong Kong", "Isle of Man", "Jersey", "Macao", "Montserrat", "N. Mariana Is.", "Niue", "Norfolk Island", "Pitcairn Is.", "Saint Helena", "Sint Maarten", "St-Barthélemy", "St-Martin", "St. Pierre and Miquelon", "Turks and Caicos Is.", "U.S. Virgin Is.", "Wallis and Futuna Is.", "Åland", "N. Cyprus",
-        ...EMBEDDED_TERRITORY_NAMES.filter(n => n !== "French Guiana")]);
-      const largeCountries = new Set(["Russia", "Canada", "United States of America", "China", "Brazil", "Australia", "India", "Argentina"]);
       // Small-country zoom capped lower than it used to be (was 6) — at 6 a
       // small island could fill the whole visible frame, right where the
       // bottom-left Map/List toggle and bottom-right zoom controls overlay it.
-      const zoomLevel = smallCountries.has(countryName) ? 4.5 : largeCountries.has(countryName) ? 2.5 : 4;
-      setZoom(zoomLevel);
+      setZoom(SMALL_COUNTRY_CODES.has(code) ? 4.5 : LARGE_COUNTRY_CODES.has(code) ? 2.5 : 4);
     }
     setSearchQuery("");
     setSearchOpen(false);
-    // Also select the country
-    const alpha2 = NAME_TO_ALPHA2[countryName];
-    if (alpha2) {
-      onCountrySelect(alpha2, countryName, { ctrlKey: true, metaKey: false } as unknown as React.MouseEvent);
-    }
+    onCountrySelect(code, label, { ctrlKey: true, metaKey: false } as unknown as React.MouseEvent);
   }, [onCountrySelect]);
 
   const handleResetZoom = useCallback(() => {
@@ -454,7 +474,7 @@ function WorldMap({ selectedCountries, onCountrySelect, selectedTaxon, precomput
                     setHighlightedIndex(i => Math.max(i - 1, 0));
                   } else if (e.key === "Enter" && filteredCountries[highlightedIndex]) {
                     e.preventDefault();
-                    handleZoomToCountry(filteredCountries[highlightedIndex].name);
+                    handleSelectCountry(filteredCountries[highlightedIndex].code, filteredCountries[highlightedIndex].label);
                   } else if (e.key === "Escape") {
                     setSearchOpen(false);
                     setSearchQuery("");
@@ -467,12 +487,12 @@ function WorldMap({ selectedCountries, onCountrySelect, selectedTaxon, precomput
             {/* Search dropdown */}
             {searchOpen && filteredCountries.length > 0 && (
               <div className="absolute top-full left-0 mt-1 w-52 bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-lg shadow-lg z-30 overflow-hidden">
-                {filteredCountries.map(({ name, label }, i) => (
+                {filteredCountries.map(({ code, label }, i) => (
                   <button
-                    key={name}
+                    key={code}
                     className={`w-full text-left px-3 py-1.5 text-xs transition-colors ${i === highlightedIndex ? "bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300" : "text-zinc-700 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-700"}`}
                     onMouseEnter={() => setHighlightedIndex(i)}
-                    onClick={() => handleZoomToCountry(name)}
+                    onClick={() => handleSelectCountry(code, label)}
                   >
                     {label}
                   </button>
@@ -672,12 +692,19 @@ function WorldMap({ selectedCountries, onCountrySelect, selectedTaxon, precomput
                 // Compute centroids from geometry on first load
                 /* eslint-disable react-hooks/immutability -- one-time cache populated from render callback data */
                 if (Object.keys(centroidsRef.current).length === 0) {
+                  // Keyed by code, so search can zoom without knowing what the
+                  // shape is called. Where several shapes share a code — Ashmore
+                  // and Cartier under AU, Somaliland under SO — the largest one
+                  // wins, so we centre on the country rather than its outlier.
+                  const areas: Record<string, number> = {};
                   for (const geo of geographies) {
-                    const name = geo.properties.name;
-                    if (name && name !== "Antarctica") {
-                      const [lng, lat] = geoCentroid(geo);
-                      centroidsRef.current[name] = [lng, lat];
-                    }
+                    const code = NAME_TO_ALPHA2[geo.properties.name];
+                    if (!code || geo.properties.name === "Antarctica") continue;
+                    const area = geoArea(geo);
+                    if (areas[code] !== undefined && areas[code] >= area) continue;
+                    areas[code] = area;
+                    const [lng, lat] = geoCentroid(geo);
+                    centroidsRef.current[code] = [lng, lat];
                   }
                 }
                 /* eslint-enable react-hooks/immutability */
