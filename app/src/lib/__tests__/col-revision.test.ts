@@ -12,6 +12,8 @@ import {
   splitSentence,
   revisionSentences,
   colTaxonUrl,
+  newRevisionTally,
+  tallyRevision,
 } from "@/lib/col-revision";
 
 // The no-match reason codes come from classifyNoMatch (lib/data/col-breakdown);
@@ -199,5 +201,69 @@ describe("colTaxonUrl", () => {
   it("falls back to a name search for the one reason with no CoL record", () => {
     expect(colTaxonUrl({ reason: "no_link" }, "Achatinella lila"))
       .toBe("https://www.catalogueoflife.org/data/search?q=Achatinella%20lila");
+  });
+});
+
+// The bars deliberately do not partition the flagged set (see RevisionTally).
+// That's only defensible if the arithmetic the card prints is exactly right, so
+// the identity is pinned here rather than trusted.
+describe("RevisionTally", () => {
+  const tally = (flags: Parameters<typeof tallyRevision>[1][]) => {
+    const t = newRevisionTally();
+    for (const f of flags) tallyRevision(t, f);
+    return t;
+  };
+
+  it("keeps noMatch + split - both === flagged, the identity the card prints", () => {
+    const t = tally([
+      { reason: "lumped" },
+      { reason: "infraspecific" },
+      { splitInto: ["A"] },
+      { splitInto: ["B"] },
+      { splitInto: ["C"] },
+      { reason: "lumped", splitInto: ["D"] },   // both
+      { reason: "no_link", splitInto: ["E"] },  // both
+      null,
+      undefined,
+      { splitInto: [] },                        // carries nothing
+    ]);
+    expect(t.noMatch).toBe(4);
+    expect(t.split).toBe(5);
+    expect(t.both).toBe(2);
+    expect(t.flagged).toBe(7);
+    expect(t.noMatch + t.split - t.both).toBe(t.flagged);
+  });
+
+  it("partitions species into flagged and clean, with nothing lost", () => {
+    const flags = [{ reason: "lumped" }, { splitInto: ["A"] }, null, { splitInto: [] }, { reason: "no_link", splitInto: ["B"] }];
+    const t = tally(flags);
+    expect(t.flagged + t.clean).toBe(flags.length);
+  });
+
+  it("counts a species in every bar it belongs to, so the bars over-total by exactly `both`", () => {
+    const t = tally([{ reason: "lumped" }, { reason: "lumped", splitInto: ["D"] }, { splitInto: ["E"] }]);
+    expect(t.counts).toEqual({ lumped: 2, split: 2 });
+    const barSum = Object.values(t.counts).reduce((a, b) => a + b, 0);
+    expect(barSum).toBe(t.flagged + t.both);
+  });
+
+  it("makes each bar's count equal what selecting that reason returns — the invariant a strict partition would have broken", () => {
+    const flags = [
+      { reason: "lumped" },
+      { reason: "lumped", splitInto: ["D"] },
+      { splitInto: ["E"] },
+      { reason: "no_link" },
+      null,
+    ];
+    const t = tally(flags);
+    for (const reason of Object.keys(t.counts)) {
+      const selected = flags.filter((f) => matchesRevisionFilter(f, null, new Set([reason])));
+      expect(selected.length, `bar "${reason}" must select exactly what it counts`).toBe(t.counts[reason]);
+    }
+  });
+
+  it("counts nothing for an all-clean set", () => {
+    const t = tally([null, undefined, { colId: "X" }]);
+    expect(t).toEqual({ counts: {}, flagged: 0, clean: 3, noMatch: 0, split: 0, both: 0 });
   });
 });

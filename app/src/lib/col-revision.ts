@@ -126,6 +126,53 @@ export function matchesRevisionFilter(
 }
 
 /**
+ * Running totals behind the filter chart.
+ *
+ * The six no-match reasons DO partition their own set — classifyNoMatch's
+ * if-else chain gives a species exactly one — but `split` is an orthogonal
+ * property, so the seven bars together do not partition the flagged species.
+ * Forcing them to would mean either demoting split for the ~1.5% carrying both
+ * (making the Split bar disagree with the rows clicking it returns, which is the
+ * worse lie) or dropping a true fact about those species.
+ *
+ * So the bars stay honest and the arithmetic is made explicit instead:
+ * `noMatch + split - both === flagged`, asserted in the tests and surfaced under
+ * the chart whenever `both` is non-zero.
+ */
+export interface RevisionTally {
+  /** Species per signal — what each bar shows, and exactly what clicking it selects. */
+  counts: Record<string, number>;
+  /** Distinct species carrying at least one signal. */
+  flagged: number;
+  /** Species carrying neither. flagged + clean === every species tallied. */
+  clean: number;
+  /** Species with a no-match reason (any of the six). */
+  noMatch: number;
+  /** Species with at least one split-off species. */
+  split: number;
+  /** Species counted in BOTH noMatch and split — the overlap the bars double-count. */
+  both: number;
+}
+
+export function newRevisionTally(): RevisionTally {
+  return { counts: {}, flagged: 0, clean: 0, noMatch: 0, split: 0, both: 0 };
+}
+
+/** Fold one species' flag into a tally. Mutates — this runs once per species in
+ *  a memo over the whole in-view list, so it deliberately allocates nothing. */
+export function tallyRevision(t: RevisionTally, flag: ColRevision | null | undefined): void {
+  if (!isFlagged(flag)) { t.clean++; return; }
+  t.flagged++;
+  const reasons = revisionReasons(flag!);
+  for (const reason of reasons) t.counts[reason] = (t.counts[reason] ?? 0) + 1;
+  const hasSplit = reasons.includes(SPLIT_REASON);
+  const hasReason = flag!.reason != null;
+  if (hasSplit) t.split++;
+  if (hasReason) t.noMatch++;
+  if (hasSplit && hasReason) t.both++;
+}
+
+/**
  * The explanation split into parts, so the SAME wording serves a plain-text
  * tooltip and a rendering where `detail` is a link to that species. `detail` is
  * the only part that is ever a species the app can link to.

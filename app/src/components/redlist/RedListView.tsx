@@ -16,7 +16,7 @@ import { CATEGORY_COLORS, TAXA_BY_ID, THREATENED_CATEGORIES } from "@/config/tax
 import { speciesMatchesNode, getNodeDef, getViewRootForNode, findNode, matchesBreakdownName, breakdownDisplayName } from "@/lib/taxonomy-utils";
 import { dynamicNodeDisplayName } from "@/lib/dynamic-taxon";
 import ReviewerChart from "./ReviewerChart";
-import { REVISION_REASONS, REVISION_REASON_SHORT, REVISION_REASON_SUMMARY, revisionReasons, revisionSentences, matchesRevisionFilter, isFlagged, colTaxonUrl } from "@/lib/col-revision";
+import { REVISION_REASONS, REVISION_REASON_SHORT, REVISION_REASON_SUMMARY, revisionReasons, revisionSentences, matchesRevisionFilter, isFlagged, colTaxonUrl, newRevisionTally, tallyRevision } from "@/lib/col-revision";
 import { parseAssessors } from "@/lib/parseAssessors";
 import { iucnRegionCountries, matchingRegions } from "@/lib/regions";
 import { useFilterParams, type SortField, type MapViewMode } from "@/hooks/useFilterParams";
@@ -2345,16 +2345,14 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
   // Flagged/Clean toggle keeps showing what it WOULD select. Same
   // "cross-filter, minus my own axis" rule as threatCounts/criteriaCounts.
   //
-  // The bars do NOT partition the flagged set: the no-match reasons are mutually
-  // exclusive with each other, but "Split" is an independent signal, so the ~2%
-  // of flagged species carrying both count toward two bars and the bars sum to
-  // slightly more than colFlaggedTotal (same as Criteria/Habitat). Species-level
-  // totals still partition: colFlaggedTotal + colCleanTotal is every in-view
-  // species.
-  const { colReasonCounts, colFlaggedTotal, colCleanTotal } = useMemo(() => {
-    const counts: Record<string, number> = {};
-    let flagged = 0;
-    let clean = 0;
+  // The six no-match reasons partition their own set, but "Split" is an
+  // orthogonal property, so the seven bars together don't partition the flagged
+  // species — see RevisionTally for why forcing them to would be worse. The
+  // tally carries the overlap so the card can show the arithmetic rather than
+  // leave a 1.5% gap for someone to find. Species-level totals DO partition:
+  // flagged + clean is every in-view species.
+  const colTally = useMemo(() => {
+    const tally = newRevisionTally();
     taxaFilteredSpecies.forEach(s => {
       if (!matchesSearch(s)) return;
       if (selectedCategories.size > 0 && !selectedCategories.has(s.category)) return;
@@ -2372,14 +2370,9 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
       if (!matchesReviewersFilter(s)) return;
       if (selectedCriteria.size > 0 && !parseCriteriaCodes(s.criteria).some(code => Array.from(selectedCriteria).some(sel => code === sel || code.startsWith(sel)))) return;
       if (!matchesFacilitatorsFilter(s)) return;
-      const flag = s.col_revision;
-      if (!isFlagged(flag)) { clean++; return; }
-      flagged++;
-      // A species can carry both signals (no clean match AND splits), so it
-      // counts toward both bars — see revisionReasons.
-      for (const reason of revisionReasons(flag!)) counts[reason] = (counts[reason] || 0) + 1;
+      tallyRevision(tally, s.col_revision);
     });
-    return { colReasonCounts: counts, colFlaggedTotal: flagged, colCleanTotal: clean };
+    return tally;
   }, [taxaFilteredSpecies, selectedCategories, selectedCountries, selectedYearRanges, selectedObsRanges, selectedSystems, selectedPopulationTrends, selectedMovementPatterns, selectedThreats, selectedCriteria, matchesHabitatFilter, matchesSearch, matchesAssessorsFilter, matchesReviewersFilter, matchesFacilitatorsFilter, matchesObsRangeFilter, selectedAssessmentCounts, matchesAssessmentCountFilter, matchesYearRangeFilter, selectedAssessmentYears, matchesAssessmentYearFilter]);
 
   // Habitat counts: apply all filters EXCEPT habitat (all 4 dimensions — code
@@ -3444,8 +3437,8 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
       .map(reason => ({
         code: REVISION_REASON_SHORT[reason] ?? reason,
         rawCode: reason,
-        count: colReasonCounts[reason] ?? 0,
-        label: (colReasonCounts[reason] ?? 0).toLocaleString(),
+        count: colTally.counts[reason] ?? 0,
+        label: (colTally.counts[reason] ?? 0).toLocaleString(),
       }))
       .filter(d => d.count > 0 || selectedColReasons.has(d.rawCode))
       .sort((a, b) => b.count - a.count);
@@ -3483,7 +3476,7 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
               aria-pressed={flaggedActive}
               title="Only species with no clean 1:1 Catalogue of Life match"
             >
-              ⚑ {colFlaggedTotal.toLocaleString()}
+              ⚑ {colTally.flagged.toLocaleString()}
             </button>
             <button
               type="button"
@@ -3492,7 +3485,7 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
               aria-pressed={colMatch === "clean"}
               title="Only species with a clean 1:1 Catalogue of Life match"
             >
-              Clean {colCleanTotal.toLocaleString()}
+              Clean {colTally.clean.toLocaleString()}
             </button>
           </div>
         </div>
@@ -3534,6 +3527,20 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
                 }}
               />
             </div>
+            {/* Why the bars total more than the ⚑ count. "Split" is an
+                orthogonal property, not a seventh mutually-exclusive reason, so
+                a species can sit in two bars. Rather than leave that as a silent
+                1.5% gap for a reader to trip over, spell the arithmetic out —
+                and only when this view actually contains an overlap. */}
+            {colTally.both > 0 && (
+              <p
+                className="mt-1 text-[11px] leading-snug text-zinc-500 dark:text-zinc-400"
+                title="The six no-match reasons are mutually exclusive; Split is a separate property a species can also have. Each bar still selects exactly the species it counts."
+              >
+                {colTally.noMatch.toLocaleString()} no match + {colTally.split.toLocaleString()} split
+                {" − "}{colTally.both.toLocaleString()} counted in both = {colTally.flagged.toLocaleString()} flagged
+              </p>
+            )}
             {selectedColReasons.size > 0 && (
               <button
                 type="button"
@@ -3547,7 +3554,7 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
         ) : (
           <div style={{ height: 90 }} className="flex items-center justify-center">
             <span className="text-sm text-zinc-400 dark:text-zinc-500">
-              {colCleanTotal > 0 ? "Every species here has a clean 1:1 CoL match" : "No Catalogue of Life match data"}
+              {colTally.clean > 0 ? "No taxonomic revisions flagged here" : "No Catalogue of Life match data"}
             </span>
           </div>
         )}
