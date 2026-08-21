@@ -27,6 +27,8 @@ interface AssessorChartProps {
   /** The selected items for the currently active tab */
   selectedItems: Set<string>;
   onBarClick: (data: { payload?: { code?: string } }, event: React.MouseEvent) => void;
+  /** Shift+drag across the bars to select everyone swept over */
+  onRangeSelect?: (codes: string[], event: MouseEvent | React.MouseEvent) => void;
   onItemToggle: (code: string) => void;
   loading?: boolean;
   viewMode: ViewMode;
@@ -45,6 +47,7 @@ export default function AssessorChart({
   allFacilitators,
   selectedItems,
   onBarClick,
+  onRangeSelect,
   onItemToggle,
   loading,
   viewMode,
@@ -198,6 +201,7 @@ export default function AssessorChart({
             dataKey="code"
             selectedItems={selectedItems}
             onBarClick={onBarClick}
+            onRangeSelect={onRangeSelect}
             barColor={activeColor}
             yAxisWidth={150}
             leftMargin={-30}

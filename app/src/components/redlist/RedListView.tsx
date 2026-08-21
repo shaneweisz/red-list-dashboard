@@ -1433,10 +1433,10 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
   const [yearsChartMode, setYearsChartMode] = useState<"range" | "year">(
     () => (selectedAssessmentYears.size > 0 ? "year" : "range")
   );
-  // If the URL hydrates with specific years — or an explicit year range — after
-  // mount, surface the year view. The range case matters for shared links: the
-  // from/to inputs live in this view, so a link carrying a range would otherwise
-  // open with its own filter's control hidden.
+  // If the URL hydrates with specific years — or an explicit min/max year range
+  // (still accepted from /browse, the MCP server and hand-built links, though
+  // the UI now selects years by shift+dragging the chart) — surface the year
+  // view, so a shared link opens on the chart its filter applies to.
   useEffect(() => {
     if (selectedAssessmentYears.size > 0
       || exactFilters.minAssessmentYear != null
@@ -3008,6 +3008,23 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
   // handlers are parameterised by which selection setter they target.
   type SetSelection = React.Dispatch<React.SetStateAction<Set<string>>>;
 
+  // Shift+drag across a chart selects every bar the drag swept over (see
+  // FilterBarChart/YearBarChart's onRangeSelect). Plain shift+drag replaces the
+  // selection; holding Cmd/Ctrl as well adds to it, which is how a range wider
+  // than what's on screen gets built — e.g. the by-year chart pages 10 years at
+  // a time, so 2005-2020 is one drag per page.
+  const makeRangeSelect = useCallback((setter: SetSelection) =>
+    (keys: string[], event: MouseEvent | React.MouseEvent) => {
+      const isAdditive = event.metaKey || event.ctrlKey;
+      setter(prev => isAdditive ? new Set([...prev, ...keys]) : new Set(keys));
+    }, []);
+  const rangeSelectCategories = useMemo(() => makeRangeSelect(setSelectedCategories), [makeRangeSelect, setSelectedCategories]);
+  const rangeSelectYearRanges = useMemo(() => makeRangeSelect(setSelectedYearRanges), [makeRangeSelect, setSelectedYearRanges]);
+  const rangeSelectAssessmentYears = useMemo(() => makeRangeSelect(setSelectedAssessmentYears), [makeRangeSelect, setSelectedAssessmentYears]);
+  const rangeSelectObsRanges = useMemo(() => makeRangeSelect(setSelectedObsRanges), [makeRangeSelect, setSelectedObsRanges]);
+  const rangeSelectDescribedYears = useMemo(() => makeRangeSelect(setSelectedDescribedYears), [makeRangeSelect, setSelectedDescribedYears]);
+  const rangeSelectAssessmentCounts = useMemo(() => makeRangeSelect(setSelectedAssessmentCounts), [makeRangeSelect, setSelectedAssessmentCounts]);
+
   // Toggle a single assessor/reviewer in/out of selection (used by search list)
   const makeAssessorToggle = useCallback((setter: SetSelection) => (code: string) => {
     setter(prev => {
@@ -4069,6 +4086,7 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
                     dataKey="code"
                     selectedItems={selectedCategories}
                     onBarClick={handleCategoryClick}
+                    onRangeSelect={rangeSelectCategories}
                     yAxisWidth={26}
                     rightMargin={55}
                     labelFormatter={(code) => ({
@@ -4161,47 +4179,6 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
                   )}
                 </div>
               </div>
-              {/* Explicit year range. The chart itself only offers whole years
-                  (cmd-click to pick several); a range like 2017–2019 was
-                  previously reachable only by hand-editing minAssessmentYear /
-                  maxAssessmentYear into the URL. Same two params, so a range
-                  set here still shows up as the existing chips and still
-                  round-trips through a shared link. */}
-              {!(isSingleSpecies && singleSpecies) && yearsChartMode === "year" && (
-                <div className="flex items-center gap-1.5 mb-1 text-xs text-zinc-500 dark:text-zinc-400">
-                  <span>Range</span>
-                  <input
-                    type="number"
-                    inputMode="numeric"
-                    placeholder="from"
-                    value={exactFilters.minAssessmentYear ?? ""}
-                    onChange={(e) => setExactFilters({ minAssessmentYear: e.target.value === "" ? null : Number(e.target.value) })}
-                    aria-label="Assessed from year"
-                    className="w-16 rounded border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 px-1.5 py-0.5 text-xs tabular-nums text-zinc-700 dark:text-zinc-300 focus:outline-none focus:ring-1 focus:ring-blue-500"
-                  />
-                  <span>–</span>
-                  <input
-                    type="number"
-                    inputMode="numeric"
-                    placeholder="to"
-                    value={exactFilters.maxAssessmentYear ?? ""}
-                    onChange={(e) => setExactFilters({ maxAssessmentYear: e.target.value === "" ? null : Number(e.target.value) })}
-                    aria-label="Assessed to year"
-                    className="w-16 rounded border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 px-1.5 py-0.5 text-xs tabular-nums text-zinc-700 dark:text-zinc-300 focus:outline-none focus:ring-1 focus:ring-blue-500"
-                  />
-                  {(exactFilters.minAssessmentYear != null || exactFilters.maxAssessmentYear != null) && (
-                    <button
-                      type="button"
-                      onClick={() => setExactFilters({ minAssessmentYear: null, maxAssessmentYear: null })}
-                      className="ml-0.5 px-1 rounded hover:bg-zinc-100 dark:hover:bg-zinc-800"
-                      aria-label="Clear year range"
-                      title="Clear year range"
-                    >
-                      ×
-                    </button>
-                  )}
-                </div>
-              )}
               <div className="flex-1 min-h-[150px] flex flex-col">
                 {speciesLoading && assessedSpecies.length === 0 ? (
                   <div className="flex-1 flex items-center justify-center"><Spinner /></div>
@@ -4230,6 +4207,7 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
                         dataKey="shortRange"
                         selectedItems={yearRangeSelectedItems}
                         onBarClick={handleYearClick}
+                        onRangeSelect={rangeSelectYearRanges}
                         barColor="#3b82f6"
                         yAxisWidth={36}
                         rightMargin={85}
@@ -4242,6 +4220,7 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
                       data={paginatedAssessmentYearsData}
                       selectedItems={assessmentYearSelectedItems}
                       onBarClick={handleAssessmentYearClick}
+                      onRangeSelect={rangeSelectAssessmentYears}
                       barColor="#3b82f6"
                       yMax={yearsGlobalMax}
                     />
@@ -4276,6 +4255,7 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
                     dataKey="shortRange"
                     selectedItems={selectedObsRanges}
                     onBarClick={handleObsClick}
+                    onRangeSelect={rangeSelectObsRanges}
                     barColor="#10b981"
                     yAxisWidth={42}
                     rightMargin={85}
@@ -4318,6 +4298,7 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
                     dataKey="shortRange"
                     selectedItems={selectedDescribedYears}
                     onBarClick={handleDescribedYearClick}
+                    onRangeSelect={rangeSelectDescribedYears}
                     barColor="#3b82f6"
                     yAxisWidth={64}
                     rightMargin={85}
@@ -4342,6 +4323,7 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
                     dataKey="shortRange"
                     selectedItems={selectedObsRanges}
                     onBarClick={handleObsClick}
+                    onRangeSelect={rangeSelectObsRanges}
                     barColor="#10b981"
                     yAxisWidth={42}
                     rightMargin={85}
@@ -4514,6 +4496,7 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
                             dataKey="shortRange"
                             selectedItems={selectedAssessmentCounts}
                             onBarClick={handleAssessmentCountClick}
+                            onRangeSelect={rangeSelectAssessmentCounts}
                             barColor="#8b5cf6"
                             yAxisWidth={42}
                             rightMargin={85}
@@ -4668,6 +4651,7 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
                       onViewModeChange={changeCreditChartMode}
                       selectedItems={creditSelection[assessorReviewerMode].selected}
                       onBarClick={makeAssessorClick(creditSelection[assessorReviewerMode].setter)}
+                      onRangeSelect={makeRangeSelect(creditSelection[assessorReviewerMode].setter)}
                       onItemToggle={makeAssessorToggle(creditSelection[assessorReviewerMode].setter)}
                       loading={speciesLoading && assessedSpecies.length === 0}
                     />
