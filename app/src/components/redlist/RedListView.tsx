@@ -16,7 +16,7 @@ import { CATEGORY_COLORS, TAXA_BY_ID, THREATENED_CATEGORIES } from "@/config/tax
 import { speciesMatchesNode, getNodeDef, getViewRootForNode, findNode, matchesBreakdownName, breakdownDisplayName } from "@/lib/taxonomy-utils";
 import { dynamicNodeDisplayName } from "@/lib/dynamic-taxon";
 import ReviewerChart from "./ReviewerChart";
-import { NO_MATCH_REASONS, NO_MATCH_REASON_SHORT, NO_MATCH_REASON_SUMMARY, noMatchExplanation, colTaxonUrl } from "@/lib/col-no-match";
+import { REVISION_REASONS, REVISION_REASON_SHORT, REVISION_REASON_SUMMARY, revisionReasons, revisionSentences, matchesRevisionFilter, isFlagged, colTaxonUrl } from "@/lib/col-revision";
 import { parseAssessors } from "@/lib/parseAssessors";
 import { iucnRegionCountries, matchingRegions } from "@/lib/regions";
 import { useFilterParams, type SortField, type MapViewMode } from "@/hooks/useFilterParams";
@@ -596,6 +596,56 @@ function HoverTooltip({ children, text }: { children: React.ReactNode; text: str
             left: position.left,
             transform: 'translateX(-50%) translateY(-100%)',
           }}
+        >
+          {text}
+        </div>,
+        document.body
+      )}
+    </span>
+  );
+}
+
+
+// A HoverTooltip you can move the pointer INTO — so its text can be read at
+// leisure, selected and copied. HoverTooltip closes the moment the pointer
+// leaves the trigger, which makes the gap between trigger and panel
+// uncrossable; this keeps the panel open while the pointer is over either, with
+// a short grace period covering the transit. Separate from HoverTooltip rather
+// than replacing it: this one costs a timer and a second set of handlers per
+// instance, and the ~40 plain tooltips (icons, badges, column headers) hold
+// nothing worth selecting.
+function SelectableHoverTooltip({ children, text }: { children: React.ReactNode; text: string }) {
+  const [isOpen, setIsOpen] = useState(false);
+  const [position, setPosition] = useState({ top: 0, left: 0 });
+  const triggerRef = useRef<HTMLSpanElement>(null);
+  const closeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const open = () => {
+    if (closeTimer.current) clearTimeout(closeTimer.current);
+    if (triggerRef.current) {
+      const rect = triggerRef.current.getBoundingClientRect();
+      setPosition({ top: rect.top - 6, left: rect.left + rect.width / 2 });
+    }
+    setIsOpen(true);
+  };
+  // Grace period, not an immediate close: the pointer has to cross a few px of
+  // dead space to reach the panel, and every one of those frames is a mouseleave.
+  const scheduleClose = () => {
+    if (closeTimer.current) clearTimeout(closeTimer.current);
+    closeTimer.current = setTimeout(() => setIsOpen(false), 220);
+  };
+  useEffect(() => () => { if (closeTimer.current) clearTimeout(closeTimer.current); }, []);
+
+  return (
+    <span ref={triggerRef} onMouseEnter={open} onMouseLeave={scheduleClose}>
+      {children}
+      {isOpen && typeof document !== "undefined" && createPortal(
+        <div
+          role="tooltip"
+          onMouseEnter={open}
+          onMouseLeave={scheduleClose}
+          className="fixed z-[99999] px-2 py-1.5 text-xs bg-zinc-800 text-zinc-200 rounded shadow-lg max-w-[280px] text-left select-text cursor-text"
+          style={{ top: position.top, left: position.left, transform: "translateX(-50%) translateY(-100%)" }}
         >
           {text}
         </div>,
@@ -1503,13 +1553,10 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
   // specific reasons (lumped, subspecies, not-in-checklist…). Selecting a reason
   // implies flagged, so it doesn't need the toggle set as well. Same shape as
   // habitatBreadth + selectedHabitat.
-  const matchesColFilter = useCallback((s: Species): boolean => {
-    const flag = s.col_no_match ?? null;
-    if (selectedColReasons.size > 0) return flag != null && selectedColReasons.has(flag.reason);
-    if (colMatch === "flagged") return flag != null;
-    if (colMatch === "clean") return flag == null;
-    return true;
-  }, [colMatch, selectedColReasons]);
+  const matchesColFilter = useCallback(
+    (s: Species): boolean => matchesRevisionFilter(s.col_revision, colMatch, selectedColReasons),
+    [colMatch, selectedColReasons],
+  );
 
   // Consolidates all 5 habitat-related filters into one predicate (rather than 5
   // separate inline checks repeated at every filter site) since major/resident both
@@ -2298,9 +2345,12 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
   // Flagged/Clean toggle keeps showing what it WOULD select. Same
   // "cross-filter, minus my own axis" rule as threatCounts/criteriaCounts.
   //
-  // Unlike criteria, the reasons partition the flagged set — a species has
-  // exactly one — so the bars sum to colFlaggedTotal, and colFlaggedTotal +
-  // colCleanTotal is every in-view species.
+  // The bars do NOT partition the flagged set: the no-match reasons are mutually
+  // exclusive with each other, but "Split" is an independent signal, so the ~2%
+  // of flagged species carrying both count toward two bars and the bars sum to
+  // slightly more than colFlaggedTotal (same as Criteria/Habitat). Species-level
+  // totals still partition: colFlaggedTotal + colCleanTotal is every in-view
+  // species.
   const { colReasonCounts, colFlaggedTotal, colCleanTotal } = useMemo(() => {
     const counts: Record<string, number> = {};
     let flagged = 0;
@@ -2322,10 +2372,12 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
       if (!matchesReviewersFilter(s)) return;
       if (selectedCriteria.size > 0 && !parseCriteriaCodes(s.criteria).some(code => Array.from(selectedCriteria).some(sel => code === sel || code.startsWith(sel)))) return;
       if (!matchesFacilitatorsFilter(s)) return;
-      const flag = s.col_no_match;
-      if (!flag) { clean++; return; }
+      const flag = s.col_revision;
+      if (!isFlagged(flag)) { clean++; return; }
       flagged++;
-      counts[flag.reason] = (counts[flag.reason] || 0) + 1;
+      // A species can carry both signals (no clean match AND splits), so it
+      // counts toward both bars — see revisionReasons.
+      for (const reason of revisionReasons(flag!)) counts[reason] = (counts[reason] || 0) + 1;
     });
     return { colReasonCounts: counts, colFlaggedTotal: flagged, colCleanTotal: clean };
   }, [taxaFilteredSpecies, selectedCategories, selectedCountries, selectedYearRanges, selectedObsRanges, selectedSystems, selectedPopulationTrends, selectedMovementPatterns, selectedThreats, selectedCriteria, matchesHabitatFilter, matchesSearch, matchesAssessorsFilter, matchesReviewersFilter, matchesFacilitatorsFilter, matchesObsRangeFilter, selectedAssessmentCounts, matchesAssessmentCountFilter, matchesYearRangeFilter, selectedAssessmentYears, matchesAssessmentYearFilter]);
@@ -3388,9 +3440,9 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
   // reason implies flagged, so it also lights the toggle.
   const taxonomicRevisionCard = (() => {
     const loading = speciesLoading && assessedSpecies.length === 0;
-    const barData = NO_MATCH_REASONS
+    const barData = REVISION_REASONS
       .map(reason => ({
-        code: NO_MATCH_REASON_SHORT[reason] ?? reason,
+        code: REVISION_REASON_SHORT[reason] ?? reason,
         rawCode: reason,
         count: colReasonCounts[reason] ?? 0,
         label: (colReasonCounts[reason] ?? 0).toLocaleString(),
@@ -3398,7 +3450,7 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
       .filter(d => d.count > 0 || selectedColReasons.has(d.rawCode))
       .sort((a, b) => b.count - a.count);
     // FilterBarChart keys selection off the displayed `code`, not our reason id.
-    const selectedShort = new Set([...selectedColReasons].map(r => NO_MATCH_REASON_SHORT[r] ?? r));
+    const selectedShort = new Set([...selectedColReasons].map(r => REVISION_REASON_SHORT[r] ?? r));
     const shortToReason = new Map(barData.map(d => [d.code, d.rawCode]));
     // A reason narrowing implies flagged, so the Flagged button renders pressed
     // whenever one is active — and clicking it then has to mean "turn the whole
@@ -3416,7 +3468,7 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
         <div className="flex items-center justify-between gap-2 mb-1 min-h-[24px]">
           <span className="text-sm font-semibold text-zinc-900 dark:text-zinc-100 flex items-center gap-1">
             Possible Taxonomic Revision
-            <HoverTooltip text="Species whose IUCN name has no clean one-to-one match in the current Catalogue of Life checklist — a signal that the taxonomy may have moved since the assessment (the species was lumped, demoted to a subspecies, or isn't in the checklist yet). It is a flag to check, not a confirmed change: some are genuine species-boundary disagreements between the two databases. The same diagnostic the SSC group view shows as 'No 1:1 CoL Match'.">
+            <HoverTooltip text="Species whose taxonomy may have moved since they were assessed: either the IUCN name has no clean one-to-one match in the current Catalogue of Life checklist (lumped, demoted to a subspecies, or not in the checklist yet), or Catalogue of Life now recognises species likely split out of it. A flag to check, not a confirmed change — some are genuine species-boundary disagreements between the two databases, and the split signal is a name-pattern heuristic. The no-match half is the same diagnostic the SSC group view shows as 'No 1:1 CoL Match'.">
               <svg className="w-3 h-3 text-zinc-400 dark:text-zinc-500 cursor-help" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                 <circle cx="12" cy="12" r="10" />
                 <path d="M12 16v-4M12 8h.01" />
@@ -3478,7 +3530,7 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
                 rightMargin={60}
                 labelFormatter={(short: string) => {
                   const reason = shortToReason.get(short);
-                  return reason ? `${short} — ${NO_MATCH_REASON_SUMMARY[reason] ?? ""}` : short;
+                  return reason ? `${short} — ${REVISION_REASON_SUMMARY[reason] ?? ""}` : short;
                 }}
               />
             </div>
@@ -5154,10 +5206,10 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
               <button
                 key={`col-reason-${reason}`}
                 onClick={() => setColReasons(prev => { const next = new Set(prev); next.delete(reason); return next; })}
-                title={NO_MATCH_REASON_SUMMARY[reason] ?? reason}
+                title={REVISION_REASON_SUMMARY[reason] ?? reason}
                 className="px-3 py-1.5 text-sm font-medium rounded-full bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-500 flex items-center gap-1 hover:opacity-80"
               >
-                ⚑ {NO_MATCH_REASON_SHORT[reason] ?? reason}
+                ⚑ {REVISION_REASON_SHORT[reason] ?? reason}
                 <span className="text-sm">×</span>
               </button>
             ))}
@@ -5514,26 +5566,27 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
                           </span>
                           {/* Possible-taxonomic-revision flag — see the
                               "Possible Taxonomic Revision" filter card. Only
-                              the ~4% of assessed species without a clean 1:1
-                              CoL match carry one, so this is a rare marker,
-                              not a per-row decoration. It opens the CoL record
-                              that disagrees with the assessment: the tooltip
-                              says what CoL did, and the obvious next question
-                              is "show me", which the filter chart already
-                              answers for the "give me all of these" case. */}
-                          {s.col_no_match && (
-                            <HoverTooltip text={`${noMatchExplanation(s.col_no_match, s.scientific_name)} Open in Catalogue of Life ↗`}>
+                              the ~6% of assessed species CoL disagrees with (or
+                              has split something out of) carry one, so this is a
+                              rare marker, not a per-row decoration. It opens the
+                              CoL record the flag is about: the tooltip says what
+                              CoL did, and the obvious next question is "show
+                              me", which the filter chart already answers for the
+                              "give me all of these" case. A species can carry
+                              both signals, hence a list of sentences. */}
+                          {isFlagged(s.col_revision) && (
+                            <SelectableHoverTooltip text={revisionSentences(s.col_revision!, s.scientific_name).join(" ")}>
                               <a
-                                href={colTaxonUrl(s.col_no_match, s.scientific_name)}
+                                href={colTaxonUrl(s.col_revision!, s.scientific_name)}
                                 target="_blank"
                                 rel="noopener noreferrer"
                                 onClick={(e) => e.stopPropagation()}
-                                aria-label={`Possible taxonomic revision — ${NO_MATCH_REASON_SUMMARY[s.col_no_match.reason] ?? s.col_no_match.reason}. Open in Catalogue of Life`}
+                                aria-label={`Possible taxonomic revision — ${revisionReasons(s.col_revision!).map(r => REVISION_REASON_SUMMARY[r] ?? r).join("; ")}. Open in Catalogue of Life`}
                                 className="ml-1 align-middle text-amber-600 dark:text-amber-500 hover:text-amber-700 dark:hover:text-amber-400 text-xs"
                               >
                                 ⚑
                               </a>
-                            </HoverTooltip>
+                            </SelectableHoverTooltip>
                           )}
                           {s.common_name && (
                             <div className="text-zinc-500 dark:text-zinc-400 text-xs truncate max-w-[140px] md:max-w-none">

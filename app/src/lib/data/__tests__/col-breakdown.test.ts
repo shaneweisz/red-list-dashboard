@@ -3,7 +3,7 @@
  * being the single most complex piece of logic behind the described-count
  * breakdown's "why doesn't this species have a clean 1:1 CoL match"
  * diagnostic — every reason a user actually sees in the UI (TaxaSummary.tsx's
- * noMatchSentence, lib/col-no-match.ts) traces back to exactly one branch here. It's a pure
+ * noMatchSentence, lib/col-revision.ts) traces back to exactly one branch here. It's a pure
  * function of a plain row object, so this needs no DuckDB connection or
  * fixture data — just the row shapes computeBreakdownEntry's diagRows query
  * actually produces (see that query's SELECT list in col-breakdown.ts).

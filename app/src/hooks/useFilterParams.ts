@@ -253,7 +253,7 @@ export function parseParams(search: string, suffix: string = "") {
     // Catalogue of Life match state — "flagged" = no clean 1:1 CoL match (a
     // possible taxonomic revision since the assessment), "clean" = its mirror
     // image. Any other/missing value means no filter. colReasons narrows
-    // "flagged" to specific reasons (see lib/col-no-match.ts); it implies
+    // "flagged" to specific reasons (see lib/col-revision.ts); it implies
     // flagged on its own, so the two are independent params, like
     // habitat/habitatBreadth.
     colMatch: (

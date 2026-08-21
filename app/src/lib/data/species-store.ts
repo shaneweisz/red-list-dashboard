@@ -9,7 +9,7 @@ import * as fs from "fs";
 import * as path from "path";
 import { readCsv } from "./csv";
 import { countryToRegion } from "../regions";
-import type { ColNoMatch } from "../col-no-match";
+import type { ColRevision } from "../col-revision";
 
 // =============================================================================
 // PATHS
@@ -21,7 +21,7 @@ const TAXA_SUMMARY_PATH = path.join(DATA_DIR, "taxa-summary.json");
 const TABLE1A_CHILDREN_SUMMARIES_PATH = path.join(DATA_DIR, "table1a-children-summaries.json");
 const SSC_GROUP_CHILDREN_SUMMARIES_PATH = path.join(DATA_DIR, "ssc-group-children-summaries.json");
 const COUNTRY_STATS_PATH = path.join(DATA_DIR, "country-stats.json");
-const COL_NO_MATCH_PATH = path.join(DATA_DIR, "col-no-match.json");
+const COL_REVISIONS_PATH = path.join(DATA_DIR, "col-revisions.json");
 
 // =============================================================================
 // TYPES
@@ -115,7 +115,7 @@ const historyCache = new Map<string, HistoryMap>();
 let taxaSummaryCache: TaxaSummaryRow[] | null = null;
 let nodeChildrenSummariesCache: Record<string, NodeSummary[]> | null = null;
 let countryStatsCache: Record<string, { species: number; outdated: number }> | null = null;
-let colNoMatchCache: Map<number, ColNoMatch> | null = null;
+let colRevisionsCache: Map<number, ColRevision> | null = null;
 
 /** @internal Reset all module-level caches (for tests only). */
 export function _resetCaches(): void {
@@ -124,7 +124,7 @@ export function _resetCaches(): void {
   taxaSummaryCache = null;
   nodeChildrenSummariesCache = null;
   countryStatsCache = null;
-  colNoMatchCache = null;
+  colRevisionsCache = null;
 }
 
 function loadRedlistForGroup(group: string): RedlistRow[] {
@@ -197,35 +197,39 @@ export function getCountryStats(): Record<string, { species: number; outdated: n
 }
 
 /**
- * sis_taxon_id → why this assessed species has no clean 1:1 Catalogue of Life
- * match, for the ~4% of assessments that don't (data/col-no-match.json, built
- * by scripts/build-col-no-match.ts). Stamped onto every assessed species row
- * (species-duckdb.ts) so the dashboard can flag a possible taxonomic revision
- * inline and filter by reason, without a second round trip.
+ * sis_taxon_id → the "possible taxonomic revision" flag, for the ~6% of
+ * assessed species carrying one (data/col-revisions.json, built by
+ * scripts/build-col-revisions.ts). Two independent signals share the entry: no
+ * clean 1:1 Catalogue of Life match, and species CoL has likely split out of
+ * this one — see lib/col-revision.
+ *
+ * Stamped onto every assessed species row (species-duckdb.ts) so the dashboard
+ * can flag inline and filter by reason without a second round trip.
  *
  * Returns an empty map when the file is absent — a sync predating the script
  * still serves species, just with every row unflagged, rather than 500ing.
  */
-export function getColNoMatch(): Map<number, ColNoMatch> {
-  if (colNoMatchCache) return colNoMatchCache;
-  const out = new Map<number, ColNoMatch>();
-  if (fs.existsSync(COL_NO_MATCH_PATH)) {
-    // Short-keyed on disk (r/d/i/c/n, absent fields omitted) — one entry per
-    // flagged species, so the shipped file stays small. See build-col-no-match.
-    const file = JSON.parse(fs.readFileSync(COL_NO_MATCH_PATH, "utf-8")) as {
-      species: Record<string, { r: string; d?: string; i?: number; c?: string; n?: string }>;
+export function getColRevisions(): Map<number, ColRevision> {
+  if (colRevisionsCache) return colRevisionsCache;
+  const out = new Map<number, ColRevision>();
+  if (fs.existsSync(COL_REVISIONS_PATH)) {
+    // Short-keyed on disk (r/d/i/c/n/s, absent fields omitted) — one entry per
+    // flagged species, so the shipped file stays small. See build-col-revisions.
+    const file = JSON.parse(fs.readFileSync(COL_REVISIONS_PATH, "utf-8")) as {
+      species: Record<string, { r?: string; d?: string; i?: number; c?: string; n?: string; s?: string[] }>;
     };
     for (const [id, e] of Object.entries(file.species ?? {})) {
       out.set(Number(id), {
-        reason: e.r,
+        ...(e.r != null ? { reason: e.r } : {}),
         ...(e.d != null ? { detail: e.d } : {}),
         ...(e.i != null ? { detailId: e.i } : {}),
         ...(e.c != null ? { colId: e.c } : {}),
         ...(e.n != null ? { colName: e.n } : {}),
+        ...(e.s?.length ? { splitInto: e.s } : {}),
       });
     }
   }
-  colNoMatchCache = out;
+  colRevisionsCache = out;
   return out;
 }
 

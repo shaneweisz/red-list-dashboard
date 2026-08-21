@@ -52,7 +52,7 @@ yarn-error.log*
 !/data/vernacular-names.json
 !/data/col-split-candidates.parquet
 !/data/col-to-assessed.parquet
-!/data/col-no-match.json
+!/data/col-revisions.json
 
 # DuckDB httpfs extension — vendored at build time by scripts/fetch-duckdb-ext.ts
 # (downloaded, not committed; traced into the v2 function via next.config).

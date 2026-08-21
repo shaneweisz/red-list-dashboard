@@ -215,7 +215,7 @@ export interface BreakdownQueryContext {
 /**
  * The "which assessed species here have no clean 1:1 CoL match, and why"
  * diagnostic on its own — shared between computeBreakdownEntry (one breakdown
- * name at a time) and scripts/build-col-no-match.ts, which runs it ONCE over
+ * name at a time) and scripts/build-col-revisions.ts, which runs it ONCE over
  * every assessed species to build the dashboard-wide flag. Both call sites must
  * classify identically, so the query lives here rather than being written twice.
  *

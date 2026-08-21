@@ -21,8 +21,8 @@ import type { RedListSpecies } from "@/hooks/useRedListSpeciesQuery";
 import { prettifyQs } from "@/lib/query-string";
 import { sisRowKey } from "@/lib/species-row-key";
 // Reason labels are shared with the main dashboard's taxonomic-revision flag —
-// see lib/col-no-match.ts (both surfaces must explain a reason the same way).
-import { noMatchSentence } from "@/lib/col-no-match";
+// see lib/col-revision.ts (both surfaces must explain a reason the same way).
+import { noMatchSentence } from "@/lib/col-revision";
 
 // See scripts/build-taxa-summary.ts's classifyNoMatch for what each reason means.
 // Modular/additive on top of colBreakdown[].noMatchIds — safe to drop independently
