@@ -7,140 +7,50 @@ import {
   Geography,
   ZoomableGroup,
 } from "react-simple-maps";
-import { geoCentroid } from "d3-geo";
+import { geoArea, geoCentroid } from "d3-geo";
 import { IUCN_REGION_ORDER, matchingRegions, iucnRegionCountries } from "@/lib/regions";
+import { NAME_TO_ALPHA2, ALPHA2_TO_NAME } from "@/lib/countries";
+import { splitEmbeddedTerritories } from "@/lib/map-territories";
 import CountryStatsList from "./CountryStatsList";
 import type { MapViewMode, MapSortKey } from "@/hooks/useFilterParams";
 
 // Using the recommended TopoJSON from react-simple-maps
 const GEO_URL = "https://cdn.jsdelivr.net/npm/world-atlas@2/countries-50m.json";
 
-// Country name (from TopoJSON) to ISO 3166-1 alpha-2 mapping for GBIF
-const NAME_TO_ALPHA2: Record<string, string> = {
-  "Afghanistan": "AF", "Albania": "AL", "Algeria": "DZ", "Angola": "AO", "Argentina": "AR",
-  "Armenia": "AM", "Australia": "AU", "Austria": "AT", "Azerbaijan": "AZ", "Bangladesh": "BD",
-  "Belarus": "BY", "Belgium": "BE", "Benin": "BJ", "Bhutan": "BT", "Bolivia": "BO",
-  "Bosnia and Herz.": "BA", "Botswana": "BW", "Brazil": "BR", "Brunei": "BN", "Bulgaria": "BG",
-  "Burkina Faso": "BF", "Burundi": "BI", "Cambodia": "KH", "Cameroon": "CM", "Canada": "CA",
-  "Central African Rep.": "CF", "Chad": "TD", "Chile": "CL", "China": "CN", "Colombia": "CO",
-  "Congo": "CG", "Dem. Rep. Congo": "CD", "Costa Rica": "CR", "Côte d'Ivoire": "CI",
-  "Croatia": "HR", "Cuba": "CU", "Cyprus": "CY", "Czechia": "CZ", "Denmark": "DK",
-  "Djibouti": "DJ", "Dominican Rep.": "DO", "Ecuador": "EC", "Egypt": "EG", "El Salvador": "SV",
-  "Eq. Guinea": "GQ", "Eritrea": "ER", "Estonia": "EE", "eSwatini": "SZ", "Ethiopia": "ET",
-  "Fiji": "FJ", "Finland": "FI", "France": "FR", "Gabon": "GA", "Gambia": "GM", "Georgia": "GE",
-  "Germany": "DE", "Ghana": "GH", "Greece": "GR", "Greenland": "GL", "Guatemala": "GT",
-  "Guinea": "GN", "Guinea-Bissau": "GW", "Guyana": "GY", "Haiti": "HT", "Honduras": "HN",
-  "Hungary": "HU", "Iceland": "IS", "India": "IN", "Indonesia": "ID", "Iran": "IR", "Iraq": "IQ",
-  "Ireland": "IE", "Israel": "IL", "Italy": "IT", "Jamaica": "JM", "Japan": "JP", "Jordan": "JO",
-  "Kazakhstan": "KZ", "Kenya": "KE", "North Korea": "KP", "South Korea": "KR", "Kuwait": "KW",
-  "Kyrgyzstan": "KG", "Laos": "LA", "Latvia": "LV", "Lebanon": "LB", "Lesotho": "LS",
-  "Liberia": "LR", "Libya": "LY", "Lithuania": "LT", "Luxembourg": "LU", "Madagascar": "MG",
-  "Malawi": "MW", "Malaysia": "MY", "Mali": "ML", "Mauritania": "MR", "Mexico": "MX",
-  "Moldova": "MD", "Mongolia": "MN", "Montenegro": "ME", "Morocco": "MA", "Mozambique": "MZ",
-  "Myanmar": "MM", "Namibia": "NA", "Nepal": "NP", "Netherlands": "NL", "New Zealand": "NZ",
-  "Nicaragua": "NI", "Niger": "NE", "Nigeria": "NG", "Norway": "NO", "Oman": "OM",
-  "Pakistan": "PK", "Panama": "PA", "Papua New Guinea": "PG", "Paraguay": "PY", "Peru": "PE",
-  "Philippines": "PH", "Poland": "PL", "Portugal": "PT", "Puerto Rico": "PR", "Qatar": "QA",
-  "Romania": "RO", "Russia": "RU", "Rwanda": "RW", "Saudi Arabia": "SA", "Senegal": "SN",
-  "Serbia": "RS", "Sierra Leone": "SL", "Singapore": "SG", "Slovakia": "SK", "Slovenia": "SI",
-  "Solomon Is.": "SB", "Somalia": "SO", "South Africa": "ZA", "S. Sudan": "SS", "Spain": "ES",
-  "Sri Lanka": "LK", "Sudan": "SD", "Suriname": "SR", "Sweden": "SE", "Switzerland": "CH",
-  "Syria": "SY", "Taiwan": "TW", "Tajikistan": "TJ", "Tanzania": "TZ", "Thailand": "TH",
-  "Timor-Leste": "TL", "Togo": "TG", "Trinidad and Tobago": "TT", "Tunisia": "TN",
-  "Turkey": "TR", "Turkmenistan": "TM", "Uganda": "UG", "Ukraine": "UA",
-  "United Arab Emirates": "AE", "United Kingdom": "GB", "United States of America": "US",
-  "Uruguay": "UY", "Uzbekistan": "UZ", "Vanuatu": "VU", "Venezuela": "VE", "Vietnam": "VN",
-  "Yemen": "YE", "Zambia": "ZM", "Zimbabwe": "ZW", "Palestine": "PS",
-  "Macedonia": "MK", "New Caledonia": "NC", "W. Sahara": "EH", "Fr. S. Antarctic Lands": "TF",
-  "Falkland Is.": "FK",
-  // Small/micro nations not in the 50m TopoJSON at all — kept spelled out since
-  // there's no shape to match against; only useful for search.
-  "Andorra": "AD", "Bahamas": "BS", "Bahrain": "BH", "Barbados": "BB",
-  "Belize": "BZ", "Comoros": "KM", "Dominica": "DM", "Grenada": "GD",
-  "Kiribati": "KI", "Liechtenstein": "LI", "Maldives": "MV", "Malta": "MT",
-  "Mauritius": "MU", "Micronesia": "FM", "Monaco": "MC", "Nauru": "NR", "Palau": "PW",
-  "Samoa": "WS", "San Marino": "SM", "Seychelles": "SC", "Saint Lucia": "LC",
-  "Tonga": "TO", "Tuvalu": "TV",
-  // These ARE present in the 50m TopoJSON, just under an abbreviated/different
-  // name than the long form above — keyed here by the exact shape name so the
-  // map coloring lookup (NAME_TO_ALPHA2[geo.properties.name]) actually matches.
-  // (Long display names still shown elsewhere via ALPHA2_TO_NAME's own overrides below.)
-  "Antigua and Barb.": "AG", "Cabo Verde": "CV", "São Tomé and Principe": "ST",
-  "St. Kitts and Nevis": "KN", "St. Vin. and Gren.": "VC", "Vatican": "VA",
-  "Marshall Is.": "MH",
-  // Additional territories present as their own shape in the 50m TopoJSON that
-  // had no entry at all before (always rendered as "No data" regardless of the
-  // underlying Red List data).
-  "American Samoa": "AS", "Anguilla": "AI", "Aruba": "AW", "Bermuda": "BM",
-  "Br. Indian Ocean Ter.": "IO", "British Virgin Is.": "VG", "Cayman Is.": "KY",
-  "Cook Is.": "CK", "Curaçao": "CW", "Faeroe Is.": "FO", "Fr. Polynesia": "PF",
-  "Guam": "GU", "Guernsey": "GG", "Heard I. and McDonald Is.": "HM", "Hong Kong": "HK",
-  "Isle of Man": "IM", "Jersey": "JE", "Macao": "MO", "Montserrat": "MS",
-  "N. Mariana Is.": "MP", "Niue": "NU", "Norfolk Island": "NF", "Pitcairn Is.": "PN",
-  "S. Geo. and the Is.": "GS", "Saint Helena": "SH", "Sint Maarten": "SX",
-  "St-Barthélemy": "BL", "St-Martin": "MF", "St. Pierre and Miquelon": "PM",
-  "Turks and Caicos Is.": "TC", "U.S. Virgin Is.": "VI", "Wallis and Futuna Is.": "WF",
-  "Åland": "AX",
-  // Somaliland, N. Cyprus, and Kosovo are drawn as their own shape in the
-  // TopoJSON, but IUCN's public presentation doesn't treat any of them as a
-  // distinct country — fold each into its parent rather than leaving a
-  // "no data" gap that reads as a bug.
-  //
-  // Somaliland/N. Cyprus: IUCN's own Red List country standard (ISO 3166-1 +
-  // UN country names, per redlist.org/resources/country-codes) has no
-  // distinct code for either — both fold into Somalia/Cyprus, the same way
-  // IUCN's own species assessments do (e.g. the Gerenuk assessment's formal
-  // country field lists "Somalia", even though its range-description text
-  // separately mentions "Somaliland").
-  //
-  // Kosovo: unlike those two, IUCN's internal SIS database *does* carry a
-  // distinct location code (YUG-KO, a legacy former-Yugoslavia sub-code, not
-  // a modern ISO alpha-2) — which looked at first like grounds to treat it
-  // as its own country. But checking IUCN's own public page for a
-  // Kosovo-tagged species (Terranigra kosovica, iucnredlist.org/species/
-  // 155681/222427224) shows the official "Geographic Range" field lists only
-  // "Serbia" — Kosovo appears solely in the free-text range description,
-  // exactly how other legacy sub-codes (RU-EU "European Russia", FRA-FR
-  // "France (mainland)") behave: real in the internal data model, but never
-  // surfaced as their own entry in IUCN's own public country-of-occurrence
-  // presentation. So it gets the same treatment as Somaliland/N. Cyprus, not
-  // the Palestine/Taiwan/W. Sahara treatment (which do have their own
-  // "Geographic Range" line).
-  "Somaliland": "SO", "N. Cyprus": "CY", "Kosovo": "RS",
-};
+// What the shapes call each country, so a search for "Cabo Verde" or
+// "Dem. Rep. Congo" still finds it under its full name. More than one shape
+// can share a code (Ashmore and Cartier is drawn separately from Australia).
+const SHAPE_NAMES_BY_CODE: Record<string, string[]> = {};
+for (const [name, code] of Object.entries(NAME_TO_ALPHA2)) {
+  (SHAPE_NAMES_BY_CODE[code] ||= []).push(name);
+}
 
-// Complete ISO 3166-1 alpha-2 to country name mapping (for display)
-// Includes all countries, territories, and small island nations
-export const ALPHA2_TO_NAME: Record<string, string> = {
-  // From TopoJSON (use these names for map consistency)
-  ...Object.fromEntries(Object.entries(NAME_TO_ALPHA2).map(([name, code]) => [code, name])),
-  // Additional countries and territories not in TopoJSON
-  "AD": "Andorra", "AG": "Antigua and Barbuda", "AI": "Anguilla", "AQ": "Antarctica",
-  "AS": "American Samoa", "AW": "Aruba", "AX": "Åland Islands", "BB": "Barbados",
-  "BH": "Bahrain", "BL": "Saint Barthélemy", "BM": "Bermuda", "BQ": "Bonaire",
-  "BS": "Bahamas", "BV": "Bouvet Island", "BZ": "Belize", "CC": "Cocos Islands",
-  "CK": "Cook Islands", "CV": "Cape Verde", "CW": "Curaçao", "CX": "Christmas Island",
-  "DM": "Dominica", "FK": "Falkland Islands", "FM": "Micronesia", "FO": "Faroe Islands",
-  "GD": "Grenada", "GF": "French Guiana", "GG": "Guernsey", "GI": "Gibraltar",
-  "GP": "Guadeloupe", "GS": "South Georgia", "GU": "Guam", "HK": "Hong Kong",
-  "HM": "Heard Island", "IM": "Isle of Man", "IO": "British Indian Ocean Territory",
-  "JE": "Jersey", "KI": "Kiribati", "KM": "Comoros", "KN": "Saint Kitts and Nevis",
-  "KY": "Cayman Islands", "LC": "Saint Lucia", "LI": "Liechtenstein", "MC": "Monaco",
-  "MF": "Saint Martin", "MH": "Marshall Islands", "MK": "North Macedonia", "MO": "Macao", "MP": "Northern Mariana Islands",
-  "MQ": "Martinique", "MS": "Montserrat", "MT": "Malta", "MU": "Mauritius", "MV": "Maldives",
-  "NF": "Norfolk Island", "NR": "Nauru", "NU": "Niue", "PF": "French Polynesia",
-  "PM": "Saint Pierre and Miquelon", "PN": "Pitcairn", "PW": "Palau", "RE": "Réunion",
-  "SC": "Seychelles", "SH": "Saint Helena", "SJ": "Svalbard", "SM": "San Marino",
-  "SO": "Somalia", "CY": "Cyprus", "RS": "Serbia",
-  "ST": "São Tomé and Príncipe", "SV": "El Salvador", "SX": "Sint Maarten",
-  "TC": "Turks and Caicos", "TK": "Tokelau", "TO": "Tonga", "TV": "Tuvalu",
-  "UM": "U.S. Minor Outlying Islands", "VA": "Vatican City", "VC": "Saint Vincent and the Grenadines",
-  "VG": "British Virgin Islands", "VI": "U.S. Virgin Islands", "WF": "Wallis and Futuna",
-  "WS": "Samoa", "YT": "Mayotte",
-};
+// Every country the app can filter by — not just the ones the shapes draw.
+// Antarctica, Gibraltar, Bouvet Island, the U.S. Minor Outlying Islands and
+// IUCN's "Disputed Territory" all carry Red List data but have no shape at
+// this resolution, and were missing from search altogether while this list was
+// built from shape names. They select like any other country; they just have
+// nowhere to zoom to.
+const SEARCHABLE_COUNTRIES = Object.entries(ALPHA2_TO_NAME)
+  .map(([code, label]) => ({
+    code,
+    label,
+    haystack: [label, ...(SHAPE_NAMES_BY_CODE[code] ?? [])].join(" ").toLowerCase(),
+  }))
+  .sort((a, b) => a.label.localeCompare(b.label));
 
-// Sorted list of country names for search
-const COUNTRY_NAMES_SORTED = Object.keys(NAME_TO_ALPHA2).sort();
+// Zoom depth by country size, keyed by code rather than shape name — a country
+// can be drawn under several labels, and one label ("Kosovo") can stand for a
+// country that isn't small at all.
+const SMALL_COUNTRY_CODES = new Set([
+  "AD", "AG", "AI", "AS", "AW", "AX", "BB", "BH", "BL", "BM", "BN", "BQ", "BV", "BZ",
+  "CC", "CV", "CW", "CX", "CY", "DJ", "DM", "FM", "FO", "GD", "GG", "GI", "GM", "GP",
+  "GW", "HK", "IM", "JE", "JM", "KI", "KM", "KN", "KW", "KY", "LB", "LC", "LI", "LS",
+  "LU", "MC", "ME", "MF", "MH", "MK", "MO", "MP", "MQ", "MS", "MT", "MU", "MV", "NF",
+  "NR", "NU", "PM", "PN", "PW", "QA", "RE", "SC", "SG", "SH", "SI", "SJ", "SM", "ST",
+  "SX", "SZ", "TC", "TK", "TO", "TT", "TV", "VA", "VC", "VG", "VI", "WF", "WS", "YT",
+]);
+const LARGE_COUNTRY_CODES = new Set(["RU", "CA", "US", "CN", "BR", "AU", "IN", "AR"]);
 
 export interface CountryStats {
   [countryCode: string]: {
@@ -322,29 +232,24 @@ function WorldMap({ selectedCountries, onCountrySelect, selectedTaxon, precomput
   const filteredCountries = useMemo(() => {
     if (!searchQuery.trim()) return [];
     const q = searchQuery.toLowerCase();
-    return COUNTRY_NAMES_SORTED.filter(name => name.toLowerCase().includes(q)).slice(0, 8);
+    return SEARCHABLE_COUNTRIES.filter(c => c.haystack.includes(q)).slice(0, 8);
   }, [searchQuery]);
 
-  const handleZoomToCountry = useCallback((countryName: string) => {
-    const coords = centroidsRef.current[countryName];
+  // Selecting always works; zooming only when the country has a shape to
+  // centre on (Antarctica is drawn but excluded from the map, and Gibraltar,
+  // Tuvalu and Bouvet Island aren't drawn at this resolution at all).
+  const handleSelectCountry = useCallback((code: string, label: string) => {
+    const coords = centroidsRef.current[code];
     if (coords) {
       setCenter(coords);
-      // Zoom level depends on country size - small countries zoom more
-      const smallCountries = new Set(["Singapore", "Luxembourg", "Cyprus", "Jamaica", "Trinidad and Tobago", "Brunei", "Qatar", "Kuwait", "Lebanon", "Djibouti", "eSwatini", "Lesotho", "Gambia", "Guinea-Bissau", "Slovenia", "Montenegro", "Kosovo", "Macedonia", "Andorra", "Antigua and Barb.", "Bahrain", "Barbados", "Belize", "Cabo Verde", "Comoros", "Dominica", "Grenada", "Kiribati", "Liechtenstein", "Maldives", "Malta", "Marshall Is.", "Mauritius", "Micronesia", "Monaco", "Nauru", "Palau", "Samoa", "San Marino", "São Tomé and Principe", "Seychelles", "St. Kitts and Nevis", "Saint Lucia", "St. Vin. and Gren.", "Tonga", "Tuvalu", "Vatican", "American Samoa", "Anguilla", "Aruba", "Bermuda", "British Virgin Is.", "Cayman Is.", "Curaçao", "Faeroe Is.", "Guernsey", "Hong Kong", "Isle of Man", "Jersey", "Macao", "Montserrat", "N. Mariana Is.", "Niue", "Norfolk Island", "Pitcairn Is.", "Saint Helena", "Sint Maarten", "St-Barthélemy", "St-Martin", "St. Pierre and Miquelon", "Turks and Caicos Is.", "U.S. Virgin Is.", "Wallis and Futuna Is.", "Åland", "N. Cyprus"]);
-      const largeCountries = new Set(["Russia", "Canada", "United States of America", "China", "Brazil", "Australia", "India", "Argentina"]);
       // Small-country zoom capped lower than it used to be (was 6) — at 6 a
       // small island could fill the whole visible frame, right where the
       // bottom-left Map/List toggle and bottom-right zoom controls overlay it.
-      const zoomLevel = smallCountries.has(countryName) ? 4.5 : largeCountries.has(countryName) ? 2.5 : 4;
-      setZoom(zoomLevel);
+      setZoom(SMALL_COUNTRY_CODES.has(code) ? 4.5 : LARGE_COUNTRY_CODES.has(code) ? 2.5 : 4);
     }
     setSearchQuery("");
     setSearchOpen(false);
-    // Also select the country
-    const alpha2 = NAME_TO_ALPHA2[countryName];
-    if (alpha2) {
-      onCountrySelect(alpha2, countryName, { ctrlKey: true, metaKey: false } as unknown as React.MouseEvent);
-    }
+    onCountrySelect(code, label, { ctrlKey: true, metaKey: false } as unknown as React.MouseEvent);
   }, [onCountrySelect]);
 
   const handleResetZoom = useCallback(() => {
@@ -569,7 +474,7 @@ function WorldMap({ selectedCountries, onCountrySelect, selectedTaxon, precomput
                     setHighlightedIndex(i => Math.max(i - 1, 0));
                   } else if (e.key === "Enter" && filteredCountries[highlightedIndex]) {
                     e.preventDefault();
-                    handleZoomToCountry(filteredCountries[highlightedIndex]);
+                    handleSelectCountry(filteredCountries[highlightedIndex].code, filteredCountries[highlightedIndex].label);
                   } else if (e.key === "Escape") {
                     setSearchOpen(false);
                     setSearchQuery("");
@@ -582,14 +487,14 @@ function WorldMap({ selectedCountries, onCountrySelect, selectedTaxon, precomput
             {/* Search dropdown */}
             {searchOpen && filteredCountries.length > 0 && (
               <div className="absolute top-full left-0 mt-1 w-52 bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-lg shadow-lg z-30 overflow-hidden">
-                {filteredCountries.map((name, i) => (
+                {filteredCountries.map(({ code, label }, i) => (
                   <button
-                    key={name}
+                    key={code}
                     className={`w-full text-left px-3 py-1.5 text-xs transition-colors ${i === highlightedIndex ? "bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300" : "text-zinc-700 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-700"}`}
                     onMouseEnter={() => setHighlightedIndex(i)}
-                    onClick={() => handleZoomToCountry(name)}
+                    onClick={() => handleSelectCountry(code, label)}
                   >
-                    {name}
+                    {label}
                   </button>
                 ))}
               </div>
@@ -778,17 +683,28 @@ function WorldMap({ selectedCountries, onCountrySelect, selectedTaxon, precomput
               setZoom(z);
             }}
           >
-            <Geographies geography={GEO_URL}>
+            {/* parseGeographies runs before the SVG paths are projected, which
+                is the only point where an overseas territory can still be cut
+                out of the parent shape it ships inside (French Guiana out of
+                France, say) — after this, each is an ordinary country feature. */}
+            <Geographies geography={GEO_URL} parseGeographies={splitEmbeddedTerritories}>
               {({ geographies }) => {
                 // Compute centroids from geometry on first load
                 /* eslint-disable react-hooks/immutability -- one-time cache populated from render callback data */
                 if (Object.keys(centroidsRef.current).length === 0) {
+                  // Keyed by code, so search can zoom without knowing what the
+                  // shape is called. Where several shapes share a code — Ashmore
+                  // and Cartier under AU, Somaliland under SO — the largest one
+                  // wins, so we centre on the country rather than its outlier.
+                  const areas: Record<string, number> = {};
                   for (const geo of geographies) {
-                    const name = geo.properties.name;
-                    if (name && name !== "Antarctica") {
-                      const [lng, lat] = geoCentroid(geo);
-                      centroidsRef.current[name] = [lng, lat];
-                    }
+                    const code = NAME_TO_ALPHA2[geo.properties.name];
+                    if (!code || geo.properties.name === "Antarctica") continue;
+                    const area = geoArea(geo);
+                    if (areas[code] !== undefined && areas[code] >= area) continue;
+                    areas[code] = area;
+                    const [lng, lat] = geoCentroid(geo);
+                    centroidsRef.current[code] = [lng, lat];
                   }
                 }
                 /* eslint-enable react-hooks/immutability */
@@ -805,7 +721,9 @@ function WorldMap({ selectedCountries, onCountrySelect, selectedTaxon, precomput
                       key={geo.rsmKey}
                       geography={geo}
                       onMouseEnter={() => {
-                        setHoveredCountry(countryName);
+                        // The shape's own label is abbreviated ("Dem. Rep.
+                        // Congo"); ALPHA2_TO_NAME has the full name.
+                        setHoveredCountry(alpha2 ? ALPHA2_TO_NAME[alpha2] ?? countryName : countryName);
                         setHoveredCountryCode(alpha2);
                         if (selectOnHover && alpha2) {
                           onCountryHover?.(alpha2);
