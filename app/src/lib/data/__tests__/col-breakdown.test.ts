@@ -87,9 +87,11 @@ describe("classifyNoMatch", () => {
     expect(result).toEqual({
       id: 1, name: "Testus example", reason: "lumped",
       detail: "Testus winnerus", detailId: 99,
-      // The CoL record the ⚑ deep-links to, plus CoL's own accepted name for it
+      // The CoL record the flag points at, plus CoL's own accepted name for it
       // — what lets the UI say "both are now called X" (see noMatchSentence).
-      colId: "ABC123", colName: "Testus realus",
+      // detailColId is the SAME record: a lump means both names share one col_id,
+      // so linking the winner's name links there too.
+      colId: "ABC123", colName: "Testus realus", detailColId: "ABC123",
     });
   });
 
@@ -129,5 +131,50 @@ describe("classifyNoMatch", () => {
   it("coerces numeric-looking id/name fields (DuckDB row objects aren't guaranteed JS number/string types)", () => {
     const result = classifyNoMatch({ ...baseRow, id: "7", name: 42 as unknown as string });
     expect(result).toEqual({ id: 7, name: "42", reason: "no_link" });
+  });
+});
+
+// Two reasons added after review found them misreported in the wild — both are
+// specifically about NOT saying something misleading, so they get their own cases.
+describe("classifyNoMatch — checklist coverage", () => {
+  it("synonym_of: the checklist DOES hold the name, as a synonym — not 'not in the checklist yet'", () => {
+    // Sorbus minima: its matched col_id is XR-only, but the curated checklist
+    // covers the name as a synonym of Hedlundia minima (a genus transfer).
+    const result = classifyNoMatch({
+      ...baseRow, linked_col_id: "VJSZQ", linked_name: "Sorbus minima", linked_in_base: false,
+      covered_name: "Hedlundia minima", covered_col_id: "3JZCX",
+    });
+    expect(result.reason).toBe("synonym_of");
+    expect(result.detail).toBe("Hedlundia minima");
+    // Links to the ACCEPTED record, not the XR-only id CoL may since have retired.
+    expect(result.colId).toBe("3JZCX");
+    expect(result.detailColId).toBe("3JZCX");
+  });
+
+  it("not_in_base: still reported when the checklist genuinely doesn't cover the name", () => {
+    const result = classifyNoMatch({
+      ...baseRow, linked_col_id: "VJSZQ", linked_name: "Sorbus minima", linked_in_base: false,
+    });
+    expect(result.reason).toBe("not_in_base");
+  });
+
+  it("provisional: an unlinked name CoL holds provisionally isn't 'no CoL name at all'", () => {
+    // Idaea josephinae: unmatched by build-matching (it only links accepted
+    // names), but CoL does hold C7CM2 for it.
+    const result = classifyNoMatch({ ...baseRow, linked_col_id: null, prov_col_id: "C7CM2" });
+    expect(result.reason).toBe("provisional");
+    expect(result.colId).toBe("C7CM2");
+  });
+
+  it("no_link: still reported when CoL really has nothing under the name", () => {
+    expect(classifyNoMatch({ ...baseRow, linked_col_id: null, prov_col_id: null }).reason).toBe("no_link");
+  });
+
+  it("infraspecific: carries the parent's CoL record so that name can be linked too", () => {
+    const result = classifyNoMatch({
+      ...baseRow, linked_col_id: "ABC123", linked_name: null, bk_rank: "subspecies",
+      parent_assessed_name: "Muntiacus muntjak", parent_assessed_id: 42, parent_col_id: "PARENT1",
+    });
+    expect(result.detailColId).toBe("PARENT1");
   });
 });

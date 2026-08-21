@@ -19,7 +19,7 @@
 import type { DuckDBConnection } from "@duckdb/node-api";
 import { filterToSql, type NodeFilter } from "@/lib/taxonomy-sql";
 
-export type NoMatchReason = "no_link" | "missing_from_backbone" | "infraspecific" | "provisional" | "lumped" | "not_in_base" | "extinct_unconfirmed" | "classified_elsewhere";
+export type NoMatchReason = "no_link" | "missing_from_backbone" | "infraspecific" | "provisional" | "lumped" | "not_in_base" | "extinct_unconfirmed" | "classified_elsewhere" | "synonym_of";
 export interface NoMatchDetail {
   id: number;
   name: string;
@@ -31,6 +31,8 @@ export interface NoMatchDetail {
   /** The CoL id this assessment links to, so the UI can deep-link to the CoL
    *  record that disagrees with it. Absent only for "no_link" (there isn't one). */
   colId?: string;
+  /** The CoL record for `detail`, so the UI can link that name to CoL too. */
+  detailColId?: string;
   /** CoL's OWN accepted name for that col_id, when the species/ universe has it.
    *  Differs from `detail` when CoL's accepted name is neither this species nor
    *  the assessed one that won the tie-break (e.g. a lump under a third name), so
@@ -76,8 +78,15 @@ export interface BreakdownEntry {
 //    and for whenever backbone.parquet isn't available at build time).
 //  - lumped: its linked col_id IS in the universe, but a DIFFERENT assessed species
 //    won the accepted-name tie-break for it (a genuine CoL synonymy/lump).
-//  - not_in_base: its linked col_id exists and matches this name, but isn't in CoL's
-//    curated Base checklist yet (freshly split/described, still XR-only).
+//  - synonym_of: same as not_in_base (its linked col_id is XR-only), BUT IUCN's own
+//    name is separately covered by the curated checklist AS A SYNONYM of an accepted
+//    species — so "not in the checklist yet" would be exactly backwards. The usual
+//    cause is a genus transfer CoL has made and IUCN hasn't (Acanthoptila nipalensis
+//    -> Turdoides nipalensis, Sorbus minima -> Hedlundia minima). Checked before
+//    not_in_base, since it is the more specific finding.
+//  - not_in_base: its linked col_id exists and matches this name, isn't in CoL's
+//    curated Base checklist, and the checklist doesn't cover the name as a synonym
+//    either (freshly split/described, still XR-only).
 //  - extinct_unconfirmed: CoL flags its linked col_id extinct, but IUCN hasn't
 //    confirmed EX/EW for it (so it falls outside the extant-or-EX/EW universe).
 //  - classified_elsewhere: none of the above — the linked col_id is real, in_base,
@@ -93,10 +102,22 @@ export function classifyNoMatch(row: Record<string, unknown>): NoMatchDetail {
   const winnerName = row.winner_name as string | null;
   const winnerId = row.winner_id as number | null;
   const bkRank = row.bk_rank as string | null;
+  const coveredName = row.covered_name as string | null;
+  const coveredColId = row.covered_col_id as string | null;
+  const parentColId = row.parent_col_id as string | null;
+  const provColId = row.prov_col_id as string | null;
   const parentName = row.parent_name as string | null;
   const parentAssessedId = row.parent_assessed_id as number | null;
   const parentAssessedName = row.parent_assessed_name as string | null;
-  if (!linkedColId) return { id, name, reason: "no_link" };
+  if (!linkedColId) {
+    // Nothing in species_link — but CoL may still hold the name, just not as an
+    // accepted species: build-matching only links accepted names, so a
+    // provisionally-accepted record (134 species) never gets linked and would
+    // otherwise be reported as "no CoL name at all", which is plainly wrong to
+    // anyone who looks the name up (e.g. Idaea josephinae -> C7CM2).
+    if (provColId) return { id, name, reason: "provisional", colId: provColId };
+    return { id, name, reason: "no_link" };
+  }
   // Every remaining reason has a col_id to point at, and — where species/ knows
   // the name — CoL's own accepted spelling of it.
   const ref = { colId: linkedColId, ...(linkedName ? { colName: linkedName } : {}) };
@@ -104,14 +125,22 @@ export function classifyNoMatch(row: Record<string, unknown>): NoMatchDetail {
     if (bkRank === "species") return { id, name, reason: "provisional", ...ref };
     if (bkRank) {
       if (parentAssessedName) {
-        return { id, name, reason: "infraspecific", detail: parentAssessedName, detailId: parentAssessedId != null ? Number(parentAssessedId) : undefined, ...ref };
+        return { id, name, reason: "infraspecific", detail: parentAssessedName, detailId: parentAssessedId != null ? Number(parentAssessedId) : undefined, ...(parentColId ? { detailColId: parentColId } : {}), ...ref };
       }
-      if (parentName) return { id, name, reason: "infraspecific", detail: parentName, ...ref };
+      if (parentName) return { id, name, reason: "infraspecific", detail: parentName, ...(parentColId ? { detailColId: parentColId } : {}), ...ref };
     }
     return { id, name, reason: "missing_from_backbone", ...ref };
   }
-  if (winnerName) return { id, name, reason: "lumped", detail: winnerName, detailId: winnerId != null ? Number(winnerId) : undefined, ...ref };
-  if (!linkedInBase) return { id, name, reason: "not_in_base", ...ref };
+  if (winnerName) return { id, name, reason: "lumped", detail: winnerName, detailId: winnerId != null ? Number(winnerId) : undefined, detailColId: linkedColId, ...ref };
+  if (!linkedInBase) {
+    if (coveredName && coveredColId) {
+      // Link to the ACCEPTED record, not the XR-only one this assessment matched:
+      // that XR id is exactly the one CoL may since have retired (Sorbus minima's
+      // VJSZQ now 404s as "removed"), and the accepted record is what a reader wants.
+      return { id, name, reason: "synonym_of", detail: coveredName, detailColId: coveredColId, ...ref, colId: coveredColId };
+    }
+    return { id, name, reason: "not_in_base", ...ref };
+  }
   if (linkedExtinct) return { id, name, reason: "extinct_unconfirmed", ...ref };
   return { id, name, reason: "classified_elsewhere", ...ref };
 }
@@ -262,6 +291,23 @@ export async function computeNoMatchDetails(
       FROM matched_assessed ma
       JOIN read_parquet('${linkPath}') l ON l.id = ma.id AND l.src = 'redlist' AND l.col_id IS NOT NULL AND l.match_method != 'iucn_synonym_covered'
     ),
+    covered_links AS (
+      -- IUCN's own name as the curated checklist knows it: an
+      -- 'iucn_synonym_covered' row is written when the checklist holds this name
+      -- as a SYNONYM of an accepted species, which is the opposite of "not in the
+      -- checklist yet" — see classifyNoMatch's synonym_of.
+      SELECT id, min(col_id) AS col_id, min(name) AS name FROM (
+      SELECT cl.id AS id, cl.col_id AS col_id, cs.scientific_name AS name
+      FROM (
+        SELECT ma.id AS id, l.col_id AS col_id
+        FROM matched_assessed ma
+        JOIN read_parquet('${linkPath}') l ON l.id = ma.id AND l.src = 'redlist'
+          AND l.col_id IS NOT NULL AND l.match_method = 'iucn_synonym_covered'
+      ) cl
+      JOIN read_parquet('${speciesGlob}', hive_partitioning=true) cs
+        ON cs.col_id = cl.col_id AND cs.in_base
+      ) GROUP BY id
+    ),
     candidate_links AS (
       SELECT id, name, col_id,
              row_number() OVER (
@@ -273,13 +319,27 @@ export async function computeNoMatchDetails(
     ),
     winners AS (
       SELECT col_id, id AS winner_id, name AS winner_name FROM candidate_links WHERE rn = 1
-    )
+    )${hasBackbone ? `,
+    -- Names CoL holds ONLY as a provisionally-accepted species. Semi-joined to the
+    -- assessed names in scope, so this reads backbone.parquet against a small
+    -- build side rather than scanning it whole, and pre-aggregated so it can't
+    -- multiply rows in the SELECT below.
+    prov_by_name AS (
+      SELECT lower(scientific_name) AS lname, min(col_id) AS col_id
+      FROM read_parquet('${ctx.backbonePath}')
+      WHERE rank = 'species' AND status = 'provisionally accepted'
+        AND lower(scientific_name) IN (SELECT lower(scientific_name) FROM matched_assessed)
+      GROUP BY 1
+    )` : ""}
     SELECT
       ma.id AS id, ma.scientific_name AS name,
       pl.col_id AS linked_col_id,
       sp.scientific_name AS linked_name, sp.in_base AS linked_in_base, sp.extinct AS linked_extinct,
-      w.winner_name AS winner_name, w.winner_id AS winner_id
+      w.winner_name AS winner_name, w.winner_id AS winner_id,
+      cov.name AS covered_name, cov.col_id AS covered_col_id
       ${hasBackbone ? `,
+      pbn.col_id AS prov_col_id,
+      bk.parent_id AS parent_col_id,
       bk.rank AS bk_rank,
       bkparent.scientific_name AS parent_name,
       ca.assessed_id AS parent_assessed_id, ca.assessed_name AS parent_assessed_name` : ""}
@@ -288,13 +348,15 @@ export async function computeNoMatchDetails(
     LEFT JOIN read_parquet('${speciesGlob}', hive_partitioning=true) sp ON sp.col_id = pl.col_id
     LEFT JOIN winners w ON w.col_id = pl.col_id
     LEFT JOIN candidate_links cl ON cl.id = ma.id AND cl.rn = 1
+    LEFT JOIN covered_links cov ON cov.id = ma.id
     ${hasBackbone ? `
     -- Only needed to explain species/-misses (sp.scientific_name IS NULL) more
     -- precisely than a blanket "missing from backbone" — see classifyNoMatch's
     -- infraspecific/provisional reasons.
     LEFT JOIN read_parquet('${ctx.backbonePath}') bk ON bk.col_id = pl.col_id
     LEFT JOIN read_parquet('${ctx.backbonePath}') bkparent ON bkparent.col_id = bk.parent_id
-    LEFT JOIN col_to_assessed ca ON ca.col_id = bk.parent_id` : ""}
+    LEFT JOIN col_to_assessed ca ON ca.col_id = bk.parent_id
+    LEFT JOIN prov_by_name pbn ON pl.col_id IS NULL AND pbn.lname = lower(ma.scientific_name)` : ""}
     WHERE cl.id IS NULL
     -- Deterministic order — this JOIN chain has no natural order, and without one
     -- DuckDB's parallel scan returns diagRows (and so noMatchIds/noMatchDetails)

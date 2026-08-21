@@ -56,10 +56,11 @@ export interface ColRevisionsFile {
   /** sis_taxon_id → the flag, with short keys and absent fields omitted — one
    *  entry per flagged species, so the shipped file stays small.
    *  r = no-match reason (absent on a split-only flag), d = detail (the species
-   *  it's lumped with / demoted under), i = that species' own SIS id, c = the
-   *  CoL id to link to, n = CoL's own accepted name for that col_id,
-   *  s = names CoL likely split out of this species. */
-  species: Record<string, { r?: string; d?: string; i?: number; c?: string; n?: string; s?: string[] }>;
+   *  it's lumped with / demoted under), i = that species' own SIS id, dc = that
+   *  species' CoL id, c = the CoL id to link to, n = CoL's own accepted name for
+   *  that col_id, s = [name, col_id] of each species CoL likely split out of
+   *  this one. */
+  species: Record<string, { r?: string; d?: string; i?: number; dc?: string; c?: string; n?: string; s?: [string, string][] }>;
 }
 
 export async function run(): Promise<void> {
@@ -115,6 +116,7 @@ export async function run(): Promise<void> {
       r: d.reason,
       ...(d.detail != null ? { d: d.detail } : {}),
       ...(d.detailId != null ? { i: d.detailId } : {}),
+      ...(d.detailColId != null ? { dc: d.detailColId } : {}),
       ...(d.colId != null ? { c: d.colId } : {}),
       // CoL's accepted name is only worth shipping when it says something the
       // other fields don't — otherwise it's the same string twice per entry.
@@ -140,7 +142,7 @@ export async function run(): Promise<void> {
           AND col_id NOT IN (SELECT col_id FROM assessed_cids)
       ),
       pairs AS (
-        SELECT sc.parent_id AS parent_id, ne.scientific_name AS ne_name
+        SELECT sc.parent_id AS parent_id, ne.scientific_name AS ne_name, ne.col_id AS ne_col_id
         FROM split_candidates sc
         JOIN ne ON ne.col_id = sc.ne_col_id
         WHERE sc.rn = 1
@@ -151,15 +153,22 @@ export async function run(): Promise<void> {
         WHERE l.src = 'redlist' AND l.col_id IS NOT NULL AND l.match_method != 'iucn_synonym_covered'
         GROUP BY l.id
       )
-      SELECT p.parent_id AS parent_id, list(p.ne_name ORDER BY p.ne_name) AS ne_names,
+      SELECT p.parent_id AS parent_id,
+             list(struct_pack(name := p.ne_name, col_id := p.ne_col_id) ORDER BY p.ne_name) AS ne_names,
              any_value(pc.col_id) AS parent_col_id
       FROM pairs p LEFT JOIN parent_col pc ON pc.id = p.parent_id
       GROUP BY p.parent_id ORDER BY p.parent_id`)).getRowObjects();
     for (const r of splitRows) {
       const id = String(r.parent_id);
-      // DuckDB hands a LIST back as its own value wrapper, not a JS array.
+      // DuckDB hands a LIST back as its own value wrapper, not a JS array, and
+      // each item as a struct wrapper of its own.
       const raw = r.ne_names as { items?: unknown[] } | unknown[];
-      const names = (Array.isArray(raw) ? raw : raw?.items ?? []).map(String);
+      // A LIST arrives as { items: [...] } and each STRUCT inside it as
+      // { entries: {...} } — neither is a plain JS value.
+      const items = (Array.isArray(raw) ? raw : raw?.items ?? []) as { entries?: { name?: string; col_id?: string } }[];
+      const names: [string, string][] = items
+        .map((it) => [String(it?.entries?.name ?? ""), String(it?.entries?.col_id ?? "")] as [string, string])
+        .filter(([n]) => n.length > 0);
       if (names.length === 0) continue;
       splitParents++;
       const entry = species[id] ?? {};

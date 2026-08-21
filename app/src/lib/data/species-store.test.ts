@@ -845,23 +845,28 @@ describe("getColRevisions", () => {
   };
 
   it("expands every short key onto its long name", () => {
-    const map = load({ species: { "41775": { r: "lumped", d: "Sus scrofa", i: 123, c: "7PST9", n: "Sus x", s: ["Sus y"] } } });
+    const map = load({ species: { "41775": { r: "lumped", d: "Sus scrofa", i: 123, dc: "SUSSC", c: "7PST9", n: "Sus x", s: [["Sus y", "SUSY1"]] } } });
     expect(map.get(41775)).toEqual({
-      reason: "lumped", detail: "Sus scrofa", detailId: 123,
-      colId: "7PST9", colName: "Sus x", splitInto: ["Sus y"],
+      reason: "lumped", detail: "Sus scrofa", detailId: 123, detailColId: "SUSSC",
+      colId: "7PST9", colName: "Sus x", splitInto: [{ name: "Sus y", colId: "SUSY1" }],
     });
   });
 
+  it("keeps a split name with no CoL record as plain text rather than a dead link", () => {
+    const map = load({ species: { "1": { s: [["Sus y", ""], ["Sus z", "SUSZ1"]] } } });
+    expect(map.get(1)!.splitInto).toEqual([{ name: "Sus y" }, { name: "Sus z", colId: "SUSZ1" }]);
+  });
+
   it("keys by number, not by the string the JSON object uses", () => {
-    const map = load({ species: { "811": { s: ["Alcelaphus cokii"] } } });
+    const map = load({ species: { "811": { s: [["Alcelaphus cokii", "L7YRS"]] } } });
     expect(map.get(811)).toBeTruthy();
     expect(map.has(811)).toBe(true);
   });
 
   it("omits absent fields rather than setting them undefined", () => {
-    const map = load({ species: { "811": { s: ["Alcelaphus cokii"], c: "BHBY" } } });
+    const map = load({ species: { "811": { s: [["Alcelaphus cokii", "L7YRS"]], c: "BHBY" } } });
     // A split-only flag has no no-match reason at all.
-    expect(map.get(811)).toEqual({ colId: "BHBY", splitInto: ["Alcelaphus cokii"] });
+    expect(map.get(811)).toEqual({ colId: "BHBY", splitInto: [{ name: "Alcelaphus cokii", colId: "L7YRS" }] });
     expect("reason" in map.get(811)!).toBe(false);
   });
 

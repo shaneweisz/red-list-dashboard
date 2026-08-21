@@ -49,8 +49,8 @@ describe("revision vocabulary", () => {
 describe("isFlagged / revisionReasons", () => {
   it("treats the two signals as independent, and a species with both as belonging to both bars", () => {
     expect(revisionReasons({ reason: "lumped" })).toEqual(["lumped"]);
-    expect(revisionReasons({ splitInto: ["Aepyceros petersi"] })).toEqual([SPLIT_REASON]);
-    expect(revisionReasons({ reason: "lumped", splitInto: ["Leptoxis coosaensis"] }))
+    expect(revisionReasons({ splitInto: [{ name: "Aepyceros petersi" }] })).toEqual([SPLIT_REASON]);
+    expect(revisionReasons({ reason: "lumped", splitInto: [{ name: "Leptoxis coosaensis" }] }))
       .toEqual([SPLIT_REASON, "lumped"]);
   });
 
@@ -62,14 +62,14 @@ describe("isFlagged / revisionReasons", () => {
     expect(isFlagged({ splitInto: [] })).toBe(false);
     expect(isFlagged({ colId: "ABC" })).toBe(false);
     expect(isFlagged({ reason: "no_link" })).toBe(true);
-    expect(isFlagged({ splitInto: ["Aepyceros petersi"] })).toBe(true);
+    expect(isFlagged({ splitInto: [{ name: "Aepyceros petersi" }] })).toBe(true);
   });
 });
 
 describe("matchesRevisionFilter", () => {
   const lumped = { reason: "lumped", detail: "Sus scrofa" };
-  const split = { splitInto: ["Aepyceros petersi"] };
-  const both = { reason: "lumped", splitInto: ["Leptoxis coosaensis"] };
+  const split = { splitInto: [{ name: "Aepyceros petersi" }] };
+  const both = { reason: "lumped", splitInto: [{ name: "Leptoxis coosaensis" }] };
   const none = null;
   const no = new Set<string>();
 
@@ -143,46 +143,62 @@ describe("noMatchSentence", () => {
 });
 
 describe("splitSentence", () => {
+  const flat = (flag: Parameters<typeof splitSentence>[0], subject: string) => {
+    const s = splitSentence(flag, subject);
+    return s && `${s.before}${s.names.map((n) => n.name).join(", ")}${s.after}`;
+  };
+
   it("is null when there are no splits", () => {
     expect(splitSentence({ reason: "lumped" }, "Sus scrofa")).toBeNull();
     expect(splitSentence({ splitInto: [] }, "Sus scrofa")).toBeNull();
   });
 
-  it("names a single split-off species", () => {
-    expect(splitSentence({ splitInto: ["Aepyceros petersi"] }, "Aepyceros melampus"))
-      .toBe("Catalogue of Life now also recognises Aepyceros petersi, likely split from Aepyceros melampus.");
+  it("says the species still exists, and what the split means for the assessment", () => {
+    const sentence = flat({ splitInto: [{ name: "Aepyceros petersi" }] }, "Aepyceros melampus")!;
+    // The two things a reader needs: it isn't gone, and the assessment's scope moved.
+    expect(sentence).toContain("Aepyceros melampus is still a species");
+    expect(sentence).toContain("may cover populations now assigned to Aepyceros petersi");
   });
 
-  it("lists a handful in full, with 'and' before the last", () => {
-    expect(splitSentence({ splitInto: ["Alcelaphus cokii", "Alcelaphus lelwel", "Alcelaphus major"] }, "Alcelaphus buselaphus"))
-      .toBe("Catalogue of Life now also recognises 3 species likely split from Alcelaphus buselaphus:"
-        + " Alcelaphus cokii, Alcelaphus lelwel and Alcelaphus major.");
+  it("counts the split-off species rather than just listing them", () => {
+    expect(flat({ splitInto: [{ name: "A" }, { name: "B" }, { name: "C" }] }, "X"))
+      .toContain("split 3 more species out of it");
+    expect(flat({ splitInto: [{ name: "A" }] }, "X")).toContain("split another species out of it");
   });
 
   it("summarises the tail rather than listing 73 brambles", () => {
-    const names = Array.from({ length: 73 }, (_, i) => `Rubus sp${i}`);
-    const sentence = splitSentence({ splitInto: names }, "Rubus fruticosus")!;
-    expect(sentence).toContain("73 species likely split from Rubus fruticosus");
-    expect(sentence).toContain("Rubus sp0, Rubus sp1, Rubus sp2 and 70 more");
+    const names = Array.from({ length: 73 }, (_, i) => ({ name: `Rubus sp${i}` }));
+    const sentence = flat({ splitInto: names }, "Rubus fruticosus")!;
+    expect(sentence).toContain("73 more species");
+    expect(sentence).toContain("Rubus sp0, Rubus sp1, Rubus sp2, and 70 more.");
     expect(sentence).not.toContain("Rubus sp3,");
   });
 
-  it("hedges — the underlying signal is a name-pattern heuristic, not a changelog", () => {
-    expect(splitSentence({ splitInto: ["Aepyceros petersi"] }, "Aepyceros melampus")).toContain("likely");
+  it("keeps each split-off species as its own value, so it can be linked", () => {
+    const s = splitSentence({ splitInto: [{ name: "Alcelaphus cokii", colId: "L7YRS" }] }, "Alcelaphus buselaphus")!;
+    expect(s.names).toEqual([{ name: "Alcelaphus cokii", colId: "L7YRS" }]);
+    expect(s.before).not.toContain("Alcelaphus cokii");
+  });
+
+  it("hedges both the heuristic and its consequence", () => {
+    const sentence = flat({ splitInto: [{ name: "Aepyceros petersi" }] }, "Aepyceros melampus")!;
+    expect(sentence).toContain("appears to have");
+    expect(sentence).toContain("may cover");
   });
 });
 
 describe("revisionSentences", () => {
   it("returns one sentence per signal, no-match first", () => {
     expect(revisionSentences({ reason: "no_link" }, "Bufo bufo")).toHaveLength(1);
-    expect(revisionSentences({ splitInto: ["Bufo spinosus"] }, "Bufo bufo")).toHaveLength(1);
+    expect(revisionSentences({ splitInto: [{ name: "Bufo spinosus" }] }, "Bufo bufo")).toHaveLength(1);
     const both = revisionSentences(
-      { reason: "lumped", detail: "Leptoxis picta", splitInto: ["Leptoxis coosaensis"] },
+      { reason: "lumped", detail: "Leptoxis picta", splitInto: [{ name: "Leptoxis coosaensis" }] },
       "Leptoxis foremani",
     );
     expect(both).toHaveLength(2);
     expect(both[0]).toContain("is the same species as Leptoxis picta");
     expect(both[1]).toContain("Leptoxis coosaensis");
+    expect(both[1]).toContain("is still a species");
   });
 
   it("returns nothing for a flag carrying neither signal", () => {
@@ -194,7 +210,7 @@ describe("colTaxonUrl", () => {
   it("deep-links to the CoL record the flag is about", () => {
     expect(colTaxonUrl({ reason: "lumped", colId: "7PST9" }, "Achatinella lila"))
       .toBe("https://www.catalogueoflife.org/data/taxon/7PST9");
-    expect(colTaxonUrl({ splitInto: ["Aepyceros petersi"], colId: "64ZMM" }, "Aepyceros melampus"))
+    expect(colTaxonUrl({ splitInto: [{ name: "Aepyceros petersi" }], colId: "64ZMM" }, "Aepyceros melampus"))
       .toBe("https://www.catalogueoflife.org/data/taxon/64ZMM");
   });
 
@@ -218,11 +234,11 @@ describe("RevisionTally", () => {
     const t = tally([
       { reason: "lumped" },
       { reason: "infraspecific" },
-      { splitInto: ["A"] },
-      { splitInto: ["B"] },
-      { splitInto: ["C"] },
-      { reason: "lumped", splitInto: ["D"] },   // both
-      { reason: "no_link", splitInto: ["E"] },  // both
+      { splitInto: [{ name: "A" }] },
+      { splitInto: [{ name: "B" }] },
+      { splitInto: [{ name: "C" }] },
+      { reason: "lumped", splitInto: [{ name: "D" }] },   // both
+      { reason: "no_link", splitInto: [{ name: "E" }] },  // both
       null,
       undefined,
       { splitInto: [] },                        // carries nothing
@@ -235,13 +251,13 @@ describe("RevisionTally", () => {
   });
 
   it("partitions species into flagged and clean, with nothing lost", () => {
-    const flags = [{ reason: "lumped" }, { splitInto: ["A"] }, null, { splitInto: [] }, { reason: "no_link", splitInto: ["B"] }];
+    const flags = [{ reason: "lumped" }, { splitInto: [{ name: "A" }] }, null, { splitInto: [] }, { reason: "no_link", splitInto: [{ name: "B" }] }];
     const t = tally(flags);
     expect(t.flagged + t.clean).toBe(flags.length);
   });
 
   it("counts a species in every bar it belongs to, so the bars over-total by exactly `both`", () => {
-    const t = tally([{ reason: "lumped" }, { reason: "lumped", splitInto: ["D"] }, { splitInto: ["E"] }]);
+    const t = tally([{ reason: "lumped" }, { reason: "lumped", splitInto: [{ name: "D" }] }, { splitInto: [{ name: "E" }] }]);
     expect(t.counts).toEqual({ lumped: 2, split: 2 });
     const barSum = Object.values(t.counts).reduce((a, b) => a + b, 0);
     expect(barSum).toBe(t.flagged + t.both);
@@ -250,8 +266,8 @@ describe("RevisionTally", () => {
   it("makes each bar's count equal what selecting that reason returns — the invariant a strict partition would have broken", () => {
     const flags = [
       { reason: "lumped" },
-      { reason: "lumped", splitInto: ["D"] },
-      { splitInto: ["E"] },
+      { reason: "lumped", splitInto: [{ name: "D" }] },
+      { splitInto: [{ name: "E" }] },
       { reason: "no_link" },
       null,
     ];

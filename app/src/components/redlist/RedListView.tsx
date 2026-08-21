@@ -16,7 +16,7 @@ import { CATEGORY_COLORS, TAXA_BY_ID, THREATENED_CATEGORIES } from "@/config/tax
 import { speciesMatchesNode, getNodeDef, getViewRootForNode, findNode, matchesBreakdownName, breakdownDisplayName } from "@/lib/taxonomy-utils";
 import { dynamicNodeDisplayName } from "@/lib/dynamic-taxon";
 import ReviewerChart from "./ReviewerChart";
-import { REVISION_REASONS, REVISION_REASON_SHORT, REVISION_REASON_SUMMARY, revisionReasons, revisionSentences, matchesRevisionFilter, isFlagged, colTaxonUrl, newRevisionTally, tallyRevision } from "@/lib/col-revision";
+import { REVISION_REASONS, REVISION_REASON_SHORT, REVISION_REASON_SUMMARY, revisionReasons, matchesRevisionFilter, isFlagged, colUrl, colTaxonUrl, noMatchSentence, splitSentence, newRevisionTally, tallyRevision, type ColRevision } from "@/lib/col-revision";
 import { parseAssessors } from "@/lib/parseAssessors";
 import { iucnRegionCountries, matchingRegions } from "@/lib/regions";
 import { useFilterParams, type SortField, type MapViewMode } from "@/hooks/useFilterParams";
@@ -606,15 +606,15 @@ function HoverTooltip({ children, text }: { children: React.ReactNode; text: str
 }
 
 
-// A HoverTooltip you can move the pointer INTO — so its text can be read at
-// leisure, selected and copied. HoverTooltip closes the moment the pointer
+// A HoverTooltip you can move the pointer INTO — so its content can be read at
+// leisure, selected and copied, and so links inside it are clickable. HoverTooltip closes the moment the pointer
 // leaves the trigger, which makes the gap between trigger and panel
 // uncrossable; this keeps the panel open while the pointer is over either, with
 // a short grace period covering the transit. Separate from HoverTooltip rather
 // than replacing it: this one costs a timer and a second set of handlers per
 // instance, and the ~40 plain tooltips (icons, badges, column headers) hold
 // nothing worth selecting.
-function SelectableHoverTooltip({ children, text }: { children: React.ReactNode; text: string }) {
+function SelectableHoverTooltip({ children, content }: { children: React.ReactNode; content: React.ReactNode }) {
   const [isOpen, setIsOpen] = useState(false);
   const [position, setPosition] = useState({ top: 0, left: 0 });
   const triggerRef = useRef<HTMLSpanElement>(null);
@@ -644,14 +644,99 @@ function SelectableHoverTooltip({ children, text }: { children: React.ReactNode;
           role="tooltip"
           onMouseEnter={open}
           onMouseLeave={scheduleClose}
-          className="fixed z-[99999] px-2 py-1.5 text-xs bg-zinc-800 text-zinc-200 rounded shadow-lg max-w-[280px] text-left select-text cursor-text"
+          className="fixed z-[99999] px-2 py-1.5 text-xs leading-relaxed bg-zinc-800 text-zinc-200 rounded shadow-lg max-w-[340px] text-left select-text cursor-text"
           style={{ top: position.top, left: position.left, transform: "translateX(-50%) translateY(-100%)" }}
         >
-          {text}
+          {content}
         </div>,
         document.body
       )}
     </span>
+  );
+}
+
+
+// The ⚑ tooltip's body. Every species it names links to that species' own
+// Catalogue of Life record — those names are the actionable part ("what is
+// Hedlundia minima?"), and a link per name beats one link on the flag, which
+// could only ever point at a single record.
+function RevisionTooltipContent({ flag, name }: { flag: ColRevision; name: string }) {
+  const colLink = (text: string, colId?: string) =>
+    colId ? (
+      <a
+        href={colUrl(colId)}
+        target="_blank"
+        rel="noopener noreferrer"
+        onClick={(e) => e.stopPropagation()}
+        className="text-blue-300 hover:text-blue-200 underline"
+      >
+        {text}
+      </a>
+    ) : (
+      text
+    );
+
+  // Reasons like "provisional" or "extinct flag" name no second species, so
+  // without this the tooltip would have no link at all — and the record the
+  // reader wants is precisely the one for this species (the Idaea josephinae
+  // report: "hasn't been matched … but there is C7CM2"). Only when there is no
+  // `detail` link, so the two don't point at the same page twice.
+  const linkSubject = (text: string): React.ReactNode => {
+    const i = text.indexOf(name);
+    if (i < 0) return text;
+    return (
+      <>
+        {text.slice(0, i)}
+        <a
+          href={colTaxonUrl(flag, name)}
+          target="_blank"
+          rel="noopener noreferrer"
+          onClick={(e) => e.stopPropagation()}
+          className="text-blue-300 hover:text-blue-200 underline"
+        >
+          {name}
+        </a>
+        {text.slice(i + name.length)}
+      </>
+    );
+  };
+
+  const sentences: React.ReactNode[] = [];
+  if (flag.reason != null) {
+    const s = noMatchSentence(flag, name);
+    const linkable = s.detail == null;
+    sentences.push(
+      <span key="no-match">
+        {linkable ? linkSubject(s.before) : s.before}
+        {s.detail != null && colLink(s.detail, flag.detailColId)}
+        {s.after}
+      </span>,
+    );
+  }
+  const split = splitSentence(flag, name);
+  if (split) {
+    sentences.push(
+      <span key="split">
+        {split.before}
+        {split.names.map((n, i) => (
+          <React.Fragment key={n.name}>
+            {i > 0 && ", "}
+            {colLink(n.name, n.colId)}
+          </React.Fragment>
+        ))}
+        {split.after}
+      </span>,
+    );
+  }
+  return (
+    <>
+      {sentences.map((node, i) => (
+        <React.Fragment key={i}>
+          {i > 0 && " "}
+          {node}
+        </React.Fragment>
+      ))}
+    </>
   );
 }
 
@@ -5582,17 +5667,14 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
                               "give me all of these" case. A species can carry
                               both signals, hence a list of sentences. */}
                           {isFlagged(s.col_revision) && (
-                            <SelectableHoverTooltip text={revisionSentences(s.col_revision!, s.scientific_name).join(" ")}>
-                              <a
-                                href={colTaxonUrl(s.col_revision!, s.scientific_name)}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                onClick={(e) => e.stopPropagation()}
-                                aria-label={`Possible taxonomic revision — ${revisionReasons(s.col_revision!).map(r => REVISION_REASON_SUMMARY[r] ?? r).join("; ")}. Open in Catalogue of Life`}
-                                className="ml-1 align-middle text-amber-600 dark:text-amber-500 hover:text-amber-700 dark:hover:text-amber-400 text-xs"
+                            <SelectableHoverTooltip content={<RevisionTooltipContent flag={s.col_revision!} name={s.scientific_name} />}>
+                              <span
+                                role="img"
+                                aria-label={`Possible taxonomic revision — ${revisionReasons(s.col_revision!).map(r => REVISION_REASON_SUMMARY[r] ?? r).join("; ")}`}
+                                className="ml-1 align-middle text-amber-600 dark:text-amber-500 text-xs cursor-help"
                               >
                                 ⚑
-                              </a>
+                              </span>
                             </SelectableHoverTooltip>
                           )}
                           {s.common_name && (

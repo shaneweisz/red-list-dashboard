@@ -10,6 +10,7 @@ import * as path from "path";
 import { readCsv } from "./csv";
 import { countryToRegion } from "../regions";
 import type { ColRevision } from "../col-revision";
+import type { NoMatchReason, NoMatchDetail } from "./col-breakdown";
 
 // =============================================================================
 // PATHS
@@ -213,19 +214,22 @@ export function getColRevisions(): Map<number, ColRevision> {
   if (colRevisionsCache) return colRevisionsCache;
   const out = new Map<number, ColRevision>();
   if (fs.existsSync(COL_REVISIONS_PATH)) {
-    // Short-keyed on disk (r/d/i/c/n/s, absent fields omitted) — one entry per
+    // Short-keyed on disk (r/d/i/dc/c/n/s, absent fields omitted) — one entry per
     // flagged species, so the shipped file stays small. See build-col-revisions.
     const file = JSON.parse(fs.readFileSync(COL_REVISIONS_PATH, "utf-8")) as {
-      species: Record<string, { r?: string; d?: string; i?: number; c?: string; n?: string; s?: string[] }>;
+      species: Record<string, { r?: string; d?: string; i?: number; dc?: string; c?: string; n?: string; s?: [string, string][] }>;
     };
     for (const [id, e] of Object.entries(file.species ?? {})) {
       out.set(Number(id), {
         ...(e.r != null ? { reason: e.r } : {}),
         ...(e.d != null ? { detail: e.d } : {}),
         ...(e.i != null ? { detailId: e.i } : {}),
+        ...(e.dc != null ? { detailColId: e.dc } : {}),
         ...(e.c != null ? { colId: e.c } : {}),
         ...(e.n != null ? { colName: e.n } : {}),
-        ...(e.s?.length ? { splitInto: e.s } : {}),
+        // [name, col_id] pairs on disk; an empty col_id means CoL has the name
+        // but no record we can link to, so the UI renders it as plain text.
+        ...(e.s?.length ? { splitInto: e.s.map(([name, colId]) => (colId ? { name, colId } : { name })) } : {}),
       });
     }
   }
@@ -728,14 +732,11 @@ export interface NodeSummary {
 // See scripts/build-taxa-summary.ts's classifyNoMatch for what each reason means and
 // how it's derived. Modular/additive on top of noMatchIds — safe to ignore or drop
 // without touching the count-only CoL Match / No CoL Match mechanism.
-export type NoMatchReason = "no_link" | "missing_from_backbone" | "infraspecific" | "provisional" | "lumped" | "not_in_base" | "extinct_unconfirmed" | "classified_elsewhere";
-export interface NoMatchDetail {
-  id: number;
-  name: string;
-  reason: NoMatchReason;
-  detail?: string;
-  detailId?: number;
-}
+// Re-exported from lib/data/col-breakdown, which is where classifyNoMatch
+// actually produces these — this file used to declare its own structurally
+// identical copy, and adding a reason there (synonym_of) silently failed to
+// typecheck here until both were edited. One declaration, no drift.
+export type { NoMatchReason, NoMatchDetail };
 
 // Heuristic "split from" flag for Not Evaluated species — see
 // scripts/build-taxa-summary.ts's SPLIT_CANDIDATES_SQL for the mechanism and its

@@ -36,6 +36,7 @@ export const SPLIT_REASON = "split";
 export const REVISION_REASONS = [
   SPLIT_REASON,
   "lumped",
+  "synonym_of",
   "infraspecific",
   "not_in_base",
   "provisional",
@@ -52,6 +53,7 @@ export type RevisionReasonCode = (typeof REVISION_REASONS)[number];
 export const REVISION_REASON_SHORT: Record<string, string> = {
   split: "Split",
   lumped: "Lumped",
+  synonym_of: "Renamed",
   infraspecific: "Subspecies",
   not_in_base: "Not in checklist",
   provisional: "Provisional",
@@ -65,6 +67,7 @@ export const REVISION_REASON_SHORT: Record<string, string> = {
 export const REVISION_REASON_SUMMARY: Record<string, string> = {
   split: "Catalogue of Life recognises species likely split out of this one",
   lumped: "Catalogue of Life merges this with another assessed species",
+  synonym_of: "Catalogue of Life's checklist files this name under another species",
   infraspecific: "Catalogue of Life now ranks this as a subspecies",
   not_in_base: "recognised, but not yet in Catalogue of Life's curated checklist",
   provisional: "listed by Catalogue of Life only provisionally",
@@ -87,12 +90,14 @@ export interface ColRevision {
   /** The CoL id to deep-link to: the record that disagrees with the assessment,
    *  or — for a split-only flag — this species' own CoL record. */
   colId?: string;
+  /** The CoL record for `detail`, so that name can link to CoL as well. */
+  detailColId?: string;
   /** CoL's own accepted name for that col_id, when it's neither this species
    *  nor `detail` (i.e. the two were merged under some third name). */
   colName?: string;
-  /** Names of the species CoL now recognises that were likely split out of this
-   *  one. Never empty when present. */
-  splitInto?: string[];
+  /** Species CoL now recognises that were likely split out of this one, each
+   *  with its own CoL record. Never empty when present. */
+  splitInto?: { name: string; colId?: string }[];
 }
 
 /** Does this species carry any revision signal at all? */
@@ -183,6 +188,14 @@ export interface NoMatchSentence {
   after: string;
 }
 
+/** The split explanation, with the split-off species kept as their own values so
+ *  each can be rendered as a link to its CoL record. */
+export interface SplitSentence {
+  before: string;
+  names: { name: string; colId?: string }[];
+  after: string;
+}
+
 const COL = "Catalogue of Life";
 
 /**
@@ -207,6 +220,13 @@ export function noMatchSentence(flag: ColRevision, subject: string | null): NoMa
         ? { before: `According to ${COL}, ${s}is the same species as `, detail: flag.detail, after: `${merged}.` }
         : { before: "Same species as ", detail: flag.detail, after: merged };
     }
+    case "synonym_of":
+      // NOT "not in the checklist yet" — the checklist has the name, filed as a
+      // synonym of an accepted species. Usually a genus transfer IUCN hasn't
+      // adopted (Sorbus minima -> Hedlundia minima).
+      return subject
+        ? { before: `${COL}'s checklist files ${s}as a synonym of `, detail: flag.detail, after: "." }
+        : { before: "Filed as a synonym of ", detail: flag.detail, after: "" };
     case "infraspecific":
       return subject
         ? { before: `According to ${COL}, ${s}is no longer a species of its own — it is now a subspecies of `, detail: flag.detail, after: "." }
@@ -226,9 +246,13 @@ export function noMatchSentence(flag: ColRevision, subject: string | null): NoMa
     // CoL's record for this exact name is flagged extinct. Verified case by case
     // — see TaxaSummary.tsx's git history (2026-07-21) to re-check a given species.
     case "extinct_unconfirmed":
+      // Deliberately "its record ... is flagged": the flag is a fact about CoL's
+      // record, not about the species. Some are real boundary disagreements
+      // (Equus ferus), and some are simply wrong upstream — CoL flags
+      // Columba elphinstonii (a Least Concern, extant pigeon) extinct.
       return subject
-        ? { before: `${COL} marks ${s}extinct, but this assessment doesn't.`, after: "" }
-        : { before: `${COL} marks the name extinct; this assessment doesn't`, after: "" };
+        ? { before: `${COL}'s record for ${s}is flagged extinct, which this assessment's category contradicts — often a CoL data error.`, after: "" }
+        : { before: `${COL}'s record is flagged extinct; this assessment's category contradicts it`, after: "" };
     case "no_link":
       return subject
         ? { before: `${s}hasn't been matched to a ${COL} name yet.`, after: "" }
@@ -254,19 +278,31 @@ export function noMatchSentence(flag: ColRevision, subject: string | null): NoMa
 const MAX_SPLIT_NAMES = 3;
 
 /**
- * The split half of the flag, or null when there is none. Deliberately hedged
- * ("likely"): the underlying signal is a name-pattern heuristic — CoL keeps the
- * old subspecies name as a synonym when a subspecies is promoted — not a
- * confirmed taxonomic changelog. See SPLIT_CANDIDATES_SQL in col-breakdown.ts.
+ * The split half of the flag, in parts so each split-off species can be linked
+ * to its own CoL record, or null when there is none.
+ *
+ * Deliberately hedged ("likely"): the underlying signal is a name-pattern
+ * heuristic — CoL keeps the old subspecies name as a synonym when a subspecies
+ * is promoted — not a confirmed taxonomic changelog. See SPLIT_CANDIDATES_SQL
+ * in col-breakdown.ts.
  */
-export function splitSentence(flag: ColRevision, subject: string): string | null {
+export function splitSentence(flag: ColRevision, subject: string): SplitSentence | null {
   const names = flag.splitInto ?? [];
   if (names.length === 0) return null;
-  if (names.length === 1) return `${COL} now also recognises ${names[0]}, likely split from ${subject}.`;
   const shown = names.slice(0, MAX_SPLIT_NAMES);
   const rest = names.length - shown.length;
-  const list = rest > 0 ? `${shown.join(", ")} and ${rest} more` : `${shown.slice(0, -1).join(", ")} and ${shown[shown.length - 1]}`;
-  return `${COL} now also recognises ${names.length} species likely split from ${subject}: ${list}.`;
+  return {
+    // The point isn't that new names exist — it's what that implies for THIS
+    // assessment. The species itself is not gone (a reader's first worry), but
+    // the assessment was made against a broader concept than CoL now uses, so
+    // part of what it covers may since have been reassigned. "appears to have"
+    // hedges the heuristic; "may cover" hedges the consequence.
+    before: `${subject} is still a species, but ${COL} appears to have since split `
+      + (names.length === 1 ? "another species" : `${names.length} more species`)
+      + ` out of it — so this assessment may cover populations now assigned to `,
+    names: shown,
+    after: rest > 0 ? `, and ${rest} more.` : ".",
+  };
 }
 
 /** The whole flag as plain sentences — one per signal it carries. */
@@ -277,7 +313,7 @@ export function revisionSentences(flag: ColRevision, subject: string): string[] 
     out.push(`${before}${detail ?? ""}${after}`);
   }
   const split = splitSentence(flag, subject);
-  if (split) out.push(split);
+  if (split) out.push(`${split.before}${split.names.map((n) => n.name).join(", ")}${split.after}`);
   return out;
 }
 
@@ -293,8 +329,13 @@ export function noMatchExplanation(flag: ColRevision, subject: string | null = n
  * flag. Falls back to a CoL name search when there's no col_id at all, which is
  * the "no_link" case (there is no record to link to — that IS the finding).
  */
+/** A CoL record's public page. */
+export function colUrl(colId: string): string {
+  return `https://www.catalogueoflife.org/data/taxon/${colId}`;
+}
+
 export function colTaxonUrl(flag: ColRevision, scientificName: string): string {
   return flag.colId
-    ? `https://www.catalogueoflife.org/data/taxon/${flag.colId}`
+    ? colUrl(flag.colId)
     : `https://www.catalogueoflife.org/data/search?q=${encodeURIComponent(scientificName)}`;
 }
