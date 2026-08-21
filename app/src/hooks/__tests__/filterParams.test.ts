@@ -266,6 +266,8 @@ describe("buildQs", () => {
     search: "",
     subgroups: new Set<string>(),
     sortField: null as "year" | "category" | "totalGbif" | "newGbif" | "pctNewGbif" | null,
+    sortField2: null as "year" | "category" | "totalGbif" | "newGbif" | "pctNewGbif" | null,
+    sortDirection2: "desc" as const,
     sortDirection: "desc" as const,
     species: null as string | null,
     tab: null as "gbif" | "literature" | "redlist" | "wikipedia" | "cites" | "assessors" | null,
@@ -418,6 +420,38 @@ describe("buildQs", () => {
     expect([...parseParams(qs).facilitators]).toEqual(["Rutherford, C.A.", "Hermes, C."]);
   });
 
+  // Secondary sort — shift/cmd-click a second column header.
+  it("round-trips a secondary sort through sort2/dir2", () => {
+    const qs = buildQs({ ...emptyState, sortField: "year", sortDirection: "desc", sortField2: "newGbif", sortDirection2: "asc" });
+    const p = new URLSearchParams(qs);
+    expect(p.get("sort2")).toBe("newGbif");
+    expect(p.get("dir2")).toBe("asc");
+    const parsed = parseParams(qs);
+    expect(parsed.sortField2).toBe("newGbif");
+    expect(parsed.sortDirection2).toBe("asc");
+  });
+
+  it("omits dir2 when the secondary is the default desc", () => {
+    const qs = buildQs({ ...emptyState, sortField: "category", sortField2: "newGbif", sortDirection2: "desc" });
+    const p = new URLSearchParams(qs);
+    expect(p.get("sort2")).toBe("newGbif");
+    expect(p.has("dir2")).toBe(false);
+  });
+
+  it("omits a secondary that duplicates the primary — it would be a no-op tiebreaker", () => {
+    const qs = buildQs({ ...emptyState, sortField: "newGbif", sortField2: "newGbif" });
+    expect(new URLSearchParams(qs).has("sort2")).toBe(false);
+  });
+
+  it("omits a secondary that duplicates the implicit default primary (year)", () => {
+    const qs = buildQs({ ...emptyState, sortField: null, sortField2: "year" });
+    expect(new URLSearchParams(qs).has("sort2")).toBe(false);
+  });
+
+  it("ignores an unrecognised sort2 rather than trusting the URL", () => {
+    expect(parseParams("?sort2=notAColumn").sortField2).toBeNull();
+  });
+
   it("includes species when set", () => {
     const qs = buildQs({ ...emptyState, species: "sis-176168", tab: "gbif" });
     const params = new URLSearchParams(qs);
@@ -510,6 +544,8 @@ describe("parseParams ↔ buildQs round-trip", () => {
       search: "shrew",
       sortField: "category" as const,
       sortDirection: "asc" as const,
+      sortField2: "newGbif" as const,
+      sortDirection2: "desc" as const,
       species: null,
       tab: null,
     };
@@ -556,6 +592,8 @@ describe("parseParams ↔ buildQs round-trip", () => {
       facilitators: new Set<string>(),
       search: "",
       sortField: null as "year" | "category" | "totalGbif" | "newGbif" | "pctNewGbif" | null,
+    sortField2: null as "year" | "category" | "totalGbif" | "newGbif" | "pctNewGbif" | null,
+    sortDirection2: "desc" as const,
       sortDirection: "desc" as const,
       species: null as string | null,
       tab: null as "gbif" | "literature" | "redlist" | "wikipedia" | "cites" | "assessors" | null,
@@ -596,6 +634,8 @@ describe("parseParams ↔ buildQs round-trip", () => {
     facilitators: new Set<string>(),
     search: "",
     sortField: null as "year" | "category" | "totalGbif" | "newGbif" | "pctNewGbif" | null,
+    sortField2: null as "year" | "category" | "totalGbif" | "newGbif" | "pctNewGbif" | null,
+    sortDirection2: "desc" as const,
     sortDirection: "desc" as const,
     species: null as string | null,
     tab: null as "gbif" | "literature" | "redlist" | "wikipedia" | "cites" | "assessors" | null,
@@ -706,6 +746,8 @@ describe("parseParams ↔ buildQs round-trip", () => {
       facilitators: new Set<string>(),
       search: "",
       sortField: null as "year" | "category" | "totalGbif" | "newGbif" | "pctNewGbif" | null,
+    sortField2: null as "year" | "category" | "totalGbif" | "newGbif" | "pctNewGbif" | null,
+    sortDirection2: "desc" as const,
       sortDirection: "desc" as const,
       species: null as string | null,
       tab: null as "gbif" | "literature" | "redlist" | "wikipedia" | "cites" | "assessors" | null,
@@ -746,6 +788,8 @@ describe("parseParams ↔ buildQs round-trip", () => {
       facilitators: new Set<string>(),
       search: "",
       sortField: null as "year" | "category" | "totalGbif" | "newGbif" | "pctNewGbif" | null,
+    sortField2: null as "year" | "category" | "totalGbif" | "newGbif" | "pctNewGbif" | null,
+    sortDirection2: "desc" as const,
       sortDirection: "desc" as const,
       species: null as string | null,
       tab: null as "gbif" | "literature" | "redlist" | "wikipedia" | "cites" | "assessors" | null,
@@ -786,6 +830,8 @@ describe("parseParams ↔ buildQs round-trip", () => {
       search: "",
       sortField: "newGbif" as const,
       sortDirection: "desc" as const,
+      sortField2: null,
+      sortDirection2: "desc" as const,
       species: null as string | null,
       tab: null as "gbif" | "literature" | "redlist" | "wikipedia" | "cites" | "assessors" | null,
     };
@@ -826,6 +872,8 @@ describe("param suffixing (compare mode)", () => {
     subgroups: new Set<string>(),
     sortField: null as "year" | "category" | "totalGbif" | "newGbif" | "pctNewGbif" | "describedYear" | null,
     sortDirection: "desc" as const,
+    sortField2: null as "year" | "category" | "totalGbif" | "newGbif" | "pctNewGbif" | "describedYear" | null,
+    sortDirection2: "desc" as const,
     species: null as string | null,
     tab: null as "gbif" | "literature" | "redlist" | "wikipedia" | "cites" | "assessors" | "reviewers" | "col" | "eol" | null,
   };
@@ -961,6 +1009,8 @@ describe("OWN_PARAM_NAMES stays in sync with buildQs", () => {
       maxDescribedYear: 2010,
       sortField: "category" as const,
       sortDirection: "asc" as const,
+      sortField2: "newGbif" as const,
+      sortDirection2: "desc" as const,
       mapViewMode: "list" as const,
       mapSortKey: "outdated" as const,
       mapSortDirection: "asc" as const,

@@ -3198,7 +3198,7 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
     {perTaxa.length > 0 && selectedTaxa.size === 0 && (
       <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1.5 mt-1.5">
         <span className="hidden sm:inline pl-3 md:pl-4 text-sm text-zinc-400 dark:text-zinc-500">
-          {countryMode ? "Click a country to view its species, Cmd/Ctrl+click to multi-select." : "Click to filter, use charts and search to explore species. Cmd/Ctrl+click to multi-select."}
+          {countryMode ? "Click a country to view its species, Cmd/Ctrl+click to multi-select." : "Click to filter, use charts and search to explore species. Cmd/Ctrl+click to multi-select, Shift+drag across a chart to select a range."}
         </span>
         <span className="inline-flex items-center gap-1.5 ml-auto pr-3 sm:pr-0">
           {/* Assessed/Not Evaluated toggle used to be paired here too, but it's
