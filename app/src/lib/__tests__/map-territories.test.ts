@@ -70,7 +70,7 @@ describe("splitEmbeddedTerritories", () => {
     expect(polygonCount(split, "Netherlands")).toBe(polygonCount(WORLD, "Netherlands") - 3);
     expect(polygonCount(split, "New Zealand")).toBe(polygonCount(WORLD, "New Zealand") - 2);
     // Svalbard proper (8 islands) + Bjørnøya + Jan Mayen, all one ISO code.
-    expect(polygonCount(split, "Svalbard")).toBe(10);
+    expect(polygonCount(split, "Svalbard and Jan Mayen")).toBe(10);
     expect(polygonCount(split, "Norway")).toBe(polygonCount(WORLD, "Norway") - 10);
   });
 
@@ -79,7 +79,7 @@ describe("splitEmbeddedTerritories", () => {
     // Australian territories with no shared ISO code — split, nothing is left.
     expect(byName(split, "Indian Ocean Ter.")).toHaveLength(0);
     expect(polygonCount(split, "Christmas Island")).toBe(1);
-    expect(polygonCount(split, "Cocos Islands")).toBe(2);
+    expect(polygonCount(split, "Cocos (Keeling) Islands")).toBe(2);
   });
 
   it("passes every other country straight through, untouched", () => {

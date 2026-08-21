@@ -22,13 +22,7 @@ describe("country lookup tables", () => {
     // The TopoJSON spells them "St. Vin. and Gren.", "Faeroe Is.", "Cabo Verde";
     // ALPHA2_TO_NAME is what the tooltip, the list view and the filter chips
     // show, so it has to override each of those back to the long form.
-    //
-    // These nine still show the abbreviation and predate this table being
-    // deduplicated — listed rather than silently tolerated so the guard still
-    // catches anything NEW slipping through, and so the debt stays visible.
-    const KNOWN_ABBREVIATED = new Set(["BA", "CD", "CF", "DO", "EH", "GQ", "SB", "SS", "TF"]);
     for (const [code, name] of Object.entries(ALPHA2_TO_NAME)) {
-      if (KNOWN_ABBREVIATED.has(code)) continue;
       // "U.S." is the country's actual name, not a shortening of one.
       expect(name.replace("U.S.", "US"), `${code} is showing an abbreviated shape name`)
         .not.toMatch(/\b(Is|Rep|Terr?|Ter|Herz|Gren|Vin|Geo|Fr|N|S|W|St|Eq)\.\s|\bIs\.$/);
@@ -53,5 +47,12 @@ describe("country lookup tables", () => {
   it("puts French Guiana in South America, where the Red List does", () => {
     expect(resolveCountryToAlpha2("French Guiana")).toBe("GF");
     expect(resolveCountryToAlpha2("Guyane")).toBeNull(); // not an IUCN spelling
+  });
+
+  it("names DT, which is IUCN's own code rather than an ISO one", () => {
+    // 1,808 assessed species carry it; without a name it renders as a bare
+    // "DT" row in the country list and an unresolvable ?country= value.
+    expect(ALPHA2_TO_NAME["DT"]).toBe("Disputed Territory");
+    expect(resolveCountryToAlpha2("DT")).toBe("DT");
   });
 });

@@ -74,8 +74,16 @@ export const NAME_TO_ALPHA2: Record<string, string> = {
   // feature labelled with the name below, so these entries are what let the
   // map resolve it — see that module for why the split is needed at all.
   "French Guiana": "GF", "Guadeloupe": "GP", "Martinique": "MQ",
-  "Réunion": "RE", "Mayotte": "YT", "Bonaire": "BQ", "Svalbard": "SJ",
-  "Tokelau": "TK", "Christmas Island": "CX", "Cocos Islands": "CC",
+  "Réunion": "RE", "Mayotte": "YT", "Bonaire, Sint Eustatius and Saba": "BQ",
+  "Svalbard and Jan Mayen": "SJ", "Tokelau": "TK",
+  "Christmas Island": "CX", "Cocos (Keeling) Islands": "CC",
+  // Ashmore and Cartier has no ISO alpha-2 of its own — ISO files the reefs
+  // under Australia, so IUCN records anything found there as AU. Mapping the
+  // shape keeps it coloured with Australia instead of reading as a data gap.
+  // ("Siachen Glacier", the only other unmapped shape, stays unmapped: Natural
+  // Earth deliberately attributes it to neither India nor Pakistan, and IUCN's
+  // own location list has no code for it either, so neither do we.)
+  "Ashmore and Cartier Is.": "AU",
   // Somaliland, N. Cyprus, and Kosovo are drawn as their own shape in the
   // TopoJSON, but IUCN's public presentation doesn't treat any of them as a
   // distinct country — fold each into its parent rather than leaving a
@@ -112,8 +120,8 @@ export const ALPHA2_TO_NAME: Record<string, string> = {
   // Additional countries and territories not in TopoJSON
   "AD": "Andorra", "AG": "Antigua and Barbuda", "AI": "Anguilla", "AQ": "Antarctica",
   "AS": "American Samoa", "AW": "Aruba", "AX": "Åland Islands", "BB": "Barbados",
-  "BH": "Bahrain", "BL": "Saint Barthélemy", "BM": "Bermuda", "BQ": "Bonaire",
-  "BS": "Bahamas", "BV": "Bouvet Island", "BZ": "Belize", "CC": "Cocos Islands",
+  "BH": "Bahrain", "BL": "Saint Barthélemy", "BM": "Bermuda", "BQ": "Bonaire, Sint Eustatius and Saba",
+  "BS": "Bahamas", "BV": "Bouvet Island", "BZ": "Belize", "CC": "Cocos (Keeling) Islands",
   "CK": "Cook Islands", "CV": "Cape Verde", "CW": "Curaçao", "CX": "Christmas Island",
   "DM": "Dominica", "FK": "Falkland Islands", "FM": "Micronesia", "FO": "Faroe Islands",
   "GD": "Grenada", "GF": "French Guiana", "GG": "Guernsey", "GI": "Gibraltar",
@@ -125,8 +133,27 @@ export const ALPHA2_TO_NAME: Record<string, string> = {
   "MQ": "Martinique", "MS": "Montserrat", "MT": "Malta", "MU": "Mauritius", "MV": "Maldives",
   "NF": "Norfolk Island", "NR": "Nauru", "NU": "Niue", "PF": "French Polynesia",
   "PM": "Saint Pierre and Miquelon", "PN": "Pitcairn", "PW": "Palau", "RE": "Réunion",
-  "SC": "Seychelles", "SH": "Saint Helena", "SJ": "Svalbard", "SM": "San Marino",
-  "SO": "Somalia", "CY": "Cyprus", "RS": "Serbia",
+  "SC": "Seychelles", "SH": "Saint Helena", "SJ": "Svalbard and Jan Mayen", "SM": "San Marino",
+  // Overrides for names the spread above would otherwise win with: each of
+  // these codes is also keyed by a shape that folds into it ("Somaliland",
+  // "N. Cyprus", "Kosovo", "Ashmore and Cartier Is."), and the spread takes
+  // the LAST key that maps to a code.
+  "SO": "Somalia", "CY": "Cyprus", "RS": "Serbia", "AU": "Australia",
+  // The shapes carry abbreviated labels ("Dem. Rep. Congo", "Solomon Is."),
+  // and this table is what the list view, tooltip and filter chips show — so
+  // spell them out. Names follow IUCN's own location_lookup, except that CD
+  // keeps this table's natural word order rather than ISO's inverted
+  // "Congo, The Democratic Republic of the".
+  "BA": "Bosnia and Herzegovina", "CD": "Democratic Republic of the Congo",
+  "CF": "Central African Republic", "DO": "Dominican Republic",
+  "EH": "Western Sahara", "GQ": "Equatorial Guinea", "SB": "Solomon Islands",
+  "SS": "South Sudan", "TF": "French Southern Territories",
+  // Not an ISO code at all: IUCN's own location code for range that falls in
+  // disputed territory, recorded alongside real countries (a South China Sea
+  // coral lists DT next to CN, TW, VN and PH). 1,808 assessed species carry
+  // it, so it needs a label rather than showing as a bare "DT" row — but it
+  // has no shape on the map, and shouldn't have one.
+  "DT": "Disputed Territory",
   "ST": "São Tomé and Príncipe", "SV": "El Salvador", "SX": "Sint Maarten",
   "TC": "Turks and Caicos", "TK": "Tokelau", "TO": "Tonga", "TV": "Tuvalu",
   "UM": "U.S. Minor Outlying Islands", "VA": "Vatican City", "VC": "Saint Vincent and the Grenadines",

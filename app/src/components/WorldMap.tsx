@@ -9,7 +9,7 @@ import {
 } from "react-simple-maps";
 import { geoCentroid } from "d3-geo";
 import { IUCN_REGION_ORDER, matchingRegions, iucnRegionCountries } from "@/lib/regions";
-import { NAME_TO_ALPHA2 } from "@/lib/countries";
+import { NAME_TO_ALPHA2, ALPHA2_TO_NAME } from "@/lib/countries";
 import { splitEmbeddedTerritories, EMBEDDED_TERRITORY_NAMES } from "@/lib/map-territories";
 import CountryStatsList from "./CountryStatsList";
 import type { MapViewMode, MapSortKey } from "@/hooks/useFilterParams";
@@ -197,10 +197,16 @@ function WorldMap({ selectedCountries, onCountrySelect, selectedTaxon, precomput
   const searchContainerRef = useRef<HTMLDivElement>(null);
   const mapContainerRef = useRef<HTMLDivElement>(null);
 
+  // Matches (and shows) the full country name, so "Democratic Republic" finds
+  // the shape labelled "Dem. Rep. Congo". Zooming still keys off the shape's
+  // own name, which is how the centroid cache below is built.
   const filteredCountries = useMemo(() => {
     if (!searchQuery.trim()) return [];
     const q = searchQuery.toLowerCase();
-    return COUNTRY_NAMES_SORTED.filter(name => name.toLowerCase().includes(q)).slice(0, 8);
+    return COUNTRY_NAMES_SORTED
+      .map(name => ({ name, label: ALPHA2_TO_NAME[NAME_TO_ALPHA2[name]] ?? name }))
+      .filter(({ name, label }) => label.toLowerCase().includes(q) || name.toLowerCase().includes(q))
+      .slice(0, 8);
   }, [searchQuery]);
 
   const handleZoomToCountry = useCallback((countryName: string) => {
@@ -448,7 +454,7 @@ function WorldMap({ selectedCountries, onCountrySelect, selectedTaxon, precomput
                     setHighlightedIndex(i => Math.max(i - 1, 0));
                   } else if (e.key === "Enter" && filteredCountries[highlightedIndex]) {
                     e.preventDefault();
-                    handleZoomToCountry(filteredCountries[highlightedIndex]);
+                    handleZoomToCountry(filteredCountries[highlightedIndex].name);
                   } else if (e.key === "Escape") {
                     setSearchOpen(false);
                     setSearchQuery("");
@@ -461,14 +467,14 @@ function WorldMap({ selectedCountries, onCountrySelect, selectedTaxon, precomput
             {/* Search dropdown */}
             {searchOpen && filteredCountries.length > 0 && (
               <div className="absolute top-full left-0 mt-1 w-52 bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-lg shadow-lg z-30 overflow-hidden">
-                {filteredCountries.map((name, i) => (
+                {filteredCountries.map(({ name, label }, i) => (
                   <button
                     key={name}
                     className={`w-full text-left px-3 py-1.5 text-xs transition-colors ${i === highlightedIndex ? "bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300" : "text-zinc-700 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-700"}`}
                     onMouseEnter={() => setHighlightedIndex(i)}
                     onClick={() => handleZoomToCountry(name)}
                   >
-                    {name}
+                    {label}
                   </button>
                 ))}
               </div>
@@ -688,7 +694,9 @@ function WorldMap({ selectedCountries, onCountrySelect, selectedTaxon, precomput
                       key={geo.rsmKey}
                       geography={geo}
                       onMouseEnter={() => {
-                        setHoveredCountry(countryName);
+                        // The shape's own label is abbreviated ("Dem. Rep.
+                        // Congo"); ALPHA2_TO_NAME has the full name.
+                        setHoveredCountry(alpha2 ? ALPHA2_TO_NAME[alpha2] ?? countryName : countryName);
                         setHoveredCountryCode(alpha2);
                         if (selectOnHover && alpha2) {
                           onCountryHover?.(alpha2);

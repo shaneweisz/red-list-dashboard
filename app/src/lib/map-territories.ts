@@ -56,10 +56,10 @@ const EMBEDDED_TERRITORIES: Record<string, readonly EmbeddedTerritory[]> = {
   Netherlands: [
     // Bonaire, plus Saba and Sint Eustatius 800km north-east — one ISO code
     // (BQ, the Caribbean Netherlands) across two clusters of shapes.
-    { code: "BQ", name: "Bonaire", boxes: [[-68.6, 11.9, -68.0, 12.5], [-63.4, 17.3, -62.8, 17.8]] },
+    { code: "BQ", name: "Bonaire, Sint Eustatius and Saba", boxes: [[-68.6, 11.9, -68.0, 12.5], [-63.4, 17.3, -62.8, 17.8]] },
   ],
   Norway: [
-    { code: "SJ", name: "Svalbard", boxes: [[10, 73.5, 36, 81.5], [-10, 70.5, -7, 71.5]] },
+    { code: "SJ", name: "Svalbard and Jan Mayen", boxes: [[10, 73.5, 36, 81.5], [-10, 70.5, -7, 71.5]] },
   ],
   "New Zealand": [
     { code: "TK", name: "Tokelau", boxes: [[-173, -10, -170.5, -8]] },
@@ -69,7 +69,7 @@ const EMBEDDED_TERRITORIES: Record<string, readonly EmbeddedTerritory[]> = {
   // Ter." label. Splitting it is what gives either of them a code.
   "Indian Ocean Ter.": [
     { code: "CX", name: "Christmas Island", boxes: [[105, -11.0, 106.5, -10.0]] },
-    { code: "CC", name: "Cocos Islands", boxes: [[96.5, -12.5, 97.3, -11.9]] },
+    { code: "CC", name: "Cocos (Keeling) Islands", boxes: [[96.5, -12.5, 97.3, -11.9]] },
   ],
 };
 
