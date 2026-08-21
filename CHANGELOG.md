@@ -4,6 +4,7 @@ All notable changes to the IUCN Red List Assessments Dashboard.
 
 ## [Unreleased]
 
+- Added Shift+drag range selection to the filter charts — drag across Conservation Status, Years Since Assessed, Year of Latest Assessment, GBIF Records, Year Described, Number of Assessments or the Assessors/Reviewers/Facilitators chart to select every bar swept over, holding Cmd/Ctrl to add to the existing selection rather than replace it. The Year view's from/to number inputs are gone — a drag across the bars does the same job in one gesture (the `minAssessmentYear`/`maxAssessmentYear` URL params still work for shared links, /browse and MCP)
 - Fixed GBIF counts for plants and fungi excluding preserved specimens. Herbarium and fungarium sheets are the primary — often the only — georeferenced record of a plant or fungus, so counting field observations alone showed *Parkinsonia peruviana* (CR) as having 1 record when it has 31. The sync now counts preserved specimens for Plantae, Fungi and Chromista, matching what the occurrence map has defaulted to for those kingdoms all along; animals are unchanged
 
 ## [v2.19.0] — 2026-07-24 – 2026-07-30 — Sign-in, Compare Mode & Filter Charts
