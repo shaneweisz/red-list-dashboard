@@ -137,15 +137,31 @@ export interface ColRevision {
 
 /** Does this species carry any revision signal at all? */
 export function isFlagged(flag: ColRevision | null | undefined): boolean {
-  return flag != null && (flag.reason != null || (flag.splitInto?.length ?? 0) > 0);
+  return flag != null && (flag.reason != null || (flag.splitInto?.length ?? 0) > 0 || (flag.lumpedWith?.length ?? 0) > 0);
 }
 
-/** Every reason bar this species belongs in — one per signal it carries, so a
- *  species with both a no-match reason and splits counts toward both. */
+/**
+ * Every bar this species belongs in — one per signal it carries, so a species
+ * with more than one counts toward each.
+ *
+ * Three independent signals: it has been split, it shares a CoL record with
+ * other assessments (lumped), and it has no clean 1:1 match for some other
+ * reason. Lumping is derived from the group rather than from `reason` on
+ * purpose: EVERY assessment sharing the record is equally affected, and which
+ * one the classifier happens to call "lumped" is an accepted-name tie-break, not
+ * a fact about the taxonomy — CoL's 347N2 is both Dasycercus cristicauda (EX)
+ * and Dasycercus hillieri (LC), and neither assessment is the odd one out.
+ */
 export function revisionReasons(flag: ColRevision): string[] {
   const out: string[] = [];
   if (flag.splitInto?.length) out.push(SPLIT_REASON);
-  if (flag.reason != null) out.push(flag.reason);
+  // Either source counts: the group (what the dashboard ships) or the
+  // classifier's own label (what the SSC panel's data carries, and what an
+  // artifact built before the group was collected would have). Without the
+  // fallback such a flag would be flagged but sit in no bar, so nothing could
+  // select it.
+  if (flag.lumpedWith?.length || flag.reason === "lumped") out.push("lumped");
+  if (flag.reason != null && flag.reason !== "lumped") out.push(flag.reason);
   return out;
 }
 
@@ -168,16 +184,12 @@ export function matchesRevisionFilter(
 /**
  * Running totals behind the filter chart.
  *
- * The six no-match reasons DO partition their own set — classifyNoMatch's
- * if-else chain gives a species exactly one — but `split` is an orthogonal
- * property, so the seven bars together do not partition the flagged species.
- * Forcing them to would mean either demoting split for the ~1.5% carrying both
- * (making the Split bar disagree with the rows clicking it returns, which is the
- * worse lie) or dropping a true fact about those species.
- *
- * So the bars stay honest and the arithmetic is made explicit instead:
- * `noMatch + split - both === flagged`, asserted in the tests and surfaced under
- * the chart whenever `both` is non-zero.
+ * The no-match reasons partition their own set — classifyNoMatch gives a species
+ * exactly one — but split and lumped are orthogonal properties, so the bars
+ * together do not partition the flagged species. Forcing them to would mean
+ * making a bar disagree with the rows clicking it returns, or dropping a true
+ * fact about a species. So the bars stay honest and the overlap is stated under
+ * the chart instead.
  */
 export interface RevisionTally {
   /** Species per signal — what each bar shows, and exactly what clicking it selects. */
@@ -186,16 +198,13 @@ export interface RevisionTally {
   flagged: number;
   /** Species carrying neither. flagged + clean === every species tallied. */
   clean: number;
-  /** Species with a no-match reason (any of the six). */
-  noMatch: number;
-  /** Species with at least one split-off species. */
-  split: number;
-  /** Species counted in BOTH noMatch and split — the overlap the bars double-count. */
-  both: number;
+  /** Species carrying more than one signal — the amount by which the bars
+   *  over-total `flagged`, which is what the card explains under the chart. */
+  multiSignal: number;
 }
 
 export function newRevisionTally(): RevisionTally {
-  return { counts: {}, flagged: 0, clean: 0, noMatch: 0, split: 0, both: 0 };
+  return { counts: {}, flagged: 0, clean: 0, multiSignal: 0 };
 }
 
 /** Fold one species' flag into a tally. Mutates — this runs once per species in
@@ -205,11 +214,12 @@ export function tallyRevision(t: RevisionTally, flag: ColRevision | null | undef
   t.flagged++;
   const reasons = revisionReasons(flag!);
   for (const reason of reasons) t.counts[reason] = (t.counts[reason] ?? 0) + 1;
-  const hasSplit = reasons.includes(SPLIT_REASON);
-  const hasReason = flag!.reason != null;
-  if (hasSplit) t.split++;
-  if (hasReason) t.noMatch++;
-  if (hasSplit && hasReason) t.both++;
+  if (reasons.length > 1) t.multiSignal++;
+}
+
+/** Total across the bars — `flagged` plus one for each extra signal carried. */
+export function barTotal(t: RevisionTally): number {
+  return Object.values(t.counts).reduce((a, b) => a + b, 0);
 }
 
 /**
@@ -370,12 +380,14 @@ export function splitSummary(flag: ColRevision, subject: string): SplitSummary |
  */
 export function lumpSummary(flag: ColRevision, subject: string): SplitSummary | null {
   const others = flag.lumpedWith ?? [];
-  if (flag.reason !== "lumped" || others.length === 0) return null;
+  if (others.length === 0) return null;
   const under = flag.lumpedUnder;
   return {
     lead: `${COL} treats ${subject} and `
       + (others.length === 1 ? "1 other IUCN assessment" : `${others.length} other IUCN assessments`)
-      + ` as a single species${under ? `, ${under}` : ""}`
+      // Named only when it adds something: for the assessment that IS CoL's
+      // accepted name, ", Dasycercus cristicauda" just repeats the subject.
+      + ` as a single species${under && under !== subject ? `, ${under}` : ""}`
       + ` — so more than one assessment covers what ${COL} counts as one species:`,
     // A member with no synonym record of its own — typically the accepted name
     // itself — links to the shared record, which IS its record.
@@ -401,13 +413,11 @@ export function flattenSummary(s: SplitSummary | null): string | null {
 /** The whole flag as plain sentences — one per signal it carries. */
 export function revisionSentences(flag: ColRevision, subject: string): string[] {
   const out: string[] = [];
-  if (flag.reason != null) {
-    const lump = flattenSummary(lumpSummary(flag, subject));
-    if (lump) out.push(lump);
-    else {
-      const { before, detail, after } = noMatchSentence(flag, subject);
-      out.push(`${before}${detail ?? ""}${after}`);
-    }
+  const lump = flattenSummary(lumpSummary(flag, subject));
+  if (lump) out.push(lump);
+  else if (flag.reason != null) {
+    const { before, detail, after } = noMatchSentence(flag, subject);
+    out.push(`${before}${detail ?? ""}${after}`);
   }
   const split = splitSentence(flag, subject);
   if (split) out.push(split);

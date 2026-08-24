@@ -16,7 +16,7 @@ import { CATEGORY_COLORS, TAXA_BY_ID, THREATENED_CATEGORIES } from "@/config/tax
 import { speciesMatchesNode, getNodeDef, getViewRootForNode, findNode, matchesBreakdownName, breakdownDisplayName } from "@/lib/taxonomy-utils";
 import { dynamicNodeDisplayName } from "@/lib/dynamic-taxon";
 import ReviewerChart from "./ReviewerChart";
-import { REVISION_REASONS, REVISION_REASON_SHORT, REVISION_REASON_SUMMARY, revisionReasons, matchesRevisionFilter, isFlagged, colUrl, colTaxonUrl, noMatchSentence, splitSummary, lumpSummary, type SplitSummary, newRevisionTally, tallyRevision, type ColRevision } from "@/lib/col-revision";
+import { REVISION_REASONS, REVISION_REASON_SHORT, REVISION_REASON_SUMMARY, revisionReasons, matchesRevisionFilter, isFlagged, colUrl, colTaxonUrl, noMatchSentence, splitSummary, lumpSummary, type SplitSummary, newRevisionTally, tallyRevision, barTotal, type ColRevision } from "@/lib/col-revision";
 import { parseAssessors } from "@/lib/parseAssessors";
 import { iucnRegionCountries, matchingRegions } from "@/lib/regions";
 import { useFilterParams, type SortField, type MapViewMode } from "@/hooks/useFilterParams";
@@ -802,21 +802,21 @@ function RevisionTooltipContent({ flag, name }: { flag: ColRevision; name: strin
     );
   };
 
+  // The three signals are independent, so each renders on its own terms — a
+  // lumped species no longer carries a `reason` at all (see revisionReasons),
+  // which is why the lump list can't hang off one.
   const sentences: React.ReactNode[] = [];
-  if (flag.reason != null) {
-    const lump = lumpSummary(flag, name);
-    if (lump) {
-      sentences.push(renderList("lump", lump));
-    } else {
-      const s = noMatchSentence(flag, name);
-      sentences.push(
-        <span key="no-match">
-          {linkSubject(s.before)}
-          {s.detail != null && colLink(s.detail, flag.detailColId)}
-          {s.after}
-        </span>,
-      );
-    }
+  const lump = lumpSummary(flag, name);
+  if (lump) sentences.push(renderList("lump", lump));
+  else if (flag.reason != null) {
+    const s = noMatchSentence(flag, name);
+    sentences.push(
+      <span key="no-match">
+        {linkSubject(s.before)}
+        {s.detail != null && colLink(s.detail, flag.detailColId)}
+        {s.after}
+      </span>,
+    );
   }
   const split = splitSummary(flag, name);
   if (split) sentences.push(renderList("split", split));
@@ -3596,18 +3596,18 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
                 }}
               />
             </div>
-            {/* Why the bars total more than the ⚑ count. "Split" is an
-                orthogonal property, not a seventh mutually-exclusive reason, so
-                a species can sit in two bars. Rather than leave that as a silent
-                1.5% gap for a reader to trip over, spell the arithmetic out —
-                and only when this view actually contains an overlap. */}
-            {colTally.both > 0 && (
+            {/* Why the bars total more than the ⚑ count. Split, lumped and the
+                no-match reasons are independent properties, not one axis, so a
+                species can sit in more than one bar. Rather than leave that as a
+                silent gap for a reader to trip over, state it — and only when
+                this view actually contains an overlap. */}
+            {colTally.multiSignal > 0 && (
               <p
                 className="mt-1 text-[11px] leading-snug text-zinc-500 dark:text-zinc-400"
-                title="The six no-match reasons are mutually exclusive; Split is a separate property a species can also have. Each bar still selects exactly the species it counts."
+                title="Each bar still selects exactly the species it counts. A species that has been both split and lumped, say, appears in both."
               >
-                {colTally.noMatch.toLocaleString()} no match + {colTally.split.toLocaleString()} split
-                {" − "}{colTally.both.toLocaleString()} counted in both = {colTally.flagged.toLocaleString()} flagged
+                {colTally.multiSignal.toLocaleString()} of these carry more than one signal, so the bars
+                {" "}total {barTotal(colTally).toLocaleString()}, not {colTally.flagged.toLocaleString()}.
               </p>
             )}
             {selectedColReasons.size > 0 && (

@@ -16,8 +16,10 @@ import {
   flattenSummary,
   revisionSentences,
   colTaxonUrl,
+  type ColRevision,
   newRevisionTally,
   tallyRevision,
+  barTotal,
 } from "@/lib/col-revision";
 
 // The no-match reason codes come from classifyNoMatch (lib/data/col-breakdown);
@@ -74,6 +76,8 @@ describe("isFlagged / revisionReasons", () => {
     expect(revisionReasons({ splitInto: [{ name: "Aepyceros petersi" }] })).toEqual([SPLIT_REASON]);
     expect(revisionReasons({ reason: "lumped", splitInto: [{ name: "Leptoxis coosaensis" }] }))
       .toEqual([SPLIT_REASON, "lumped"]);
+    // Derived from the group as well, which is how the dashboard ships it.
+    expect(revisionReasons({ lumpedWith: [{ name: "Dasycercus hillieri" }] })).toEqual(["lumped"]);
   });
 
   it("is unflagged for no flag, and for a flag carrying neither signal", () => {
@@ -339,45 +343,37 @@ describe("RevisionTally", () => {
     return t;
   };
 
-  it("keeps noMatch + split - both === flagged, the identity the card prints", () => {
-    const t = tally([
-      { reason: "lumped" },
-      { reason: "infraspecific" },
-      { splitInto: [{ name: "A" }] },
-      { splitInto: [{ name: "B" }] },
-      { splitInto: [{ name: "C" }] },
-      { reason: "lumped", splitInto: [{ name: "D" }] },   // both
-      { reason: "no_link", splitInto: [{ name: "E" }] },  // both
-      null,
-      undefined,
-      { splitInto: [] },                        // carries nothing
-    ]);
-    expect(t.noMatch).toBe(4);
-    expect(t.split).toBe(5);
-    expect(t.both).toBe(2);
-    expect(t.flagged).toBe(7);
-    expect(t.noMatch + t.split - t.both).toBe(t.flagged);
-  });
-
   it("partitions species into flagged and clean, with nothing lost", () => {
-    const flags = [{ reason: "lumped" }, { splitInto: [{ name: "A" }] }, null, { splitInto: [] }, { reason: "no_link", splitInto: [{ name: "B" }] }];
+    const flags = [
+      { reason: "no_link" },
+      { splitInto: [{ name: "A" }] },
+      { lumpedWith: [{ name: "B" }] },
+      null,
+      { splitInto: [] },
+    ];
     const t = tally(flags);
     expect(t.flagged + t.clean).toBe(flags.length);
+    expect(t.flagged).toBe(3);
   });
 
-  it("counts a species in every bar it belongs to, so the bars over-total by exactly `both`", () => {
-    const t = tally([{ reason: "lumped" }, { reason: "lumped", splitInto: [{ name: "D" }] }, { splitInto: [{ name: "E" }] }]);
-    expect(t.counts).toEqual({ lumped: 2, split: 2 });
-    const barSum = Object.values(t.counts).reduce((a, b) => a + b, 0);
-    expect(barSum).toBe(t.flagged + t.both);
-  });
-
-  it("makes each bar's count equal what selecting that reason returns — the invariant a strict partition would have broken", () => {
-    const flags = [
-      { reason: "lumped" },
-      { reason: "lumped", splitInto: [{ name: "D" }] },
-      { splitInto: [{ name: "E" }] },
+  it("counts a species in every bar it belongs to, over-totalling by exactly multiSignal", () => {
+    const t = tally([
       { reason: "no_link" },
+      { lumpedWith: [{ name: "B" }] },
+      { lumpedWith: [{ name: "B" }], splitInto: [{ name: "C" }] }, // two signals
+      { reason: "not_in_base", splitInto: [{ name: "D" }] },       // two signals
+    ]);
+    expect(t.counts).toEqual({ no_link: 1, lumped: 2, split: 2, not_in_base: 1 });
+    expect(t.multiSignal).toBe(2);
+    expect(barTotal(t)).toBe(t.flagged + t.multiSignal);
+  });
+
+  it("makes each bar's count equal what selecting that reason returns", () => {
+    // The invariant a strict partition would have broken.
+    const flags = [
+      { reason: "no_link" },
+      { lumpedWith: [{ name: "B" }] },
+      { lumpedWith: [{ name: "B" }], splitInto: [{ name: "C" }] },
       null,
     ];
     const t = tally(flags);
@@ -389,6 +385,46 @@ describe("RevisionTally", () => {
 
   it("counts nothing for an all-clean set", () => {
     const t = tally([null, undefined, { colId: "X" }]);
-    expect(t).toEqual({ counts: {}, flagged: 0, clean: 3, noMatch: 0, split: 0, both: 0 });
+    expect(t).toEqual({ counts: {}, flagged: 0, clean: 3, multiSignal: 0 });
+  });
+});
+
+describe("lumping is symmetric", () => {
+  // CoL's 347N2 is both Dasycercus cristicauda (EX) and Dasycercus hillieri
+  // (LC). Only hillieri used to be flagged, because it matched by synonym while
+  // cristicauda matched by accepted name — a tie-break, not a taxonomic fact.
+  const cristicauda: ColRevision = { colId: "347N2", lumpedUnder: "Dasycercus cristicauda",
+    lumpedWith: [{ name: "Dasycercus hillieri", category: "LC" }] };
+  const hillieri: ColRevision = { colId: "347N2", lumpedUnder: "Dasycercus cristicauda",
+    lumpedWith: [{ name: "Dasycercus cristicauda", category: "EX" }] };
+
+  it("flags both members, not just the one that lost the tie-break", () => {
+    expect(isFlagged(cristicauda)).toBe(true);
+    expect(isFlagged(hillieri)).toBe(true);
+  });
+
+  it("puts both in the lumped bar without either carrying a no-match reason", () => {
+    expect(revisionReasons(cristicauda)).toEqual(["lumped"]);
+    expect(revisionReasons(hillieri)).toEqual(["lumped"]);
+    expect(cristicauda.reason).toBeUndefined();
+  });
+
+  it("selects both when the lumped bar is clicked", () => {
+    const sel = new Set(["lumped"]);
+    expect(matchesRevisionFilter(cristicauda, null, sel)).toBe(true);
+    expect(matchesRevisionFilter(hillieri, null, sel)).toBe(true);
+  });
+
+  it("names CoL's species only when it isn't the subject already", () => {
+    // cristicauda IS the accepted name, so repeating it would say nothing.
+    expect(lumpSummary(cristicauda, "Dasycercus cristicauda")!.lead)
+      .toContain("as a single species — so more than one");
+    expect(lumpSummary(hillieri, "Dasycercus hillieri")!.lead)
+      .toContain("as a single species, Dasycercus cristicauda —");
+  });
+
+  it("describes each from its own side", () => {
+    expect(lumpSummary(cristicauda, "Dasycercus cristicauda")!.entries[0].name).toBe("Dasycercus hillieri");
+    expect(lumpSummary(hillieri, "Dasycercus hillieri")!.entries[0].name).toBe("Dasycercus cristicauda");
   });
 });

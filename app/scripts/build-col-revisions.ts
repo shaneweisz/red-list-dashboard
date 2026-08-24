@@ -268,10 +268,12 @@ export async function run(): Promise<void> {
 
     let lumped = 0;
     for (const r of lumpRows) {
-      const entry = species[String(r.id)];
-      // Only the assessments the classifier actually flagged as lumped — the one
-      // that won the tie-break has a clean match and no flag to hang this on.
-      if (!entry || entry.r !== "lumped") continue;
+      // EVERY assessment sharing the record, not just the ones the classifier
+      // called "lumped". Which one it calls that is an accepted-name tie-break:
+      // CoL's 347N2 is both Dasycercus cristicauda (EX) and Dasycercus hillieri
+      // (LC), and only hillieri was flagged because it matched by synonym. Both
+      // assessments describe what CoL counts as one species, so both say so.
+      const entry = species[String(r.id)] ?? {};
       const raw = r.others as { items?: unknown[] } | unknown[] | null;
       const items = (Array.isArray(raw) ? raw : raw?.items ?? []) as { entries?: Record<string, unknown> }[];
       const others = items
@@ -280,16 +282,22 @@ export async function run(): Promise<void> {
       if (!others.length) continue;
       entry.lw = others;
       if (r.accepted_name != null) entry.ln = String(r.accepted_name);
+      // "lumped" is now a signal derived from the group (see revisionReasons),
+      // not a per-species reason, so drop the classifier's own label and the
+      // winner-specific fields it came with. Anything else it diagnosed stays.
+      if (entry.r === "lumped") { delete entry.r; delete entry.d; delete entry.i; delete entry.dc; delete entry.n; }
+      species[String(r.id)] = entry;
       lumped++;
     }
-    console.log(`  CoL revisions: ${lumped} lumped species carry their full group`);
+    counts["lumped"] = lumped;
+    console.log(`  CoL revisions: ${lumped} assessments share a CoL record with another`);
   }
 
   const out: ColRevisionsFile = { counts, total: Object.keys(species).length, species };
   fs.writeFileSync(outPath, JSON.stringify(out));
   const kb = Math.round(fs.statSync(outPath).size / 1024);
-  const noMatchFlagged = details.filter((d) => !unflagged.has(d.reason)).length;
-  const skipped = details.length - noMatchFlagged;
+  const noMatchFlagged = details.filter((d) => !unflagged.has(d.reason) && d.reason !== "lumped").length;
+  const skipped = details.filter((d) => unflagged.has(d.reason)).length;
   console.log(`  CoL revisions: ${out.total} flagged species (${noMatchFlagged} no-match, ${splitParents} with splits) → ${outPath} (${kb} KB, ${((Date.now() - started) / 1000).toFixed(1)}s)`);
   if (skipped) console.log(`    (${skipped} diagnosed but not flagged: ${UNFLAGGED_REASONS.join(", ")} — see col-revision.ts)`);
   for (const [reason, n] of Object.entries(counts).sort((a, b) => b[1] - a[1])) console.log(`    ${reason.padEnd(24)} ${n}`);
