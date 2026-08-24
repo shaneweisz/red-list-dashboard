@@ -20,7 +20,7 @@ import { BASIS_LABELS } from "./OccurrenceListTable";
 import {
   PROTECTED_AREAS_TILE_URL,
   PROTECTED_AREAS_ATTRIBUTION,
-  PROTECTED_AREAS_COLOR,
+  highlightColour,
   PROTECTED_AREAS_HUE_ROTATION,
   PROTECTED_AREAS_MAX_ZOOM,
   identifyProtectedAreas,
@@ -2693,11 +2693,34 @@ export default function OccurrenceMapRow({
   // one has nothing to say about this one.
   useEffect(() => setSelectedEcoregion(null), [speciesKey]);
 
-  /** The boundary of whichever listed protected area is being pointed at. */
-  const highlightedAreaGeoJson = useMemo<GeoJSON.Feature | null>(() => {
-    const area = pointQuery?.areas[pointQuery.highlight];
-    if (!area?.geometry) return null;
-    return { type: "Feature", properties: { sitePid: area.sitePid }, geometry: area.geometry };
+  /**
+   * Every protected area under the clicked point, each carrying its own colour.
+   *
+   * All of them at once rather than one at a time: the whole question a click
+   * on overlapping designations asks is how many there are and where each one
+   * ends, and that can't be answered by a shape that changes under the pointer.
+   * The one being pointed at is drawn heavier, so hover still says which row is
+   * which — it just isn't the only thing that does.
+   */
+  const highlightedAreaGeoJson = useMemo<GeoJSON.FeatureCollection | null>(() => {
+    if (!pointQuery) return null;
+    // Indexed before filtering, so a point-only site (which has no geometry to
+    // draw) doesn't shift the colours of the ones after it away from their
+    // swatches in the list.
+    const features = pointQuery.areas
+      .map((area, index) => ({ area, index }))
+      .filter(({ area }) => area.geometry)
+      .map(({ area, index }) => ({
+        type: "Feature" as const,
+        properties: {
+          sitePid: area.sitePid,
+          colour: highlightColour(index),
+          active: index === pointQuery.highlight,
+        },
+        geometry: area.geometry as GeoJSON.MultiPolygon,
+      }));
+    if (features.length === 0) return null;
+    return { type: "FeatureCollection", features };
   }, [pointQuery]);
 
   // Where a hovered record sits on the map: the assessor's own coordinates
@@ -2982,7 +3005,13 @@ export default function OccurrenceMapRow({
                   <Layer
                     id={`wdpa-highlight-fill-${panelId}`}
                     type="fill"
-                    paint={{ "fill-color": PROTECTED_AREAS_COLOR, "fill-opacity": 0.18 }}
+                    paint={{
+                      "fill-color": ["get", "colour"],
+                      // Light, because these stack: three overlapping fills at
+                      // the old opacity turned the shared ground opaque and
+                      // hid the records the question was about.
+                      "fill-opacity": ["case", ["get", "active"], 0.2, 0.08],
+                    }}
                   />
                   <Layer
                     id={`wdpa-highlight-casing-${panelId}`}
@@ -2992,7 +3021,10 @@ export default function OccurrenceMapRow({
                   <Layer
                     id={`wdpa-highlight-line-${panelId}`}
                     type="line"
-                    paint={{ "line-color": PROTECTED_AREAS_COLOR, "line-width": 2 }}
+                    paint={{
+                      "line-color": ["get", "colour"],
+                      "line-width": ["case", ["get", "active"], 3, 1.75],
+                    }}
                   />
                 </Source>
               )}
@@ -3440,31 +3472,51 @@ export default function OccurrenceMapRow({
                   <div className="text-[11px] text-zinc-700 dark:text-zinc-200 space-y-1.5">
                     {pointQuery.kind === "areas" ? (
                       <div className="space-y-1">
+                        {/* Says up front that there is more than one, before
+                            you have to infer it from the length of the list. */}
+                        {pointQuery.areas.length > 1 && (
+                          <div className="text-[10px] text-zinc-400 dark:text-zinc-500">
+                            {pointQuery.areas.length} overlapping designations here
+                          </div>
+                        )}
                         {pointQuery.areas.map((area, index) => (
                           <div
                             key={area.sitePid}
                             onMouseEnter={() => setPointQuery((prev) => (prev ? { ...prev, highlight: index } : prev))}
-                            className={`-mx-1 px-1 py-0.5 rounded ${
-                              index === pointQuery.highlight ? "bg-pink-50 dark:bg-pink-950/40" : ""
+                            className={`-mx-1 px-1 py-0.5 rounded flex gap-1.5 ${
+                              index === pointQuery.highlight ? "bg-zinc-100 dark:bg-zinc-800" : ""
                             }`}
                           >
-                            <a
-                              href={protectedPlanetUrl(area)}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              title="Open this site on Protected Planet"
-                              className="font-medium text-blue-600 dark:text-blue-400 hover:underline"
-                            >
-                              {area.name}
-                            </a>
-                            <div className="text-zinc-500 dark:text-zinc-400">
-                              {[
-                                area.designation,
-                                area.iucnCategory ? `IUCN ${area.iucnCategory}` : null,
-                                area.statusYear ? String(area.statusYear) : null,
-                              ]
-                                .filter(Boolean)
-                                .join(" · ")}
+                            {/* The swatch is what ties this row to its outline
+                                on the map. Only drawn when there's more than
+                                one site — a single colour keyed to nothing is
+                                just decoration. */}
+                            {pointQuery.areas.length > 1 && (
+                              <span
+                                className="mt-1 w-2 h-2 rounded-sm shrink-0"
+                                style={{ background: highlightColour(index) }}
+                                title="This site's outline on the map"
+                              />
+                            )}
+                            <div className="min-w-0">
+                              <a
+                                href={protectedPlanetUrl(area)}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                title="Open this site on Protected Planet"
+                                className="font-medium text-blue-600 dark:text-blue-400 hover:underline"
+                              >
+                                {area.name}
+                              </a>
+                              <div className="text-zinc-500 dark:text-zinc-400">
+                                {[
+                                  area.designation,
+                                  area.iucnCategory ? `IUCN ${area.iucnCategory}` : null,
+                                  area.statusYear ? String(area.statusYear) : null,
+                                ]
+                                  .filter(Boolean)
+                                  .join(" · ")}
+                              </div>
                             </div>
                           </div>
                         ))}

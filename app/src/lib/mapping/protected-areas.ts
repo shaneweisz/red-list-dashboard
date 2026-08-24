@@ -78,6 +78,32 @@ function hueOf(hex: string): number {
 export const PROTECTED_AREAS_HUE_ROTATION =
   (hueOf(PROTECTED_AREAS_COLOR) - CACHE_HUE_DEGREES + 360) % 360;
 
+/**
+ * Colours for the sites under one clicked point, in order.
+ *
+ * Protected areas overlap constantly — a national park inside a biosphere
+ * reserve inside a Ramsar site — and the popup used to list all of them while
+ * the map outlined only whichever you were pointing at. Two names and one
+ * shape reads as one area with two labels, which is the opposite of true. Each
+ * site now gets its own colour, drawn at the same time and shown as a swatch
+ * on its row, so the count on the map matches the count in the list.
+ *
+ * Chosen to stay apart from each other and from the layer's own pink, and to
+ * hold up over satellite imagery as well as paper basemaps. Sites past the
+ * sixth reuse the ramp — six overlapping designations is already rare.
+ */
+export const PROTECTED_AREA_HIGHLIGHTS = [
+  PROTECTED_AREAS_COLOR, // the layer's own pink, for the first site
+  "#2563eb", // blue
+  "#f59e0b", // amber
+  "#059669", // emerald
+  "#7c3aed", // violet
+  "#0891b2", // cyan
+];
+
+export const highlightColour = (index: number) =>
+  PROTECTED_AREA_HIGHLIGHTS[index % PROTECTED_AREA_HIGHLIGHTS.length];
+
 export const PROTECTED_AREAS_ATTRIBUTION =
   '<a href="https://www.protectedplanet.net" target="_blank" rel="noopener noreferrer">WDPA</a> &copy; UNEP-WCMC &amp; IUCN';
 
