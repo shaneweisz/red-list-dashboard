@@ -368,31 +368,56 @@ export function splitSummary(flag: ColRevision, subject: string): SplitSummary |
   };
 }
 
+/** The lump explanation. One sentence, with the assessments kept as their own
+ *  values so each can be a link to its CoL record. */
+export interface LumpSentence {
+  before: string;
+  /** Every assessment CoL files under one species, this one first. */
+  members: { name: string; colId?: string; category?: string }[];
+  after: string;
+}
+
 /**
  * The lump half of the flag: IUCN assesses several species that CoL files as
- * one. The mirror image of a split — many assessments to one CoL species rather
- * than one assessment to many — so it gets the same treatment: say what it means
- * for the assessment, then name the others with links to the evidence.
+ * one. Reads as a single sentence rather than a list, because the finding is one
+ * fact — these are the same species to CoL — and the IUCN categories carry it:
+ * "Dasycercus cristicauda (EX) and Dasycercus hillieri (LC)" is the whole
+ * problem in one line.
  *
- * Returns null when the group isn't known (an older artifact, or the SSC panel's
- * data, which carries only the tie-break winner) — callers fall back to
- * noMatchSentence.
+ * The subject is included, first, since the sentence is about the group and it
+ * is one of them. Returns null when the group isn't known (an older artifact, or
+ * the SSC panel's data, which carries only the tie-break winner) — callers fall
+ * back to noMatchSentence.
  */
-export function lumpSummary(flag: ColRevision, subject: string): SplitSummary | null {
+export function lumpSentence(
+  flag: ColRevision,
+  subject: string,
+  subjectCategory?: string,
+): LumpSentence | null {
   const others = flag.lumpedWith ?? [];
   if (others.length === 0) return null;
-  const under = flag.lumpedUnder;
   return {
-    lead: `${COL} treats ${subject} and `
-      + (others.length === 1 ? "1 other IUCN assessment" : `${others.length} other IUCN assessments`)
-      // Named only when it adds something: for the assessment that IS CoL's
-      // accepted name, ", Dasycercus cristicauda" just repeats the subject.
-      + ` as a single species${under && under !== subject ? `, ${under}` : ""}`
-      + ` — so more than one assessment covers what ${COL} counts as one species:`,
-    // A member with no synonym record of its own — typically the accepted name
-    // itself — links to the shared record, which IS its record.
-    entries: others.map((o) => (o.colId ? o : { ...o, colId: flag.colId })),
+    before: `${COL} treats `,
+    members: [
+      { name: subject, colId: flag.colId, ...(subjectCategory ? { category: subjectCategory } : {}) },
+      // A member with no synonym record of its own — typically CoL's accepted
+      // name — links to the shared record, which IS its record.
+      ...others.map((o) => (o.colId ? o : { ...o, colId: flag.colId })),
+    ],
+    // Named even when it repeats one of the members: the first mention is "an
+    // assessment", this one is "what CoL calls the merged species".
+    after: ` as a single species${flag.lumpedUnder ? `, ${flag.lumpedUnder}` : ""}.`,
   };
+}
+
+/** The lump sentence as one plain string, for a context that can't hold links. */
+export function flattenLump(l: LumpSentence | null): string | null {
+  if (!l) return null;
+  const parts = l.members.map((m) => (m.category ? `${m.name} (${m.category})` : m.name));
+  const joined = parts.length > 1
+    ? `${parts.slice(0, -1).join(", ")} and ${parts[parts.length - 1]}`
+    : parts[0];
+  return `${l.before}${joined}${l.after}`;
 }
 
 /** The summary flattened to one plain string, for a context that can't hold links. */
@@ -413,7 +438,7 @@ export function flattenSummary(s: SplitSummary | null): string | null {
 /** The whole flag as plain sentences — one per signal it carries. */
 export function revisionSentences(flag: ColRevision, subject: string): string[] {
   const out: string[] = [];
-  const lump = flattenSummary(lumpSummary(flag, subject));
+  const lump = flattenLump(lumpSentence(flag, subject));
   if (lump) out.push(lump);
   else if (flag.reason != null) {
     const { before, detail, after } = noMatchSentence(flag, subject);

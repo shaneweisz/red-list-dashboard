@@ -12,8 +12,8 @@ import {
   noMatchExplanation,
   splitSentence,
   splitSummary,
-  lumpSummary,
-  flattenSummary,
+  lumpSentence,
+  flattenLump,
   revisionSentences,
   colTaxonUrl,
   type ColRevision,
@@ -242,54 +242,58 @@ describe("splitSummary", () => {
   });
 });
 
-describe("lumpSummary", () => {
+describe("lumpSentence", () => {
   const sus = {
-    reason: "lumped", detail: "Sus scrofa", colId: "53HGR", lumpedUnder: "Sus scrofa",
+    reason: "lumped", colId: "53HGR", lumpedUnder: "Sus scrofa",
     lumpedWith: [{ name: "Sus scrofa", category: "LC" }],
   };
   const limonium = {
-    reason: "lumped", colId: "X", lumpedUnder: "Limonium roridum",
+    colId: "72FJ7", lumpedUnder: "Limonium roridum",
     lumpedWith: [
       { name: "Limonium dolihiense", colId: "72DMW", category: "EN" },
       { name: "Limonium helenae", colId: "72DP8", category: "EN" },
     ],
   };
 
-  it("is null unless the flag is a lump with its group known", () => {
-    expect(lumpSummary({ splitInto: [{ name: "A" }] }, "X")).toBeNull();
+  it("is null unless the group is known", () => {
+    expect(lumpSentence({ splitInto: [{ name: "A" }] }, "X")).toBeNull();
     // The SSC panel's data carries only the tie-break winner, so callers there
-    // fall back to noMatchSentence rather than rendering an empty list.
-    expect(lumpSummary({ reason: "lumped", detail: "Sus scrofa" }, "Sus bucculentus")).toBeNull();
+    // fall back to noMatchSentence rather than rendering an empty sentence.
+    expect(lumpSentence({ reason: "lumped", detail: "Sus scrofa" }, "Sus bucculentus")).toBeNull();
   });
 
-  it("says how many assessments describe one CoL species, and what it is called", () => {
-    expect(lumpSummary(sus, "Sus bucculentus")!.lead).toBe(
-      "Catalogue of Life treats Sus bucculentus and 1 other IUCN assessment as a single species," +
-      " Sus scrofa — so more than one assessment covers what Catalogue of Life counts as one species:"
+  it("reads as one sentence naming every assessment and CoL's name for them", () => {
+    const c = { colId: "347N2", lumpedUnder: "Dasycercus cristicauda",
+      lumpedWith: [{ name: "Dasycercus hillieri", category: "LC" }] };
+    expect(flattenLump(lumpSentence(c, "Dasycercus cristicauda", "EX"))).toBe(
+      "Catalogue of Life treats Dasycercus cristicauda (EX) and Dasycercus hillieri (LC)" +
+      " as a single species, Dasycercus cristicauda."
     );
-    expect(lumpSummary(limonium, "Limonium chersonesum")!.lead)
-      .toContain("and 2 other IUCN assessments as a single species, Limonium roridum");
   });
 
-  it("lists the other assessments, not the species itself", () => {
-    const entries = lumpSummary(limonium, "Limonium chersonesum")!.entries;
-    expect(entries.map((e) => e.name)).toEqual(["Limonium dolihiense", "Limonium helenae"]);
-    expect(entries.map((e) => e.name)).not.toContain("Limonium chersonesum");
+  it("puts the subject first, and includes it — the sentence is about the group", () => {
+    const members = lumpSentence(limonium, "Limonium crateriforme", "EN")!.members;
+    expect(members.map((m) => m.name)).toEqual([
+      "Limonium crateriforme", "Limonium dolihiense", "Limonium helenae",
+    ]);
+    expect(members[0].category).toBe("EN");
   });
 
-  it("carries each member's own CoL record and IUCN category", () => {
-    // The category is where the awkwardness shows — one CoL species assessed
-    // both Extinct and Least Concern.
-    const [first] = lumpSummary(limonium, "Limonium chersonesum")!.entries;
-    expect(first.colId).toBe("72DMW");
-    expect(first.category).toBe("EN");
-    expect(flattenSummary(lumpSummary(sus, "Sus bucculentus"))).toContain("Sus scrofa (LC)");
+  it("joins several with commas and a final 'and'", () => {
+    expect(flattenLump(lumpSentence(limonium, "Limonium crateriforme", "EN")))
+      .toContain("Limonium crateriforme (EN), Limonium dolihiense (EN) and Limonium helenae (EN)");
   });
 
-  it("copes with an accepted name the group does not contain", () => {
-    // Limonium roridum is CoL's name for the group; none of the 15 assessed
-    // species is called that.
-    expect(lumpSummary(limonium, "Limonium chersonesum")!.lead).toContain("Limonium roridum");
+  it("carries each member's own CoL record, falling back to the shared one", () => {
+    const members = lumpSentence(limonium, "Limonium crateriforme", "EN")!.members;
+    expect(members[1].colId).toBe("72DMW");
+    // Sus scrofa is the accepted name, so it has no synonym record of its own.
+    expect(lumpSentence(sus, "Sus bucculentus", "EX")!.members[1].colId).toBe("53HGR");
+  });
+
+  it("copes with no category for the subject", () => {
+    expect(flattenLump(lumpSentence(limonium, "Limonium crateriforme")))
+      .toContain("treats Limonium crateriforme, Limonium dolihiense (EN)");
   });
 });
 
@@ -309,7 +313,10 @@ describe("revisionSentences", () => {
         lumpedWith: [{ name: "Leptoxis picta", category: "EX" }] },
       "Leptoxis foremani",
     );
-    expect(withGroup[0]).toContain("as a single species, Leptoxis picta");
+    expect(withGroup[0]).toBe(
+      "Catalogue of Life treats Leptoxis foremani and Leptoxis picta (EX)" +
+      " as a single species, Leptoxis picta."
+    );
     expect(both[1]).toContain("Leptoxis coosaensis");
     expect(both[1]).toContain("has been split into");
   });
@@ -415,16 +422,10 @@ describe("lumping is symmetric", () => {
     expect(matchesRevisionFilter(hillieri, null, sel)).toBe(true);
   });
 
-  it("names CoL's species only when it isn't the subject already", () => {
-    // cristicauda IS the accepted name, so repeating it would say nothing.
-    expect(lumpSummary(cristicauda, "Dasycercus cristicauda")!.lead)
-      .toContain("as a single species — so more than one");
-    expect(lumpSummary(hillieri, "Dasycercus hillieri")!.lead)
-      .toContain("as a single species, Dasycercus cristicauda —");
-  });
-
   it("describes each from its own side", () => {
-    expect(lumpSummary(cristicauda, "Dasycercus cristicauda")!.entries[0].name).toBe("Dasycercus hillieri");
-    expect(lumpSummary(hillieri, "Dasycercus hillieri")!.entries[0].name).toBe("Dasycercus cristicauda");
+    expect(lumpSentence(cristicauda, "Dasycercus cristicauda")!.members.map((m) => m.name))
+      .toEqual(["Dasycercus cristicauda", "Dasycercus hillieri"]);
+    expect(lumpSentence(hillieri, "Dasycercus hillieri")!.members.map((m) => m.name))
+      .toEqual(["Dasycercus hillieri", "Dasycercus cristicauda"]);
   });
 });

@@ -16,7 +16,7 @@ import { CATEGORY_COLORS, TAXA_BY_ID, THREATENED_CATEGORIES } from "@/config/tax
 import { speciesMatchesNode, getNodeDef, getViewRootForNode, findNode, matchesBreakdownName, breakdownDisplayName } from "@/lib/taxonomy-utils";
 import { dynamicNodeDisplayName } from "@/lib/dynamic-taxon";
 import ReviewerChart from "./ReviewerChart";
-import { REVISION_REASONS, REVISION_REASON_SHORT, REVISION_REASON_SUMMARY, revisionReasons, matchesRevisionFilter, isFlagged, colUrl, colTaxonUrl, noMatchSentence, splitSummary, lumpSummary, type SplitSummary, newRevisionTally, tallyRevision, barTotal, type ColRevision } from "@/lib/col-revision";
+import { REVISION_REASONS, REVISION_REASON_SHORT, REVISION_REASON_SUMMARY, revisionReasons, matchesRevisionFilter, isFlagged, colUrl, colTaxonUrl, noMatchSentence, splitSummary, lumpSentence, type SplitSummary, newRevisionTally, tallyRevision, barTotal, type ColRevision } from "@/lib/col-revision";
 import { parseAssessors } from "@/lib/parseAssessors";
 import { iucnRegionCountries, matchingRegions } from "@/lib/regions";
 import { useFilterParams, type SortField, type MapViewMode } from "@/hooks/useFilterParams";
@@ -704,7 +704,7 @@ function SelectableHoverTooltip({ children, content }: { children: React.ReactNo
  *  the old name is long, which a page of ten often is. */
 const SPLIT_PAGE_SIZE = 5;
 
-function RevisionTooltipContent({ flag, name }: { flag: ColRevision; name: string }) {
+function RevisionTooltipContent({ flag, name, category }: { flag: ColRevision; name: string; category?: string }) {
   // Resets to the first page on every open: the panel is only mounted while the
   // tooltip is up, so there is no stale page to come back to.
   const [splitPage, setSplitPage] = useState(0);
@@ -806,9 +806,22 @@ function RevisionTooltipContent({ flag, name }: { flag: ColRevision; name: strin
   // lumped species no longer carries a `reason` at all (see revisionReasons),
   // which is why the lump list can't hang off one.
   const sentences: React.ReactNode[] = [];
-  const lump = lumpSummary(flag, name);
-  if (lump) sentences.push(renderList("lump", lump));
-  else if (flag.reason != null) {
+  const lump = lumpSentence(flag, name, category);
+  if (lump) {
+    sentences.push(
+      <span key="lump">
+        {lump.before}
+        {lump.members.map((m, i) => (
+          <React.Fragment key={m.name}>
+            {i > 0 && (i === lump.members.length - 1 ? " and " : ", ")}
+            {colLink(m.name, m.colId)}
+            {m.category && <span className="text-zinc-400"> ({m.category})</span>}
+          </React.Fragment>
+        ))}
+        {lump.after}
+      </span>,
+    );
+  } else if (flag.reason != null) {
     const s = noMatchSentence(flag, name);
     sentences.push(
       <span key="no-match">
@@ -4807,9 +4820,8 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
                   );
                 })()}
 
-                {/* Assessment Criteria, Number of Assessments and Possible
-                    Taxonomic Revision — three to a row. */}
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                {/* Assessment Criteria alongside Number of Assessments. */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                   {/* Criteria — top-level A-E bar chart (see criteriaCard);
                       clicking a bar both selects it as a filter AND expands
                       its next level below (number -> sub-clause -> roman
@@ -4873,12 +4885,6 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
                       </div>
                     </div>
                   )}
-
-                  {/* Possible Taxonomic Revision — assessed-only: the flag is a
-                      property of an IUCN assessment's name, so it has no meaning
-                      in the Not Evaluated (new-assessments) view, whose rows are
-                      CoL species with no assessment to disagree with. */}
-                  {!isNewAssessments && taxonomicRevisionCard}
                 </div>
 
                 {/* Realm, Movement, and Trend as three columns in one row. */}
@@ -4993,6 +4999,16 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
                   {habitatCard}
                   {threatsCard}
                 </div>
+
+                {/* Possible Taxonomic Revision — assessed-only: the flag is a
+                    property of an IUCN assessment's name, so it has no meaning
+                    in the Not Evaluated (new-assessments) view, whose rows are
+                    CoL species with no assessment to disagree with. */}
+                {!isNewAssessments && (
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    {taxonomicRevisionCard}
+                  </div>
+                )}
 
             </>
           )}
@@ -5656,7 +5672,7 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
                               "give me all of these" case. A species can carry
                               both signals, hence a list of sentences. */}
                           {isFlagged(s.col_revision) && (
-                            <SelectableHoverTooltip content={<RevisionTooltipContent flag={s.col_revision!} name={s.scientific_name} />}>
+                            <SelectableHoverTooltip content={<RevisionTooltipContent flag={s.col_revision!} name={s.scientific_name} category={s.category} />}>
                               <a
                                 href={colTaxonUrl(s.col_revision!, s.scientific_name)}
                                 target="_blank"
