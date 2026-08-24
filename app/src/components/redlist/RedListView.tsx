@@ -535,6 +535,39 @@ function DebouncedSearchInput({
   );
 }
 
+/**
+ * The filter axes a cross-filter chart can opt out of — see matchesFilters.
+ * Naming follows the URL params where they exist, so a skip set reads against
+ * the address bar.
+ */
+type FilterAxis =
+  | "search" | "categories" | "countries" | "years" | "assessmentYears" | "obs"
+  | "assessmentCounts" | "systems" | "trends" | "movement" | "threats" | "criteria"
+  | "habitat" | "endemics" | "growthForms" | "assessors" | "reviewers" | "facilitators"
+  | "revision";
+
+const skipSet = (...axes: FilterAxis[]): ReadonlySet<FilterAxis> => new Set(axes);
+
+// A chart's own axis, so its bars keep showing what clicking them would select.
+const SKIP_YEARS = skipSet("years", "assessmentYears");
+const SKIP_OBS = skipSet("obs");
+const SKIP_ASSESSMENT_COUNTS = skipSet("assessmentCounts");
+const SKIP_COUNTRIES = skipSet("countries");
+// Threats, Criteria and Habitat additionally ignore the endemics and growth-form
+// toggles. That is inherited behaviour, not a principle — preserved here so this
+// refactor changes no number, and now at least visible rather than buried in
+// three separately-drifting copies of the clause list.
+const SKIP_THREATS = skipSet("threats", "endemics", "growthForms");
+const SKIP_CRITERIA = skipSet("criteria", "endemics", "growthForms");
+const SKIP_HABITAT = skipSet("habitat", "endemics", "growthForms");
+// The credits chart cross-filters against the other two credit types itself
+// (see buildCreditChart), so it skips all three here.
+const SKIP_CREDITS = skipSet("assessors", "reviewers", "facilitators");
+// The revision chart's own two axes are one filter (matchesColFilter). It
+// inherits the same endemics/growth-form blind spot as the three above, having
+// been written from the Criteria chart's clause list.
+const SKIP_REVISION = skipSet("revision", "endemics", "growthForms");
+
 // Explain IUCN Red List criteria codes
 // See: https://www.iucnredlist.org/resources/categories-and-criteria
 function explainCriteria(criteria: string): string {
@@ -1996,6 +2029,50 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
 
   // Year chart: apply all filters EXCEPT year range AND outdated (see
   // taxaFilteredSpeciesExceptOutdated above) — buckets align exactly with the
+  // ── One filter predicate for every cross-filter chart ────────────────
+  //
+  // Each chart shows what WOULD match if you clicked a bar, so each applies
+  // every filter except the axis it is itself the control for — Threats applies
+  // everything but the threat selection, and so on. That used to be twelve
+  // hand-maintained copies of the same clause list, which drifted: the
+  // taxonomic-revision filter was added to all twelve and still missed the
+  // credits chart (a thirteenth copy in matchesNonCreditFilters), which then
+  // reported unfiltered counts until it was spotted.
+  //
+  // Now the clause list lives once and each caller passes the axes it skips, so
+  // "what does this chart deliberately ignore?" is a visible argument rather
+  // than an absence you have to notice. The skip sets below are exactly what the
+  // old inline chains did, quirks included — see SKIP_THREATS et al.
+  const matchesFilters = useCallback((s: Species, skip: ReadonlySet<FilterAxis>): boolean => {
+    if (!skip.has("search") && !matchesSearch(s)) return false;
+    if (!skip.has("categories") && selectedCategories.size > 0 && !selectedCategories.has(s.category)) return false;
+    if (!skip.has("countries") && selectedCountries.size > 0 && !s.countries.some(c => selectedCountries.has(c))) return false;
+    // Year filters are gated on NE throughout: an unassessed species has no
+    // assessment date to compare against.
+    if (!skip.has("years") && s.category !== "NE" && selectedYearRanges.size > 0 && !matchesYearRangeFilter(s.assessment_date, selectedYearRanges)) return false;
+    if (!skip.has("assessmentYears") && s.category !== "NE" && selectedAssessmentYears.size > 0 && !matchesAssessmentYearFilter(s.assessment_date, selectedAssessmentYears)) return false;
+    if (!skip.has("obs") && selectedObsRanges.size > 0 && !matchesObsRangeFilter(s.gbif_occurrence_count, selectedObsRanges)) return false;
+    if (!skip.has("assessmentCounts") && selectedAssessmentCounts.size > 0 && !matchesAssessmentCountFilter(s.assessment_count, selectedAssessmentCounts)) return false;
+    if (!skip.has("systems") && selectedSystems.size > 0 && !s.systems?.some(sys => selectedSystems.has(sys))) return false;
+    if (!skip.has("trends") && selectedPopulationTrends.size > 0 && (!s.population_trend || !selectedPopulationTrends.has(s.population_trend))) return false;
+    if (!skip.has("movement") && selectedMovementPatterns.size > 0 && (!s.movement_pattern || !selectedMovementPatterns.has(s.movement_pattern))) return false;
+    if (!skip.has("threats") && selectedThreats.size > 0 && !s.threat_codes?.some(tc => Array.from(selectedThreats).some(sel => tc === sel || tc.startsWith(sel + ".")))) return false;
+    if (!skip.has("criteria") && selectedCriteria.size > 0 && !parseCriteriaCodes(s.criteria).some(code => Array.from(selectedCriteria).some(sel => code === sel || code.startsWith(sel)))) return false;
+    if (!skip.has("endemics") && endemicsOnly && s.countries.length !== 1) return false;
+    if (!skip.has("growthForms") && selectedGrowthForms.size > 0 && !s.growth_forms?.some(gf => selectedGrowthForms.has(gf))) return false;
+    if (!skip.has("assessors") && !matchesAssessorsFilter(s)) return false;
+    if (!skip.has("habitat") && !matchesHabitatFilter(s)) return false;
+    if (!skip.has("reviewers") && !matchesReviewersFilter(s)) return false;
+    if (!skip.has("facilitators") && !matchesFacilitatorsFilter(s)) return false;
+    if (!skip.has("revision") && !matchesColFilter(s)) return false;
+    return true;
+  }, [matchesSearch, selectedCategories, selectedCountries, selectedYearRanges, matchesYearRangeFilter,
+      selectedAssessmentYears, matchesAssessmentYearFilter, selectedObsRanges, matchesObsRangeFilter,
+      selectedAssessmentCounts, matchesAssessmentCountFilter, selectedSystems, selectedPopulationTrends,
+      selectedMovementPatterns, selectedThreats, selectedCriteria, endemicsOnly, selectedGrowthForms,
+      matchesAssessorsFilter, matchesHabitatFilter, matchesReviewersFilter, matchesFacilitatorsFilter,
+      matchesColFilter]);
+
   // isOutdated() threshold (>10 years) so the Outdated toggle mutes rather than
   // zeroes out the buckets that don't match.
   const assessmentYearData = useMemo(() => {
@@ -2009,24 +2086,8 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
       { range: "20+ years", shortRange: ">20y", count: 0, minYear: 20 },
     ];
     taxaFilteredSpeciesExceptOutdated.forEach(s => {
+      if (!matchesFilters(s, SKIP_YEARS)) return;
       if (!s.assessment_date || s.category === "NE") return;
-      if (!matchesSearch(s)) return;
-      if (selectedCategories.size > 0 && !selectedCategories.has(s.category)) return;
-      if (selectedCountries.size > 0 && !s.countries.some(c => selectedCountries.has(c))) return;
-      if (selectedObsRanges.size > 0 && !matchesObsRangeFilter(s.gbif_occurrence_count, selectedObsRanges)) return;
-      if (selectedAssessmentCounts.size > 0 && !matchesAssessmentCountFilter(s.assessment_count, selectedAssessmentCounts)) return;
-      if (selectedSystems.size > 0 && !s.systems?.some(sys => selectedSystems.has(sys))) return;
-      if (selectedPopulationTrends.size > 0 && (!s.population_trend || !selectedPopulationTrends.has(s.population_trend))) return;
-      if (selectedMovementPatterns.size > 0 && (!s.movement_pattern || !selectedMovementPatterns.has(s.movement_pattern))) return;
-      if (selectedThreats.size > 0 && !s.threat_codes?.some(tc => Array.from(selectedThreats).some(sel => tc === sel || tc.startsWith(sel + ".")))) return;
-      if (selectedCriteria.size > 0 && !parseCriteriaCodes(s.criteria).some(code => Array.from(selectedCriteria).some(sel => code === sel || code.startsWith(sel)))) return;
-      if (endemicsOnly && s.countries.length !== 1) return;
-      if (selectedGrowthForms.size > 0 && !s.growth_forms?.some(gf => selectedGrowthForms.has(gf))) return;
-      if (!matchesAssessorsFilter(s)) return;
-      if (!matchesHabitatFilter(s)) return;
-      if (!matchesReviewersFilter(s)) return;
-      if (!matchesFacilitatorsFilter(s)) return;
-      if (!matchesColFilter(s)) return;
       const yearsSince = (now - new Date(s.assessment_date).getTime()) / msPerYear;
       if (yearsSince < 1) ranges[0].count++;
       else if (yearsSince < 5) ranges[1].count++;
@@ -2039,7 +2100,7 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
       ...r,
       label: `${r.count.toLocaleString()} (${total > 0 ? Math.round((r.count / total) * 100) : 0}%)`,
     }));
-  }, [taxaFilteredSpeciesExceptOutdated, selectedCategories, selectedCountries, selectedObsRanges, selectedSystems, selectedPopulationTrends, selectedMovementPatterns, selectedThreats, selectedCriteria, matchesHabitatFilter, endemicsOnly, selectedGrowthForms, matchesSearch, matchesAssessorsFilter, matchesReviewersFilter, matchesFacilitatorsFilter, matchesColFilter, matchesObsRangeFilter, selectedAssessmentCounts, matchesAssessmentCountFilter]);
+  }, [taxaFilteredSpeciesExceptOutdated, matchesFilters]);
 
   // Assessments-by-year chart: apply all filters EXCEPT the year-based ones
   // (selectedYearRanges, selectedAssessmentYears) AND outdated. The Range bucket
@@ -2052,24 +2113,8 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
   const assessmentYearsByYearData = useMemo(() => {
     const counts: Record<string, number> = {};
     taxaFilteredSpeciesExceptOutdated.forEach(s => {
+      if (!matchesFilters(s, SKIP_YEARS)) return;
       if (!s.assessment_date || s.category === "NE") return;
-      if (!matchesSearch(s)) return;
-      if (selectedCategories.size > 0 && !selectedCategories.has(s.category)) return;
-      if (selectedCountries.size > 0 && !s.countries.some(c => selectedCountries.has(c))) return;
-      if (selectedObsRanges.size > 0 && !matchesObsRangeFilter(s.gbif_occurrence_count, selectedObsRanges)) return;
-      if (selectedAssessmentCounts.size > 0 && !matchesAssessmentCountFilter(s.assessment_count, selectedAssessmentCounts)) return;
-      if (selectedSystems.size > 0 && !s.systems?.some(sys => selectedSystems.has(sys))) return;
-      if (selectedPopulationTrends.size > 0 && (!s.population_trend || !selectedPopulationTrends.has(s.population_trend))) return;
-      if (selectedMovementPatterns.size > 0 && (!s.movement_pattern || !selectedMovementPatterns.has(s.movement_pattern))) return;
-      if (selectedThreats.size > 0 && !s.threat_codes?.some(tc => Array.from(selectedThreats).some(sel => tc === sel || tc.startsWith(sel + ".")))) return;
-      if (selectedCriteria.size > 0 && !parseCriteriaCodes(s.criteria).some(code => Array.from(selectedCriteria).some(sel => code === sel || code.startsWith(sel)))) return;
-      if (endemicsOnly && s.countries.length !== 1) return;
-      if (selectedGrowthForms.size > 0 && !s.growth_forms?.some(gf => selectedGrowthForms.has(gf))) return;
-      if (!matchesAssessorsFilter(s)) return;
-      if (!matchesHabitatFilter(s)) return;
-      if (!matchesReviewersFilter(s)) return;
-      if (!matchesFacilitatorsFilter(s)) return;
-      if (!matchesColFilter(s)) return;
       const year = String(new Date(s.assessment_date).getFullYear());
       counts[year] = (counts[year] || 0) + 1;
     });
@@ -2082,7 +2127,7 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
         count,
         label: `${count.toLocaleString()} (${total > 0 ? Math.round((count / total) * 100) : 0}%)`,
       }));
-  }, [taxaFilteredSpeciesExceptOutdated, selectedCategories, selectedCountries, selectedObsRanges, selectedSystems, selectedPopulationTrends, selectedMovementPatterns, selectedThreats, selectedCriteria, matchesHabitatFilter, endemicsOnly, selectedGrowthForms, matchesSearch, matchesAssessorsFilter, matchesReviewersFilter, matchesFacilitatorsFilter, matchesColFilter, matchesObsRangeFilter, selectedAssessmentCounts, matchesAssessmentCountFilter]);
+  }, [taxaFilteredSpeciesExceptOutdated, matchesFilters]);
 
   const yearsTotalPages = Math.max(1, Math.ceil(assessmentYearsByYearData.length / YEARS_PAGE_SIZE));
   const paginatedAssessmentYearsData = useMemo(
@@ -2128,23 +2173,7 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
       { range: "10K+", shortRange: "10K+", count: 0 },
     ];
     taxaFilteredSpecies.forEach(s => {
-      if (!matchesSearch(s)) return;
-      if (selectedCategories.size > 0 && !selectedCategories.has(s.category)) return;
-      if (selectedCountries.size > 0 && !s.countries.some(c => selectedCountries.has(c))) return;
-      if (s.category !== "NE" && selectedYearRanges.size > 0 && !matchesYearRangeFilter(s.assessment_date, selectedYearRanges)) return;
-      if (s.category !== "NE" && selectedAssessmentYears.size > 0 && !matchesAssessmentYearFilter(s.assessment_date, selectedAssessmentYears)) return;
-      if (selectedSystems.size > 0 && !s.systems?.some(sys => selectedSystems.has(sys))) return;
-      if (selectedPopulationTrends.size > 0 && (!s.population_trend || !selectedPopulationTrends.has(s.population_trend))) return;
-      if (selectedMovementPatterns.size > 0 && (!s.movement_pattern || !selectedMovementPatterns.has(s.movement_pattern))) return;
-      if (selectedThreats.size > 0 && !s.threat_codes?.some(tc => Array.from(selectedThreats).some(sel => tc === sel || tc.startsWith(sel + ".")))) return;
-      if (selectedCriteria.size > 0 && !parseCriteriaCodes(s.criteria).some(code => Array.from(selectedCriteria).some(sel => code === sel || code.startsWith(sel)))) return;
-      if (endemicsOnly && s.countries.length !== 1) return;
-      if (selectedGrowthForms.size > 0 && !s.growth_forms?.some(gf => selectedGrowthForms.has(gf))) return;
-      if (!matchesAssessorsFilter(s)) return;
-      if (!matchesHabitatFilter(s)) return;
-      if (!matchesReviewersFilter(s)) return;
-      if (!matchesFacilitatorsFilter(s)) return;
-      if (!matchesColFilter(s)) return;
+      if (!matchesFilters(s, SKIP_OBS)) return;
       const obs = s.gbif_occurrence_count ?? 0;
       if (obs === 0) ranges[0].count++;
       else if (obs <= 10) ranges[1].count++;
@@ -2158,7 +2187,7 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
       ...r,
       label: `${r.count.toLocaleString()} (${total > 0 ? Math.round((r.count / total) * 100) : 0}%)`,
     }));
-  }, [taxaFilteredSpecies, selectedCategories, selectedCountries, selectedYearRanges, selectedSystems, selectedPopulationTrends, selectedMovementPatterns, selectedThreats, selectedCriteria, matchesHabitatFilter, endemicsOnly, selectedGrowthForms, matchesSearch, matchesAssessorsFilter, matchesReviewersFilter, matchesFacilitatorsFilter, matchesColFilter, matchesYearRangeFilter, selectedAssessmentYears, matchesAssessmentYearFilter]);
+  }, [taxaFilteredSpecies, matchesFilters]);
 
   // Number of Assessments chart (#423 item 1): apply all filters EXCEPT the
   // assessment-count selection itself. NE species have no assessment history
@@ -2174,25 +2203,8 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
     ];
     const byBucket: Record<string, number> = { "1": 0, "2": 1, "3": 2, "4": 3, "5+": 4 };
     taxaFilteredSpecies.forEach(s => {
+      if (!matchesFilters(s, SKIP_ASSESSMENT_COUNTS)) return;
       if (s.category === "NE") return;
-      if (!matchesSearch(s)) return;
-      if (selectedCategories.size > 0 && !selectedCategories.has(s.category)) return;
-      if (selectedCountries.size > 0 && !s.countries.some(c => selectedCountries.has(c))) return;
-      if (selectedYearRanges.size > 0 && !matchesYearRangeFilter(s.assessment_date, selectedYearRanges)) return;
-      if (selectedAssessmentYears.size > 0 && !matchesAssessmentYearFilter(s.assessment_date, selectedAssessmentYears)) return;
-      if (selectedObsRanges.size > 0 && !matchesObsRangeFilter(s.gbif_occurrence_count, selectedObsRanges)) return;
-      if (selectedSystems.size > 0 && !s.systems?.some(sys => selectedSystems.has(sys))) return;
-      if (selectedPopulationTrends.size > 0 && (!s.population_trend || !selectedPopulationTrends.has(s.population_trend))) return;
-      if (selectedMovementPatterns.size > 0 && (!s.movement_pattern || !selectedMovementPatterns.has(s.movement_pattern))) return;
-      if (selectedThreats.size > 0 && !s.threat_codes?.some(tc => Array.from(selectedThreats).some(sel => tc === sel || tc.startsWith(sel + ".")))) return;
-      if (selectedCriteria.size > 0 && !parseCriteriaCodes(s.criteria).some(code => Array.from(selectedCriteria).some(sel => code === sel || code.startsWith(sel)))) return;
-      if (endemicsOnly && s.countries.length !== 1) return;
-      if (selectedGrowthForms.size > 0 && !s.growth_forms?.some(gf => selectedGrowthForms.has(gf))) return;
-      if (!matchesAssessorsFilter(s)) return;
-      if (!matchesHabitatFilter(s)) return;
-      if (!matchesReviewersFilter(s)) return;
-      if (!matchesFacilitatorsFilter(s)) return;
-      if (!matchesColFilter(s)) return;
       buckets[byBucket[assessmentCountBucket(s.assessment_count)]].count++;
     });
     const total = buckets.reduce((sum, r) => sum + r.count, 0);
@@ -2200,7 +2212,7 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
       ...r,
       label: `${r.count.toLocaleString()} (${total > 0 ? Math.round((r.count / total) * 100) : 0}%)`,
     }));
-  }, [taxaFilteredSpecies, selectedCategories, selectedCountries, selectedYearRanges, selectedAssessmentYears, selectedObsRanges, selectedSystems, selectedPopulationTrends, selectedMovementPatterns, selectedThreats, selectedCriteria, matchesHabitatFilter, endemicsOnly, selectedGrowthForms, matchesSearch, matchesAssessorsFilter, matchesReviewersFilter, matchesFacilitatorsFilter, matchesColFilter, matchesYearRangeFilter, matchesAssessmentYearFilter, matchesObsRangeFilter, assessmentCountBucket]);
+  }, [taxaFilteredSpecies, assessmentCountBucket, matchesFilters]);
 
   // Year Described chart (NE / new-assessments only): per-bucket counts, cross-filtered
   // by every OTHER active filter (search, country, GBIF obs) but NOT the described-year
@@ -2231,24 +2243,7 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
     const counts: Record<string, number> = {};
     const outdatedCounts: Record<string, number> = {};
     taxaFilteredSpecies.forEach(s => {
-      if (!matchesSearch(s)) return;
-      if (selectedCategories.size > 0 && !selectedCategories.has(s.category)) return;
-      if (s.category !== "NE" && selectedYearRanges.size > 0 && !matchesYearRangeFilter(s.assessment_date, selectedYearRanges)) return;
-      if (s.category !== "NE" && selectedAssessmentYears.size > 0 && !matchesAssessmentYearFilter(s.assessment_date, selectedAssessmentYears)) return;
-      if (selectedObsRanges.size > 0 && !matchesObsRangeFilter(s.gbif_occurrence_count, selectedObsRanges)) return;
-      if (selectedAssessmentCounts.size > 0 && !matchesAssessmentCountFilter(s.assessment_count, selectedAssessmentCounts)) return;
-      if (selectedSystems.size > 0 && !s.systems?.some(sys => selectedSystems.has(sys))) return;
-      if (selectedPopulationTrends.size > 0 && (!s.population_trend || !selectedPopulationTrends.has(s.population_trend))) return;
-      if (selectedMovementPatterns.size > 0 && (!s.movement_pattern || !selectedMovementPatterns.has(s.movement_pattern))) return;
-      if (selectedThreats.size > 0 && !s.threat_codes?.some(tc => Array.from(selectedThreats).some(sel => tc === sel || tc.startsWith(sel + ".")))) return;
-      if (selectedCriteria.size > 0 && !parseCriteriaCodes(s.criteria).some(code => Array.from(selectedCriteria).some(sel => code === sel || code.startsWith(sel)))) return;
-      if (endemicsOnly && s.countries.length !== 1) return;
-      if (selectedGrowthForms.size > 0 && !s.growth_forms?.some(gf => selectedGrowthForms.has(gf))) return;
-      if (!matchesAssessorsFilter(s)) return;
-      if (!matchesHabitatFilter(s)) return;
-      if (!matchesReviewersFilter(s)) return;
-      if (!matchesFacilitatorsFilter(s)) return;
-      if (!matchesColFilter(s)) return;
+      if (!matchesFilters(s, SKIP_COUNTRIES)) return;
       // Gated on NE the same way the assessment-year filters above are, since NE species have no assessment.
       const outdated = s.category !== "NE" && isOutdated(s.assessment_date, dataAsOf);
       s.countries.forEach(code => {
@@ -2270,7 +2265,7 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
       ])
     );
     return { countryCounts: counts, uniqueCountries: sorted, countryStatsForMap: statsForMap };
-  }, [taxaFilteredSpecies, selectedCategories, selectedYearRanges, selectedObsRanges, selectedSystems, selectedPopulationTrends, selectedMovementPatterns, selectedThreats, selectedCriteria, matchesHabitatFilter, endemicsOnly, selectedGrowthForms, matchesSearch, matchesAssessorsFilter, matchesReviewersFilter, matchesFacilitatorsFilter, matchesColFilter, matchesObsRangeFilter, selectedAssessmentCounts, matchesAssessmentCountFilter, matchesYearRangeFilter, selectedAssessmentYears, matchesAssessmentYearFilter, dataAsOf]);
+  }, [taxaFilteredSpecies, dataAsOf, matchesFilters]);
 
   // True per-country totals — taxon/subgroup selection only, no other filters —
   // so the Country map tooltip can show "142 of 3,847 total" instead of just
@@ -2389,22 +2384,7 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
     const counts: Record<string, number> = {};
     let total = 0;
     taxaFilteredSpecies.forEach(s => {
-      if (!matchesSearch(s)) return;
-      if (selectedCategories.size > 0 && !selectedCategories.has(s.category)) return;
-      if (selectedCountries.size > 0 && !s.countries.some(c => selectedCountries.has(c))) return;
-      if (s.category !== "NE" && selectedYearRanges.size > 0 && !matchesYearRangeFilter(s.assessment_date, selectedYearRanges)) return;
-      if (s.category !== "NE" && selectedAssessmentYears.size > 0 && !matchesAssessmentYearFilter(s.assessment_date, selectedAssessmentYears)) return;
-      if (selectedObsRanges.size > 0 && !matchesObsRangeFilter(s.gbif_occurrence_count, selectedObsRanges)) return;
-      if (selectedAssessmentCounts.size > 0 && !matchesAssessmentCountFilter(s.assessment_count, selectedAssessmentCounts)) return;
-      if (selectedSystems.size > 0 && !s.systems?.some(sys => selectedSystems.has(sys))) return;
-      if (selectedPopulationTrends.size > 0 && (!s.population_trend || !selectedPopulationTrends.has(s.population_trend))) return;
-      if (selectedMovementPatterns.size > 0 && (!s.movement_pattern || !selectedMovementPatterns.has(s.movement_pattern))) return;
-      if (selectedCriteria.size > 0 && !parseCriteriaCodes(s.criteria).some(code => Array.from(selectedCriteria).some(sel => code === sel || code.startsWith(sel)))) return;
-      if (!matchesAssessorsFilter(s)) return;
-      if (!matchesHabitatFilter(s)) return;
-      if (!matchesReviewersFilter(s)) return;
-      if (!matchesFacilitatorsFilter(s)) return;
-      if (!matchesColFilter(s)) return;
+      if (!matchesFilters(s, SKIP_THREATS)) return;
       total++;
       if (!s.threat_codes?.length) return;
       // Deduplicate: count each prefix at most once per species
@@ -2421,7 +2401,7 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
       }
     });
     return { threatCounts: counts, threatTotal: total };
-  }, [taxaFilteredSpecies, selectedCategories, selectedCountries, selectedYearRanges, selectedObsRanges, selectedSystems, selectedPopulationTrends, selectedMovementPatterns, selectedCriteria, matchesHabitatFilter, matchesSearch, matchesAssessorsFilter, matchesReviewersFilter, matchesFacilitatorsFilter, matchesColFilter, matchesObsRangeFilter, selectedAssessmentCounts, matchesAssessmentCountFilter, matchesYearRangeFilter, selectedAssessmentYears, matchesAssessmentYearFilter]);
+  }, [taxaFilteredSpecies, matchesFilters]);
 
   // Criteria counts: apply all filters EXCEPT criteria (count species per code — at every
   // depth: letter, number, sub-clause, roman numeral — deduplicated per species) — mirrors
@@ -2439,22 +2419,7 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
     const counts: Record<string, number> = {};
     let total = 0;
     taxaFilteredSpecies.forEach(s => {
-      if (!matchesSearch(s)) return;
-      if (selectedCategories.size > 0 && !selectedCategories.has(s.category)) return;
-      if (selectedCountries.size > 0 && !s.countries.some(c => selectedCountries.has(c))) return;
-      if (s.category !== "NE" && selectedYearRanges.size > 0 && !matchesYearRangeFilter(s.assessment_date, selectedYearRanges)) return;
-      if (s.category !== "NE" && selectedAssessmentYears.size > 0 && !matchesAssessmentYearFilter(s.assessment_date, selectedAssessmentYears)) return;
-      if (selectedObsRanges.size > 0 && !matchesObsRangeFilter(s.gbif_occurrence_count, selectedObsRanges)) return;
-      if (selectedAssessmentCounts.size > 0 && !matchesAssessmentCountFilter(s.assessment_count, selectedAssessmentCounts)) return;
-      if (selectedSystems.size > 0 && !s.systems?.some(sys => selectedSystems.has(sys))) return;
-      if (selectedPopulationTrends.size > 0 && (!s.population_trend || !selectedPopulationTrends.has(s.population_trend))) return;
-      if (selectedMovementPatterns.size > 0 && (!s.movement_pattern || !selectedMovementPatterns.has(s.movement_pattern))) return;
-      if (selectedThreats.size > 0 && !s.threat_codes?.some(tc => Array.from(selectedThreats).some(sel => tc === sel || tc.startsWith(sel + ".")))) return;
-      if (!matchesAssessorsFilter(s)) return;
-      if (!matchesHabitatFilter(s)) return;
-      if (!matchesReviewersFilter(s)) return;
-      if (!matchesFacilitatorsFilter(s)) return;
-      if (!matchesColFilter(s)) return;
+      if (!matchesFilters(s, SKIP_CRITERIA)) return;
       const codes = parseCriteriaCodes(s.criteria);
       if (codes.length === 0) return;
       total++;
@@ -2465,7 +2430,7 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
       for (const letter of letters) counts[letter] = (counts[letter] || 0) + 1;
     });
     return { criteriaCounts: counts, criteriaTotal: total };
-  }, [taxaFilteredSpecies, selectedCategories, selectedCountries, selectedYearRanges, selectedObsRanges, selectedSystems, selectedPopulationTrends, selectedMovementPatterns, selectedThreats, matchesHabitatFilter, matchesSearch, matchesAssessorsFilter, matchesReviewersFilter, matchesFacilitatorsFilter, matchesColFilter, matchesObsRangeFilter, selectedAssessmentCounts, matchesAssessmentCountFilter, matchesYearRangeFilter, selectedAssessmentYears, matchesAssessmentYearFilter]);
+  }, [taxaFilteredSpecies, matchesFilters]);
 
   // Taxonomic-revision counts: apply every filter EXCEPT this chart's own two
   // (colMatch/colReasons — hence no matchesColFilter here), so each reason bar
@@ -2482,26 +2447,11 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
   const colTally = useMemo(() => {
     const tally = newRevisionTally();
     taxaFilteredSpecies.forEach(s => {
-      if (!matchesSearch(s)) return;
-      if (selectedCategories.size > 0 && !selectedCategories.has(s.category)) return;
-      if (selectedCountries.size > 0 && !s.countries.some(c => selectedCountries.has(c))) return;
-      if (s.category !== "NE" && selectedYearRanges.size > 0 && !matchesYearRangeFilter(s.assessment_date, selectedYearRanges)) return;
-      if (s.category !== "NE" && selectedAssessmentYears.size > 0 && !matchesAssessmentYearFilter(s.assessment_date, selectedAssessmentYears)) return;
-      if (selectedObsRanges.size > 0 && !matchesObsRangeFilter(s.gbif_occurrence_count, selectedObsRanges)) return;
-      if (selectedAssessmentCounts.size > 0 && !matchesAssessmentCountFilter(s.assessment_count, selectedAssessmentCounts)) return;
-      if (selectedSystems.size > 0 && !s.systems?.some(sys => selectedSystems.has(sys))) return;
-      if (selectedPopulationTrends.size > 0 && (!s.population_trend || !selectedPopulationTrends.has(s.population_trend))) return;
-      if (selectedMovementPatterns.size > 0 && (!s.movement_pattern || !selectedMovementPatterns.has(s.movement_pattern))) return;
-      if (selectedThreats.size > 0 && !s.threat_codes?.some(tc => Array.from(selectedThreats).some(sel => tc === sel || tc.startsWith(sel + ".")))) return;
-      if (!matchesAssessorsFilter(s)) return;
-      if (!matchesHabitatFilter(s)) return;
-      if (!matchesReviewersFilter(s)) return;
-      if (selectedCriteria.size > 0 && !parseCriteriaCodes(s.criteria).some(code => Array.from(selectedCriteria).some(sel => code === sel || code.startsWith(sel)))) return;
-      if (!matchesFacilitatorsFilter(s)) return;
+      if (!matchesFilters(s, SKIP_REVISION)) return;
       tallyRevision(tally, s.col_revision);
     });
     return tally;
-  }, [taxaFilteredSpecies, selectedCategories, selectedCountries, selectedYearRanges, selectedObsRanges, selectedSystems, selectedPopulationTrends, selectedMovementPatterns, selectedThreats, selectedCriteria, matchesHabitatFilter, matchesSearch, matchesAssessorsFilter, matchesReviewersFilter, matchesFacilitatorsFilter, matchesObsRangeFilter, selectedAssessmentCounts, matchesAssessmentCountFilter, matchesYearRangeFilter, selectedAssessmentYears, matchesAssessmentYearFilter]);
+  }, [taxaFilteredSpecies, matchesFilters]);
 
   // Habitat counts: apply all filters EXCEPT habitat (all 4 dimensions — code
   // selection, specialists/major/resident toggles — so the drill-down counts and
@@ -2517,22 +2467,7 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
     const counts: Record<string, number> = {};
     let total = 0;
     taxaFilteredSpecies.forEach(s => {
-      if (!matchesSearch(s)) return;
-      if (selectedCategories.size > 0 && !selectedCategories.has(s.category)) return;
-      if (selectedCountries.size > 0 && !s.countries.some(c => selectedCountries.has(c))) return;
-      if (s.category !== "NE" && selectedYearRanges.size > 0 && !matchesYearRangeFilter(s.assessment_date, selectedYearRanges)) return;
-      if (s.category !== "NE" && selectedAssessmentYears.size > 0 && !matchesAssessmentYearFilter(s.assessment_date, selectedAssessmentYears)) return;
-      if (selectedObsRanges.size > 0 && !matchesObsRangeFilter(s.gbif_occurrence_count, selectedObsRanges)) return;
-      if (selectedAssessmentCounts.size > 0 && !matchesAssessmentCountFilter(s.assessment_count, selectedAssessmentCounts)) return;
-      if (selectedSystems.size > 0 && !s.systems?.some(sys => selectedSystems.has(sys))) return;
-      if (selectedPopulationTrends.size > 0 && (!s.population_trend || !selectedPopulationTrends.has(s.population_trend))) return;
-      if (selectedMovementPatterns.size > 0 && (!s.movement_pattern || !selectedMovementPatterns.has(s.movement_pattern))) return;
-      if (selectedThreats.size > 0 && !s.threat_codes?.some(tc => Array.from(selectedThreats).some(sel => tc === sel || tc.startsWith(sel + ".")))) return;
-      if (selectedCriteria.size > 0 && !parseCriteriaCodes(s.criteria).some(code => Array.from(selectedCriteria).some(sel => code === sel || code.startsWith(sel)))) return;
-      if (!matchesAssessorsFilter(s)) return;
-      if (!matchesReviewersFilter(s)) return;
-      if (!matchesFacilitatorsFilter(s)) return;
-      if (!matchesColFilter(s)) return;
+      if (!matchesFilters(s, SKIP_HABITAT)) return;
       // selectedHabitat itself is excluded from this cross-filter (so every bar
       // stays visible to compare against, even once one is picked) but Breadth/
       // Importance/Season are refinements, not "the axis being explored" —
@@ -2568,7 +2503,7 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
       }
     });
     return { habitatCounts: counts, habitatTotal: total };
-  }, [taxaFilteredSpecies, selectedCategories, selectedCountries, selectedYearRanges, selectedObsRanges, selectedSystems, selectedPopulationTrends, selectedMovementPatterns, selectedThreats, selectedCriteria, matchesSearch, matchesAssessorsFilter, matchesReviewersFilter, matchesFacilitatorsFilter, matchesColFilter, matchesObsRangeFilter, selectedAssessmentCounts, matchesAssessmentCountFilter, matchesYearRangeFilter, selectedAssessmentYears, matchesAssessmentYearFilter, habitatBreadth, selectedHabitatImportance, selectedHabitatSeasons, selectedHabitatSuitability, habitatImportanceActive, habitatSeasonsActive, habitatSuitabilityActive]);
+  }, [taxaFilteredSpecies, habitatBreadth, selectedHabitatImportance, selectedHabitatSeasons, selectedHabitatSuitability, habitatImportanceActive, habitatSeasonsActive, habitatSuitabilityActive, matchesFilters]);
 
   // Handle region filter — select all countries in the chosen region
   // The region picker hands back a whole country set (a union of the regions
@@ -2591,29 +2526,9 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
   // that duplication is a live trap: the taxonomic-revision filter was added to
   // all twelve inline chains and silently missed here, leaving the credits chart
   // reporting unfiltered counts. Anything added to one belongs in the other.
-  const matchesNonCreditFilters = useCallback((s: Species): boolean => {
-    if (!matchesSearch(s)) return false;
-    if (selectedCategories.size > 0 && !selectedCategories.has(s.category)) return false;
-    if (selectedCountries.size > 0 && !s.countries.some(c => selectedCountries.has(c))) return false;
-    if (s.category !== "NE" && selectedYearRanges.size > 0 && !matchesYearRangeFilter(s.assessment_date, selectedYearRanges)) return false;
-    if (s.category !== "NE" && selectedAssessmentYears.size > 0 && !matchesAssessmentYearFilter(s.assessment_date, selectedAssessmentYears)) return false;
-    if (selectedObsRanges.size > 0 && !matchesObsRangeFilter(s.gbif_occurrence_count, selectedObsRanges)) return false;
-    if (selectedAssessmentCounts.size > 0 && !matchesAssessmentCountFilter(s.assessment_count, selectedAssessmentCounts)) return false;
-    if (selectedSystems.size > 0 && !s.systems?.some(sys => selectedSystems.has(sys))) return false;
-    if (selectedPopulationTrends.size > 0 && (!s.population_trend || !selectedPopulationTrends.has(s.population_trend))) return false;
-    if (selectedMovementPatterns.size > 0 && (!s.movement_pattern || !selectedMovementPatterns.has(s.movement_pattern))) return false;
-    if (selectedThreats.size > 0 && !s.threat_codes?.some(tc => Array.from(selectedThreats).some(sel => tc === sel || tc.startsWith(sel + ".")))) return false;
-    if (selectedCriteria.size > 0 && !parseCriteriaCodes(s.criteria).some(code => Array.from(selectedCriteria).some(sel => code === sel || code.startsWith(sel)))) return false;
-    if (!matchesHabitatFilter(s)) return false;
-    if (!matchesColFilter(s)) return false;
-    if (endemicsOnly && s.countries.length !== 1) return false;
-    if (selectedGrowthForms.size > 0 && !s.growth_forms?.some(gf => selectedGrowthForms.has(gf))) return false;
-    return true;
-  }, [matchesSearch, selectedCategories, selectedCountries, selectedYearRanges, matchesYearRangeFilter,
-      selectedAssessmentYears, matchesAssessmentYearFilter, selectedObsRanges, matchesObsRangeFilter,
-      selectedAssessmentCounts, matchesAssessmentCountFilter, selectedSystems, selectedPopulationTrends,
-      selectedMovementPatterns, selectedThreats, selectedCriteria, matchesHabitatFilter, matchesColFilter,
-      endemicsOnly, selectedGrowthForms]);
+  const matchesNonCreditFilters = useCallback(
+    (s: Species): boolean => matchesFilters(s, SKIP_CREDITS),
+    [matchesFilters]);
 
   // `total` is the percentage denominator: species carrying at least one name of
   // this credit type. Like criteria/habitat, one assessment can list several
