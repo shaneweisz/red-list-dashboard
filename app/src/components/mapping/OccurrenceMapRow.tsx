@@ -152,10 +152,6 @@ const ExclusionDialog = dynamic(
   () => import("./ExclusionDialog"),
   { ssr: false }
 );
-const ConfirmDialog = dynamic(
-  () => import("@/components/ConfirmDialog"),
-  { ssr: false }
-);
 const MapPlaceSearch = dynamic(
   () => import("./MapPlaceSearch"),
   { ssr: false }
@@ -1046,11 +1042,6 @@ export default function OccurrenceMapRow({
   // dragging always stays on top and stays grabbable even where the handles overlap.
   const [activeDateHandle, setActiveDateHandle] = useState<"from" | "to" | null>(null);
 
-  // Overlays dropdown state (the context layers: protected areas, forest loss,
-  // habitat types, ecoregions, native-country shading, sampling effort)
-  const [overlaysOpen, setOverlaysOpen] = useState(false);
-  const overlaysRef = useRef<HTMLDivElement>(null);
-
   // Fixed page size for filmstrip
   const pageSize = INAT_PAGE_SIZE;
 
@@ -1095,18 +1086,6 @@ export default function OccurrenceMapRow({
     document.addEventListener("mousedown", handler);
     return () => document.removeEventListener("mousedown", handler);
   }, [dateRangeOpen]);
-
-  // Close overlays popover on outside click
-  useEffect(() => {
-    if (!overlaysOpen) return;
-    const handler = (e: MouseEvent) => {
-      if (overlaysRef.current && !overlaysRef.current.contains(e.target as Node)) {
-        setOverlaysOpen(false);
-      }
-    };
-    document.addEventListener("mousedown", handler);
-    return () => document.removeEventListener("mousedown", handler);
-  }, [overlaysOpen]);
 
   // Hovered iNat observation (for map highlight)
   const [hoveredObs, setHoveredObs] = useState<InatObservation | null>(null);
@@ -1267,7 +1246,6 @@ export default function OccurrenceMapRow({
   const [historyOpen, setHistoryOpen] = useState(false);
 
   /** A dragged georeference waiting to be confirmed or put back. */
-  const [pendingMove, setPendingMove] = useState<{ gbifID: number; lat: number; lon: number } | null>(null);
 
   // Fetch occurrences (re-fetches when the requested record sets change)
   useEffect(() => {
@@ -1660,42 +1638,34 @@ export default function OccurrenceMapRow({
     [georeferences, commitEdits]
   );
 
-  // Dragging a marker moves the point and leaves everything else — radius,
-  // notes, the record it belongs to — alone.
   /**
-   * A drag proposes a new position; it doesn't commit one.
+   * Dragging a marker moves the point and leaves everything else — radius,
+   * notes, the record it belongs to — alone.
    *
-   * The point is small, the map pans under it, and a stray drag silently
-   * rewrote a coordinate someone had worked out from a locality description —
-   * with no undo, since the old position was gone the moment it moved. So the
-   * marker sits where you dropped it and waits to be confirmed; cancelling puts
-   * the prop back and MapLibre snaps it home.
+   * It used to stop and ask, because a stray drag rewrote a coordinate someone
+   * had worked out from a locality description and the old position was gone
+   * the moment it moved. It goes through the edit history now, so the old
+   * position isn't gone — it's one ⌘Z away, labelled "move a georeference" —
+   * and a dialog on every drag was asking permission for something already
+   * reversible.
    */
   const handleGeoreferenceDragged = useCallback(
     (gbifID: number, lat: number, lon: number) => {
-      if (!georeferences[gbifID]) return;
-      setPendingMove({ gbifID, lat: Number(lat.toFixed(5)), lon: Number(lon.toFixed(5)) });
-    },
-    [georeferences]
-  );
-
-  const confirmMove = useCallback(() => {
-    if (!pendingMove) return;
-    const existing = georeferences[pendingMove.gbifID];
-    if (existing) {
+      const existing = georeferences[gbifID];
+      if (!existing) return;
       commitEdits({ georeferences: {
         ...georeferences,
-        [pendingMove.gbifID]: {
+        [gbifID]: {
           ...existing,
-          decimalLatitude: pendingMove.lat,
-          decimalLongitude: pendingMove.lon,
+          decimalLatitude: Number(lat.toFixed(5)),
+          decimalLongitude: Number(lon.toFixed(5)),
           georeferencedDate: new Date().toISOString(),
           georeferencedBy: existing.georeferencedBy || accountEmail || undefined,
         },
       } }, "move a georeference");
-    }
-    setPendingMove(null);
-  }, [pendingMove, georeferences, commitEdits, accountEmail]);
+    },
+    [georeferences, commitEdits, accountEmail]
+  );
 
   const handleMarkerHover = useCallback(
     (gbifID: number) => {
@@ -3088,8 +3058,8 @@ export default function OccurrenceMapRow({
                   {visibleGeoreferences.map((g) => (
                     <MapLibreMarker
                       key={g.gbifID}
-                      longitude={pendingMove?.gbifID === g.gbifID ? pendingMove.lon : g.decimalLongitude}
-                      latitude={pendingMove?.gbifID === g.gbifID ? pendingMove.lat : g.decimalLatitude}
+                      longitude={g.decimalLongitude}
+                      latitude={g.decimalLatitude}
                       anchor="center"
                       draggable
                       onDragEnd={(e) => handleGeoreferenceDragged(g.gbifID, e.lngLat.lat, e.lngLat.lng)}
@@ -3730,10 +3700,13 @@ export default function OccurrenceMapRow({
               )}
             </MapGL>
           ) : null}
-          {/* Bottom-left stack: what an overlay's colours mean, then the
-              occurrence legend. Stacked in a column so a legend that only
-              appears with its overlay can't land on top of another. */}
+          {/* Bottom-left stack: which records are drawn, what they measure,
+              then what each overlay's colours mean. Stacked in a column so a
+              legend that only appears with its overlay can't land on top of
+              another. */}
           <div className="absolute bottom-2 left-2 z-[1000] flex flex-col items-start gap-1.5 max-w-[90%]">
+          {mounted && renderRangeMetrics()}
+          {!loadingOccurrences && mounted && renderRecordLayers(label)}
           {/* The measuring tool's running total. First in the stack because
               it's a live mode, not a legend. */}
           {measure && (
@@ -3895,92 +3868,26 @@ export default function OccurrenceMapRow({
               )}
             </div>
           )}
-          {/* Legend */}
-          {!loadingOccurrences && (
-            <div className="bg-white dark:bg-zinc-800 px-2 py-1.5 rounded text-xs text-zinc-600 dark:text-zinc-300 shadow flex flex-wrap items-center gap-x-3 gap-y-1 max-w-full">
-              {label ? (
-                <span>{label}</span>
-              ) : colorByDate ? (
-                <>
-                  <div className="flex items-center gap-1">
-                    <div className="w-3 h-3 rounded-full" style={{ background: dateToColor(minDateNum).fill, border: `2px solid ${dateToColor(minDateNum).stroke}` }} />
-                    <span>{minDateLabel}</span>
-                  </div>
-                  <span>→</span>
-                  <div className="flex items-center gap-1">
-                    <div className="w-3 h-3 rounded-full" style={{ background: dateToColor(maxDateNum).fill, border: `2px solid ${dateToColor(maxDateNum).stroke}` }} />
-                    <span>{maxDateLabel}</span>
-                  </div>
-                </>
-              ) : (
-                <>
-                  <div className="flex items-center gap-1">
-                    <div className="w-3 h-3 rounded-full bg-gray-400 border-2 border-gray-500" />
-                    <span>≤{assessmentDate?.split("T")[0] ?? assessmentYear}</span>
-                  </div>
-                  <div className="flex items-center gap-1">
-                    <div className="w-3 h-3 rounded-full bg-green-400 border-2 border-green-600" />
-                    <span>After {assessmentDate?.split("T")[0] ?? assessmentYear}</span>
-                  </div>
-                </>
-              )}
-              {/* One swatch per point set on the map, so the three colours are
-                  never something to work out from context. Only shown when the
-                  set is both loaded and visible — a legend for a hidden layer
-                  is a legend for something that isn't there. */}
-              {showMyGeoreferences && visibleGeoreferences.length > 0 && (
-                <>
-                  <span className="text-zinc-300 dark:text-zinc-600">|</span>
-                  <div className="flex items-center gap-1" title="Coordinates you worked out here">
-                    <div className="w-3 h-3 rounded-full" style={{ background: "#7c3aed" }} />
-                    <span>Yours ({visibleGeoreferences.length.toLocaleString()})</span>
-                  </div>
-                </>
-              )}
-              {showPointFile && pointFile && pointFile.points.length > 0 && (
-                <>
-                  <span className="text-zinc-300 dark:text-zinc-600">|</span>
-                  <button
-                    onClick={() => setPointFileOpen(true)}
-                    className="flex items-center gap-1 hover:underline"
-                    title={`${pointFile.fileName} — click for how it compares`}
-                  >
-                    <div
-                      className="w-3 h-3 rounded-full border-2 border-white dark:border-zinc-800"
-                      style={{ background: POINT_FILE_COLOR }}
-                    />
-                    <span>Imported CSV records ({pointFile.points.length.toLocaleString()})</span>
-                  </button>
-                </>
-              )}
-              {/* Toggle color mode / split view (only when assessment year is available) */}
-              {!label && assessmentYear && (
-                <>
-                  <span className="text-zinc-300 dark:text-zinc-600">|</span>
-                  <button
-                    onClick={() => setColorByDate(!colorByDate)}
-                    className="px-1.5 py-0.5 rounded border border-zinc-300 dark:border-zinc-600 text-[10px] text-zinc-500 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-700 transition-colors"
-                    title={colorByDate ? "Color by before/after assessment" : "Color by date"}
-                  >
-                    {colorByDate ? "Color by before/after assess. date" : "Color by date"}
-                  </button>
-                  {!splitView && (
-                    <button
-                      onClick={() => {
-                        if (!splitDate && assessmentDate) setSplitDate(assessmentDate.split("T")[0]);
-                        setSplitView(true);
-                      }}
-                      className="px-1.5 py-0.5 rounded border border-zinc-300 dark:border-zinc-600 text-[10px] text-zinc-500 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-700 transition-colors flex items-center gap-1"
-                    >
-                      <svg width="10" height="10" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
-                        <rect x="1" y="2" width="14" height="12" rx="1.5" />
-                        <line x1="8" y1="2" x2="8" y2="14" />
-                      </svg>
-                      Split view
-                    </button>
-                  )}
-                </>
-              )}
+          {/* The split-view panels still need their own colour key: the
+              records panel is drawn per panel, but the before/after split is
+              about the two panels together. Everything else this used to hold
+              now sits on the rows it describes. */}
+          {!loadingOccurrences && !label && assessmentYear && !splitView && (
+            <div className="bg-white dark:bg-zinc-800 px-2 py-1 rounded shadow text-[10px] text-zinc-500 dark:text-zinc-400">
+              <button
+                onClick={() => {
+                  if (!splitDate && assessmentDate) setSplitDate(assessmentDate.split("T")[0]);
+                  setSplitView(true);
+                }}
+                title="Show the records before and after the assessment date side by side"
+                className="flex items-center gap-1 hover:text-zinc-700 dark:hover:text-zinc-200"
+              >
+                <svg width="10" height="10" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
+                  <rect x="1" y="2" width="14" height="12" rx="1.5" />
+                  <line x1="8" y1="2" x2="8" y2="14" />
+                </svg>
+                Split view
+              </button>
             </div>
           )}
           </div>
@@ -4029,8 +3936,11 @@ export default function OccurrenceMapRow({
               ))}
             </div>
           )}
-          {/* Top-left: the split-view label, then the place search — where a
-              map's search box lives everywhere else. */}
+          {/* Top-left: the split-view label, the place search — where a map's
+              search box lives everywhere else — and the context layers under
+              it. Overlays sit on this side because the records they're being
+              compared against are diagonally opposite, so neither column
+              covers what the other is about. */}
           <div className="absolute top-2 left-2 z-[1000] flex flex-col items-start gap-1.5">
             {label && (
               <div className="bg-zinc-900/80 text-white text-[11px] font-medium px-2.5 py-1 rounded-full shadow-md">
@@ -4049,6 +3959,7 @@ export default function OccurrenceMapRow({
                 onPreview={setPreviewPlace}
               />
             )}
+            {!loadingOccurrences && mounted && renderOverlayLayers()}
           </div>
           {/* Top-right stack: what's loaded, then the basemap choice. Stacked
               in a flex column rather than each guessing the other's offset —
@@ -4121,11 +4032,6 @@ export default function OccurrenceMapRow({
                 )}
               </div>
             )}
-            {/* The record layers first, then what they measure, then the
-                basemap under both — the layers are the subject, and the
-                basemap is only the paper they're drawn on. */}
-            {!loadingOccurrences && mounted && renderRecordLayers()}
-            {mounted && renderRangeMetrics()}
             {!loadingOccurrences && mounted && (
               <div className="flex flex-col gap-0.5 bg-white dark:bg-zinc-800 rounded-lg shadow-md border border-zinc-200 dark:border-zinc-700 p-1">
                 {(Object.entries(BASEMAP_STYLES) as [BasemapKey, (typeof BASEMAP_STYLES)[BasemapKey]][]).map(([key, opt]) => (
@@ -4216,7 +4122,7 @@ export default function OccurrenceMapRow({
         extreme fluctuations, and none of those come from points on a
         map — so where GeoCAT shows a green LC, this shows nothing. */}
     {!loadingOccurrences && (
-      <div className="bg-white dark:bg-zinc-800 rounded-lg shadow-md border border-zinc-200 dark:border-zinc-700 px-2.5 py-2 text-[11px] text-zinc-700 dark:text-zinc-200 w-56">
+      <div className="bg-white dark:bg-zinc-800 rounded-lg shadow-md border border-zinc-200 dark:border-zinc-700 px-2.5 py-2 text-[11px] text-zinc-700 dark:text-zinc-200 w-52">
         <button
           onClick={() => setShowRangeMetrics((v) => !v)}
           className="flex items-center gap-2 w-full text-left"
@@ -4235,7 +4141,7 @@ export default function OccurrenceMapRow({
               }`}
             />
           </span>
-          <span className="font-medium">Enables EOO/AOO</span>
+          <span className="font-medium">Enable EOO/AOO</span>
         </button>
         {rangeMetrics && (
           <div className="mt-2 space-y-2">
@@ -4335,8 +4241,266 @@ export default function OccurrenceMapRow({
     </>
   );
 
-  const renderRecordLayers = () => (
-    <div className="flex flex-col bg-white dark:bg-zinc-800 rounded-lg shadow-md border border-zinc-200 dark:border-zinc-700 py-1 w-44">
+  /**
+   * The context layers, as a panel on the map rather than a dropdown.
+   *
+   * They were behind a button in the toolbar, which meant every comparison —
+   * does this gap sit inside a protected area, is it forest that has gone,
+   * has anyone collected here at all — cost a click to open, a click to
+   * toggle, and a click somewhere else to get the menu out of the way of the
+   * map you were trying to read.
+   */
+  const renderOverlayLayers = () => (
+    <div className="flex flex-col bg-white dark:bg-zinc-800 rounded-lg shadow-md border border-zinc-200 dark:border-zinc-700 py-1 w-48">
+      <div className="flex items-baseline gap-1 px-2 pb-0.5 text-[9px] uppercase tracking-wide text-zinc-400 dark:text-zinc-500">
+        <span>Overlays</span>
+        <span className="ml-auto tabular-nums normal-case tracking-normal">
+          {overlayToggleValues.filter(Boolean).length} of {overlayToggleValues.length}
+        </span>
+      </div>
+      <label
+        className="flex items-center gap-2 px-2 py-0.5 hover:bg-zinc-50 dark:hover:bg-zinc-700 cursor-pointer text-[11px]"
+        title="Overlay the World Database on Protected Areas (WDPA) — UNEP-WCMC & IUCN. With it on, clicking the map names the areas covering that point and links each to Protected Planet."
+      >
+        <input
+          type="checkbox"
+          checked={showProtectedAreas}
+          onChange={() => {
+            setShowProtectedAreas((v) => !v);
+            setPointQuery(null);
+          }}
+          className="w-3 h-3 rounded accent-emerald-500 shrink-0"
+        />
+        <span className="flex-1 min-w-0 text-zinc-700 dark:text-zinc-200">Protected areas</span>
+        <a
+          href="https://www.protectedplanet.net"
+          target="_blank"
+          rel="noopener noreferrer"
+          title="World Database on Protected Areas (WDPA), via Protected Planet — UNEP-WCMC & IUCN"
+          onClick={(e) => {
+            // Same pattern as the other info-icon links in this
+            // component: prevent the enclosing <label>'s native
+            // click-forwarding from toggling the checkbox.
+            e.preventDefault();
+            e.stopPropagation();
+            window.open("https://www.protectedplanet.net", "_blank", "noopener,noreferrer");
+          }}
+          className="shrink-0 text-zinc-300 hover:text-zinc-500 dark:text-zinc-600 dark:hover:text-zinc-400"
+        >
+          <FaInfoCircle className="w-3 h-3" />
+        </a>
+      </label>
+      <label
+        className="flex items-center gap-2 px-2 py-0.5 text-[11px] hover:bg-zinc-50 dark:hover:bg-zinc-700 cursor-pointer"
+        title={`${FOREST_LOSS_SOURCE_NOTE} Coloured by year of loss, ${FOREST_LOSS_FIRST_YEAR}\u2013${FOREST_LOSS_LAST_YEAR}. ${FOREST_LOSS_CAVEAT}`}
+      >
+        <input
+          type="checkbox"
+          checked={showForestLoss}
+          onChange={() => setShowForestLoss((v) => !v)}
+          className="w-3 h-3 rounded accent-emerald-500 shrink-0"
+        />
+        <span className="flex-1 min-w-0 text-zinc-700 dark:text-zinc-200">Forest loss</span>
+        <a
+          href={FOREST_LOSS_URL}
+          target="_blank"
+          rel="noopener noreferrer"
+          title={`${FOREST_LOSS_SOURCE_NOTE} Opens Global Nature Watch, the platform formerly called Global Forest Watch.`}
+          onClick={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            window.open(FOREST_LOSS_URL, "_blank", "noopener,noreferrer");
+          }}
+          className="shrink-0 text-zinc-300 hover:text-zinc-500 dark:text-zinc-600 dark:hover:text-zinc-400"
+        >
+          <FaInfoCircle className="w-3 h-3" />
+        </a>
+      </label>
+      <label
+        className="flex items-center gap-2 px-2 py-0.5 text-[11px] hover:bg-zinc-50 dark:hover:bg-zinc-700 cursor-pointer"
+        title="IUCN habitat classes from Jung et al. (2020), the 100m map behind Area of Habitat. Coloured by level 1; click the map for the exact class."
+      >
+        <input
+          type="checkbox"
+          checked={showHabitat}
+          onChange={() => {
+            setShowHabitat((v) => !v);
+            setPointQuery(null);
+          }}
+          className="w-3 h-3 rounded accent-emerald-500 shrink-0"
+        />
+        <span className="flex-1 min-w-0 text-zinc-700 dark:text-zinc-200">Habitat types</span>
+        <a
+          href="https://zenodo.org/records/4058819"
+          target="_blank"
+          rel="noopener noreferrer"
+          title="A global map of terrestrial habitat types — Jung et al. 2020"
+          onClick={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            window.open("https://zenodo.org/records/4058819", "_blank", "noopener,noreferrer");
+          }}
+          className="shrink-0 text-zinc-300 hover:text-zinc-500 dark:text-zinc-600 dark:hover:text-zinc-400"
+        >
+          <FaInfoCircle className="w-3 h-3" />
+        </a>
+      </label>
+      <label
+        className="flex items-center gap-2 px-2 py-0.5 hover:bg-zinc-50 dark:hover:bg-zinc-700 cursor-pointer text-[11px]"
+        title="Terrestrial ecoregions and biomes (Dinerstein et al. 2017) — the ecosystem a record sits in. Right-click anywhere to name it."
+      >
+        <input
+          type="checkbox"
+          checked={showEcoregions}
+          onChange={() => setShowEcoregions((v) => !v)}
+          className="w-3 h-3 rounded accent-emerald-600 shrink-0"
+        />
+        <span className="flex-1 min-w-0 text-zinc-700 dark:text-zinc-200 flex items-center gap-1">
+          Ecoregions
+          {ecoregionsLoading && (
+            <svg className="w-3 h-3 animate-spin text-zinc-400" fill="none" viewBox="0 0 24 24">
+              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+            </svg>
+          )}
+        </span>
+        {ecoregionsFailed && (
+          <span className="text-[10px] text-red-500 shrink-0">unavailable</span>
+        )}
+        <a
+          href={ECOREGIONS_PAPER_URL}
+          target="_blank"
+          rel="noopener noreferrer"
+          title="An Ecoregion-Based Approach to Protecting Half the Terrestrial Realm — Dinerstein et al. 2017, BioScience. The RESOLVE Ecoregions 2017 layer, CC BY 4.0."
+          onClick={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            window.open(ECOREGIONS_PAPER_URL, "_blank", "noopener,noreferrer");
+          }}
+          className="shrink-0 text-zinc-300 hover:text-zinc-500 dark:text-zinc-600 dark:hover:text-zinc-400"
+        >
+          <FaInfoCircle className="w-3 h-3" />
+        </a>
+      </label>
+      <label
+        className={`flex items-center gap-2 px-2 py-0.5 text-[11px] ${
+          nativeCountriesWcvp && nativeCountriesWcvp.length > 0
+            ? "hover:bg-zinc-50 dark:hover:bg-zinc-700 cursor-pointer"
+            : "opacity-50 cursor-not-allowed"
+        }`}
+        title="Shade the countries Kew's POWO/World Checklist of Vascular Plants considers this species native to"
+      >
+        <input
+          type="checkbox"
+          checked={showPowoRangeOverlay}
+          disabled={!(nativeCountriesWcvp && nativeCountriesWcvp.length > 0)}
+          onChange={() => setShowPowoRangeOverlay((v) => !v)}
+          className="w-3 h-3 rounded accent-blue-500 shrink-0"
+        />
+        <span className="flex-1 min-w-0 text-zinc-700 dark:text-zinc-200">POWO native range</span>
+        {wcvpPowoId && (
+          <a
+            href={`https://powo.science.kew.org/taxon/urn:lsid:ipni.org:names:${wcvpPowoId}`}
+            target="_blank"
+            rel="noopener noreferrer"
+            title="View this species on Plants of the World Online (POWO)"
+            onClick={(e) => {
+              // See the identical pattern on Coordinate cleaning's
+              // source links: prevent the enclosing <label>'s native
+              // click-forwarding from toggling the checkbox, without
+              // losing the link's own navigation.
+              e.preventDefault();
+              e.stopPropagation();
+              window.open(
+                `https://powo.science.kew.org/taxon/urn:lsid:ipni.org:names:${wcvpPowoId}`,
+                "_blank",
+                "noopener,noreferrer"
+              );
+            }}
+            className="shrink-0 text-zinc-300 hover:text-zinc-500 dark:text-zinc-600 dark:hover:text-zinc-400"
+          >
+            <FaInfoCircle className="w-3 h-3" />
+          </a>
+        )}
+      </label>
+{hasIucnNativeRange && (
+      <label
+        className="flex items-center gap-2 px-2 py-0.5 text-[11px] hover:bg-zinc-50 dark:hover:bg-zinc-700 cursor-pointer"
+        title="Shade the countries this species' IUCN Red List assessment lists as native range"
+      >
+        <input
+          type="checkbox"
+          checked={showIucnRangeOverlay}
+          onChange={() => setShowIucnRangeOverlay((v) => !v)}
+          className="w-3 h-3 rounded accent-amber-500 shrink-0"
+        />
+        <span className="flex-1 min-w-0 text-zinc-700 dark:text-zinc-200">IUCN native countries</span>
+      </label>
+      )}
+      {/* Withheld entirely where the dataset has no matching
+          taxon — see lib/mapping/sampling-effort.ts. A fish
+          judged against seabird effort is worse than no layer. */}
+      {nativeEffortGroup && (
+        <div>
+          <label
+            className="flex items-center gap-2 px-2 py-0.5 hover:bg-zinc-50 dark:hover:bg-zinc-700 cursor-pointer text-[11px]"
+            title="GBIF records per 10 km cell (El-Gabbas 2026). Shows whether a gap in the records is genuinely empty or merely unvisited — the caveat behind a record-based AOO."
+          >
+            <input
+              type="checkbox"
+              checked={showSamplingEffort}
+              onChange={() => setShowSamplingEffort((v) => !v)}
+              className="w-3 h-3 rounded accent-yellow-500 shrink-0"
+            />
+            <span className="flex-1 min-w-0 text-zinc-700 dark:text-zinc-200 flex items-center gap-1">
+              GBIF sampling effort
+              {effortLoading && (
+                <svg className="w-3 h-3 animate-spin text-zinc-400" fill="none" viewBox="0 0 24 24">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                </svg>
+              )}
+            </span>
+            <a
+              href={EFFORT_PAPER_URL}
+              target="_blank"
+              rel="noopener noreferrer"
+              title="Global sampling effort of GBIF biodiversity data — El-Gabbas 2026, Diversity and Distributions"
+              onClick={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                window.open(EFFORT_PAPER_URL, "_blank", "noopener,noreferrer");
+              }}
+              className="shrink-0 text-zinc-300 hover:text-zinc-500 dark:text-zinc-600 dark:hover:text-zinc-400"
+            >
+              <FaInfoCircle className="w-3 h-3" />
+            </a>
+          </label>
+          {/* One taxon at a time, not several: two effort
+              surfaces drawn over each other give a colour that
+              can't be read back to either. */}
+          {showSamplingEffort && (
+            <select
+              value={effortGroup ?? nativeEffortGroup}
+              onChange={(e) => setEffortGroup(e.target.value as EffortGroup)}
+              className="mx-2 mb-1 w-[calc(100%-1rem)] rounded border border-zinc-300 dark:border-zinc-600 bg-white dark:bg-zinc-800 px-1.5 py-1 text-[11px] text-zinc-700 dark:text-zinc-200"
+              title="Which taxon's collecting effort to show. All taxa is dominated by birds and casual observation, so the matching group is usually the honest comparison."
+            >
+              {EFFORT_GROUPS.map((g) => (
+                <option key={g} value={g}>
+                  {EFFORT_GROUP_LABELS[g]}
+                  {g === nativeEffortGroup ? " (this species)" : ""}
+                </option>
+              ))}
+            </select>
+          )}
+        </div>
+      )}
+    </div>
+  );
+
+  const renderRecordLayers = (label: string | null) => (
+    <div className="flex flex-col bg-white dark:bg-zinc-800 rounded-lg shadow-md border border-zinc-200 dark:border-zinc-700 py-1 w-52">
       <div className="px-2 pb-0.5 text-[9px] uppercase tracking-wide text-zinc-400 dark:text-zinc-500">
         Records
       </div>
@@ -4349,6 +4513,49 @@ export default function OccurrenceMapRow({
         />
         <span className="flex-1 min-w-0 text-zinc-700 dark:text-zinc-200">GBIF points</span>
       </label>
+      {/* What the GBIF points' colours mean, under the row that draws them.
+          This was a separate legend panel: two boxes in the same corner, one
+          naming the layers and one explaining their colours, with nothing to
+          say which swatch belonged to which row. */}
+      {showGbif && !label && (
+        <div className="px-2 pb-0.5 pl-6 text-[10px] text-zinc-500 dark:text-zinc-400">
+          {colorByDate ? (
+            <div className="flex items-center gap-1">
+              <span
+                className="w-2.5 h-2.5 rounded-full shrink-0"
+                style={{ background: dateToColor(minDateNum).fill, border: `1.5px solid ${dateToColor(minDateNum).stroke}` }}
+              />
+              <span className="tabular-nums">{minDateLabel}</span>
+              <span>→</span>
+              <span
+                className="w-2.5 h-2.5 rounded-full shrink-0"
+                style={{ background: dateToColor(maxDateNum).fill, border: `1.5px solid ${dateToColor(maxDateNum).stroke}` }}
+              />
+              <span className="tabular-nums">{maxDateLabel}</span>
+            </div>
+          ) : (
+            <div className="flex flex-col gap-0.5">
+              <span className="flex items-center gap-1">
+                <span className="w-2.5 h-2.5 rounded-full shrink-0 bg-gray-400 border-[1.5px] border-gray-500" />
+                ≤{assessmentDate?.split("T")[0] ?? assessmentYear}
+              </span>
+              <span className="flex items-center gap-1">
+                <span className="w-2.5 h-2.5 rounded-full shrink-0 bg-green-400 border-[1.5px] border-green-600" />
+                After {assessmentDate?.split("T")[0] ?? assessmentYear}
+              </span>
+            </div>
+          )}
+          {assessmentYear && (
+            <button
+              onClick={() => setColorByDate(!colorByDate)}
+              title={colorByDate ? "Colour by before/after the assessment date" : "Colour by date"}
+              className="mt-0.5 underline decoration-dotted hover:text-zinc-700 dark:hover:text-zinc-200"
+            >
+              {colorByDate ? "by assessment date" : "by date"}
+            </button>
+          )}
+        </div>
+      )}
       {visibleGeoreferences.length > 0 && (
         <label className="flex items-center gap-1.5 px-2 py-0.5 hover:bg-zinc-50 dark:hover:bg-zinc-700 cursor-pointer text-[11px]">
           <input
@@ -4357,8 +4564,9 @@ export default function OccurrenceMapRow({
             onChange={() => setShowMyGeoreferences((v) => !v)}
             className="w-3 h-3 rounded accent-violet-600 shrink-0"
           />
+          <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ background: "#7c3aed" }} />
           <span className="flex-1 min-w-0 text-zinc-700 dark:text-zinc-200 truncate">
-            Your georeferences
+            Yours
           </span>
           <span className="tabular-nums text-[10px] text-zinc-400">
             {visibleGeoreferences.length.toLocaleString()}
@@ -4373,9 +4581,17 @@ export default function OccurrenceMapRow({
             onChange={() => setShowPointFile((v) => !v)}
             className="w-3 h-3 rounded accent-blue-600 shrink-0"
           />
-          <span className="flex-1 min-w-0 text-zinc-700 dark:text-zinc-200 truncate">
-            Imported CSV records
-          </span>
+          <span
+            className="w-2.5 h-2.5 rounded-full shrink-0 border border-white dark:border-zinc-800"
+            style={{ background: POINT_FILE_COLOR }}
+          />
+          <button
+            onClick={(e) => { e.preventDefault(); e.stopPropagation(); setPointFileOpen(true); }}
+            title={`${pointFile.fileName} — click for how it compares`}
+            className="flex-1 min-w-0 text-left text-zinc-700 dark:text-zinc-200 truncate hover:underline"
+          >
+            Imported CSV
+          </button>
           <span className="tabular-nums text-[10px] text-zinc-400">
             {pointFile.points.length.toLocaleString()}
           </span>
@@ -4499,32 +4715,6 @@ export default function OccurrenceMapRow({
           onRemove={removePointFile}
           scientificName={scientificName}
           onClose={() => setPointFileOpen(false)}
-        />
-      )}
-      {pendingMove && (
-        <ConfirmDialog
-          title="Move this georeference?"
-          body={
-            <>
-              To <span className="tabular-nums">{pendingMove.lat.toFixed(5)}, {pendingMove.lon.toFixed(5)}</span>.
-              {(() => {
-                const from = georeferences[pendingMove.gbifID];
-                return from ? (
-                  <>
-                    {" "}It currently sits at{" "}
-                    <span className="tabular-nums">
-                      {from.decimalLatitude.toFixed(5)}, {from.decimalLongitude.toFixed(5)}
-                    </span>
-                    , and that position won&apos;t be recoverable.
-                  </>
-                ) : null;
-              })()}
-            </>
-          }
-          confirmLabel="Move it"
-          cancelLabel="Put it back"
-          onConfirm={confirmMove}
-          onCancel={() => setPendingMove(null)}
         />
       )}
       {pendingExclusion && (
@@ -5178,282 +5368,6 @@ export default function OccurrenceMapRow({
                           </div>
                         );
                       })()
-                    )}
-                  </div>
-                )}
-              </div>
-              {/* Overlays — context layers only: what protects this ground,
-                  what grows on it, which countries a source calls native, and
-                  how hard anyone has looked here. Independent of the "Native
-                  range only" occurrence filter above. The species' own record
-                  layers are on the map itself, under the basemap toggle. */}
-              <div className="relative" ref={overlaysRef}>
-                <button
-                  onClick={() => setOverlaysOpen(!overlaysOpen)}
-                  className={`inline-flex items-center gap-1.5 px-2 py-1 rounded border text-xs transition-colors ${
-                    overlaysOpen
-                      ? "bg-zinc-100 dark:bg-zinc-800 border-zinc-400 dark:border-zinc-500"
-                      : "border-zinc-300 dark:border-zinc-600 hover:bg-zinc-50 dark:hover:bg-zinc-800"
-                  } text-zinc-700 dark:text-zinc-300`}
-                  title="Context layers: protected areas, forest loss, habitat types, ecoregions, POWO/IUCN native countries, GBIF sampling effort"
-                >
-                  <svg className="w-3.5 h-3.5 text-zinc-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7" />
-                  </svg>
-                  Overlays
-                  <span className="text-[10px] text-zinc-400 tabular-nums">
-                    {overlayToggleValues.filter(Boolean).length} of {overlayToggleValues.length}
-                  </span>
-                  <svg className={`w-3 h-3 text-zinc-400 transition-transform ${overlaysOpen ? "rotate-180" : ""}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
-                  </svg>
-                </button>
-                {overlaysOpen && (
-                  <div className="absolute left-0 top-full mt-1 z-50 w-72 bg-white dark:bg-zinc-900 rounded-lg border border-zinc-200 dark:border-zinc-700 shadow-lg py-1">
-                    <label
-                      className="flex items-center gap-2 px-3 py-1.5 hover:bg-zinc-50 dark:hover:bg-zinc-800 cursor-pointer text-xs"
-                      title="Overlay the World Database on Protected Areas (WDPA) — UNEP-WCMC & IUCN. With it on, clicking the map names the areas covering that point and links each to Protected Planet."
-                    >
-                      <input
-                        type="checkbox"
-                        checked={showProtectedAreas}
-                        onChange={() => {
-                          setShowProtectedAreas((v) => !v);
-                          setPointQuery(null);
-                        }}
-                        className="w-3 h-3 rounded accent-emerald-500 shrink-0"
-                      />
-                      <span className="flex-1 min-w-0 text-zinc-700 dark:text-zinc-200">
-                        Protected areas <span className="text-zinc-400">· Protected Planet</span>
-                      </span>
-                      <a
-                        href="https://www.protectedplanet.net"
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        title="World Database on Protected Areas (WDPA), via Protected Planet — UNEP-WCMC & IUCN"
-                        onClick={(e) => {
-                          // Same pattern as the other info-icon links in this
-                          // component: prevent the enclosing <label>'s native
-                          // click-forwarding from toggling the checkbox.
-                          e.preventDefault();
-                          e.stopPropagation();
-                          window.open("https://www.protectedplanet.net", "_blank", "noopener,noreferrer");
-                        }}
-                        className="shrink-0 text-zinc-300 hover:text-zinc-500 dark:text-zinc-600 dark:hover:text-zinc-400"
-                      >
-                        <FaInfoCircle className="w-3 h-3" />
-                      </a>
-                    </label>
-                    <label
-                      className="flex items-center gap-2 px-3 py-1.5 text-xs hover:bg-zinc-50 dark:hover:bg-zinc-800 cursor-pointer"
-                      title={`${FOREST_LOSS_SOURCE_NOTE} Coloured by year of loss, ${FOREST_LOSS_FIRST_YEAR}\u2013${FOREST_LOSS_LAST_YEAR}. ${FOREST_LOSS_CAVEAT}`}
-                    >
-                      <input
-                        type="checkbox"
-                        checked={showForestLoss}
-                        onChange={() => setShowForestLoss((v) => !v)}
-                        className="w-3 h-3 rounded accent-emerald-500 shrink-0"
-                      />
-                      <span className="flex-1 min-w-0 text-zinc-700 dark:text-zinc-200">
-                        Forest loss <span className="text-zinc-400">· Global Forest Watch</span>
-                      </span>
-                      <a
-                        href={FOREST_LOSS_URL}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        title={`${FOREST_LOSS_SOURCE_NOTE} Opens Global Nature Watch, the platform formerly called Global Forest Watch.`}
-                        onClick={(e) => {
-                          e.preventDefault();
-                          e.stopPropagation();
-                          window.open(FOREST_LOSS_URL, "_blank", "noopener,noreferrer");
-                        }}
-                        className="shrink-0 text-zinc-300 hover:text-zinc-500 dark:text-zinc-600 dark:hover:text-zinc-400"
-                      >
-                        <FaInfoCircle className="w-3 h-3" />
-                      </a>
-                    </label>
-                    <label
-                      className="flex items-center gap-2 px-3 py-1.5 text-xs hover:bg-zinc-50 dark:hover:bg-zinc-800 cursor-pointer"
-                      title="IUCN habitat classes from Jung et al. (2020), the 100m map behind Area of Habitat. Coloured by level 1; click the map for the exact class."
-                    >
-                      <input
-                        type="checkbox"
-                        checked={showHabitat}
-                        onChange={() => {
-                          setShowHabitat((v) => !v);
-                          setPointQuery(null);
-                        }}
-                        className="w-3 h-3 rounded accent-emerald-500 shrink-0"
-                      />
-                      <span className="flex-1 min-w-0 text-zinc-700 dark:text-zinc-200">
-                        Habitat types <span className="text-zinc-400">· Jung et al. 2020</span>
-                      </span>
-                      <a
-                        href="https://zenodo.org/records/4058819"
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        title="A global map of terrestrial habitat types — Jung et al. 2020"
-                        onClick={(e) => {
-                          e.preventDefault();
-                          e.stopPropagation();
-                          window.open("https://zenodo.org/records/4058819", "_blank", "noopener,noreferrer");
-                        }}
-                        className="shrink-0 text-zinc-300 hover:text-zinc-500 dark:text-zinc-600 dark:hover:text-zinc-400"
-                      >
-                        <FaInfoCircle className="w-3 h-3" />
-                      </a>
-                    </label>
-                    <label
-                      className="flex items-center gap-2 px-3 py-1.5 hover:bg-zinc-50 dark:hover:bg-zinc-800 cursor-pointer text-xs"
-                      title="Terrestrial ecoregions and biomes (Dinerstein et al. 2017) — the ecosystem a record sits in. Right-click anywhere to name it."
-                    >
-                      <input
-                        type="checkbox"
-                        checked={showEcoregions}
-                        onChange={() => setShowEcoregions((v) => !v)}
-                        className="w-3 h-3 rounded accent-emerald-600 shrink-0"
-                      />
-                      <span className="flex-1 min-w-0 text-zinc-700 dark:text-zinc-200 flex items-center gap-1">
-                        Ecoregions <span className="text-zinc-400">· Dinerstein et al. 2017</span>
-                        {ecoregionsLoading && (
-                          <svg className="w-3 h-3 animate-spin text-zinc-400" fill="none" viewBox="0 0 24 24">
-                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-                          </svg>
-                        )}
-                      </span>
-                      {ecoregionsFailed && (
-                        <span className="text-[10px] text-red-500 shrink-0">unavailable</span>
-                      )}
-                      <a
-                        href={ECOREGIONS_PAPER_URL}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        title="An Ecoregion-Based Approach to Protecting Half the Terrestrial Realm — Dinerstein et al. 2017, BioScience. The RESOLVE Ecoregions 2017 layer, CC BY 4.0."
-                        onClick={(e) => {
-                          e.preventDefault();
-                          e.stopPropagation();
-                          window.open(ECOREGIONS_PAPER_URL, "_blank", "noopener,noreferrer");
-                        }}
-                        className="shrink-0 text-zinc-300 hover:text-zinc-500 dark:text-zinc-600 dark:hover:text-zinc-400"
-                      >
-                        <FaInfoCircle className="w-3 h-3" />
-                      </a>
-                    </label>
-                    <label
-                      className={`flex items-center gap-2 px-3 py-1.5 text-xs ${
-                        nativeCountriesWcvp && nativeCountriesWcvp.length > 0
-                          ? "hover:bg-zinc-50 dark:hover:bg-zinc-800 cursor-pointer"
-                          : "opacity-50 cursor-not-allowed"
-                      }`}
-                      title="Shade the countries Kew's POWO/World Checklist of Vascular Plants considers this species native to"
-                    >
-                      <input
-                        type="checkbox"
-                        checked={showPowoRangeOverlay}
-                        disabled={!(nativeCountriesWcvp && nativeCountriesWcvp.length > 0)}
-                        onChange={() => setShowPowoRangeOverlay((v) => !v)}
-                        className="w-3 h-3 rounded accent-blue-500 shrink-0"
-                      />
-                      <span className="flex-1 min-w-0 text-zinc-700 dark:text-zinc-200">POWO native range</span>
-                      {wcvpPowoId && (
-                        <a
-                          href={`https://powo.science.kew.org/taxon/urn:lsid:ipni.org:names:${wcvpPowoId}`}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          title="View this species on Plants of the World Online (POWO)"
-                          onClick={(e) => {
-                            // See the identical pattern on Coordinate cleaning's
-                            // source links: prevent the enclosing <label>'s native
-                            // click-forwarding from toggling the checkbox, without
-                            // losing the link's own navigation.
-                            e.preventDefault();
-                            e.stopPropagation();
-                            window.open(
-                              `https://powo.science.kew.org/taxon/urn:lsid:ipni.org:names:${wcvpPowoId}`,
-                              "_blank",
-                              "noopener,noreferrer"
-                            );
-                          }}
-                          className="shrink-0 text-zinc-300 hover:text-zinc-500 dark:text-zinc-600 dark:hover:text-zinc-400"
-                        >
-                          <FaInfoCircle className="w-3 h-3" />
-                        </a>
-                      )}
-                    </label>
-{hasIucnNativeRange && (
-                    <label
-                      className="flex items-center gap-2 px-3 py-1.5 text-xs hover:bg-zinc-50 dark:hover:bg-zinc-800 cursor-pointer"
-                      title="Shade the countries this species' IUCN Red List assessment lists as native range"
-                    >
-                      <input
-                        type="checkbox"
-                        checked={showIucnRangeOverlay}
-                        onChange={() => setShowIucnRangeOverlay((v) => !v)}
-                        className="w-3 h-3 rounded accent-amber-500 shrink-0"
-                      />
-                      <span className="flex-1 min-w-0 text-zinc-700 dark:text-zinc-200">IUCN native countries</span>
-                    </label>
-                    )}
-                    <div className="border-t border-zinc-100 dark:border-zinc-800 my-1" />
-                    {/* Withheld entirely where the dataset has no matching
-                        taxon — see lib/mapping/sampling-effort.ts. A fish
-                        judged against seabird effort is worse than no layer. */}
-                    {nativeEffortGroup && (
-                      <div>
-                        <label
-                          className="flex items-center gap-2 px-3 py-1.5 hover:bg-zinc-50 dark:hover:bg-zinc-800 cursor-pointer text-xs"
-                          title="GBIF records per 10 km cell (El-Gabbas 2026). Shows whether a gap in the records is genuinely empty or merely unvisited — the caveat behind a record-based AOO."
-                        >
-                          <input
-                            type="checkbox"
-                            checked={showSamplingEffort}
-                            onChange={() => setShowSamplingEffort((v) => !v)}
-                            className="w-3 h-3 rounded accent-yellow-500 shrink-0"
-                          />
-                          <span className="flex-1 min-w-0 text-zinc-700 dark:text-zinc-200 flex items-center gap-1">
-                            GBIF sampling effort <span className="text-zinc-400">· El-Gabbas 2026</span>
-                            {effortLoading && (
-                              <svg className="w-3 h-3 animate-spin text-zinc-400" fill="none" viewBox="0 0 24 24">
-                                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-                              </svg>
-                            )}
-                          </span>
-                          <a
-                            href={EFFORT_PAPER_URL}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            title="Global sampling effort of GBIF biodiversity data — El-Gabbas 2026, Diversity and Distributions"
-                            onClick={(e) => {
-                              e.preventDefault();
-                              e.stopPropagation();
-                              window.open(EFFORT_PAPER_URL, "_blank", "noopener,noreferrer");
-                            }}
-                            className="shrink-0 text-zinc-300 hover:text-zinc-500 dark:text-zinc-600 dark:hover:text-zinc-400"
-                          >
-                            <FaInfoCircle className="w-3 h-3" />
-                          </a>
-                        </label>
-                        {/* One taxon at a time, not several: two effort
-                            surfaces drawn over each other give a colour that
-                            can't be read back to either. */}
-                        {showSamplingEffort && (
-                          <select
-                            value={effortGroup ?? nativeEffortGroup}
-                            onChange={(e) => setEffortGroup(e.target.value as EffortGroup)}
-                            className="mx-3 mb-1.5 w-[calc(100%-1.5rem)] rounded border border-zinc-300 dark:border-zinc-600 bg-white dark:bg-zinc-800 px-1.5 py-1 text-[11px] text-zinc-700 dark:text-zinc-200"
-                            title="Which taxon's collecting effort to show. All taxa is dominated by birds and casual observation, so the matching group is usually the honest comparison."
-                          >
-                            {EFFORT_GROUPS.map((g) => (
-                              <option key={g} value={g}>
-                                {EFFORT_GROUP_LABELS[g]}
-                                {g === nativeEffortGroup ? " (this species)" : ""}
-                              </option>
-                            ))}
-                          </select>
-                        )}
-                      </div>
                     )}
                   </div>
                 )}
