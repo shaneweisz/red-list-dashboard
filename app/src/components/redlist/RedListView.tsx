@@ -3831,7 +3831,7 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
                 });
                 setExpandedThreat(prev => { const next = new Set(prev); if (next.has(code)) next.delete(code); else next.add(code); return next; });
               },
-              barColor: "#8b5cf6",
+              barColor: "#fb923c",
               yAxisWidth: 155,
               rightMargin: 80,
               yAxisTickMaxLength: 22,
@@ -4725,13 +4725,23 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
                 {/* Country alongside Assessors/Reviewers/Facilitators. */}
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                   {countryMapCard}
-                  {isSingleSpecies && singleSpecies ? (
-                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                      {([
-                        { title: "Assessors", names: singleSpeciesAssessors },
-                        { title: "Reviewers", names: singleSpeciesReviewers },
-                        { title: "Facilitators", names: singleSpeciesFacilitators },
-                      ] as const).map(({ title, names }) => (
+                  {isSingleSpecies && singleSpecies ? (() => {
+                    // Facilitators are absent on ~62% of latest assessments — the
+                    // field is only filled when the credited assessor is an
+                    // organisation — so "Facilitators / None listed" is the common
+                    // case, not the exception. Drop the card rather than spend a
+                    // third of the row saying nothing. Assessors and Reviewers keep
+                    // theirs: empty there is genuinely notable.
+                    const cards = [
+                      { title: "Assessors", names: singleSpeciesAssessors },
+                      { title: "Reviewers", names: singleSpeciesReviewers },
+                      ...(singleSpeciesFacilitators.length > 0
+                        ? [{ title: "Facilitators", names: singleSpeciesFacilitators }]
+                        : []),
+                    ];
+                    return (
+                    <div className={`grid grid-cols-1 gap-3 ${cards.length === 3 ? "sm:grid-cols-3" : "sm:grid-cols-2"}`}>
+                      {cards.map(({ title, names }) => (
                         <div key={title} className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-3 flex flex-col">
                           <div className="flex items-center justify-between mb-1">
                             <span className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">{title}</span>
@@ -4750,7 +4760,8 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
                         </div>
                       ))}
                     </div>
-                  ) : (
+                    );
+                  })() : (
                     <ReviewerChart
                       allAssessors={assessorChartData}
                       allReviewers={reviewerChartData}
