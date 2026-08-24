@@ -4720,10 +4720,48 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
               confusing, so this reverts to plain click-to-expand instead. */}
           {!isNewAssessments && (
             <>
-                {/* Country, Threats — paired side by side. */}
+                {/* Country alongside Assessors/Reviewers/Facilitators. */}
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                   {countryMapCard}
-                  {threatsCard}
+                  {isSingleSpecies && singleSpecies ? (
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                      {([
+                        { title: "Assessors", names: singleSpeciesAssessors },
+                        { title: "Reviewers", names: singleSpeciesReviewers },
+                        { title: "Facilitators", names: singleSpeciesFacilitators },
+                      ] as const).map(({ title, names }) => (
+                        <div key={title} className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-3 flex flex-col">
+                          <div className="flex items-center justify-between mb-1">
+                            <span className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">{title}</span>
+                          </div>
+                          <div className="overflow-y-auto mt-2" style={{ maxHeight: 260 }}>
+                            {names.length > 0 ? (
+                              <div className="flex flex-wrap gap-2">
+                                {names.map((name) => (
+                                  <span key={name} className="inline-block px-3 py-1.5 text-sm rounded-lg bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300">{name}</span>
+                                ))}
+                              </div>
+                            ) : (
+                              <span className="text-sm text-zinc-400 dark:text-zinc-500">None listed</span>
+                            )}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <ReviewerChart
+                      allAssessors={assessorChartData}
+                      allReviewers={reviewerChartData}
+                      allFacilitators={facilitatorChartData}
+                      viewMode={assessorReviewerMode}
+                      onViewModeChange={changeCreditChartMode}
+                      selectedItems={creditSelection[assessorReviewerMode].selected}
+                      onBarClick={makeAssessorClick(creditSelection[assessorReviewerMode].setter)}
+                      onRangeSelect={makeRangeSelect(creditSelection[assessorReviewerMode].setter)}
+                      onItemToggle={makeAssessorToggle(creditSelection[assessorReviewerMode].setter)}
+                      loading={speciesLoading && assessedSpecies.length === 0}
+                    />
+                  )}
                 </div>
 
                 <button
@@ -4815,11 +4853,9 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
                   );
                 })()}
 
-                {/* Assessment Criteria alongside Number of Assessments — a row, not a
-                    stack (previously stacked in Habitat's right column; moved
-                    out once Habitat started pairing with Assessors/Reviewers
-                    instead). */}
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                {/* Assessment Criteria, Number of Assessments and Possible
+                    Taxonomic Revision — three to a row. */}
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                   {/* Criteria — top-level A-E bar chart (see criteriaCard);
                       clicking a bar both selects it as a filter AND expands
                       its next level below (number -> sub-clause -> roman
@@ -4883,6 +4919,12 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
                       </div>
                     </div>
                   )}
+
+                  {/* Possible Taxonomic Revision — assessed-only: the flag is a
+                      property of an IUCN assessment's name, so it has no meaning
+                      in the Not Evaluated (new-assessments) view, whose rows are
+                      CoL species with no assessment to disagree with. */}
+                  {!isNewAssessments && taxonomicRevisionCard}
                 </div>
 
                 {/* Realm, Movement, and Trend as three columns in one row. */}
@@ -4992,59 +5034,11 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
                   </div>
                 </div>
 
-                {/* Habitat alongside Assessors/Reviewers. */}
+                {/* Habitat alongside Threats. */}
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                   {habitatCard}
-                  {isSingleSpecies && singleSpecies ? (
-                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                      {([
-                        { title: "Assessors", names: singleSpeciesAssessors },
-                        { title: "Reviewers", names: singleSpeciesReviewers },
-                        { title: "Facilitators", names: singleSpeciesFacilitators },
-                      ] as const).map(({ title, names }) => (
-                        <div key={title} className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-3 flex flex-col">
-                          <div className="flex items-center justify-between mb-1">
-                            <span className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">{title}</span>
-                          </div>
-                          <div className="overflow-y-auto mt-2" style={{ maxHeight: 260 }}>
-                            {names.length > 0 ? (
-                              <div className="flex flex-wrap gap-2">
-                                {names.map((name) => (
-                                  <span key={name} className="inline-block px-3 py-1.5 text-sm rounded-lg bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300">{name}</span>
-                                ))}
-                              </div>
-                            ) : (
-                              <span className="text-sm text-zinc-400 dark:text-zinc-500">None listed</span>
-                            )}
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  ) : (
-                    <ReviewerChart
-                      allAssessors={assessorChartData}
-                      allReviewers={reviewerChartData}
-                      allFacilitators={facilitatorChartData}
-                      viewMode={assessorReviewerMode}
-                      onViewModeChange={changeCreditChartMode}
-                      selectedItems={creditSelection[assessorReviewerMode].selected}
-                      onBarClick={makeAssessorClick(creditSelection[assessorReviewerMode].setter)}
-                      onRangeSelect={makeRangeSelect(creditSelection[assessorReviewerMode].setter)}
-                      onItemToggle={makeAssessorToggle(creditSelection[assessorReviewerMode].setter)}
-                      loading={speciesLoading && assessedSpecies.length === 0}
-                    />
-                  )}
+                  {threatsCard}
                 </div>
-
-                {/* Possible Taxonomic Revision — assessed-only: the flag is a
-                    property of an IUCN assessment's name, so it has no meaning
-                    in the Not Evaluated (new-assessments) view, whose rows are
-                    CoL species with no assessment to disagree with. */}
-                {!isNewAssessments && (
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                    {taxonomicRevisionCard}
-                  </div>
-                )}
 
             </>
           )}
