@@ -3819,7 +3819,7 @@ export default function OccurrenceMapRow({
                 title={biomeLegendOpen ? "Hide the biomes" : "Show what the ecoregion colours mean"}
                 className="flex items-center gap-1.5 w-full"
               >
-                <span className="text-zinc-500 dark:text-zinc-400">Ecoregions</span>
+                <span className="text-zinc-500 dark:text-zinc-400">Terrestrial ecoregions</span>
                 <span className="text-zinc-400">{ecoregions.features.length} in 14 biomes</span>
                 <span className="text-[9px] ml-auto">{biomeLegendOpen ? "\u25be" : "\u25b8"}</span>
               </button>
@@ -3913,7 +3913,7 @@ export default function OccurrenceMapRow({
                       <span key={entry.code} className="w-1.5 h-2.5" style={{ background: entry.color }} />
                     ))}
                   </span>
-                  Habitat
+                  IUCN habitat types
                   <span className="text-[9px]">{habitatLegendOpen ? "\u25be" : "\u25b8"}</span>
                 </button>
                 <a
@@ -4482,7 +4482,7 @@ export default function OccurrenceMapRow({
           onChange={() => setShowForestLoss((v) => !v)}
           className="w-3 h-3 rounded accent-emerald-500 shrink-0"
         />
-        <span className="flex-1 min-w-0 text-zinc-700 dark:text-zinc-200">Forest loss</span>
+        <span className="flex-1 min-w-0 text-zinc-700 dark:text-zinc-200">Tree cover loss</span>
         <a
           href={FOREST_LOSS_URL}
           target="_blank"
@@ -4511,7 +4511,7 @@ export default function OccurrenceMapRow({
           }}
           className="w-3 h-3 rounded accent-emerald-500 shrink-0"
         />
-        <span className="flex-1 min-w-0 text-zinc-700 dark:text-zinc-200">Habitat types</span>
+        <span className="flex-1 min-w-0 text-zinc-700 dark:text-zinc-200">IUCN habitat types</span>
         <a
           href="https://zenodo.org/records/4058819"
           target="_blank"
@@ -4538,7 +4538,7 @@ export default function OccurrenceMapRow({
           className="w-3 h-3 rounded accent-emerald-600 shrink-0"
         />
         <span className="flex-1 min-w-0 text-zinc-700 dark:text-zinc-200 flex items-center gap-1">
-          Ecoregions
+          Terrestrial ecoregions
           {ecoregionsLoading && (
             <svg className="w-3 h-3 animate-spin text-zinc-400" fill="none" viewBox="0 0 24 24">
               <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
