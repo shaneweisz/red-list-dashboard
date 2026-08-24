@@ -963,6 +963,18 @@ export default function OccurrenceMapRow({
   const [showPointFile, setShowPointFile] = useState(true);
 
   /**
+   * Outside fullscreen the map draws GBIF's records and nothing else.
+   *
+   * The panel that toggles these three is fullscreen-only, so on the dashboard
+   * an assessor's own coordinates and an imported point file would be drawn
+   * with no way to take them off — and worse, no label saying they were there.
+   * The dashboard's map answers "what does GBIF hold for this species", which
+   * is one layer's worth of question.
+   */
+  const drawMyGeoreferences = showMyGeoreferences && fullscreen;
+  const drawPointFile = showPointFile && fullscreen;
+
+  /**
    * The IUCN point file loaded for this species, if any.
    *
    * Read from its own store, and adjusted during render when the species
@@ -2623,7 +2635,7 @@ export default function OccurrenceMapRow({
   const rangeMetricPoints = useMemo(() => {
     const points: { lon: number; lat: number }[] = [];
     let ownCount = 0;
-    if (showGbif || showMyGeoreferences) {
+    if (showGbif || drawMyGeoreferences) {
       for (const o of includedOccurrences) {
         // The assessor's own coordinates first, and — the part that matters —
         // whether or not GBIF has any. A record georeferenced by hand is
@@ -2631,7 +2643,7 @@ export default function OccurrenceMapRow({
         // exactly the points the georeferencing work exists to add.
         const mine = georeferences[o.properties.gbifID];
         if (mine) {
-          if (showMyGeoreferences) {
+          if (drawMyGeoreferences) {
             points.push({ lon: mine.decimalLongitude, lat: mine.decimalLatitude });
             ownCount += 1;
           }
@@ -2642,13 +2654,13 @@ export default function OccurrenceMapRow({
         }
       }
     }
-    if (showPointFile && pointFile) {
+    if (drawPointFile && pointFile) {
       for (const point of pointFile.points) {
         points.push({ lon: point.longitude, lat: point.latitude });
       }
     }
-    return { points, ownCount, fromPointFile: showPointFile && pointFile ? pointFile.points.length : 0 };
-  }, [includedOccurrences, georeferences, showGbif, showMyGeoreferences, showPointFile, pointFile]);
+    return { points, ownCount, fromPointFile: drawPointFile && pointFile ? pointFile.points.length : 0 };
+  }, [includedOccurrences, georeferences, showGbif, drawMyGeoreferences, drawPointFile, pointFile]);
 
   const rangeMetrics = useMemo(() => {
     if (!showRangeMetrics || rangeMetricPoints.points.length === 0) return null;
@@ -3082,7 +3094,7 @@ export default function OccurrenceMapRow({
                   produced in. A hollow ring rather than a filled dot so a point
                   sitting exactly on top of the record it came from still shows
                   the record underneath it. */}
-              {showPointFile && pointFileGeoJson.features.length > 0 && (
+              {drawPointFile && pointFileGeoJson.features.length > 0 && (
                 <Source id={`pointfile-${panelId}`} type="geojson" data={pointFileGeoJson}>
                   <Layer
                     id={`pointfile-circles-${panelId}`}
@@ -3101,7 +3113,7 @@ export default function OccurrenceMapRow({
                   scale. They are never merged into the GBIF layer or into any
                   GBIF count: one person's reading of a locality description
                   shouldn't become indistinguishable from a published record. */}
-              {showMyGeoreferences && visibleGeoreferences.length > 0 && (
+              {drawMyGeoreferences && visibleGeoreferences.length > 0 && (
                 <>
                   <Source id={`georef-circles-${panelId}`} type="geojson" data={georeferenceCirclesGeoJson}>
                     <Layer
