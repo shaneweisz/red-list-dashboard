@@ -676,11 +676,14 @@ function RevisionTooltipContent({ flag, name }: { flag: ColRevision; name: strin
       text
     );
 
-  // Reasons like "provisional" or "extinct flag" name no second species, so
-  // without this the tooltip would have no link at all — and the record the
-  // reader wants is precisely the one for this species (the Idaea josephinae
-  // report: "hasn't been matched … but there is C7CM2"). Only when there is no
-  // `detail` link, so the two don't point at the same page twice.
+  // The row's own species is a link too, wherever its name appears in the
+  // sentence — for reasons that name no second species ("provisional",
+  // "extinct flag") it is the only record there is to open, and even where a
+  // second species IS named, "what does CoL say about THIS one" is the question
+  // the flag raises. For `lumped`/`synonym_of` it lands on the same record as
+  // `detail` by construction (that shared record is the whole finding), which is
+  // right rather than redundant: the XR-only id the assessment actually matched
+  // is the one CoL may since have retired.
   const linkSubject = (text: string): React.ReactNode => {
     const i = text.indexOf(name);
     if (i < 0) return text;
@@ -704,10 +707,9 @@ function RevisionTooltipContent({ flag, name }: { flag: ColRevision; name: strin
   const sentences: React.ReactNode[] = [];
   if (flag.reason != null) {
     const s = noMatchSentence(flag, name);
-    const linkable = s.detail == null;
     sentences.push(
       <span key="no-match">
-        {linkable ? linkSubject(s.before) : s.before}
+        {linkSubject(s.before)}
         {s.detail != null && colLink(s.detail, flag.detailColId)}
         {s.after}
       </span>,
@@ -717,7 +719,7 @@ function RevisionTooltipContent({ flag, name }: { flag: ColRevision; name: strin
   if (split) {
     sentences.push(
       <span key="split">
-        {split.before}
+        {linkSubject(split.before)}
         {split.names.map((n, i) => (
           <React.Fragment key={n.name}>
             {i > 0 && ", "}
@@ -5668,13 +5670,16 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
                               both signals, hence a list of sentences. */}
                           {isFlagged(s.col_revision) && (
                             <SelectableHoverTooltip content={<RevisionTooltipContent flag={s.col_revision!} name={s.scientific_name} />}>
-                              <span
-                                role="img"
-                                aria-label={`Possible taxonomic revision — ${revisionReasons(s.col_revision!).map(r => REVISION_REASON_SUMMARY[r] ?? r).join("; ")}`}
-                                className="ml-1 align-middle text-amber-600 dark:text-amber-500 text-xs cursor-help"
+                              <a
+                                href={colTaxonUrl(s.col_revision!, s.scientific_name)}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                onClick={(e) => e.stopPropagation()}
+                                aria-label={`Possible taxonomic revision — ${revisionReasons(s.col_revision!).map(r => REVISION_REASON_SUMMARY[r] ?? r).join("; ")}. Open in Catalogue of Life`}
+                                className="ml-1 align-middle text-amber-600 dark:text-amber-500 hover:text-amber-700 dark:hover:text-amber-400 text-xs"
                               >
                                 ⚑
-                              </span>
+                              </a>
                             </SelectableHoverTooltip>
                           )}
                           {s.common_name && (

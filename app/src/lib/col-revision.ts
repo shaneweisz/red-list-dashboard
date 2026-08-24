@@ -292,14 +292,16 @@ export function splitSentence(flag: ColRevision, subject: string): SplitSentence
   const shown = names.slice(0, MAX_SPLIT_NAMES);
   const rest = names.length - shown.length;
   return {
-    // The point isn't that new names exist — it's what that implies for THIS
-    // assessment. The species itself is not gone (a reader's first worry), but
-    // the assessment was made against a broader concept than CoL now uses, so
-    // part of what it covers may since have been reassigned. "appears to have"
-    // hedges the heuristic; "may cover" hedges the consequence.
-    before: `${subject} is still a species, but ${COL} appears to have since split `
-      + (names.length === 1 ? "another species" : `${names.length} more species`)
-      + ` out of it — so this assessment may cover populations now assigned to `,
+    // Leads with the consequence for THIS assessment: it was made against a
+    // broader concept than CoL now uses, so part of what it covers may since
+    // have been reassigned. "suggests" hedges the heuristic, "may cover" the
+    // consequence.
+    //
+    // The count is names.length + 1 — the species itself is one of the species
+    // the old concept split into, and the names listed are the OTHERS. Saying
+    // "split into 3" while listing 3 names would quietly lose the parent.
+    before: `${COL} suggests ${subject} has been split into ${names.length + 1} separate species`
+      + ` — so this assessment may cover populations now assigned to `,
     names: shown,
     after: rest > 0 ? `, and ${rest} more.` : ".",
   };

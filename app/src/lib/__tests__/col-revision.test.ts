@@ -153,23 +153,26 @@ describe("splitSentence", () => {
     expect(splitSentence({ splitInto: [] }, "Sus scrofa")).toBeNull();
   });
 
-  it("says the species still exists, and what the split means for the assessment", () => {
+  it("leads with what the split means for the assessment", () => {
     const sentence = flat({ splitInto: [{ name: "Aepyceros petersi" }] }, "Aepyceros melampus")!;
-    // The two things a reader needs: it isn't gone, and the assessment's scope moved.
-    expect(sentence).toContain("Aepyceros melampus is still a species");
-    expect(sentence).toContain("may cover populations now assigned to Aepyceros petersi");
+    expect(sentence).toBe(
+      "Catalogue of Life suggests Aepyceros melampus has been split into 2 separate species" +
+      " — so this assessment may cover populations now assigned to Aepyceros petersi."
+    );
   });
 
-  it("counts the split-off species rather than just listing them", () => {
+  it("counts the species the old concept split INTO, parent included", () => {
+    // The names listed are the OTHERS, so "split into 4" while listing 3 is
+    // correct — saying "split into 3" would quietly drop the species itself.
     expect(flat({ splitInto: [{ name: "A" }, { name: "B" }, { name: "C" }] }, "X"))
-      .toContain("split 3 more species out of it");
-    expect(flat({ splitInto: [{ name: "A" }] }, "X")).toContain("split another species out of it");
+      .toContain("split into 4 separate species");
+    expect(flat({ splitInto: [{ name: "A" }] }, "X")).toContain("split into 2 separate species");
   });
 
   it("summarises the tail rather than listing 73 brambles", () => {
     const names = Array.from({ length: 73 }, (_, i) => ({ name: `Rubus sp${i}` }));
     const sentence = flat({ splitInto: names }, "Rubus fruticosus")!;
-    expect(sentence).toContain("73 more species");
+    expect(sentence).toContain("split into 74 separate species");
     expect(sentence).toContain("Rubus sp0, Rubus sp1, Rubus sp2, and 70 more.");
     expect(sentence).not.toContain("Rubus sp3,");
   });
@@ -182,8 +185,13 @@ describe("splitSentence", () => {
 
   it("hedges both the heuristic and its consequence", () => {
     const sentence = flat({ splitInto: [{ name: "Aepyceros petersi" }] }, "Aepyceros melampus")!;
-    expect(sentence).toContain("appears to have");
+    expect(sentence).toContain("suggests");
     expect(sentence).toContain("may cover");
+  });
+
+  it("names the subject in the sentence, so the UI can link it to its own CoL record", () => {
+    const s = splitSentence({ splitInto: [{ name: "Aepyceros petersi" }] }, "Aepyceros melampus")!;
+    expect(s.before).toContain("Aepyceros melampus");
   });
 });
 
@@ -198,7 +206,7 @@ describe("revisionSentences", () => {
     expect(both).toHaveLength(2);
     expect(both[0]).toContain("is the same species as Leptoxis picta");
     expect(both[1]).toContain("Leptoxis coosaensis");
-    expect(both[1]).toContain("is still a species");
+    expect(both[1]).toContain("has been split into");
   });
 
   it("returns nothing for a flag carrying neither signal", () => {
