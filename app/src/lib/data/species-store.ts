@@ -217,7 +217,8 @@ export function getColRevisions(): Map<number, ColRevision> {
     // Short-keyed on disk (r/d/i/dc/c/n/s, absent fields omitted) — one entry per
     // flagged species, so the shipped file stays small. See build-col-revisions.
     const file = JSON.parse(fs.readFileSync(COL_REVISIONS_PATH, "utf-8")) as {
-      species: Record<string, { r?: string; d?: string; i?: number; dc?: string; c?: string; n?: string; s?: [string, string][] }>;
+      species: Record<string, { r?: string; d?: string; i?: number; dc?: string; c?: string; n?: string;
+        s?: [string, string, string, string][]; k?: [string, string][] }>;
     };
     for (const [id, e] of Object.entries(file.species ?? {})) {
       out.set(Number(id), {
@@ -227,9 +228,18 @@ export function getColRevisions(): Map<number, ColRevision> {
         ...(e.dc != null ? { detailColId: e.dc } : {}),
         ...(e.c != null ? { colId: e.c } : {}),
         ...(e.n != null ? { colName: e.n } : {}),
-        // [name, col_id] pairs on disk; an empty col_id means CoL has the name
-        // but no record we can link to, so the UI renders it as plain text.
-        ...(e.s?.length ? { splitInto: e.s.map(([name, colId]) => (colId ? { name, colId } : { name })) } : {}),
+        // [name, col_id, previous name, previous col_id] on disk; an empty
+        // string means CoL has nothing we can link to, so the UI renders that
+        // part as plain text (or omits it).
+        ...(e.s?.length ? {
+          splitInto: e.s.map(([name, colId, prevName, prevColId]) => ({
+            name,
+            ...(colId ? { colId } : {}),
+            ...(prevName ? { previousName: prevName } : {}),
+            ...(prevColId ? { previousColId: prevColId } : {}),
+          })),
+        } : {}),
+        ...(e.k?.length ? { splitKept: e.k.map(([name, colId]) => (colId ? { name, colId } : { name })) } : {}),
       });
     }
   }

@@ -16,7 +16,7 @@ import { CATEGORY_COLORS, TAXA_BY_ID, THREATENED_CATEGORIES } from "@/config/tax
 import { speciesMatchesNode, getNodeDef, getViewRootForNode, findNode, matchesBreakdownName, breakdownDisplayName } from "@/lib/taxonomy-utils";
 import { dynamicNodeDisplayName } from "@/lib/dynamic-taxon";
 import ReviewerChart from "./ReviewerChart";
-import { REVISION_REASONS, REVISION_REASON_SHORT, REVISION_REASON_SUMMARY, revisionReasons, matchesRevisionFilter, isFlagged, colUrl, colTaxonUrl, noMatchSentence, splitSentence, newRevisionTally, tallyRevision, type ColRevision } from "@/lib/col-revision";
+import { REVISION_REASONS, REVISION_REASON_SHORT, REVISION_REASON_SUMMARY, revisionReasons, matchesRevisionFilter, isFlagged, colUrl, colTaxonUrl, noMatchSentence, splitSummary, newRevisionTally, tallyRevision, type ColRevision } from "@/lib/col-revision";
 import { parseAssessors } from "@/lib/parseAssessors";
 import { iucnRegionCountries, matchingRegions } from "@/lib/regions";
 import { useFilterParams, type SortField, type MapViewMode } from "@/hooks/useFilterParams";
@@ -644,7 +644,7 @@ function SelectableHoverTooltip({ children, content }: { children: React.ReactNo
           role="tooltip"
           onMouseEnter={open}
           onMouseLeave={scheduleClose}
-          className="fixed z-[99999] px-2 py-1.5 text-xs leading-relaxed bg-zinc-800 text-zinc-200 rounded shadow-lg max-w-[340px] text-left select-text cursor-text"
+          className="fixed z-[99999] px-2 py-1.5 text-xs leading-relaxed bg-zinc-800 text-zinc-200 rounded shadow-lg max-w-[400px] text-left select-text cursor-text"
           style={{ top: position.top, left: position.left, transform: "translateX(-50%) translateY(-100%)" }}
         >
           {content}
@@ -715,18 +715,50 @@ function RevisionTooltipContent({ flag, name }: { flag: ColRevision; name: strin
       </span>,
     );
   }
-  const split = splitSentence(flag, name);
+  const split = splitSummary(flag, name);
   if (split) {
     sentences.push(
       <span key="split">
-        {linkSubject(split.before)}
-        {split.names.map((n, i) => (
-          <React.Fragment key={n.name}>
-            {i > 0 && ", "}
-            {colLink(n.name, n.colId)}
-          </React.Fragment>
-        ))}
-        {split.after}
+        {linkSubject(split.lead)}
+        <ul className="mt-1 space-y-0.5">
+          {/* Split-offs, then the remainder, then the assessed species itself —
+              "and N more" belongs with the names it stands in for, not after
+              the line that closes the list. */}
+          {[...split.entries.filter((e) => !e.isSelf), ...split.entries.filter((e) => e.isSelf)].map((e) => (
+            <React.Fragment key={e.name}>
+            {e.isSelf && split.more > 0 && (
+              <li className="flex gap-1.5 text-zinc-400">
+                <span aria-hidden className="text-zinc-500">•</span>
+                <span>and {split.more} more</span>
+              </li>
+            )}
+            <li className="flex gap-1.5">
+              <span aria-hidden className="text-zinc-500">•</span>
+              <span>
+                {colLink(e.name, e.colId)}
+                {/* The old infraspecific name that now resolves to this species
+                    IS the evidence for the split, and it is only visible on
+                    CoL from this side — so link it too. */}
+                {e.previousName && (
+                  <span className="text-zinc-400"> — previously {colLink(e.previousName, e.previousColId)}</span>
+                )}
+                {e.isSelf && (
+                  <span className="text-zinc-400">
+                    {e.kept?.length
+                      ? <> — kept {e.kept.map((k, i) => (
+                          <React.Fragment key={k.name}>
+                            {i > 0 && ", "}
+                            {colLink(k.name, k.colId)}
+                          </React.Fragment>
+                        ))}</>
+                      : " — this species"}
+                  </span>
+                )}
+              </span>
+            </li>
+            </React.Fragment>
+          ))}
+        </ul>
       </span>,
     );
   }

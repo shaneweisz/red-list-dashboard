@@ -58,9 +58,12 @@ export interface ColRevisionsFile {
    *  r = no-match reason (absent on a split-only flag), d = detail (the species
    *  it's lumped with / demoted under), i = that species' own SIS id, dc = that
    *  species' CoL id, c = the CoL id to link to, n = CoL's own accepted name for
-   *  that col_id, s = [name, col_id] of each species CoL likely split out of
-   *  this one. */
-  species: Record<string, { r?: string; d?: string; i?: number; dc?: string; c?: string; n?: string; s?: [string, string][] }>;
+   *  that col_id, s = [name, col_id, previous name, previous col_id] of each
+   *  species CoL likely split out of this one ("previous" being the old
+   *  infraspecific name that now resolves there — the evidence for the split),
+   *  k = the same for the infraspecific names this species KEPT. */
+  species: Record<string, { r?: string; d?: string; i?: number; dc?: string; c?: string; n?: string;
+    s?: [string, string, string, string][]; k?: [string, string][] }>;
 }
 
 export async function run(): Promise<void> {
@@ -135,47 +138,109 @@ export async function run(): Promise<void> {
   // species_link supplies its own CoL record for the flag to link to.
   let splitParents = 0;
   if (hasBackbone) {
+    // The evidence behind every split: CoL keeps the old infraspecific name as a
+    // synonym when one is promoted, so "which accepted species does the name
+    // 'Vallonia costata var. montana' resolve to today" IS the signal. Same
+    // resolution (including the autonym hop) as SPLIT_CANDIDATES_SQL, kept here
+    // rather than added to that shared table so the committed
+    // col-split-candidates.parquet keeps its current shape.
+    await conn.run(`
+      CREATE TEMP TABLE split_evidence AS
+      SELECT b.col_id AS syn_col_id,
+             b.scientific_name AS syn_name,
+             b.authorship AS syn_authorship,
+             lower(split_part(b.scientific_name, ' ', 1) || ' ' || split_part(b.scientific_name, ' ', 2)) AS binomial,
+             CASE WHEN p.rank = 'species' THEN p.col_id
+                  WHEN p.rank IN ('subspecies', 'infraspecific name', 'variety')
+                       AND p.status IN ('accepted', 'provisionally accepted') THEN p.parent_id
+             END AS target_col_id
+      FROM read_parquet('${backbonePath}') b
+      JOIN read_parquet('${backbonePath}') p ON p.col_id = b.parent_id
+      WHERE b.status = 'synonym' AND b.rank IN ('subspecies', 'infraspecific name', 'variety')`);
+
     const splitRows = await (await conn.run(`
       WITH ne AS (
         SELECT col_id, scientific_name FROM read_parquet('${speciesGlob}', hive_partitioning=true)
         WHERE in_base AND ${universeSql} AND col_id NOT IN ${EXCLUDED_COL_IDS_SQL}
           AND col_id NOT IN (SELECT col_id FROM assessed_cids)
       ),
-      pairs AS (
-        SELECT sc.parent_id AS parent_id, ne.scientific_name AS ne_name, ne.col_id AS ne_col_id
-        FROM split_candidates sc
-        JOIN ne ON ne.col_id = sc.ne_col_id
-        WHERE sc.rn = 1
-      ),
       parent_col AS (
         SELECT l.id AS id, any_value(l.col_id) AS col_id
         FROM read_parquet('${link}') l
         WHERE l.src = 'redlist' AND l.col_id IS NOT NULL AND l.match_method != 'iucn_synonym_covered'
         GROUP BY l.id
+      ),
+      -- One split-off species per row, with the oldest-sorting synonym that
+      -- points at it as the evidence. More than one can back a split (26% of
+      -- pairs); one is enough to make the inference checkable by hand.
+      pairs AS (
+        SELECT sc.parent_id AS parent_id, ne.scientific_name AS ne_name, ne.col_id AS ne_col_id,
+               min_by(ev.syn_name, ev.syn_name) AS prev_name,
+               min_by(ev.syn_col_id, ev.syn_name) AS prev_col_id,
+               min_by(ev.syn_authorship, ev.syn_name) AS prev_authorship
+        FROM split_candidates sc
+        JOIN ne ON ne.col_id = sc.ne_col_id
+        LEFT JOIN split_evidence ev
+          ON ev.target_col_id = sc.ne_col_id AND ev.binomial = lower(sc.parent_name)
+        WHERE sc.rn = 1
+        GROUP BY 1, 2, 3
+      ),
+      -- The infraspecific names that resolved back to the assessed species
+      -- itself — why it is still one of the species the old concept split into.
+      kept AS (
+        SELECT sc.parent_id AS parent_id,
+               list(struct_pack(name := ev.syn_name, col_id := ev.syn_col_id,
+                                authorship := ev.syn_authorship) ORDER BY ev.syn_name) AS names
+        FROM (SELECT DISTINCT parent_id, parent_name FROM split_candidates WHERE rn = 1) sc
+        JOIN parent_col pc ON pc.id = sc.parent_id
+        JOIN split_evidence ev ON ev.target_col_id = pc.col_id AND ev.binomial = lower(sc.parent_name)
+        GROUP BY 1
       )
       SELECT p.parent_id AS parent_id,
-             list(struct_pack(name := p.ne_name, col_id := p.ne_col_id) ORDER BY p.ne_name) AS ne_names,
-             any_value(pc.col_id) AS parent_col_id
-      FROM pairs p LEFT JOIN parent_col pc ON pc.id = p.parent_id
+             list(struct_pack(name := p.ne_name, col_id := p.ne_col_id, prev_name := p.prev_name,
+                              prev_col_id := p.prev_col_id, prev_authorship := p.prev_authorship)
+                  ORDER BY p.ne_name) AS ne_names,
+             any_value(pc.col_id) AS parent_col_id,
+             any_value(k.names) AS kept_names,
+             any_value(sc2.parent_name) AS parent_name
+      FROM pairs p
+      LEFT JOIN (SELECT DISTINCT parent_id, parent_name FROM split_candidates WHERE rn = 1) sc2 ON sc2.parent_id = p.parent_id
+      LEFT JOIN parent_col pc ON pc.id = p.parent_id
+      LEFT JOIN kept k ON k.parent_id = p.parent_id
       GROUP BY p.parent_id ORDER BY p.parent_id`)).getRowObjects();
+
+    const unwrap = (v: unknown): Record<string, unknown>[] => {
+      // A LIST arrives as { items: [...] } and each STRUCT as { entries: {...} }.
+      const raw = v as { items?: unknown[] } | unknown[] | null;
+      const items = (Array.isArray(raw) ? raw : raw?.items ?? []) as { entries?: Record<string, unknown> }[];
+      return items.map((it) => it?.entries ?? {});
+    };
+    // CoL writes authorship separately; the tooltip wants the name as CoL prints
+    // it. The leading binomial is dropped: it is the assessed species' own name
+    // by construction (that IS the join condition), so storing it would repeat a
+    // string already on the row ~9k times, and the list it renders into is
+    // headed by that name anyway. "Vallonia costata var. montana Sterki, 1893"
+    // ships as "var. montana Sterki, 1893".
+    const shorten = (name: unknown, authorship: unknown, binomial: string) => {
+      let n = String(name ?? "");
+      if (n.toLowerCase().startsWith(`${binomial.toLowerCase()} `)) n = n.slice(binomial.length + 1);
+      return `${n}${authorship ? ` ${String(authorship)}` : ""}`.trim();
+    };
+
     for (const r of splitRows) {
       const id = String(r.parent_id);
-      // DuckDB hands a LIST back as its own value wrapper, not a JS array, and
-      // each item as a struct wrapper of its own.
-      const raw = r.ne_names as { items?: unknown[] } | unknown[];
-      // A LIST arrives as { items: [...] } and each STRUCT inside it as
-      // { entries: {...} } — neither is a plain JS value.
-      const items = (Array.isArray(raw) ? raw : raw?.items ?? []) as { entries?: { name?: string; col_id?: string } }[];
-      const names: [string, string][] = items
-        .map((it) => [String(it?.entries?.name ?? ""), String(it?.entries?.col_id ?? "")] as [string, string])
+      const binomial = String(r.parent_name ?? "");
+      const names = unwrap(r.ne_names)
+        .map((e) => [String(e.name ?? ""), String(e.col_id ?? ""), shorten(e.prev_name, e.prev_authorship, binomial), String(e.prev_col_id ?? "")] as [string, string, string, string])
         .filter(([n]) => n.length > 0);
       if (names.length === 0) continue;
       splitParents++;
       const entry = species[id] ?? {};
       entry.s = names;
-      // Only supply a col_id when the no-match half didn't already choose one —
-      // that one points at the record that DISAGREES with the assessment, which
-      // is the more specific thing to link to.
+      const kept = unwrap(r.kept_names)
+        .map((e) => [shorten(e.name, e.authorship, binomial), String(e.col_id ?? "")] as [string, string])
+        .filter(([n]) => n.length > 0);
+      if (kept.length) entry.k = kept;
       if (entry.c == null && r.parent_col_id != null) entry.c = String(r.parent_col_id);
       species[id] = entry;
     }

@@ -96,8 +96,13 @@ export interface ColRevision {
    *  nor `detail` (i.e. the two were merged under some third name). */
   colName?: string;
   /** Species CoL now recognises that were likely split out of this one, each
-   *  with its own CoL record. Never empty when present. */
-  splitInto?: { name: string; colId?: string }[];
+   *  with its own CoL record and — as the evidence for the split — the old
+   *  infraspecific name that now resolves to it (binomial stripped: "var.
+   *  montana Sterki, 1893"). Never empty when present. */
+  splitInto?: SplitEntry[];
+  /** The infraspecific names that resolved back to THIS species — why it is
+   *  still one of the species the old concept split into. */
+  splitKept?: { name: string; colId?: string }[];
 }
 
 /** Does this species carry any revision signal at all? */
@@ -188,12 +193,29 @@ export interface NoMatchSentence {
   after: string;
 }
 
-/** The split explanation, with the split-off species kept as their own values so
- *  each can be rendered as a link to its CoL record. */
-export interface SplitSentence {
-  before: string;
-  names: { name: string; colId?: string }[];
-  after: string;
+/** One species the old concept split into. */
+export interface SplitEntry {
+  name: string;
+  colId?: string;
+  /** The old infraspecific name that now resolves here — the evidence. */
+  previousName?: string;
+  previousColId?: string;
+}
+
+/**
+ * The split explanation as a list, so every name in it can be a link to its own
+ * CoL record — both the species and the old name behind it. Showing the old name
+ * is what makes the inference checkable: CoL's site has no view of "names that
+ * used to sit under this species and now resolve elsewhere", so without it a
+ * reader has to reconstruct the derivation (see SPLIT_CANDIDATES_SQL's worked
+ * example).
+ */
+export interface SplitSummary {
+  lead: string;
+  /** Capped at MAX_SPLIT_NAMES, plus the assessed species itself last. */
+  entries: (SplitEntry & { isSelf?: boolean; kept?: { name: string; colId?: string }[] })[];
+  /** Split-off species not shown, so the list can say "and N more". */
+  more: number;
 }
 
 const COL = "Catalogue of Life";
@@ -293,25 +315,37 @@ const MAX_SPLIT_NAMES = 3;
  * is promoted — not a confirmed taxonomic changelog. See SPLIT_CANDIDATES_SQL
  * in col-breakdown.ts.
  */
-export function splitSentence(flag: ColRevision, subject: string): SplitSentence | null {
+export function splitSummary(flag: ColRevision, subject: string): SplitSummary | null {
   const names = flag.splitInto ?? [];
   if (names.length === 0) return null;
   const shown = names.slice(0, MAX_SPLIT_NAMES);
-  const rest = names.length - shown.length;
+  // The count is names.length + 1 — the species itself is one of the species the
+  // old concept split into, and it is listed last so the arithmetic is visible
+  // rather than asserted.
+  const total = names.length + 1;
   return {
-    // Leads with the consequence for THIS assessment: it was made against a
-    // broader concept than CoL now uses, so part of what it covers may since
-    // have been reassigned. "suggests" hedges the heuristic, "may cover" the
-    // consequence.
-    //
-    // The count is names.length + 1 — the species itself is one of the species
-    // the old concept split into, and the names listed are the OTHERS. Saying
-    // "split into 3" while listing 3 names would quietly lose the parent.
-    before: `${COL} suggests ${subject} has been split into ${names.length + 1} separate species`
-      + ` — so this assessment may cover populations now assigned to `,
-    names: shown,
-    after: rest > 0 ? `, and ${rest} more.` : ".",
+    lead: `${COL} suggests ${subject} has been split into ${total} separate species`
+      + `, so this assessment may cover populations now assigned to the others:`,
+    entries: [
+      ...shown,
+      { name: subject, colId: flag.colId, isSelf: true, ...(flag.splitKept?.length ? { kept: flag.splitKept } : {}) },
+    ],
+    more: names.length - shown.length,
   };
+}
+
+/** The summary flattened to one plain string, for a context that can't hold links. */
+export function splitSentence(flag: ColRevision, subject: string): string | null {
+  const s = splitSummary(flag, subject);
+  if (!s) return null;
+  const part = (e: SplitSummary["entries"][number]) => {
+    if (e.isSelf) return e.kept?.length ? `${e.name} (kept ${e.kept.map((k) => k.name).join(", ")})` : `${e.name} (unchanged)`;
+    return e.previousName ? `${e.name} (previously ${e.previousName})` : e.name;
+  };
+  const listed = s.entries.filter((e) => !e.isSelf).map(part);
+  const self = s.entries.find((e) => e.isSelf)!;
+  const more = s.more > 0 ? [`and ${s.more} more`] : [];
+  return `${s.lead} ${[...listed, ...more, part(self)].join("; ")}.`;
 }
 
 /** The whole flag as plain sentences — one per signal it carries. */
@@ -322,7 +356,7 @@ export function revisionSentences(flag: ColRevision, subject: string): string[] 
     out.push(`${before}${detail ?? ""}${after}`);
   }
   const split = splitSentence(flag, subject);
-  if (split) out.push(`${split.before}${split.names.map((n) => n.name).join(", ")}${split.after}`);
+  if (split) out.push(split);
   return out;
 }
 

@@ -1150,7 +1150,7 @@
       "name": "Bat Specialist Group",
       "estimatedDescribed": 0,
       "totalAssessed": 1336,
-      "outdated": 537,
+      "outdated": 538,
       "gbifNeSpeciesCount": 92,
       "byCategory": {
         "VU": 109,
@@ -2714,7 +2714,7 @@
       "name": "Equid Specialist Group",
       "estimatedDescribed": 0,
       "totalAssessed": 7,
-      "outdated": 4,
+      "outdated": 5,
       "gbifNeSpeciesCount": 3,
       "byCategory": {
         "CR": 1,
@@ -3680,7 +3680,7 @@
       "name": "Small Mammal Specialist Group",
       "estimatedDescribed": 0,
       "totalAssessed": 2933,
-      "outdated": 1483,
+      "outdated": 1490,
       "gbifNeSpeciesCount": 133,
       "byCategory": {
         "CR": 74,
@@ -10400,7 +10400,7 @@
       "name": "Seahorse, Pipefish and Seadragon Specialist Group",
       "estimatedDescribed": 0,
       "totalAssessed": 308,
-      "outdated": 208,
+      "outdated": 210,
       "gbifNeSpeciesCount": 16,
       "byCategory": {
         "DD": 78,
@@ -15556,7 +15556,7 @@
       "name": "Mollusc Specialist Group",
       "estimatedDescribed": 0,
       "totalAssessed": 9957,
-      "outdated": 5195,
+      "outdated": 5196,
       "gbifNeSpeciesCount": 26641,
       "byCategory": {
         "CR": 782,
@@ -34531,7 +34531,7 @@
       "name": "Orchid Specialist Group",
       "estimatedDescribed": 0,
       "totalAssessed": 2443,
-      "outdated": 1113,
+      "outdated": 1114,
       "gbifNeSpeciesCount": 18899,
       "byCategory": {
         "VU": 315,
@@ -38164,7 +38164,7 @@
       "name": "Palm Specialist Group",
       "estimatedDescribed": 0,
       "totalAssessed": 1330,
-      "outdated": 443,
+      "outdated": 444,
       "gbifNeSpeciesCount": 1108,
       "byCategory": {
         "VU": 138,
@@ -39661,7 +39661,7 @@
       "name": "No / Other SSC Group",
       "estimatedDescribed": 0,
       "totalAssessed": 71284,
-      "outdated": 15981,
+      "outdated": 15982,
       "gbifNeSpeciesCount": 227639,
       "byCategory": {
         "LR/cd": 95,

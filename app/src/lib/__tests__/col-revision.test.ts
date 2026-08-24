@@ -10,6 +10,7 @@ import {
   noMatchSentence,
   noMatchExplanation,
   splitSentence,
+  splitSummary,
   revisionSentences,
   colTaxonUrl,
   newRevisionTally,
@@ -150,56 +151,85 @@ describe("noMatchSentence", () => {
   });
 });
 
-describe("splitSentence", () => {
-  const flat = (flag: Parameters<typeof splitSentence>[0], subject: string) => {
-    const s = splitSentence(flag, subject);
-    return s && `${s.before}${s.names.map((n) => n.name).join(", ")}${s.after}`;
+describe("splitSummary", () => {
+  const vallonia = {
+    colId: "7FDLW",
+    splitInto: [
+      { name: "Vallonia gracilicosta", colId: "7FDMB", previousName: "var. montana Sterki, 1893", previousColId: "7V9Y8" },
+      { name: "Vallonia parvula", colId: "7TKP7", previousName: "var. minor Sterki, 1893", previousColId: "7V9Y7" },
+      { name: "Vallonia patens", colId: "7TKP8", previousName: "var. amurensis Sterki in Pilsbry, 1893", previousColId: "7V9Y5" },
+    ],
+    splitKept: [
+      { name: "var. helvetica Sterki, 1893", colId: "7V9Y6" },
+      { name: "var. pyrenaica Sterki, 1893", colId: "7V9Y9" },
+    ],
   };
 
   it("is null when there are no splits", () => {
-    expect(splitSentence({ reason: "lumped" }, "Sus scrofa")).toBeNull();
-    expect(splitSentence({ splitInto: [] }, "Sus scrofa")).toBeNull();
+    expect(splitSummary({ reason: "lumped" }, "Sus scrofa")).toBeNull();
+    expect(splitSummary({ splitInto: [] }, "Sus scrofa")).toBeNull();
   });
 
   it("leads with what the split means for the assessment", () => {
-    const sentence = flat({ splitInto: [{ name: "Aepyceros petersi" }] }, "Aepyceros melampus")!;
-    expect(sentence).toBe(
-      "Catalogue of Life suggests Aepyceros melampus has been split into 2 separate species" +
-      " — so this assessment may cover populations now assigned to Aepyceros petersi."
+    expect(splitSummary(vallonia, "Vallonia costata")!.lead).toBe(
+      "Catalogue of Life suggests Vallonia costata has been split into 4 separate species," +
+      " so this assessment may cover populations now assigned to the others:"
     );
   });
 
-  it("counts the species the old concept split INTO, parent included", () => {
-    // The names listed are the OTHERS, so "split into 4" while listing 3 is
-    // correct — saying "split into 3" would quietly drop the species itself.
-    expect(flat({ splitInto: [{ name: "A" }, { name: "B" }, { name: "C" }] }, "X"))
-      .toContain("split into 4 separate species");
-    expect(flat({ splitInto: [{ name: "A" }] }, "X")).toContain("split into 2 separate species");
+  it("lists the assessed species itself last, so the count adds up on screen", () => {
+    // "split into 4" while listing 3 would read as an off-by-one; the species is
+    // one of the four, and it is shown as such.
+    const entries = splitSummary(vallonia, "Vallonia costata")!.entries;
+    expect(entries).toHaveLength(4);
+    expect(entries.map((e) => e.name)).toEqual([
+      "Vallonia gracilicosta", "Vallonia parvula", "Vallonia patens", "Vallonia costata",
+    ]);
+    expect(entries.at(-1)!.isSelf).toBe(true);
+    expect(entries.slice(0, -1).every((e) => !e.isSelf)).toBe(true);
   });
 
-  it("summarises the tail rather than listing 73 brambles", () => {
+  it("carries the old name behind each split, with its own CoL record", () => {
+    // This is the evidence, and CoL only shows it from the NEW species' page —
+    // so the tooltip has to carry it or the claim can't be checked by hand.
+    const first = splitSummary(vallonia, "Vallonia costata")!.entries[0];
+    expect(first.previousName).toBe("var. montana Sterki, 1893");
+    expect(first.previousColId).toBe("7V9Y8");
+  });
+
+  it("shows what the species kept, which is why it is still one of the four", () => {
+    const self = splitSummary(vallonia, "Vallonia costata")!.entries.at(-1)!;
+    expect(self.colId).toBe("7FDLW");
+    expect(self.kept?.map((k) => k.name)).toEqual([
+      "var. helvetica Sterki, 1893", "var. pyrenaica Sterki, 1893",
+    ]);
+  });
+
+  it("has no kept list when every infraspecific name moved away", () => {
+    const self = splitSummary({ colId: "A", splitInto: [{ name: "B" }] }, "X")!.entries.at(-1)!;
+    expect(self.kept).toBeUndefined();
+  });
+
+  it("caps the list and reports the remainder rather than listing 73 brambles", () => {
     const names = Array.from({ length: 73 }, (_, i) => ({ name: `Rubus sp${i}` }));
-    const sentence = flat({ splitInto: names }, "Rubus fruticosus")!;
-    expect(sentence).toContain("split into 74 separate species");
-    expect(sentence).toContain("Rubus sp0, Rubus sp1, Rubus sp2, and 70 more.");
-    expect(sentence).not.toContain("Rubus sp3,");
-  });
-
-  it("keeps each split-off species as its own value, so it can be linked", () => {
-    const s = splitSentence({ splitInto: [{ name: "Alcelaphus cokii", colId: "L7YRS" }] }, "Alcelaphus buselaphus")!;
-    expect(s.names).toEqual([{ name: "Alcelaphus cokii", colId: "L7YRS" }]);
-    expect(s.before).not.toContain("Alcelaphus cokii");
+    const summary = splitSummary({ splitInto: names }, "Rubus fruticosus")!;
+    expect(summary.lead).toContain("split into 74 separate species");
+    expect(summary.more).toBe(70);
+    // 3 split-offs + the species itself.
+    expect(summary.entries).toHaveLength(4);
   });
 
   it("hedges both the heuristic and its consequence", () => {
-    const sentence = flat({ splitInto: [{ name: "Aepyceros petersi" }] }, "Aepyceros melampus")!;
-    expect(sentence).toContain("suggests");
-    expect(sentence).toContain("may cover");
+    const lead = splitSummary(vallonia, "Vallonia costata")!.lead;
+    expect(lead).toContain("suggests");
+    expect(lead).toContain("may cover");
   });
 
-  it("names the subject in the sentence, so the UI can link it to its own CoL record", () => {
-    const s = splitSentence({ splitInto: [{ name: "Aepyceros petersi" }] }, "Aepyceros melampus")!;
-    expect(s.before).toContain("Aepyceros melampus");
+  it("flattens to a single string for contexts that can't hold links", () => {
+    const flat = splitSentence(vallonia, "Vallonia costata")!;
+    expect(flat).toContain("Vallonia gracilicosta (previously var. montana Sterki, 1893)");
+    expect(flat).toContain("Vallonia costata (kept var. helvetica Sterki, 1893, var. pyrenaica Sterki, 1893)");
+    expect(splitSentence({ colId: "A", splitInto: [{ name: "B" }] }, "X")).toContain("X (unchanged)");
   });
 });
 
