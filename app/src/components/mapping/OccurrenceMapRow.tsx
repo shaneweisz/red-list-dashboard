@@ -2874,15 +2874,14 @@ export default function OccurrenceMapRow({
               onDragEnd={() => setPanning(false)}
             >
               <ScaleControl position="bottom-right" />
-              {/* Measuring, in the gap between the scale bar and the
-                  attribution — the map's own furniture, which is what it is.
-                  Small and quiet: it's a tool you reach for occasionally, not
-                  a control the map is about. It used to start from a
-                  right-clicked point, which made the first end something you
-                  had to have chosen before you knew you wanted to measure; now
-                  both ends are picked on the map after you ask. */}
+              {/* Measuring, above the scale bar it's the fine-grained
+                  version of. Small and quiet: it's a tool you reach for
+                  occasionally, not a control the map is about. It used to start
+                  from a right-clicked point, which made the first end something
+                  you had to have chosen before you knew you wanted to measure;
+                  now both ends are picked on the map after you ask. */}
               {fullscreen && (panelId === "main" || !splitView) ? (
-                <div className="absolute bottom-[3.3rem] right-[7rem] z-[1000]">
+                <div className="absolute bottom-20 right-2 z-[1000]">
                   <button
                     onClick={() => setMeasure(measure ? null : [])}
                     title={measure ? "Stop measuring (or press Escape)" : "Measure the distance between two points on the map"}
@@ -3352,6 +3351,20 @@ export default function OccurrenceMapRow({
               )}
               {/* The measured path. Drawn above everything so the line stays
                   readable over the rasters it's being measured against. */}
+              {/* The distance on the line it measures. It used to be in a
+                  chip at the far corner of the map, which meant reading the
+                  answer somewhere other than where the question was drawn. */}
+              {measure && measure.length > 1 && (
+                <MapLibreMarker
+                  longitude={(measure[0][0] + measure[1][0]) / 2}
+                  latitude={(measure[0][1] + measure[1][1]) / 2}
+                  anchor="bottom"
+                >
+                  <div className="px-1.5 py-0.5 -translate-y-1 rounded bg-zinc-900/85 text-white text-[11px] font-medium tabular-nums whitespace-nowrap shadow">
+                    {formatDistance(pathLengthMetres(measure))}
+                  </div>
+                </MapLibreMarker>
+              )}
               {measure && measure.length > 0 && (
                 <Source
                   id={`measure-${panelId}`}
@@ -3645,16 +3658,11 @@ export default function OccurrenceMapRow({
               it's a live mode, not a legend. */}
           {measure && (
             <div className="bg-white dark:bg-zinc-800 px-2 py-1.5 rounded shadow text-[11px] text-zinc-700 dark:text-zinc-200 flex items-center gap-2">
-              {measure.length > 1 && (
-                <span className="font-medium tabular-nums">{formatDistance(pathLengthMetres(measure))}</span>
+              {measure.length < 2 && (
+                <span className="text-zinc-400">
+                  {measure.length === 0 ? "click the first point" : "click the second point"}
+                </span>
               )}
-              <span className="text-zinc-400">
-                {measure.length === 0
-                  ? "click the first point"
-                  : measure.length < 2
-                    ? "click the second point"
-                    : "click again to measure on from here"}
-              </span>
               <button
                 onClick={() => setMeasure(null)}
                 title="Finish measuring (or press Escape)"
