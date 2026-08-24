@@ -775,7 +775,7 @@ export default function OccurrenceMapRow({
   }, [showEcoregions, ecoregions, ecoregionsLoading]);
 
   /** Whether the Overlays panel is rolled up to its header. */
-  const [overlaysCollapsed, setOverlaysCollapsed] = useState(false);
+  const [overlaysCollapsed, setOverlaysCollapsed] = useState(true);
   const [showRangeMetrics, setShowRangeMetrics] = useState(false);
   /**
    * The AOO grid's cell width, in kilometres.
@@ -3938,11 +3938,8 @@ export default function OccurrenceMapRow({
               ))}
             </div>
           )}
-          {/* Top-left: the split-view label, the place search — where a map's
-              search box lives everywhere else — and the context layers under
-              it. Overlays sit on this side because the records they're being
-              compared against are diagonally opposite, so neither column
-              covers what the other is about. */}
+          {/* Top-left: the split-view label, then the place search — where a
+              map's search box lives everywhere else. */}
           <div className="absolute top-2 left-2 z-[1000] flex flex-col items-start gap-1.5">
             {label && (
               <div className="bg-zinc-900/80 text-white text-[11px] font-medium px-2.5 py-1 rounded-full shadow-md">
@@ -3961,7 +3958,6 @@ export default function OccurrenceMapRow({
                 onPreview={setPreviewPlace}
               />
             )}
-            {!loadingOccurrences && mounted && renderOverlayLayers()}
           </div>
           {/* Top-right stack: what's loaded, then the basemap choice. Stacked
               in a flex column rather than each guessing the other's offset —
@@ -4031,6 +4027,12 @@ export default function OccurrenceMapRow({
                 )}
               </div>
             )}
+            {/* The context layers, then the basemap under them: both are what
+                the records get read against, so they sit together, opposite the
+                records themselves. Rolled up by default — the badge says how
+                many are on, and on the dashboard's smaller map an open panel
+                covers a third of it. */}
+            {!loadingOccurrences && mounted && renderOverlayLayers()}
             {!loadingOccurrences && mounted && (
               <div className="flex flex-col gap-0.5 bg-white dark:bg-zinc-800 rounded-lg shadow-md border border-zinc-200 dark:border-zinc-700 p-1">
                 {(Object.entries(BASEMAP_STYLES) as [BasemapKey, (typeof BASEMAP_STYLES)[BasemapKey]][]).map(([key, opt]) => (
@@ -5447,16 +5449,19 @@ export default function OccurrenceMapRow({
                           ? `${pointFile.fileName} — ${pointFile.points.length.toLocaleString()} records on the map. Click to compare them against your own, or load a different file.`
                           : "Import a CSV of point records — one row per record, with decimal latitude and longitude columns. It goes on the map as its own layer, to compare against."
                       }
-                      className="inline-flex items-center gap-1 px-2 py-1 rounded border border-zinc-300 dark:border-zinc-600 text-xs text-zinc-600 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800 transition-colors"
+                      aria-label="Import CSV records"
+                      className="inline-flex items-center px-1.5 py-1 rounded border border-zinc-300 dark:border-zinc-600 text-zinc-600 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800 transition-colors"
                     >
                       {/* An upload arrow rather than a map pin: the button's
                           job is getting the file in, and a pin said "another
-                          layer" beside a row of layer toggles. */}
+                          layer" beside a row of layer toggles. Icon only, like
+                          the undo and redo it sits beside; it turns the point
+                          file's own colour once one is loaded, which is the
+                          only state it has to report. */}
                       <svg className="w-3.5 h-3.5 text-zinc-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}
                            style={pointFile ? { color: POINT_FILE_COLOR } : undefined}>
                         <path strokeLinecap="round" strokeLinejoin="round" d="M4 16v2a2 2 0 002 2h12a2 2 0 002-2v-2M7 8l5-5 5 5M12 3v12" />
                       </svg>
-                      Import CSV
                     </button>
                 </div>
                 {/* The map/list arrangement is chosen from the table's own
