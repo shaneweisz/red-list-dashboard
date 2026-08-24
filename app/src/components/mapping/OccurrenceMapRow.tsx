@@ -776,7 +776,7 @@ export default function OccurrenceMapRow({
   }, [showEcoregions, ecoregions, ecoregionsLoading]);
 
   /** Whether the Overlays panel is rolled up to its header. */
-  const [overlaysCollapsed, setOverlaysCollapsed] = useState(true);
+  const [overlaysCollapsed, setOverlaysCollapsed] = useState(false);
   const [showRangeMetrics, setShowRangeMetrics] = useState(false);
   /**
    * The AOO grid's cell width, in kilometres.
@@ -4108,9 +4108,9 @@ export default function OccurrenceMapRow({
             )}
             {/* The context layers, then the basemap under them: both are what
                 the records get read against, so they sit together, opposite the
-                records themselves. Rolled up by default — the badge says how
-                many are on, and on the dashboard's smaller map an open panel
-                covers a third of it. */}
+                records themselves. Open by default — a layer nobody knows is
+                there is a layer nobody uses — and collapsible to its header for
+                when the map underneath is what matters. */}
             {!loadingOccurrences && mounted && renderOverlayLayers()}
             {!loadingOccurrences && mounted && (
               <div className="flex flex-col gap-0.5 bg-white dark:bg-zinc-800 rounded-lg shadow-md border border-zinc-200 dark:border-zinc-700 p-1">
