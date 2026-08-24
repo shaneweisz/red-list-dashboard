@@ -775,7 +775,7 @@ export default function OccurrenceMapRow({
   }, [showEcoregions, ecoregions, ecoregionsLoading]);
 
   /** Whether the Overlays panel is rolled up to its header. */
-  const [overlaysCollapsed, setOverlaysCollapsed] = useState(!fullscreenProp);
+  const [overlaysCollapsed, setOverlaysCollapsed] = useState(false);
   const [showRangeMetrics, setShowRangeMetrics] = useState(false);
   /**
    * The AOO grid's cell width, in kilometres.
@@ -3707,10 +3707,7 @@ export default function OccurrenceMapRow({
               legend that only appears with its overlay can't land on top of
               another. */}
           <div className="absolute bottom-2 left-2 z-[1000] flex flex-col items-start gap-1.5 max-w-[90%]">
-          {/* EOO/AOO is fullscreen-only for the same reason: it is measured
-              over the record layers you switch on, and choosing between them
-              is work the dashboard's map has no room for. */}
-          {fullscreen && mounted && renderRangeMetrics()}
+          {mounted && renderRangeMetrics()}
           {!loadingOccurrences && mounted && renderRecordLayers(label)}
           {/* The measuring tool's running total. First in the stack because
               it's a live mode, not a legend. */}
@@ -5408,69 +5405,59 @@ export default function OccurrenceMapRow({
                       </span>
                     )}
 
-                    {/* Editing tools, on the page that has something to edit.
-                        Undo, redo and the CSV import all act on the record list
-                        — correcting a coordinate, striking a record out, laying
-                        a point file over the map — and that list only exists in
-                        fullscreen. On the dashboard they were three controls
-                        for work you can't start there. */}
-                    {fullscreen && (
-                      <>
-                      {/* Undo, redo, and what they'd act on. The label matters
-                          more than usual here: the table can hide the very rows an
-                          edit touched, so an unlabelled undo would act off-screen
-                          with nothing to say for itself. */}
-                      <div className="flex items-center rounded border border-zinc-300 dark:border-zinc-600 overflow-hidden">
-                        <button
-                          onClick={undoEdit}
-                          disabled={!canUndo}
-                          title={canUndo ? `Undo ${undoLabel ?? "the last edit"} (\u2318Z)` : "Nothing to undo"}
-                          className="px-1.5 py-1 text-xs text-zinc-600 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800 disabled:opacity-30 disabled:cursor-not-allowed"
-                        >
-                          <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                            <path strokeLinecap="round" strokeLinejoin="round" d="M9 14L4 9l5-5M4 9h11a5 5 0 010 10h-3" />
-                          </svg>
-                        </button>
-                        <button
-                          onClick={redoEdit}
-                          disabled={!canRedo}
-                          title={canRedo ? `Redo ${redoLabel ?? "the last undone edit"} (\u21e7\u2318Z)` : "Nothing to redo"}
-                          className="px-1.5 py-1 text-xs text-zinc-600 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800 disabled:opacity-30 disabled:cursor-not-allowed border-l border-zinc-200 dark:border-zinc-700"
-                        >
-                          <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                            <path strokeLinecap="round" strokeLinejoin="round" d="M15 14l5-5-5-5M20 9H9a5 5 0 000 10h3" />
-                          </svg>
-                        </button>
-                        {editHistory.length > 0 && (
-                          <button
-                            onClick={() => setHistoryOpen((v) => !v)}
-                            title="Everything you've changed this session"
-                            className="px-1.5 py-1 text-[10px] tabular-nums text-zinc-500 dark:text-zinc-400 hover:bg-zinc-50 dark:hover:bg-zinc-800 border-l border-zinc-200 dark:border-zinc-700"
-                          >
-                            {editHistory.filter((h) => !h.undone).length}
-                          </button>
-                        )}
-                      </div>
+                    {/* Undo, redo, and what they'd act on. The label matters
+                        more than usual here: the table can hide the very rows an
+                        edit touched, so an unlabelled undo would act off-screen
+                        with nothing to say for itself. */}
+                    <div className="flex items-center rounded border border-zinc-300 dark:border-zinc-600 overflow-hidden">
                       <button
-                        onClick={() => setPointFileOpen(true)}
-                        title={
-                          pointFile
-                            ? `${pointFile.fileName} — ${pointFile.points.length.toLocaleString()} records on the map. Click to compare them against your own, or load a different file.`
-                            : "Import a CSV of point records — one row per record, with decimal latitude and longitude columns. It goes on the map as its own layer, to compare against."
-                        }
-                        className="inline-flex items-center gap-1 px-2 py-1 rounded border border-zinc-300 dark:border-zinc-600 text-xs text-zinc-600 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800 transition-colors"
+                        onClick={undoEdit}
+                        disabled={!canUndo}
+                        title={canUndo ? `Undo ${undoLabel ?? "the last edit"} (\u2318Z)` : "Nothing to undo"}
+                        className="px-1.5 py-1 text-xs text-zinc-600 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800 disabled:opacity-30 disabled:cursor-not-allowed"
                       >
-                        {/* An upload arrow rather than a map pin: the button's
-                            job is getting the file in, and a pin said "another
-                            layer" beside a row of layer toggles. */}
-                        <svg className="w-3.5 h-3.5 text-zinc-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}
-                             style={pointFile ? { color: POINT_FILE_COLOR } : undefined}>
-                          <path strokeLinecap="round" strokeLinejoin="round" d="M4 16v2a2 2 0 002 2h12a2 2 0 002-2v-2M7 8l5-5 5 5M12 3v12" />
+                        <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M9 14L4 9l5-5M4 9h11a5 5 0 010 10h-3" />
                         </svg>
-                        Import CSV
                       </button>
-                      </>
-                    )}
+                      <button
+                        onClick={redoEdit}
+                        disabled={!canRedo}
+                        title={canRedo ? `Redo ${redoLabel ?? "the last undone edit"} (\u21e7\u2318Z)` : "Nothing to redo"}
+                        className="px-1.5 py-1 text-xs text-zinc-600 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800 disabled:opacity-30 disabled:cursor-not-allowed border-l border-zinc-200 dark:border-zinc-700"
+                      >
+                        <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M15 14l5-5-5-5M20 9H9a5 5 0 000 10h3" />
+                        </svg>
+                      </button>
+                      {editHistory.length > 0 && (
+                        <button
+                          onClick={() => setHistoryOpen((v) => !v)}
+                          title="Everything you've changed this session"
+                          className="px-1.5 py-1 text-[10px] tabular-nums text-zinc-500 dark:text-zinc-400 hover:bg-zinc-50 dark:hover:bg-zinc-800 border-l border-zinc-200 dark:border-zinc-700"
+                        >
+                          {editHistory.filter((h) => !h.undone).length}
+                        </button>
+                      )}
+                    </div>
+                    <button
+                      onClick={() => setPointFileOpen(true)}
+                      title={
+                        pointFile
+                          ? `${pointFile.fileName} — ${pointFile.points.length.toLocaleString()} records on the map. Click to compare them against your own, or load a different file.`
+                          : "Import a CSV of point records — one row per record, with decimal latitude and longitude columns. It goes on the map as its own layer, to compare against."
+                      }
+                      className="inline-flex items-center gap-1 px-2 py-1 rounded border border-zinc-300 dark:border-zinc-600 text-xs text-zinc-600 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800 transition-colors"
+                    >
+                      {/* An upload arrow rather than a map pin: the button's
+                          job is getting the file in, and a pin said "another
+                          layer" beside a row of layer toggles. */}
+                      <svg className="w-3.5 h-3.5 text-zinc-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}
+                           style={pointFile ? { color: POINT_FILE_COLOR } : undefined}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M4 16v2a2 2 0 002 2h12a2 2 0 002-2v-2M7 8l5-5 5 5M12 3v12" />
+                      </svg>
+                      Import CSV
+                    </button>
                 </div>
                 {/* The map/list arrangement is chosen from the table's own
                     footer, beside the column picker — it's a question about
