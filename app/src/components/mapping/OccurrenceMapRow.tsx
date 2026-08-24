@@ -774,6 +774,8 @@ export default function OccurrenceMapRow({
       .finally(() => setEcoregionsLoading(false));
   }, [showEcoregions, ecoregions, ecoregionsLoading]);
 
+  /** Whether the Overlays panel is rolled up to its header. */
+  const [overlaysCollapsed, setOverlaysCollapsed] = useState(true);
   const [showRangeMetrics, setShowRangeMetrics] = useState(false);
   /**
    * The AOO grid's cell width, in kilometres.
@@ -4002,9 +4004,6 @@ export default function OccurrenceMapRow({
                         </button>
                       </>
                     )}
-                    {visibleGeoreferences.length > 0 && (
-                      <> Plus <strong>{visibleGeoreferences.length.toLocaleString()}</strong> you georeferenced.</>
-                    )}
                     {georeferencedFilteredCount < georeferencedLoadedCount && (
                       <> Showing <strong>{georeferencedFilteredCount.toLocaleString()}</strong> after filters.</>
                     )}
@@ -4080,6 +4079,7 @@ export default function OccurrenceMapRow({
   // only now: the species' own records have their own panel on the map, and
   // EOO/AOO is drawn from them there too.
   const overlayToggleValues = [
+    ...(assessmentId && canViewRangeMap ? [showRange] : []),
     showProtectedAreas,
     showForestLoss,
     showHabitat,
@@ -4252,12 +4252,101 @@ export default function OccurrenceMapRow({
    */
   const renderOverlayLayers = () => (
     <div className="flex flex-col bg-white dark:bg-zinc-800 rounded-lg shadow-md border border-zinc-200 dark:border-zinc-700 py-1 w-44">
-      <div className="flex items-baseline gap-1 px-2 pb-0.5 text-[9px] uppercase tracking-wide text-zinc-400 dark:text-zinc-500">
+      <button
+        onClick={() => setOverlaysCollapsed((v) => !v)}
+        title={overlaysCollapsed ? "Show the context layers" : "Hide the context layers"}
+        className="flex items-center gap-1 px-2 pb-0.5 text-[9px] uppercase tracking-wide text-zinc-400 dark:text-zinc-500 hover:text-zinc-600 dark:hover:text-zinc-300"
+      >
+        <svg
+          className={`w-2.5 h-2.5 shrink-0 transition-transform ${overlaysCollapsed ? "-rotate-90" : ""}`}
+          fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}
+        >
+          <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+        </svg>
         <span>Overlays</span>
         <span className="ml-auto tabular-nums normal-case tracking-normal">
           {overlayToggleValues.filter(Boolean).length} of {overlayToggleValues.length}
         </span>
-      </div>
+      </button>
+      {!overlaysCollapsed && (
+        <>
+      {assessmentId && canViewRangeMap && (
+        <>
+          <label
+            className="flex items-center gap-1.5 px-2 py-0.5 hover:bg-zinc-50 dark:hover:bg-zinc-700 cursor-pointer text-[11px]"
+            title="Toggle IUCN range map overlay. Range maps are indicative only and may not reflect current distributions."
+          >
+            <input
+              type="checkbox"
+              checked={showRange}
+              onChange={() => setShowRange((v) => !v)}
+              className="w-3 h-3 rounded accent-rose-500 shrink-0"
+            />
+            <span className="flex-1 min-w-0 text-zinc-700 dark:text-zinc-200 flex items-center gap-1 truncate">
+              IUCN range map
+              {rangeLoading && (
+                <svg className="w-3 h-3 animate-spin text-zinc-400 shrink-0" fill="none" viewBox="0 0 24 24">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                </svg>
+              )}
+            </span>
+            {showRange && rangeCategories.length > 1 && (
+              <button
+                onClick={(e) => { e.preventDefault(); e.stopPropagation(); setRangeCategoriesExpanded(!rangeCategoriesExpanded); }}
+                title="Show the range map's own categories"
+                className="shrink-0 text-zinc-400 hover:text-zinc-600"
+              >
+                {rangeCategoriesExpanded ? "▴" : "▾"}
+              </button>
+            )}
+          </label>
+          {showRange && rangeNotFound && (
+            <span className="block px-2 pb-0.5 text-[10px] text-zinc-400 italic">Not yet available</span>
+          )}
+          {showRange && !rangeNotFound && rangeSimplification && (
+            <span
+              className="flex items-center gap-1 px-2 pb-0.5 text-[10px] text-amber-600 dark:text-amber-400 cursor-help"
+              title={`This range map has been simplified at ${rangeSimplification.tolerance}° (~${Math.round(rangeSimplification.tolerance * 111)}km) to reduce file size. Fine-scale boundary details may be lost.`}
+            >
+              <svg className="w-3 h-3 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                <circle cx="12" cy="12" r="10" />
+                <path d="M12 16v-4M12 8h.01" />
+              </svg>
+              Simplified to {rangeSimplification.tolerance}°
+            </span>
+          )}
+          {showRange && rangeCategoriesExpanded && rangeCategories.length > 0 && (
+            <div className="flex flex-col gap-0.5 px-2 pb-0.5 pl-6">
+              {rangeCategories.map((cat) => {
+                const isVisible = !visibleCategories || visibleCategories.has(cat.key);
+                return (
+                  <button
+                    key={cat.key}
+                    onClick={() => {
+                      setVisibleCategories((prev) => {
+                        const next = new Set(prev ?? rangeCategories.map((c) => c.key));
+                        if (next.has(cat.key)) next.delete(cat.key);
+                        else next.add(cat.key);
+                        return next;
+                      });
+                    }}
+                    className={`flex items-center gap-1 py-0.5 rounded text-[10px] text-left transition-colors ${
+                      isVisible ? "text-zinc-700 dark:text-zinc-300" : "text-zinc-400 dark:text-zinc-500 line-through"
+                    }`}
+                  >
+                    <span
+                      className="w-2.5 h-2.5 rounded-sm flex-shrink-0"
+                      style={{ background: cat.color, opacity: isVisible ? 1 : 0.3 }}
+                    />
+                    {cat.label} ({cat.count})
+                  </button>
+                );
+              })}
+            </div>
+          )}
+        </>
+      )}
       <label
         className="flex items-center gap-2 px-2 py-0.5 hover:bg-zinc-50 dark:hover:bg-zinc-700 cursor-pointer text-[11px]"
         title="Overlay the World Database on Protected Areas (WDPA) — UNEP-WCMC & IUCN. With it on, clicking the map names the areas covering that point and links each to Protected Planet."
@@ -4496,6 +4585,8 @@ export default function OccurrenceMapRow({
           )}
         </div>
       )}
+        </>
+      )}
     </div>
   );
 
@@ -4566,7 +4657,7 @@ export default function OccurrenceMapRow({
           />
           <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ background: "#7c3aed" }} />
           <span className="flex-1 min-w-0 text-zinc-700 dark:text-zinc-200 truncate">
-            Yours
+            Your georeferences
           </span>
           <span className="tabular-nums text-[10px] text-zinc-400">
             {visibleGeoreferences.length.toLocaleString()}
@@ -4596,83 +4687,6 @@ export default function OccurrenceMapRow({
             {pointFile.points.length.toLocaleString()}
           </span>
         </label>
-      )}
-      {assessmentId && canViewRangeMap && (
-        <>
-          <label
-            className="flex items-center gap-1.5 px-2 py-0.5 hover:bg-zinc-50 dark:hover:bg-zinc-700 cursor-pointer text-[11px]"
-            title="Toggle IUCN range map overlay. Range maps are indicative only and may not reflect current distributions."
-          >
-            <input
-              type="checkbox"
-              checked={showRange}
-              onChange={() => setShowRange((v) => !v)}
-              className="w-3 h-3 rounded accent-rose-500 shrink-0"
-            />
-            <span className="flex-1 min-w-0 text-zinc-700 dark:text-zinc-200 flex items-center gap-1 truncate">
-              IUCN range map
-              {rangeLoading && (
-                <svg className="w-3 h-3 animate-spin text-zinc-400 shrink-0" fill="none" viewBox="0 0 24 24">
-                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
-                </svg>
-              )}
-            </span>
-            {showRange && rangeCategories.length > 1 && (
-              <button
-                onClick={(e) => { e.preventDefault(); e.stopPropagation(); setRangeCategoriesExpanded(!rangeCategoriesExpanded); }}
-                title="Show the range map's own categories"
-                className="shrink-0 text-zinc-400 hover:text-zinc-600"
-              >
-                {rangeCategoriesExpanded ? "▴" : "▾"}
-              </button>
-            )}
-          </label>
-          {showRange && rangeNotFound && (
-            <span className="block px-2 pb-0.5 text-[10px] text-zinc-400 italic">Not yet available</span>
-          )}
-          {showRange && !rangeNotFound && rangeSimplification && (
-            <span
-              className="flex items-center gap-1 px-2 pb-0.5 text-[10px] text-amber-600 dark:text-amber-400 cursor-help"
-              title={`This range map has been simplified at ${rangeSimplification.tolerance}° (~${Math.round(rangeSimplification.tolerance * 111)}km) to reduce file size. Fine-scale boundary details may be lost.`}
-            >
-              <svg className="w-3 h-3 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
-                <circle cx="12" cy="12" r="10" />
-                <path d="M12 16v-4M12 8h.01" />
-              </svg>
-              Simplified to {rangeSimplification.tolerance}°
-            </span>
-          )}
-          {showRange && rangeCategoriesExpanded && rangeCategories.length > 0 && (
-            <div className="flex flex-col gap-0.5 px-2 pb-0.5 pl-6">
-              {rangeCategories.map((cat) => {
-                const isVisible = !visibleCategories || visibleCategories.has(cat.key);
-                return (
-                  <button
-                    key={cat.key}
-                    onClick={() => {
-                      setVisibleCategories((prev) => {
-                        const next = new Set(prev ?? rangeCategories.map((c) => c.key));
-                        if (next.has(cat.key)) next.delete(cat.key);
-                        else next.add(cat.key);
-                        return next;
-                      });
-                    }}
-                    className={`flex items-center gap-1 py-0.5 rounded text-[10px] text-left transition-colors ${
-                      isVisible ? "text-zinc-700 dark:text-zinc-300" : "text-zinc-400 dark:text-zinc-500 line-through"
-                    }`}
-                  >
-                    <span
-                      className="w-2.5 h-2.5 rounded-sm flex-shrink-0"
-                      style={{ background: cat.color, opacity: isVisible ? 1 : 0.3 }}
-                    />
-                    {cat.label} ({cat.count})
-                  </button>
-                );
-              })}
-            </div>
-          )}
-        </>
       )}
       {isAohAvailable && (
         <label
