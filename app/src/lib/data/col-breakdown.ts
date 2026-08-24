@@ -174,6 +174,28 @@ export function classifyNoMatch(row: Record<string, unknown>): NoMatchDetail {
 // immediate parent turns out to be an accepted subspecies/infraspecific rank
 // rather than the species itself.
 //
+// Worked example — Vallonia costata (IUCN LC, CoL 7FDLW). CoL holds six
+// historical infraspecific names under it, every one status='synonym'. What each
+// one now POINTS AT is the whole signal:
+//
+//   Vallonia costata euryomphalus     -> 7FDN4  V. subcyclophorella  extinct -> dropped
+//   Vallonia costata var. amurensis   -> 7TKP8  V. patens            SPLIT
+//   Vallonia costata var. helvetica   -> 7FDLW  V. costata itself            -> dropped
+//   Vallonia costata var. minor       -> 7TKP7  V. parvula           SPLIT
+//   Vallonia costata var. montana     -> 7FDMB  V. gracilicosta      SPLIT
+//   Vallonia costata var. pyrenaica   -> 7FDLW  V. costata itself            -> dropped
+//
+// Three point at other accepted species that IUCN has not assessed, so those are
+// the three the flag names. The other three are dropped by the filters below:
+// two resolve back to V. costata (already assessed, so not an NE candidate) and
+// one to an extinct species (outside the extant universe).
+//
+// The evidence is visible on CoL's site, but only from the NEW species' page —
+// V. gracilicosta (7FDMB) lists "Vallonia costata var. montana Sterki, 1893"
+// among its synonyms. There is no view from V. costata's own page showing names
+// that used to sit under it and now resolve elsewhere, which is why this has to
+// be derived rather than read off.
+//
 // This only catches the "was a named subspecies, got promoted" pattern (the
 // common case in recent Bovidae/Giraffidae splits) — it won't catch a split into
 // a segregate with no prior CoL subspecies record. One arbitrary (but
