@@ -4038,7 +4038,7 @@ export default function OccurrenceMapRow({
                   <button
                     key={key}
                     onClick={() => setBasemap(key)}
-                    className={`px-2 py-0.5 rounded text-[10px] transition-colors ${
+                    className={`px-2 py-0.5 rounded text-left text-[10px] transition-colors ${
                       basemap === key
                         ? "bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300 font-medium"
                         : "text-zinc-500 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-700"
@@ -4122,7 +4122,7 @@ export default function OccurrenceMapRow({
         extreme fluctuations, and none of those come from points on a
         map — so where GeoCAT shows a green LC, this shows nothing. */}
     {!loadingOccurrences && (
-      <div className="bg-white dark:bg-zinc-800 rounded-lg shadow-md border border-zinc-200 dark:border-zinc-700 px-2.5 py-2 text-[11px] text-zinc-700 dark:text-zinc-200 w-52">
+      <div className="bg-white dark:bg-zinc-800 rounded-lg shadow-md border border-zinc-200 dark:border-zinc-700 px-2.5 py-2 text-[11px] text-zinc-700 dark:text-zinc-200 w-44">
         <button
           onClick={() => setShowRangeMetrics((v) => !v)}
           className="flex items-center gap-2 w-full text-left"
@@ -4251,7 +4251,7 @@ export default function OccurrenceMapRow({
    * map you were trying to read.
    */
   const renderOverlayLayers = () => (
-    <div className="flex flex-col bg-white dark:bg-zinc-800 rounded-lg shadow-md border border-zinc-200 dark:border-zinc-700 py-1 w-48">
+    <div className="flex flex-col bg-white dark:bg-zinc-800 rounded-lg shadow-md border border-zinc-200 dark:border-zinc-700 py-1 w-44">
       <div className="flex items-baseline gap-1 px-2 pb-0.5 text-[9px] uppercase tracking-wide text-zinc-400 dark:text-zinc-500">
         <span>Overlays</span>
         <span className="ml-auto tabular-nums normal-case tracking-normal">
@@ -4500,7 +4500,7 @@ export default function OccurrenceMapRow({
   );
 
   const renderRecordLayers = (label: string | null) => (
-    <div className="flex flex-col bg-white dark:bg-zinc-800 rounded-lg shadow-md border border-zinc-200 dark:border-zinc-700 py-1 w-52">
+    <div className="flex flex-col bg-white dark:bg-zinc-800 rounded-lg shadow-md border border-zinc-200 dark:border-zinc-700 py-1 w-44">
       <div className="px-2 pb-0.5 text-[9px] uppercase tracking-wide text-zinc-400 dark:text-zinc-500">
         Records
       </div>
