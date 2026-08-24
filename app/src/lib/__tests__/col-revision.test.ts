@@ -40,7 +40,7 @@ describe("revision vocabulary", () => {
   });
 
   it("has no label without a reason code behind it", () => {
-    const codes = new Set<string>(REVISION_REASONS);
+    const codes = new Set<string>(ALL_REASONS);
     for (const key of Object.keys(REVISION_REASON_SHORT)) expect(codes.has(key)).toBe(true);
     for (const key of Object.keys(REVISION_REASON_SUMMARY)) expect(codes.has(key)).toBe(true);
   });
