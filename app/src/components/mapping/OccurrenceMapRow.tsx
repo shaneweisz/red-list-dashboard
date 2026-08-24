@@ -818,12 +818,12 @@ export default function OccurrenceMapRow({
     areas: ProtectedArea[];
     areasLoading: boolean;
     areasFailed?: boolean;
-    habitat: HabitatClass | null;
-    habitatLoading: boolean;
     /** Which of the listed areas is outlined on the map. */
     highlight: number;
   } | null>(null);
   const pointQueryId = useRef(0);
+  /** Discards a habitat lookup that a later click has already superseded. */
+  const habitatQueryId = useRef(0);
   /** Copied-to-clipboard acknowledgement, cleared on a timer. */
   const [copiedPoint, setCopiedPoint] = useState(false);
   /**
@@ -2167,9 +2167,8 @@ export default function OccurrenceMapRow({
   // Map event handlers
   const handleMapClick = useCallback((e: MapLayerMouseEvent, panelId: string) => {
     // Measuring owns the left click while it's on. Two points, never more,
-    // and the first one stays put: it's the deliberate one — you right-clicked
-    // that spot and asked to measure from it — so every click after the second
-    // moves the far end and re-reads the distance from the same origin.
+    // and the first one stays put once set: every click after the second moves
+    // the far end and re-reads the distance from the same origin.
     if (measure) {
       const point: [number, number] = [e.lngLat.lng, e.lngLat.lat];
       setMeasure(measure.length < 2 ? [...measure, point] : [measure[0], point]);
@@ -2207,6 +2206,23 @@ export default function OccurrenceMapRow({
           : null
       );
     }
+    // The habitat map is a raster, so there's no feature to hit-test: the
+    // service that drew the tiles answers an identify at a point, which means
+    // the answer can't disagree with what's on screen.
+    if (showHabitat) {
+      const { lng, lat } = e.lngLat;
+      const query = ++habitatQueryId.current;
+      setClickedHabitat({ habitat: null, loading: true, panelId });
+      identifyHabitat(lng, lat)
+        .then((habitat) => {
+          if (query !== habitatQueryId.current) return;
+          setClickedHabitat({ habitat, loading: false, panelId });
+        })
+        .catch(() => {
+          if (query !== habitatQueryId.current) return;
+          setClickedHabitat({ habitat: null, loading: false, panelId });
+        });
+    }
     // With the overlay on, a plain click asks what protects this spot — the
     // shapes are right there, so clicking one should answer for it. Everything
     // else about a location is on the right button.
@@ -2236,13 +2252,11 @@ export default function OccurrenceMapRow({
           elevationLoading: false,
           areas,
           areasLoading: false,
-          habitat: null,
-          habitatLoading: false,
           highlight: 0,
         });
       })
       .catch(() => undefined);
-  }, [measure, showProtectedAreas, showEcoregions, ecoregions]);
+  }, [measure, showProtectedAreas, showEcoregions, ecoregions, showHabitat]);
 
   /**
    * Right-click asks what this spot is: its coordinates, the ground elevation,
@@ -2270,8 +2284,6 @@ export default function OccurrenceMapRow({
       elevationLoading: true,
       areas: [],
       areasLoading: false,
-      habitat: null,
-      habitatLoading: showHabitat,
       highlight: 0,
     });
 
@@ -2285,22 +2297,7 @@ export default function OccurrenceMapRow({
         setPointQuery((prev) => (prev ? { ...prev, elevation: null, elevationLoading: false } : prev));
       });
 
-    // Both overlays below are rasters, so there's no feature to hit-test: the
-    // same services that drew the tiles answer an identify at a point, which
-    // means neither answer can disagree with what's on screen.
-    if (showHabitat) {
-      identifyHabitat(lng, lat)
-        .then((habitat) => {
-          if (!isCurrent()) return;
-          setPointQuery((prev) => (prev ? { ...prev, habitat, habitatLoading: false } : prev));
-        })
-        .catch(() => {
-          if (!isCurrent()) return;
-          setPointQuery((prev) => (prev ? { ...prev, habitat: null, habitatLoading: false } : prev));
-        });
-    }
-
-  }, [showHabitat, measure]);
+  }, [measure]);
 
   const copyPoint = useCallback((lat: number, lng: number) => {
     navigator.clipboard?.writeText(`${lat.toFixed(5)}, ${lng.toFixed(5)}`).then(
@@ -2426,19 +2423,6 @@ export default function OccurrenceMapRow({
     effortCellAtPoint?.bounds ?? null,
     effortLayer?.group ?? null
   );
-
-  const ecoregionAtPoint = useMemo<EcoregionProperties | null>(() => {
-    if (!pointQuery || !ecoregions) return null;
-    const point: GeoJSON.Feature<GeoJSON.Point> = {
-      type: "Feature",
-      properties: {},
-      geometry: { type: "Point", coordinates: [pointQuery.lng, pointQuery.lat] },
-    };
-    for (const feature of ecoregions.features) {
-      if (booleanPointInPolygon(point, feature)) return feature.properties;
-    }
-    return null;
-  }, [pointQuery, ecoregions]);
 
   const hoveredPointFileRow = useMemo(
     () =>
@@ -2674,6 +2658,19 @@ export default function OccurrenceMapRow({
     };
   }, [showRangeMetrics, rangeMetricPoints, aooCellKm]);
 
+  /**
+   * The habitat class under the last left click, while that overlay is on.
+   *
+   * Its own state rather than a field on the right-click query: habitat is a
+   * layer you click to interrogate, like the protected areas and the
+   * ecoregions, and it answers into the same docked panel they do.
+   */
+  const [clickedHabitat, setClickedHabitat] = useState<{
+    habitat: HabitatClass | null;
+    loading: boolean;
+    panelId: string;
+  } | null>(null);
+
   /** The ecoregion clicked on the map, outlined and named until dismissed. */
   const [selectedEcoregion, setSelectedEcoregion] = useState<{
     properties: EcoregionProperties;
@@ -2864,6 +2861,29 @@ export default function OccurrenceMapRow({
               onDragEnd={() => setPanning(false)}
             >
               <ScaleControl position="bottom-right" />
+              {/* Measuring, under the scale bar it's the fine-grained version
+                  of. It used to start from a right-clicked point, which made
+                  the first end a thing you had to have chosen before you knew
+                  you wanted to measure; now both ends are picked on the map
+                  after you ask. */}
+              {panelId === "main" || !splitView ? (
+                <div className="absolute bottom-8 right-2 z-[1000]">
+                  <button
+                    onClick={() => setMeasure(measure ? null : [])}
+                    title={measure ? "Stop measuring (or press Escape)" : "Measure the distance between two points on the map"}
+                    className={`inline-flex items-center gap-1 px-1.5 py-1 rounded shadow-md border text-[10px] transition-colors ${
+                      measure
+                        ? "bg-blue-600 border-blue-700 text-white"
+                        : "bg-white dark:bg-zinc-800 border-zinc-200 dark:border-zinc-700 text-zinc-500 dark:text-zinc-400 hover:bg-zinc-50 dark:hover:bg-zinc-700"
+                    }`}
+                  >
+                    <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M4 20L20 4M4 20v-5m0 5h5M20 4v5m0-5h-5" />
+                    </svg>
+                    Measure
+                  </button>
+                </div>
+              ) : null}
               {/* Sampling effort — the very bottom of the stack. It answers
                   whether a blank area is empty because the species isn't there
                   or because nobody has looked, which is context for everything
@@ -3463,34 +3483,6 @@ export default function OccurrenceMapRow({
                         </span>
                       )}
                     </div>
-                    {showHabitat && (
-                      <div className="pt-1 border-t border-zinc-100 dark:border-zinc-800">
-                        {pointQuery.habitatLoading ? (
-                          <span className="text-zinc-400">Reading habitat…</span>
-                        ) : pointQuery.habitat == null ? (
-                          <span className="text-zinc-400">No habitat class mapped here.</span>
-                        ) : (
-                          <span className="flex items-baseline gap-1.5">
-                            <span
-                              className="w-2.5 h-2.5 rounded-sm shrink-0 translate-y-0.5"
-                              style={{ background: pointQuery.habitat.color }}
-                            />
-                            <span>
-                              {pointQuery.habitat.name}{" "}
-                              <a
-                                href={HABITAT_SCHEME_URL}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                title="IUCN Habitats Classification Scheme"
-                                className="tabular-nums text-zinc-400 hover:underline"
-                              >
-                                {pointQuery.habitat.code}
-                              </a>
-                            </span>
-                          </span>
-                        )}
-                      </div>
-                    )}
                     {/* How much collecting has happened here at all. The
                         counts came down with the layer, so this is a lookup in
                         an array rather than a request — the reason for shipping
@@ -3561,31 +3553,6 @@ export default function OccurrenceMapRow({
                         })()}
                       </div>
                     )}
-                    {/* The ecoregion under the point. Answered from the
-                        polygons already in the browser, so there's no request
-                        and nothing to wait for — the whole reason for shipping
-                        the layer as a file rather than querying it. */}
-                    {showEcoregions && ecoregionAtPoint && (
-                      <div className="pt-1 border-t border-zinc-100 dark:border-zinc-800">
-                        <span className="flex items-baseline gap-1.5">
-                          <span
-                            className="w-2.5 h-2.5 rounded-sm shrink-0 translate-y-0.5 border border-black/10"
-                            style={{ background: ecoregionAtPoint.biomeColor }}
-                          />
-                          <span>
-                            <span className="font-medium text-zinc-700 dark:text-zinc-200">
-                              {ecoregionAtPoint.name}
-                            </span>
-                            <span className="block text-zinc-400">
-                              {ecoregionAtPoint.biome}
-                            </span>
-                            <span className="block text-zinc-400">
-                              {ecoregionAtPoint.realm} · {ecoregionAtPoint.nnh}
-                            </span>
-                          </span>
-                        </span>
-                      </div>
-                    )}
                     {/* Silent when the point isn't protected: the overlay is
                         already showing you that, and a line saying so on every
                         click is noise on the answer you did ask for. */}
@@ -3614,20 +3581,6 @@ export default function OccurrenceMapRow({
                         className="shrink-0 px-1.5 py-0.5 rounded border border-zinc-300 dark:border-zinc-600 text-zinc-600 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800"
                       >
                         Pin
-                      </button>
-                    </div>
-                    <div className="pt-1 border-t border-zinc-100 dark:border-zinc-800">
-                      <button
-                        onClick={() => {
-                          setMeasure([[pointQuery.lng, pointQuery.lat]]);
-                          setPointQuery(null);
-                        }}
-                        className="flex items-center gap-1.5 text-zinc-500 dark:text-zinc-400 hover:text-zinc-800 dark:hover:text-zinc-100"
-                      >
-                        <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                          <path strokeLinecap="round" strokeLinejoin="round" d="M4 20L20 4M4 20v-5m0 5h5M20 4v5m0-5h-5" />
-                        </svg>
-                        Measure distance
                       </button>
                     </div>
                   </div>
@@ -3677,9 +3630,15 @@ export default function OccurrenceMapRow({
               it's a live mode, not a legend. */}
           {measure && (
             <div className="bg-white dark:bg-zinc-800 px-2 py-1.5 rounded shadow text-[11px] text-zinc-700 dark:text-zinc-200 flex items-center gap-2">
-              <span className="font-medium tabular-nums">{formatDistance(pathLengthMetres(measure))}</span>
+              {measure.length > 1 && (
+                <span className="font-medium tabular-nums">{formatDistance(pathLengthMetres(measure))}</span>
+              )}
               <span className="text-zinc-400">
-                {measure.length < 2 ? "click where you're measuring to" : "click to measure somewhere else"}
+                {measure.length === 0
+                  ? "click the first point"
+                  : measure.length < 2
+                    ? "click the second point"
+                    : "click to move the far end"}
               </span>
               <button
                 onClick={() => setMeasure(null)}
@@ -4257,7 +4216,8 @@ export default function OccurrenceMapRow({
       pointQuery?.panelId === panelId && pointQuery.kind === "areas" ? pointQuery : null;
     const eco =
       showEcoregions && selectedEcoregion?.panelId === panelId ? selectedEcoregion : null;
-    if (!areasHere && !eco) return null;
+    const hab = showHabitat && clickedHabitat?.panelId === panelId ? clickedHabitat : null;
+    if (!areasHere && !eco && !hab) return null;
     return (
       <div className="bg-white dark:bg-zinc-800 rounded-lg shadow-md border border-zinc-200 dark:border-zinc-700 px-2 py-1.5 w-44 text-[11px] text-zinc-700 dark:text-zinc-200 space-y-1.5">
         {areasHere && (
@@ -4328,8 +4288,50 @@ export default function OccurrenceMapRow({
       </div>
           </div>
         )}
-        {eco && (
+        {hab && (
           <div className={areasHere ? "pt-1.5 border-t border-zinc-100 dark:border-zinc-700" : ""}>
+            <div className="flex items-baseline gap-1 pb-0.5">
+              <span className="text-[9px] uppercase tracking-wide text-zinc-400 dark:text-zinc-500">
+                Habitat
+              </span>
+              <button
+                onClick={() => setClickedHabitat(null)}
+                title="Close"
+                className="ml-auto text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300"
+              >
+                <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+            {hab.loading ? (
+              <span className="text-zinc-400">Reading habitat…</span>
+            ) : hab.habitat == null ? (
+              <span className="text-zinc-400">No habitat class mapped here.</span>
+            ) : (
+              <div className="flex items-start gap-1.5">
+                <span
+                  className="w-2.5 h-2.5 rounded-sm shrink-0 translate-y-1"
+                  style={{ background: hab.habitat.color }}
+                />
+                <div className="min-w-0">
+                  {hab.habitat.name}{" "}
+                  <a
+                    href={HABITAT_SCHEME_URL}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    title="IUCN Habitats Classification Scheme"
+                    className="tabular-nums text-zinc-400 hover:underline"
+                  >
+                    {hab.habitat.code}
+                  </a>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+        {eco && (
+          <div className={areasHere || hab ? "pt-1.5 border-t border-zinc-100 dark:border-zinc-700" : ""}>
             <div className="flex items-baseline gap-1 pb-0.5">
               <span className="text-[9px] uppercase tracking-wide text-zinc-400 dark:text-zinc-500">
                 Ecoregion
@@ -4748,28 +4750,29 @@ export default function OccurrenceMapRow({
           className="w-3 h-3 rounded accent-blue-500 shrink-0"
         />
         <span className="flex-1 min-w-0 text-zinc-700 dark:text-zinc-200">GBIF points</span>
+        {/* The date ramp on the row it belongs to rather than under it: two
+            dots and their years is small enough to sit beside the name, and a
+            legend on its own line read as a second entry in the list. */}
+        {showGbif && !label && colorByDate && (
+          <span className="flex items-center gap-0.5 shrink-0 text-[9px] tabular-nums text-zinc-400">
+            <span
+              className="w-2 h-2 rounded-full shrink-0"
+              style={{ background: dateToColor(minDateNum).fill, border: `1px solid ${dateToColor(minDateNum).stroke}` }}
+            />
+            {minDateLabel}
+            <span
+              className="w-2 h-2 rounded-full shrink-0 ml-0.5"
+              style={{ background: dateToColor(maxDateNum).fill, border: `1px solid ${dateToColor(maxDateNum).stroke}` }}
+            />
+            {maxDateLabel}
+          </span>
+        )}
       </label>
-      {/* What the GBIF points' colours mean, under the row that draws them.
-          This was a separate legend panel: two boxes in the same corner, one
-          naming the layers and one explaining their colours, with nothing to
-          say which swatch belonged to which row. */}
+      {/* The before/after key can't fit on the row — it's two labelled classes,
+          not a ramp — so it stays under it, with the way back to the ramp. */}
       {showGbif && !label && (
         <div className="px-2 pb-0.5 pl-6 text-[10px] text-zinc-500 dark:text-zinc-400">
-          {colorByDate ? (
-            <div className="flex items-center gap-1">
-              <span
-                className="w-2.5 h-2.5 rounded-full shrink-0"
-                style={{ background: dateToColor(minDateNum).fill, border: `1.5px solid ${dateToColor(minDateNum).stroke}` }}
-              />
-              <span className="tabular-nums">{minDateLabel}</span>
-              <span>→</span>
-              <span
-                className="w-2.5 h-2.5 rounded-full shrink-0"
-                style={{ background: dateToColor(maxDateNum).fill, border: `1.5px solid ${dateToColor(maxDateNum).stroke}` }}
-              />
-              <span className="tabular-nums">{maxDateLabel}</span>
-            </div>
-          ) : (
+          {!colorByDate && (
             <div className="flex flex-col gap-0.5">
               <span className="flex items-center gap-1">
                 <span className="w-2.5 h-2.5 rounded-full shrink-0 bg-gray-400 border-[1.5px] border-gray-500" />
