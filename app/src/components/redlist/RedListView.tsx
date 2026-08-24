@@ -2583,6 +2583,14 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
   // itself drives, so clicking a bar narrows the table without emptying the chart
   // you clicked in. Shared here rather than copied per chart — the three differ
   // only in which names they pull and which credit filter they leave out.
+  // Every filter EXCEPT the three credit ones, for the assessors/reviewers/
+  // facilitators chart — which cross-filters against the other two credits
+  // separately (see buildCreditChart).
+  //
+  // This restates the same clause list the per-chart memos above run inline, and
+  // that duplication is a live trap: the taxonomic-revision filter was added to
+  // all twelve inline chains and silently missed here, leaving the credits chart
+  // reporting unfiltered counts. Anything added to one belongs in the other.
   const matchesNonCreditFilters = useCallback((s: Species): boolean => {
     if (!matchesSearch(s)) return false;
     if (selectedCategories.size > 0 && !selectedCategories.has(s.category)) return false;
@@ -2597,14 +2605,15 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
     if (selectedThreats.size > 0 && !s.threat_codes?.some(tc => Array.from(selectedThreats).some(sel => tc === sel || tc.startsWith(sel + ".")))) return false;
     if (selectedCriteria.size > 0 && !parseCriteriaCodes(s.criteria).some(code => Array.from(selectedCriteria).some(sel => code === sel || code.startsWith(sel)))) return false;
     if (!matchesHabitatFilter(s)) return false;
+    if (!matchesColFilter(s)) return false;
     if (endemicsOnly && s.countries.length !== 1) return false;
     if (selectedGrowthForms.size > 0 && !s.growth_forms?.some(gf => selectedGrowthForms.has(gf))) return false;
     return true;
   }, [matchesSearch, selectedCategories, selectedCountries, selectedYearRanges, matchesYearRangeFilter,
       selectedAssessmentYears, matchesAssessmentYearFilter, selectedObsRanges, matchesObsRangeFilter,
       selectedAssessmentCounts, matchesAssessmentCountFilter, selectedSystems, selectedPopulationTrends,
-      selectedMovementPatterns, selectedThreats, selectedCriteria, matchesHabitatFilter, endemicsOnly,
-      selectedGrowthForms]);
+      selectedMovementPatterns, selectedThreats, selectedCriteria, matchesHabitatFilter, matchesColFilter,
+      endemicsOnly, selectedGrowthForms]);
 
   // `total` is the percentage denominator: species carrying at least one name of
   // this credit type. Like criteria/habitat, one assessment can list several
