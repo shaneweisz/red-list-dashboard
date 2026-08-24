@@ -2166,12 +2166,13 @@ export default function OccurrenceMapRow({
 
   // Map event handlers
   const handleMapClick = useCallback((e: MapLayerMouseEvent, panelId: string) => {
-    // Measuring owns the left click while it's on. Two points, never more,
-    // and the first one stays put once set: every click after the second moves
-    // the far end and re-reads the distance from the same origin.
+    // Measuring owns the left click while it's on. Two points, never more —
+    // and a third click doesn't move the far end, it becomes the new near one.
+    // Walking a coastline or a valley is a chain of hops, and pinning the
+    // origin made every hop after the first a measurement from the wrong place.
     if (measure) {
       const point: [number, number] = [e.lngLat.lng, e.lngLat.lat];
-      setMeasure(measure.length < 2 ? [...measure, point] : [measure[0], point]);
+      setMeasure(measure.length < 2 ? [...measure, point] : [measure[1], point]);
       return;
     }
     const features = e.features;
@@ -2867,7 +2868,7 @@ export default function OccurrenceMapRow({
                   you wanted to measure; now both ends are picked on the map
                   after you ask. */}
               {panelId === "main" || !splitView ? (
-                <div className="absolute bottom-8 right-2 z-[1000]">
+                <div className="absolute bottom-20 right-2 z-[1000]">
                   <button
                     onClick={() => setMeasure(measure ? null : [])}
                     title={measure ? "Stop measuring (or press Escape)" : "Measure the distance between two points on the map"}
@@ -3638,7 +3639,7 @@ export default function OccurrenceMapRow({
                   ? "click the first point"
                   : measure.length < 2
                     ? "click the second point"
-                    : "click to move the far end"}
+                    : "click again to measure on from here"}
               </span>
               <button
                 onClick={() => setMeasure(null)}
@@ -4742,6 +4743,46 @@ export default function OccurrenceMapRow({
       <div className="px-2 pb-0.5 text-[9px] uppercase tracking-wide text-zinc-400 dark:text-zinc-500">
         Records
       </div>
+      {/* The assessor's own layers first, GBIF's last. These are the ones you
+          are deciding about; GBIF's points are the ground they're decided
+          against, and they carry the most explanation, so they anchor the
+          bottom rather than pushing everything else down. */}
+      {visibleGeoreferences.length > 0 && (
+        <label className="flex items-center gap-1.5 px-2 py-0.5 hover:bg-zinc-50 dark:hover:bg-zinc-700 cursor-pointer text-[11px]">
+          <input
+            type="checkbox"
+            checked={showMyGeoreferences}
+            onChange={() => setShowMyGeoreferences((v) => !v)}
+            className="w-3 h-3 rounded accent-violet-600 shrink-0"
+          />
+          <span className="flex-1 min-w-0 text-zinc-700 dark:text-zinc-200 truncate">
+            Your georeferences
+          </span>
+          <span className="tabular-nums text-[10px] text-zinc-400">
+            {visibleGeoreferences.length.toLocaleString()}
+          </span>
+        </label>
+      )}
+      {pointFile && (
+        <label className="flex items-center gap-1.5 px-2 py-0.5 hover:bg-zinc-50 dark:hover:bg-zinc-700 cursor-pointer text-[11px]">
+          <input
+            type="checkbox"
+            checked={showPointFile}
+            onChange={() => setShowPointFile((v) => !v)}
+            className="w-3 h-3 rounded accent-blue-600 shrink-0"
+          />
+          <button
+            onClick={(e) => { e.preventDefault(); e.stopPropagation(); setPointFileOpen(true); }}
+            title={`${pointFile.fileName} — click for how it compares`}
+            className="flex-1 min-w-0 text-left text-zinc-700 dark:text-zinc-200 truncate hover:underline"
+          >
+            Imported CSV
+          </button>
+          <span className="tabular-nums text-[10px] text-zinc-400">
+            {pointFile.points.length.toLocaleString()}
+          </span>
+        </label>
+      )}
       <label className="flex items-center gap-1.5 px-2 py-0.5 hover:bg-zinc-50 dark:hover:bg-zinc-700 cursor-pointer text-[11px]">
         <input
           type="checkbox"
@@ -4750,29 +4791,25 @@ export default function OccurrenceMapRow({
           className="w-3 h-3 rounded accent-blue-500 shrink-0"
         />
         <span className="flex-1 min-w-0 text-zinc-700 dark:text-zinc-200">GBIF points</span>
-        {/* The date ramp on the row it belongs to rather than under it: two
-            dots and their years is small enough to sit beside the name, and a
-            legend on its own line read as a second entry in the list. */}
-        {showGbif && !label && colorByDate && (
-          <span className="flex items-center gap-0.5 shrink-0 text-[9px] tabular-nums text-zinc-400">
-            <span
-              className="w-2 h-2 rounded-full shrink-0"
-              style={{ background: dateToColor(minDateNum).fill, border: `1px solid ${dateToColor(minDateNum).stroke}` }}
-            />
-            {minDateLabel}
-            <span
-              className="w-2 h-2 rounded-full shrink-0 ml-0.5"
-              style={{ background: dateToColor(maxDateNum).fill, border: `1px solid ${dateToColor(maxDateNum).stroke}` }}
-            />
-            {maxDateLabel}
-          </span>
-        )}
       </label>
-      {/* The before/after key can't fit on the row — it's two labelled classes,
-          not a ramp — so it stays under it, with the way back to the ramp. */}
+      {/* What the GBIF points' colours mean, under the row that draws them. */}
       {showGbif && !label && (
         <div className="px-2 pb-0.5 pl-6 text-[10px] text-zinc-500 dark:text-zinc-400">
-          {!colorByDate && (
+          {colorByDate ? (
+            <div className="flex items-center gap-1">
+              <span
+                className="w-2.5 h-2.5 rounded-full shrink-0"
+                style={{ background: dateToColor(minDateNum).fill, border: `1.5px solid ${dateToColor(minDateNum).stroke}` }}
+              />
+              <span className="tabular-nums">{minDateLabel}</span>
+              <span>→</span>
+              <span
+                className="w-2.5 h-2.5 rounded-full shrink-0"
+                style={{ background: dateToColor(maxDateNum).fill, border: `1.5px solid ${dateToColor(maxDateNum).stroke}` }}
+              />
+              <span className="tabular-nums">{maxDateLabel}</span>
+            </div>
+          ) : (
             <div className="flex flex-col gap-0.5">
               <span className="flex items-center gap-1">
                 <span className="w-2.5 h-2.5 rounded-full shrink-0 bg-gray-400 border-[1.5px] border-gray-500" />
@@ -4794,47 +4831,6 @@ export default function OccurrenceMapRow({
             </button>
           )}
         </div>
-      )}
-      {visibleGeoreferences.length > 0 && (
-        <label className="flex items-center gap-1.5 px-2 py-0.5 hover:bg-zinc-50 dark:hover:bg-zinc-700 cursor-pointer text-[11px]">
-          <input
-            type="checkbox"
-            checked={showMyGeoreferences}
-            onChange={() => setShowMyGeoreferences((v) => !v)}
-            className="w-3 h-3 rounded accent-violet-600 shrink-0"
-          />
-          <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ background: "#7c3aed" }} />
-          <span className="flex-1 min-w-0 text-zinc-700 dark:text-zinc-200 truncate">
-            Your georeferences
-          </span>
-          <span className="tabular-nums text-[10px] text-zinc-400">
-            {visibleGeoreferences.length.toLocaleString()}
-          </span>
-        </label>
-      )}
-      {pointFile && (
-        <label className="flex items-center gap-1.5 px-2 py-0.5 hover:bg-zinc-50 dark:hover:bg-zinc-700 cursor-pointer text-[11px]">
-          <input
-            type="checkbox"
-            checked={showPointFile}
-            onChange={() => setShowPointFile((v) => !v)}
-            className="w-3 h-3 rounded accent-blue-600 shrink-0"
-          />
-          <span
-            className="w-2.5 h-2.5 rounded-full shrink-0 border border-white dark:border-zinc-800"
-            style={{ background: POINT_FILE_COLOR }}
-          />
-          <button
-            onClick={(e) => { e.preventDefault(); e.stopPropagation(); setPointFileOpen(true); }}
-            title={`${pointFile.fileName} — click for how it compares`}
-            className="flex-1 min-w-0 text-left text-zinc-700 dark:text-zinc-200 truncate hover:underline"
-          >
-            Imported CSV
-          </button>
-          <span className="tabular-nums text-[10px] text-zinc-400">
-            {pointFile.points.length.toLocaleString()}
-          </span>
-        </label>
       )}
     </div>
   );
