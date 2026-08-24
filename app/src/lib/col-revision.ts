@@ -97,12 +97,9 @@ export interface ColRevision {
   colName?: string;
   /** Species CoL now recognises that were likely split out of this one, each
    *  with its own CoL record and — as the evidence for the split — the old
-   *  infraspecific name that now resolves to it (binomial stripped: "var.
-   *  montana Sterki, 1893"). Never empty when present. */
+   *  infraspecific name that now resolves to it ("Vallonia costata var. montana
+   *  Sterki, 1893"). Never empty when present. */
   splitInto?: SplitEntry[];
-  /** The infraspecific names that resolved back to THIS species — why it is
-   *  still one of the species the old concept split into. */
-  splitKept?: { name: string; colId?: string }[];
 }
 
 /** Does this species carry any revision signal at all? */
@@ -212,10 +209,10 @@ export interface SplitEntry {
  */
 export interface SplitSummary {
   lead: string;
-  /** Capped at MAX_SPLIT_NAMES, plus the assessed species itself last. */
-  entries: (SplitEntry & { isSelf?: boolean; kept?: { name: string; colId?: string }[] })[];
-  /** Split-off species not shown, so the list can say "and N more". */
-  more: number;
+  /** Every species split out of this one — not capped. The tooltip scrolls
+   *  instead, so a long tail (Rubus fruticosus has 73) stays readable without
+   *  the list quietly standing in for names it doesn't show. */
+  entries: SplitEntry[];
 }
 
 const COL = "Catalogue of Life";
@@ -301,11 +298,6 @@ export function noMatchSentence(flag: ColRevision, subject: string | null): NoMa
   }
 }
 
-/** How many split-off names to spell out before summarising the rest. Some
- *  aggregates are extreme — Rubus fruticosus alone has 73 — and a tooltip
- *  listing all of them is unreadable. */
-const MAX_SPLIT_NAMES = 3;
-
 /**
  * The split half of the flag, in parts so each split-off species can be linked
  * to its own CoL record, or null when there is none.
@@ -318,19 +310,15 @@ const MAX_SPLIT_NAMES = 3;
 export function splitSummary(flag: ColRevision, subject: string): SplitSummary | null {
   const names = flag.splitInto ?? [];
   if (names.length === 0) return null;
-  const shown = names.slice(0, MAX_SPLIT_NAMES);
-  // The count is names.length + 1 — the species itself is one of the species the
-  // old concept split into, and it is listed last so the arithmetic is visible
-  // rather than asserted.
+  // The species itself is one of the species the old concept split into, so the
+  // count is names.length + 1 even though only the OTHERS are listed — which is
+  // what "the other species" / "the others" is doing at the end of the lead.
   const total = names.length + 1;
   return {
     lead: `${COL} suggests ${subject} has been split into ${total} separate species`
-      + `, so this assessment may cover populations now assigned to the others:`,
-    entries: [
-      ...shown,
-      { name: subject, colId: flag.colId, isSelf: true, ...(flag.splitKept?.length ? { kept: flag.splitKept } : {}) },
-    ],
-    more: names.length - shown.length,
+      + `, so this assessment may cover populations now assigned to `
+      + (names.length === 1 ? "the other species:" : "the others:"),
+    entries: names,
   };
 }
 
@@ -338,14 +326,8 @@ export function splitSummary(flag: ColRevision, subject: string): SplitSummary |
 export function splitSentence(flag: ColRevision, subject: string): string | null {
   const s = splitSummary(flag, subject);
   if (!s) return null;
-  const part = (e: SplitSummary["entries"][number]) => {
-    if (e.isSelf) return e.kept?.length ? `${e.name} (kept ${e.kept.map((k) => k.name).join(", ")})` : `${e.name} (unchanged)`;
-    return e.previousName ? `${e.name} (previously ${e.previousName})` : e.name;
-  };
-  const listed = s.entries.filter((e) => !e.isSelf).map(part);
-  const self = s.entries.find((e) => e.isSelf)!;
-  const more = s.more > 0 ? [`and ${s.more} more`] : [];
-  return `${s.lead} ${[...listed, ...more, part(self)].join("; ")}.`;
+  const listed = s.entries.map((e) => (e.previousName ? `${e.name} (previously ${e.previousName})` : e.name));
+  return `${s.lead} ${listed.join("; ")}.`;
 }
 
 /** The whole flag as plain sentences — one per signal it carries. */

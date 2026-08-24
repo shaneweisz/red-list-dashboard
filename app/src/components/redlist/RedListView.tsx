@@ -616,7 +616,7 @@ function HoverTooltip({ children, text }: { children: React.ReactNode; text: str
 // nothing worth selecting.
 function SelectableHoverTooltip({ children, content }: { children: React.ReactNode; content: React.ReactNode }) {
   const [isOpen, setIsOpen] = useState(false);
-  const [position, setPosition] = useState({ top: 0, left: 0 });
+  const [position, setPosition] = useState({ top: 0, left: 0, maxHeight: 0 });
   const triggerRef = useRef<HTMLSpanElement>(null);
   const closeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -624,7 +624,11 @@ function SelectableHoverTooltip({ children, content }: { children: React.ReactNo
     if (closeTimer.current) clearTimeout(closeTimer.current);
     if (triggerRef.current) {
       const rect = triggerRef.current.getBoundingClientRect();
-      setPosition({ top: rect.top - 6, left: rect.left + rect.width / 2 });
+      // The panel grows upward from the trigger, so its ceiling is the room above
+      // it. Paging keeps content bounded, but a full page opened from a row near
+      // the top of the viewport can still outgrow that — clamp so it can never
+      // render off-screen.
+      setPosition({ top: rect.top - 6, left: rect.left + rect.width / 2, maxHeight: Math.max(140, rect.top - 16) });
     }
     setIsOpen(true);
   };
@@ -644,8 +648,8 @@ function SelectableHoverTooltip({ children, content }: { children: React.ReactNo
           role="tooltip"
           onMouseEnter={open}
           onMouseLeave={scheduleClose}
-          className="fixed z-[99999] px-2 py-1.5 text-xs leading-relaxed bg-zinc-800 text-zinc-200 rounded shadow-lg max-w-[400px] text-left select-text cursor-text"
-          style={{ top: position.top, left: position.left, transform: "translateX(-50%) translateY(-100%)" }}
+          className="fixed z-[99999] px-2 py-1.5 text-xs leading-relaxed bg-zinc-800 text-zinc-200 rounded shadow-lg max-w-[400px] text-left select-text cursor-text overflow-y-auto overscroll-contain"
+          style={{ top: position.top, left: position.left, maxHeight: position.maxHeight, transform: "translateX(-50%) translateY(-100%)" }}
         >
           {content}
         </div>,
@@ -660,7 +664,15 @@ function SelectableHoverTooltip({ children, content }: { children: React.ReactNo
 // Catalogue of Life record — those names are the actionable part ("what is
 // Hedlundia minima?"), and a link per name beats one link on the flag, which
 // could only ever point at a single record.
+/** Split-off species per tooltip page. A handful of aggregates run long —
+ *  Rubus fruticosus has 73 — and the list names every one of them rather than
+ *  standing in for the tail, so it pages instead of growing without bound. */
+const SPLIT_PAGE_SIZE = 10;
+
 function RevisionTooltipContent({ flag, name }: { flag: ColRevision; name: string }) {
+  // Resets to the first page on every open: the panel is only mounted while the
+  // tooltip is up, so there is no stale page to come back to.
+  const [splitPage, setSplitPage] = useState(0);
   const colLink = (text: string, colId?: string) =>
     colId ? (
       <a
@@ -721,44 +733,39 @@ function RevisionTooltipContent({ flag, name }: { flag: ColRevision; name: strin
       <span key="split">
         {linkSubject(split.lead)}
         <ul className="mt-1 space-y-0.5">
-          {/* Split-offs, then the remainder, then the assessed species itself —
-              "and N more" belongs with the names it stands in for, not after
-              the line that closes the list. */}
-          {[...split.entries.filter((e) => !e.isSelf), ...split.entries.filter((e) => e.isSelf)].map((e) => (
-            <React.Fragment key={e.name}>
-            {e.isSelf && split.more > 0 && (
-              <li className="flex gap-1.5 text-zinc-400">
-                <span aria-hidden className="text-zinc-500">•</span>
-                <span>and {split.more} more</span>
-              </li>
-            )}
-            <li className="flex gap-1.5">
+          {split.entries.slice(splitPage * SPLIT_PAGE_SIZE, (splitPage + 1) * SPLIT_PAGE_SIZE).map((e) => (
+            <li key={e.name} className="flex gap-1.5">
               <span aria-hidden className="text-zinc-500">•</span>
               <span>
                 {colLink(e.name, e.colId)}
                 {/* The old infraspecific name that now resolves to this species
-                    IS the evidence for the split, and it is only visible on
-                    CoL from this side — so link it too. */}
+                    IS the evidence for the split, and CoL only shows it from
+                    this side — so link it too. */}
                 {e.previousName && (
                   <span className="text-zinc-400"> — previously {colLink(e.previousName, e.previousColId)}</span>
                 )}
-                {e.isSelf && (
-                  <span className="text-zinc-400">
-                    {e.kept?.length
-                      ? <> — kept {e.kept.map((k, i) => (
-                          <React.Fragment key={k.name}>
-                            {i > 0 && ", "}
-                            {colLink(k.name, k.colId)}
-                          </React.Fragment>
-                        ))}</>
-                      : " — this species"}
-                  </span>
-                )}
               </span>
             </li>
-            </React.Fragment>
           ))}
         </ul>
+        {split.entries.length > SPLIT_PAGE_SIZE && (() => {
+          const pages = Math.ceil(split.entries.length / SPLIT_PAGE_SIZE);
+          const from = splitPage * SPLIT_PAGE_SIZE;
+          const to = Math.min(from + SPLIT_PAGE_SIZE, split.entries.length);
+          const step = (delta: number) => (e: React.MouseEvent) => {
+            e.preventDefault();
+            e.stopPropagation();
+            setSplitPage((p) => Math.min(pages - 1, Math.max(0, p + delta)));
+          };
+          const arrow = "px-1 text-zinc-300 hover:text-white disabled:text-zinc-600 disabled:hover:text-zinc-600";
+          return (
+            <div className="mt-1.5 flex items-center gap-1 text-[11px] text-zinc-400">
+              <button type="button" onClick={step(-1)} disabled={splitPage === 0} className={arrow} aria-label="Previous species">‹</button>
+              <span>{from + 1}–{to} of {split.entries.length}</span>
+              <button type="button" onClick={step(1)} disabled={splitPage >= pages - 1} className={arrow} aria-label="More species">›</button>
+            </div>
+          );
+        })()}
       </span>,
     );
   }

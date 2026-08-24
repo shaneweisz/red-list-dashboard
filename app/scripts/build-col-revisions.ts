@@ -60,10 +60,9 @@ export interface ColRevisionsFile {
    *  species' CoL id, c = the CoL id to link to, n = CoL's own accepted name for
    *  that col_id, s = [name, col_id, previous name, previous col_id] of each
    *  species CoL likely split out of this one ("previous" being the old
-   *  infraspecific name that now resolves there — the evidence for the split),
-   *  k = the same for the infraspecific names this species KEPT. */
+   *  infraspecific name that now resolves there — the evidence for the split). */
   species: Record<string, { r?: string; d?: string; i?: number; dc?: string; c?: string; n?: string;
-    s?: [string, string, string, string][]; k?: [string, string][] }>;
+    s?: [string, string, string, string][] }>;
 }
 
 export async function run(): Promise<void> {
@@ -184,29 +183,14 @@ export async function run(): Promise<void> {
           ON ev.target_col_id = sc.ne_col_id AND ev.binomial = lower(sc.parent_name)
         WHERE sc.rn = 1
         GROUP BY 1, 2, 3
-      ),
-      -- The infraspecific names that resolved back to the assessed species
-      -- itself — why it is still one of the species the old concept split into.
-      kept AS (
-        SELECT sc.parent_id AS parent_id,
-               list(struct_pack(name := ev.syn_name, col_id := ev.syn_col_id,
-                                authorship := ev.syn_authorship) ORDER BY ev.syn_name) AS names
-        FROM (SELECT DISTINCT parent_id, parent_name FROM split_candidates WHERE rn = 1) sc
-        JOIN parent_col pc ON pc.id = sc.parent_id
-        JOIN split_evidence ev ON ev.target_col_id = pc.col_id AND ev.binomial = lower(sc.parent_name)
-        GROUP BY 1
       )
       SELECT p.parent_id AS parent_id,
              list(struct_pack(name := p.ne_name, col_id := p.ne_col_id, prev_name := p.prev_name,
                               prev_col_id := p.prev_col_id, prev_authorship := p.prev_authorship)
                   ORDER BY p.ne_name) AS ne_names,
-             any_value(pc.col_id) AS parent_col_id,
-             any_value(k.names) AS kept_names,
-             any_value(sc2.parent_name) AS parent_name
+             any_value(pc.col_id) AS parent_col_id
       FROM pairs p
-      LEFT JOIN (SELECT DISTINCT parent_id, parent_name FROM split_candidates WHERE rn = 1) sc2 ON sc2.parent_id = p.parent_id
       LEFT JOIN parent_col pc ON pc.id = p.parent_id
-      LEFT JOIN kept k ON k.parent_id = p.parent_id
       GROUP BY p.parent_id ORDER BY p.parent_id`)).getRowObjects();
 
     const unwrap = (v: unknown): Record<string, unknown>[] => {
@@ -215,32 +199,21 @@ export async function run(): Promise<void> {
       const items = (Array.isArray(raw) ? raw : raw?.items ?? []) as { entries?: Record<string, unknown> }[];
       return items.map((it) => it?.entries ?? {});
     };
-    // CoL writes authorship separately; the tooltip wants the name as CoL prints
-    // it. The leading binomial is dropped: it is the assessed species' own name
-    // by construction (that IS the join condition), so storing it would repeat a
-    // string already on the row ~9k times, and the list it renders into is
-    // headed by that name anyway. "Vallonia costata var. montana Sterki, 1893"
-    // ships as "var. montana Sterki, 1893".
-    const shorten = (name: unknown, authorship: unknown, binomial: string) => {
-      let n = String(name ?? "");
-      if (n.toLowerCase().startsWith(`${binomial.toLowerCase()} `)) n = n.slice(binomial.length + 1);
-      return `${n}${authorship ? ` ${String(authorship)}` : ""}`.trim();
-    };
+    // CoL writes authorship separately; the tooltip wants the name exactly as CoL
+    // prints it — full binomial included, so it reads as a name someone can search
+    // for rather than a bare epithet.
+    const full = (name: unknown, authorship: unknown) =>
+      `${String(name ?? "")}${authorship ? ` ${String(authorship)}` : ""}`.trim();
 
     for (const r of splitRows) {
       const id = String(r.parent_id);
-      const binomial = String(r.parent_name ?? "");
       const names = unwrap(r.ne_names)
-        .map((e) => [String(e.name ?? ""), String(e.col_id ?? ""), shorten(e.prev_name, e.prev_authorship, binomial), String(e.prev_col_id ?? "")] as [string, string, string, string])
+        .map((e) => [String(e.name ?? ""), String(e.col_id ?? ""), full(e.prev_name, e.prev_authorship), String(e.prev_col_id ?? "")] as [string, string, string, string])
         .filter(([n]) => n.length > 0);
       if (names.length === 0) continue;
       splitParents++;
       const entry = species[id] ?? {};
       entry.s = names;
-      const kept = unwrap(r.kept_names)
-        .map((e) => [shorten(e.name, e.authorship, binomial), String(e.col_id ?? "")] as [string, string])
-        .filter(([n]) => n.length > 0);
-      if (kept.length) entry.k = kept;
       if (entry.c == null && r.parent_col_id != null) entry.c = String(r.parent_col_id);
       species[id] = entry;
     }
