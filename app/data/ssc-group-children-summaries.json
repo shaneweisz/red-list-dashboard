@@ -333,8 +333,10 @@
             {
               "id": 22052,
               "name": "Tragelaphus angasii",
-              "reason": "not_in_base",
-              "colId": "VN6V6",
+              "reason": "synonym_of",
+              "detail": "Nyala angasii",
+              "detailColId": "QPCFY",
+              "colId": "QPCFY",
               "colName": "Tragelaphus angasii"
             }
           ],
@@ -1148,7 +1150,7 @@
       "name": "Bat Specialist Group",
       "estimatedDescribed": 0,
       "totalAssessed": 1336,
-      "outdated": 536,
+      "outdated": 537,
       "gbifNeSpeciesCount": 92,
       "byCategory": {
         "VU": 109,
@@ -3678,7 +3680,7 @@
       "name": "Small Mammal Specialist Group",
       "estimatedDescribed": 0,
       "totalAssessed": 2933,
-      "outdated": 1463,
+      "outdated": 1483,
       "gbifNeSpeciesCount": 133,
       "byCategory": {
         "CR": 74,
@@ -3942,8 +3944,10 @@
             {
               "id": 13442,
               "name": "Alexandromys maximowiczii",
-              "reason": "not_in_base",
-              "colId": "VNL8G",
+              "reason": "synonym_of",
+              "detail": "Microtus maximowiczii",
+              "detailColId": "439BN",
+              "colId": "439BN",
               "colName": "Alexandromys maximowiczii"
             },
             {
@@ -4400,8 +4404,10 @@
             {
               "id": 47968796,
               "name": "Hylomyscus anselli",
-              "reason": "not_in_base",
-              "colId": "PYSSR",
+              "reason": "synonym_of",
+              "detail": "Hylomyscus kerbispeterhansi",
+              "detailColId": "6MNPR",
+              "colId": "6MNPR",
               "colName": "Hylomyscus anselli"
             },
             {
@@ -10394,7 +10400,7 @@
       "name": "Seahorse, Pipefish and Seadragon Specialist Group",
       "estimatedDescribed": 0,
       "totalAssessed": 308,
-      "outdated": 205,
+      "outdated": 208,
       "gbifNeSpeciesCount": 16,
       "byCategory": {
         "DD": 78,
@@ -15550,7 +15556,7 @@
       "name": "Mollusc Specialist Group",
       "estimatedDescribed": 0,
       "totalAssessed": 9957,
-      "outdated": 5192,
+      "outdated": 5195,
       "gbifNeSpeciesCount": 26641,
       "byCategory": {
         "CR": 782,
@@ -15623,57 +15629,73 @@
             {
               "id": 196262,
               "name": "Pseudicius seychellensis",
-              "reason": "not_in_base",
-              "colId": "SCK36",
+              "reason": "synonym_of",
+              "detail": "Nepalicius seychellensis",
+              "detailColId": "46WWH",
+              "colId": "46WWH",
               "colName": "Pseudicius seychellensis"
             },
             {
               "id": 57791251,
               "name": "Araneus hortensis",
-              "reason": "not_in_base",
-              "colId": "VL5HY",
+              "reason": "synonym_of",
+              "detail": "Araneus diadematus",
+              "detailColId": "G59D",
+              "colId": "G59D",
               "colName": "Araneus hortensis"
             },
             {
               "id": 57822386,
               "name": "Lathys affinis",
-              "reason": "not_in_base",
-              "colId": "VL5K6",
+              "reason": "synonym_of",
+              "detail": "Analtella affinis",
+              "detailColId": "VCC3M",
+              "colId": "VCC3M",
               "colName": "Lathys affinis"
             },
             {
               "id": 57859856,
               "name": "Dysdera vandeli",
-              "reason": "not_in_base",
-              "colId": "VL5GL",
+              "reason": "synonym_of",
+              "detail": "Dysdera diversa",
+              "detailColId": "38922",
+              "colId": "38922",
               "colName": "Dysdera vandeli"
             },
             {
               "id": 57979652,
               "name": "Scotognapha paivai",
-              "reason": "not_in_base",
-              "colId": "VL5LF",
+              "reason": "synonym_of",
+              "detail": "Scotognapha paivani",
+              "detailColId": "79YHW",
+              "colId": "79YHW",
               "colName": "Scotognapha paivai"
             },
             {
               "id": 58048548,
               "name": "Hogna biscoitoi",
-              "reason": "not_in_base",
-              "colId": "VL5M7",
+              "reason": "synonym_of",
+              "detail": "Hogna insularum",
+              "detailColId": "3M6JZ",
+              "colId": "3M6JZ",
               "colName": "Hogna biscoitoi"
             },
             {
               "id": 58048645,
               "name": "Hogna schmitzi",
-              "reason": "not_in_base",
-              "colId": "VL5MB",
+              "reason": "synonym_of",
+              "detail": "Hogna maderiana",
+              "detailColId": "3M6L4",
+              "colId": "3M6L4",
               "colName": "Hogna schmitzi"
             },
             {
               "id": 58052642,
               "name": "Macaroeris desertensis",
-              "reason": "not_in_base",
-              "colId": "VL5JY",
+              "reason": "synonym_of",
+              "detail": "Macaroeris granti",
+              "detailColId": "3WXL2",
+              "colId": "3WXL2",
               "colName": "Macaroeris desertensis"
             },
             {
@@ -18916,22 +18938,28 @@
             {
               "id": 78682937,
               "name": "Candovia pallida",
-              "reason": "not_in_base",
-              "colId": "QLSR",
+              "reason": "synonym_of",
+              "detail": "Paracandovia pallida",
+              "detailColId": "VGYBM",
+              "colId": "VGYBM",
               "colName": "Candovia pallida"
             },
             {
               "id": 78683075,
               "name": "Candovia peridromes",
-              "reason": "not_in_base",
-              "colId": "QLSS",
+              "reason": "synonym_of",
+              "detail": "Paracandovia peridromes",
+              "detailColId": "VH4Y5",
+              "colId": "VH4Y5",
               "colName": "Candovia peridromes"
             },
             {
               "id": 79003367,
               "name": "Eurycnema goliath",
-              "reason": "not_in_base",
-              "colId": "3D3Q3",
+              "reason": "synonym_of",
+              "detail": "Clemacantha goliath",
+              "detailColId": "VGLWY",
+              "colId": "VGLWY",
               "colName": "Eurycnema goliath"
             },
             {
@@ -18944,15 +18972,19 @@
             {
               "id": 80228941,
               "name": "Xeroderus kirbii",
-              "reason": "not_in_base",
-              "colId": "TNBNQ",
+              "reason": "synonym_of",
+              "detail": "Xeroderus kirbyi",
+              "detailColId": "VFP4B",
+              "colId": "VFP4B",
               "colName": "Xeroderus kirbii"
             },
             {
               "id": 80229214,
               "name": "Phyllium monteithi",
-              "reason": "not_in_base",
-              "colId": "4H55J",
+              "reason": "synonym_of",
+              "detail": "Walaphyllium monteithi",
+              "detailColId": "VFKT7",
+              "colId": "VFKT7",
               "colName": "Phyllium monteithi"
             }
           ]
@@ -19701,8 +19733,10 @@
             {
               "id": 221843574,
               "name": "Andrena vocifera",
-              "reason": "not_in_base",
-              "colId": "VNLBR",
+              "reason": "synonym_of",
+              "detail": "Andrena gelriae",
+              "detailColId": "DRRJ",
+              "colId": "DRRJ",
               "colName": "Andrena vocifera"
             },
             {
@@ -20229,8 +20263,10 @@
             {
               "id": 4403,
               "name": "Chalepoxenus muellerianus",
-              "reason": "not_in_base",
-              "colId": "VMT3F",
+              "reason": "synonym_of",
+              "detail": "Temnothorax muellerianus",
+              "detailColId": "CMZQ7",
+              "colId": "CMZQ7",
               "colName": "Chalepoxenus muellerianus"
             },
             {
@@ -20248,22 +20284,28 @@
             {
               "id": 6808,
               "name": "Doronomyrmex goesswaldi",
-              "reason": "not_in_base",
-              "colId": "VMT3L",
+              "reason": "synonym_of",
+              "detail": "Leptothorax goesswaldi",
+              "detailColId": "CM5S6",
+              "colId": "CM5S6",
               "colName": "Doronomyrmex goesswaldi"
             },
             {
               "id": 6809,
               "name": "Doronomyrmex kutteri",
-              "reason": "not_in_base",
-              "colId": "VMT3M",
+              "reason": "synonym_of",
+              "detail": "Leptothorax kutteri",
+              "detailColId": "CM5SR",
+              "colId": "CM5SR",
               "colName": "Doronomyrmex kutteri"
             },
             {
               "id": 6810,
               "name": "Doronomyrmex pacis",
-              "reason": "not_in_base",
-              "colId": "VMT3N",
+              "reason": "synonym_of",
+              "detail": "Leptothorax pacis",
+              "detailColId": "CM5VQ",
+              "colId": "CM5VQ",
               "colName": "Doronomyrmex pacis"
             },
             {
@@ -21904,8 +21946,10 @@
             {
               "id": 134786,
               "name": "Stoliczia tweedei",
-              "reason": "not_in_base",
-              "colId": "T2RDL",
+              "reason": "synonym_of",
+              "detail": "Stoliczia panhai",
+              "detailColId": "6ZVLS",
+              "colId": "6ZVLS",
               "colName": "Stoliczia tweedei"
             },
             {
@@ -31655,8 +31699,10 @@
             {
               "id": 65592826,
               "name": "Metacanthus concolor",
-              "reason": "not_in_base",
-              "colId": "QTZH9",
+              "reason": "synonym_of",
+              "detail": "Metacanthus concolor",
+              "detailColId": "VFXNC",
+              "colId": "VFXNC",
               "colName": "Metacanthus concolor"
             },
             {
@@ -32083,8 +32129,10 @@
             {
               "id": 86805067,
               "name": "Evodinus clathratus",
-              "reason": "not_in_base",
-              "colId": "VN6NV",
+              "reason": "synonym_of",
+              "detail": "Evodinellus clathratus",
+              "detailColId": "BLRF6",
+              "colId": "BLRF6",
               "colName": "Evodinus clathratus"
             },
             {
@@ -34483,7 +34531,7 @@
       "name": "Orchid Specialist Group",
       "estimatedDescribed": 0,
       "totalAssessed": 2443,
-      "outdated": 1111,
+      "outdated": 1113,
       "gbifNeSpeciesCount": 18899,
       "byCategory": {
         "VU": 315,
@@ -34662,8 +34710,10 @@
             {
               "id": 46700,
               "name": "Phalaenopsis hainanensis",
-              "reason": "not_in_base",
-              "colId": "VM2FZ",
+              "reason": "synonym_of",
+              "detail": "Phalaenopsis stobartiana",
+              "detailColId": "4FR4Q",
+              "colId": "4FR4Q",
               "colName": "Phalaenopsis hainanensis"
             },
             {
@@ -38114,7 +38164,7 @@
       "name": "Palm Specialist Group",
       "estimatedDescribed": 0,
       "totalAssessed": 1330,
-      "outdated": 441,
+      "outdated": 443,
       "gbifNeSpeciesCount": 1108,
       "byCategory": {
         "VU": 138,
@@ -39611,7 +39661,7 @@
       "name": "No / Other SSC Group",
       "estimatedDescribed": 0,
       "totalAssessed": 71284,
-      "outdated": 15978,
+      "outdated": 15981,
       "gbifNeSpeciesCount": 227639,
       "byCategory": {
         "LR/cd": 95,
@@ -43896,8 +43946,10 @@
             {
               "id": 36584,
               "name": "Albizia leonardii",
-              "reason": "not_in_base",
-              "colId": "VLC6H",
+              "reason": "synonym_of",
+              "detail": "Parasenegalia vogeliana",
+              "detailColId": "4DBX5",
+              "colId": "4DBX5",
               "colName": "Albizia leonardii"
             },
             {
@@ -46144,8 +46196,10 @@
             {
               "id": 63481,
               "name": "Pyrus cajon",
-              "reason": "not_in_base",
-              "colId": "VM7CP",
+              "reason": "synonym_of",
+              "detail": "Pyrus ussuriensis",
+              "detailColId": "4QXM5",
+              "colId": "4QXM5",
               "colName": "Pyrus cajon"
             },
             {
@@ -47414,8 +47468,10 @@
             {
               "id": 177074,
               "name": "Echinochloa frumentacea",
-              "reason": "not_in_base",
-              "colId": "VJS8Z",
+              "reason": "synonym_of",
+              "detail": "Echinochloa colona",
+              "detailColId": "38GZD",
+              "colId": "38GZD",
               "colName": "Echinochloa frumentacea"
             },
             {
@@ -48034,8 +48090,10 @@
             {
               "id": 194129,
               "name": "Quercus frainetto",
-              "reason": "not_in_base",
-              "colId": "VJSTV",
+              "reason": "synonym_of",
+              "detail": "Quercus conferta",
+              "detailColId": "4R4N4",
+              "colId": "4R4N4",
               "colName": "Quercus frainetto"
             },
             {
@@ -48373,8 +48431,10 @@
             {
               "id": 200288,
               "name": "Minuartia daralagexica",
-              "reason": "not_in_base",
-              "colId": "VLC4L",
+              "reason": "synonym_of",
+              "detail": "Sabulina lineata",
+              "detailColId": "4TVST",
+              "colId": "4TVST",
               "colName": "Minuartia daralagexica"
             },
             {
@@ -48740,8 +48800,10 @@
             {
               "id": 13506888,
               "name": "Andropogon virginicus",
-              "reason": "not_in_base",
-              "colId": "VJSBB",
+              "reason": "synonym_of",
+              "detail": "Anatherum virginicum",
+              "detailColId": "DHZ3",
+              "colId": "DHZ3",
               "colName": "Andropogon virginicus"
             },
             {
@@ -49008,8 +49070,10 @@
             {
               "id": 42533150,
               "name": "Dunalia trianaei",
-              "reason": "not_in_base",
-              "colId": "NRPJB",
+              "reason": "synonym_of",
+              "detail": "Saracha nigribaccata",
+              "detailColId": "79MBC",
+              "colId": "79MBC",
               "colName": "Dunalia trianaei"
             },
             {
@@ -49655,15 +49719,19 @@
             {
               "id": 64136409,
               "name": "Citrus wintersii",
-              "reason": "not_in_base",
-              "colId": "VM8K2",
+              "reason": "synonym_of",
+              "detail": "Microcitrus papuana",
+              "detailColId": "7W955",
+              "colId": "7W955",
               "colName": "Citrus wintersii"
             },
             {
               "id": 64271261,
               "name": "Carex gynocrates",
-              "reason": "not_in_base",
-              "colId": "VLNTH",
+              "reason": "synonym_of",
+              "detail": "Carex nardina",
+              "detailColId": "69CKJ",
+              "colId": "69CKJ",
               "colName": "Carex gynocrates"
             },
             {
@@ -49701,8 +49769,10 @@
             {
               "id": 64315579,
               "name": "Juncus brevicaudatus",
-              "reason": "not_in_base",
-              "colId": "VK6W5",
+              "reason": "synonym_of",
+              "detail": "Juncus tweedyi",
+              "detailColId": "6NGXM",
+              "colId": "6NGXM",
               "colName": "Juncus brevicaudatus"
             },
             {
@@ -49866,8 +49936,10 @@
             {
               "id": 68002809,
               "name": "Pachypodium meridionale",
-              "reason": "not_in_base",
-              "colId": "VLZ6P",
+              "reason": "synonym_of",
+              "detail": "Pachypodium rutenbergianum",
+              "detailColId": "4BTV7",
+              "colId": "4BTV7",
               "colName": "Pachypodium meridionale"
             },
             {
@@ -50003,8 +50075,10 @@
             {
               "id": 71783512,
               "name": "Solanum paucissectum",
-              "reason": "not_in_base",
-              "colId": "VLDJD",
+              "reason": "synonym_of",
+              "detail": "Solanum acroglossum",
+              "detailColId": "4XZDN",
+              "colId": "4XZDN",
               "colName": "Solanum paucissectum"
             },
             {
@@ -50207,8 +50281,10 @@
             {
               "id": 80228656,
               "name": "Nototrichium divaricatum",
-              "reason": "not_in_base",
-              "colId": "VLTGF",
+              "reason": "synonym_of",
+              "detail": "Achyranthes divaricata",
+              "detailColId": "CR9KM",
+              "colId": "CR9KM",
               "colName": "Nototrichium divaricatum"
             },
             {
@@ -50340,8 +50416,10 @@
             {
               "id": 86123168,
               "name": "Crataegus wattiana",
-              "reason": "not_in_base",
-              "colId": "VM7JS",
+              "reason": "synonym_of",
+              "detail": "Crataegus chlorocarpa",
+              "detailColId": "KZY7F",
+              "colId": "KZY7F",
               "colName": "Crataegus wattiana"
             },
             {
@@ -50583,15 +50661,19 @@
             {
               "id": 95545664,
               "name": "Sorbus sognensis",
-              "reason": "not_in_base",
-              "colId": "VJSZV",
+              "reason": "synonym_of",
+              "detail": "Hedlundia sognensis",
+              "detailColId": "3JZDG",
+              "colId": "3JZDG",
               "colName": "Sorbus sognensis"
             },
             {
               "id": 95546347,
               "name": "Sorbus subarranensis",
-              "reason": "not_in_base",
-              "colId": "VJSZS",
+              "reason": "synonym_of",
+              "detail": "Hedlundia subarranensis",
+              "detailColId": "3JZDH",
+              "colId": "3JZDH",
               "colName": "Sorbus subarranensis"
             },
             {
@@ -50659,8 +50741,10 @@
             {
               "id": 100363296,
               "name": "Desmazeria pignattii",
-              "reason": "not_in_base",
-              "colId": "VM5BB",
+              "reason": "synonym_of",
+              "detail": "Desmazeria sicula",
+              "detailColId": "3522P",
+              "colId": "3522P",
               "colName": "Desmazeria pignattii"
             },
             {
@@ -50935,8 +51019,10 @@
             {
               "id": 107427615,
               "name": "Lotus arborescens",
-              "reason": "not_in_base",
-              "colId": "VLRLT",
+              "reason": "synonym_of",
+              "detail": "Lotus purpureus",
+              "detailColId": "3W86T",
+              "colId": "3W86T",
               "colName": "Lotus arborescens"
             },
             {
@@ -51206,8 +51292,10 @@
             {
               "id": 114979396,
               "name": "Agave dasylirioides",
-              "reason": "not_in_base",
-              "colId": "VLDW8",
+              "reason": "synonym_of",
+              "detail": "Agave dealbata",
+              "detailColId": "5TQK7",
+              "colId": "5TQK7",
               "colName": "Agave dasylirioides"
             },
             {
@@ -51228,8 +51316,10 @@
             {
               "id": 115630978,
               "name": "Agave kavandivi",
-              "reason": "not_in_base",
-              "colId": "VLDW4",
+              "reason": "synonym_of",
+              "detail": "Echinoagave kavandivi",
+              "detailColId": "N9RS2",
+              "colId": "N9RS2",
               "colName": "Agave kavandivi"
             },
             {
@@ -51240,8 +51330,10 @@
             {
               "id": 115698170,
               "name": "Agave tenuifolia",
-              "reason": "not_in_base",
-              "colId": "VLDVY",
+              "reason": "synonym_of",
+              "detail": "Echinoagave tenuifolia",
+              "detailColId": "N9RT9",
+              "colId": "N9RT9",
               "colName": "Agave tenuifolia"
             },
             {
@@ -53724,8 +53816,10 @@
             {
               "id": 144266782,
               "name": "Elizabetha coccinea",
-              "reason": "not_in_base",
-              "colId": "VLQ8D",
+              "reason": "synonym_of",
+              "detail": "Paloue coccinea",
+              "detailColId": "9F276",
+              "colId": "9F276",
               "colName": "Elizabetha coccinea"
             },
             {
@@ -53751,8 +53845,10 @@
             {
               "id": 144303595,
               "name": "Elizabetha princeps",
-              "reason": "not_in_base",
-              "colId": "VLQ8F",
+              "reason": "synonym_of",
+              "detail": "Paloue princeps",
+              "detailColId": "9F27G",
+              "colId": "9F27G",
               "colName": "Elizabetha princeps"
             },
             {
@@ -54206,8 +54302,10 @@
             {
               "id": 147632343,
               "name": "Photinia glomerata",
-              "reason": "not_in_base",
-              "colId": "VM7LN",
+              "reason": "synonym_of",
+              "detail": "Photinia griffithii",
+              "detailColId": "4GSMC",
+              "colId": "4GSMC",
               "colName": "Photinia glomerata"
             },
             {
@@ -54520,8 +54618,10 @@
             {
               "id": 149512300,
               "name": "Uvaria caffra",
-              "reason": "not_in_base",
-              "colId": "TXB3G",
+              "reason": "synonym_of",
+              "detail": "Uvaria afra",
+              "detailColId": "CKZB8",
+              "colId": "CKZB8",
               "colName": "Uvaria caffra"
             },
             {
@@ -54588,8 +54688,10 @@
             {
               "id": 150212071,
               "name": "Mallotus oreophilus",
-              "reason": "not_in_base",
-              "colId": "VLPSP",
+              "reason": "synonym_of",
+              "detail": "Mallotus nepalensis",
+              "detailColId": "3XPZF",
+              "colId": "3XPZF",
               "colName": "Mallotus oreophilus"
             },
             {
@@ -55233,8 +55335,10 @@
             {
               "id": 154162206,
               "name": "Dialium aubrevillei",
-              "reason": "not_in_base",
-              "colId": "VLQ6F",
+              "reason": "synonym_of",
+              "detail": "Dialium polyanthum",
+              "detailColId": "35928",
+              "colId": "35928",
               "colName": "Dialium aubrevillei"
             },
             {
@@ -56020,8 +56124,10 @@
             {
               "id": 164123600,
               "name": "Pterospermum jackianum",
-              "reason": "not_in_base",
-              "colId": "VLWDG",
+              "reason": "synonym_of",
+              "detail": "Pterospermum lanceifolium",
+              "detailColId": "4Q3B8",
+              "colId": "4Q3B8",
               "colName": "Pterospermum jackianum"
             },
             {
@@ -56294,8 +56400,10 @@
             {
               "id": 169779453,
               "name": "Hibiscus glaber",
-              "reason": "not_in_base",
-              "colId": "VLWGR",
+              "reason": "synonym_of",
+              "detail": "Talipariti glabrum",
+              "detailColId": "54LNT",
+              "colId": "54LNT",
               "colName": "Hibiscus glaber"
             },
             {
@@ -56351,8 +56459,10 @@
             {
               "id": 170267704,
               "name": "Saraca thaipingensis",
-              "reason": "not_in_base",
-              "colId": "VLQ6L",
+              "reason": "synonym_of",
+              "detail": "Saraca cauliflora",
+              "detailColId": "6XKM6",
+              "colId": "6XKM6",
               "colName": "Saraca thaipingensis"
             },
             {
@@ -56671,8 +56781,10 @@
             {
               "id": 176095359,
               "name": "Piptadenia flava",
-              "reason": "not_in_base",
-              "colId": "VLQVY",
+              "reason": "synonym_of",
+              "detail": "Piptadenia retusa",
+              "detailColId": "9F9Q8",
+              "colId": "9F9Q8",
               "colName": "Piptadenia flava"
             },
             {
@@ -59204,8 +59316,10 @@
             {
               "id": 215864325,
               "name": "Othonna cacalioides",
-              "reason": "not_in_base",
-              "colId": "VLFN2",
+              "reason": "synonym_of",
+              "detail": "Crassothonna cacalioides",
+              "detailColId": "Z722",
+              "colId": "Z722",
               "colName": "Othonna cacalioides"
             },
             {
@@ -59641,8 +59755,10 @@
             {
               "id": 225960397,
               "name": "Allium carlstroemi",
-              "reason": "not_in_base",
-              "colId": "VLC7W",
+              "reason": "synonym_of",
+              "detail": "Allium stamineum",
+              "detailColId": "5TWWP",
+              "colId": "5TWWP",
               "colName": "Allium carlstroemi"
             },
             {
@@ -60531,8 +60647,10 @@
             {
               "id": 245611033,
               "name": "Ardisia solanacea",
-              "reason": "not_in_base",
-              "colId": "VM6GS",
+              "reason": "synonym_of",
+              "detail": "Ardisia humilis",
+              "detailColId": "GD7L",
+              "colId": "GD7L",
               "colName": "Ardisia solanacea"
             },
             {
@@ -82209,8 +82327,10 @@
             {
               "id": 80703073,
               "name": "Rinodina chrysomelaena",
-              "reason": "not_in_base",
-              "colId": "VKVNW",
+              "reason": "synonym_of",
+              "detail": "Dimelaena chrysomelaena",
+              "detailColId": "B22SZ",
+              "colId": "B22SZ",
               "colName": "Rinodina chrysomelaena"
             },
             {
@@ -83240,8 +83360,10 @@
             {
               "id": 269707232,
               "name": "Cantharellus tenellus",
-              "reason": "not_in_base",
-              "colId": "M6MDH",
+              "reason": "synonym_of",
+              "detail": "Arrhenia acerosa",
+              "detailColId": "67SW4",
+              "colId": "67SW4",
               "colName": "Cantharellus tenellus"
             },
             {
@@ -84369,8 +84491,10 @@
             {
               "id": 180142742,
               "name": "Chiodecton inconspicuum",
-              "reason": "not_in_base",
-              "colId": "MC6HB",
+              "reason": "synonym_of",
+              "detail": "Chiodecton colensoi",
+              "detailColId": "5XRTG",
+              "colId": "5XRTG",
               "colName": "Chiodecton inconspicuum"
             },
             {

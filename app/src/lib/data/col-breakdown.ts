@@ -79,7 +79,7 @@ export interface BreakdownEntry {
 //  - lumped: its linked col_id IS in the universe, but a DIFFERENT assessed species
 //    won the accepted-name tie-break for it (a genuine CoL synonymy/lump).
 //  - synonym_of: same as not_in_base (its linked col_id is XR-only), BUT IUCN's own
-//    name is separately covered by the curated checklist AS A SYNONYM of an accepted
+//    name is separately held by the curated checklist AS A SYNONYM of an accepted
 //    species — so "not in the checklist yet" would be exactly backwards. The usual
 //    cause is a genus transfer CoL has made and IUCN hasn't (Acanthoptila nipalensis
 //    -> Turdoides nipalensis, Sorbus minima -> Hedlundia minima). Checked before
@@ -106,6 +106,8 @@ export function classifyNoMatch(row: Record<string, unknown>): NoMatchDetail {
   const coveredColId = row.covered_col_id as string | null;
   const parentColId = row.parent_col_id as string | null;
   const provColId = row.prov_col_id as string | null;
+  const synName = row.syn_name as string | null;
+  const synColId = row.syn_col_id as string | null;
   const parentName = row.parent_name as string | null;
   const parentAssessedId = row.parent_assessed_id as number | null;
   const parentAssessedName = row.parent_assessed_name as string | null;
@@ -133,11 +135,18 @@ export function classifyNoMatch(row: Record<string, unknown>): NoMatchDetail {
   }
   if (winnerName) return { id, name, reason: "lumped", detail: winnerName, detailId: winnerId != null ? Number(winnerId) : undefined, detailColId: linkedColId, ...ref };
   if (!linkedInBase) {
-    if (coveredName && coveredColId) {
+    // Two routes to the same finding. The link table's own 'iucn_synonym_covered'
+    // row is the cheap one, but build-matching doesn't always write it — the 2024
+    // Accipiter break-up (Accipiter cooperii -> Astur cooperii, and 84 more) is
+    // invisible to it — so fall back to asking the backbone directly whether this
+    // name is a synonym of a species the curated checklist accepts.
+    const synonymName = coveredName ?? synName;
+    const synonymColId = coveredColId ?? synColId;
+    if (synonymName && synonymColId) {
       // Link to the ACCEPTED record, not the XR-only one this assessment matched:
       // that XR id is exactly the one CoL may since have retired (Sorbus minima's
       // VJSZQ now 404s as "removed"), and the accepted record is what a reader wants.
-      return { id, name, reason: "synonym_of", detail: coveredName, detailColId: coveredColId, ...ref, colId: coveredColId };
+      return { id, name, reason: "synonym_of", detail: synonymName, detailColId: synonymColId, ...ref, colId: synonymColId };
     }
     return { id, name, reason: "not_in_base", ...ref };
   }
@@ -330,6 +339,18 @@ export async function computeNoMatchDetails(
       WHERE rank = 'species' AND status = 'provisionally accepted'
         AND lower(scientific_name) IN (SELECT lower(scientific_name) FROM matched_assessed)
       GROUP BY 1
+    ),
+    -- The backbone's own synonym -> accepted-in-Base edge, for the names
+    -- 'iucn_synonym_covered' misses. Same semi-join shape as prov_by_name.
+    syn_in_base AS (
+      SELECT lname, any_value(col_id) AS col_id, any_value(name) AS name FROM (
+        SELECT lower(syn.scientific_name) AS lname, acc.col_id AS col_id, acc.scientific_name AS name
+        FROM read_parquet('${ctx.backbonePath}') syn
+        JOIN read_parquet('${speciesGlob}', hive_partitioning=true) acc
+          ON acc.col_id = syn.parent_id AND acc.in_base
+        WHERE syn.status = 'synonym'
+          AND lower(syn.scientific_name) IN (SELECT lower(scientific_name) FROM matched_assessed)
+      ) GROUP BY lname
     )` : ""}
     SELECT
       ma.id AS id, ma.scientific_name AS name,
@@ -339,6 +360,7 @@ export async function computeNoMatchDetails(
       cov.name AS covered_name, cov.col_id AS covered_col_id
       ${hasBackbone ? `,
       pbn.col_id AS prov_col_id,
+      sib.name AS syn_name, sib.col_id AS syn_col_id,
       bk.parent_id AS parent_col_id,
       bk.rank AS bk_rank,
       bkparent.scientific_name AS parent_name,
@@ -356,7 +378,8 @@ export async function computeNoMatchDetails(
     LEFT JOIN read_parquet('${ctx.backbonePath}') bk ON bk.col_id = pl.col_id
     LEFT JOIN read_parquet('${ctx.backbonePath}') bkparent ON bkparent.col_id = bk.parent_id
     LEFT JOIN col_to_assessed ca ON ca.col_id = bk.parent_id
-    LEFT JOIN prov_by_name pbn ON pl.col_id IS NULL AND pbn.lname = lower(ma.scientific_name)` : ""}
+    LEFT JOIN prov_by_name pbn ON pl.col_id IS NULL AND pbn.lname = lower(ma.scientific_name)
+    LEFT JOIN syn_in_base sib ON sib.lname = lower(ma.scientific_name)` : ""}
     WHERE cl.id IS NULL
     -- Deterministic order — this JOIN chain has no natural order, and without one
     -- DuckDB's parallel scan returns diagRows (and so noMatchIds/noMatchDetails)

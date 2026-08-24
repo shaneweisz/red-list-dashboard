@@ -137,6 +137,14 @@ describe("noMatchSentence", () => {
       .toBe("Bufo bufo hasn't been matched to a Catalogue of Life name yet.");
   });
 
+  it("does not promise the checklist will add a name it has declined", () => {
+    // "hasn't added it yet" implied a backlog; most of these are old names in
+    // genera the checklist covers thoroughly. See noMatchSentence's not_in_base.
+    const sentence = noMatchExplanation({ reason: "not_in_base" }, "Euphorbia ankarensis");
+    expect(sentence).not.toContain("yet");
+    expect(sentence).toContain("extended release");
+  });
+
   it("falls back to the raw code rather than rendering undefined", () => {
     expect(noMatchExplanation({ reason: "some_future_reason" }, "Bufo bufo")).toBe("some_future_reason");
   });

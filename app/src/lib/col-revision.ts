@@ -69,7 +69,7 @@ export const REVISION_REASON_SUMMARY: Record<string, string> = {
   lumped: "Catalogue of Life merges this with another assessed species",
   synonym_of: "Catalogue of Life's checklist files this name under another species",
   infraspecific: "Catalogue of Life now ranks this as a subspecies",
-  not_in_base: "recognised, but not yet in Catalogue of Life's curated checklist",
+  not_in_base: "in Catalogue of Life's extended release only, not its curated checklist",
   provisional: "listed by Catalogue of Life only provisionally",
   extinct_unconfirmed: "Catalogue of Life marks the name extinct; the assessment doesn't",
   no_link: "not matched to a Catalogue of Life name yet",
@@ -231,10 +231,17 @@ export function noMatchSentence(flag: ColRevision, subject: string | null): NoMa
       return subject
         ? { before: `According to ${COL}, ${s}is no longer a species of its own — it is now a subspecies of `, detail: flag.detail, after: "." }
         : { before: "Now a subspecies of ", detail: flag.detail, after: "" };
+    // Deliberately NOT "hasn't added it yet": that implies a backlog the
+    // checklist is working through, and for most of these it isn't true. Only
+    // ~10% were described since 2015 and 39% are pre-1950, and 80% sit in a genus
+    // the curated checklist covers thoroughly (Euphorbia has 2,113 accepted
+    // species in it, but not Euphorbia ankarensis) — so the checklist knows the
+    // group and has not adopted the name. What IS true is where the record comes
+    // from, so say that instead.
     case "not_in_base":
       return subject
-        ? { before: `${COL} recognises ${s}but hasn't added it to its curated checklist yet.`, after: "" }
-        : { before: `Recognised, but not yet in ${COL}'s curated checklist`, after: "" };
+        ? { before: `${COL} has a record for ${s}but only in its extended release — the curated checklist doesn't include it.`, after: "" }
+        : { before: `In ${COL}'s extended release only, not its curated checklist`, after: "" };
     case "provisional":
       return subject
         ? { before: `${COL} lists ${s}only provisionally, not as a fully accepted species.`, after: "" }

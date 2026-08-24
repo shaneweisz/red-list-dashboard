@@ -151,6 +151,26 @@ describe("classifyNoMatch — checklist coverage", () => {
     expect(result.detailColId).toBe("3JZCX");
   });
 
+  it("synonym_of: also found via the backbone, for the names 'iucn_synonym_covered' misses", () => {
+    // Accipiter cooperii -> Astur cooperii: the 2024 Accipiter break-up, which
+    // build-matching writes no covered link for.
+    const result = classifyNoMatch({
+      ...baseRow, linked_col_id: "XRONLY", linked_name: "Accipiter cooperii", linked_in_base: false,
+      syn_name: "Astur cooperii", syn_col_id: "CVW5J",
+    });
+    expect(result.reason).toBe("synonym_of");
+    expect(result.detail).toBe("Astur cooperii");
+    expect(result.colId).toBe("CVW5J");
+  });
+
+  it("synonym_of: the covered-link route wins when both are available", () => {
+    const result = classifyNoMatch({
+      ...baseRow, linked_col_id: "XRONLY", linked_name: "X", linked_in_base: false,
+      covered_name: "From link", covered_col_id: "LINK1", syn_name: "From backbone", syn_col_id: "BB1",
+    });
+    expect(result.detail).toBe("From link");
+  });
+
   it("not_in_base: still reported when the checklist genuinely doesn't cover the name", () => {
     const result = classifyNoMatch({
       ...baseRow, linked_col_id: "VJSZQ", linked_name: "Sorbus minima", linked_in_base: false,
