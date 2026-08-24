@@ -41,7 +41,7 @@ import {
   type BreakdownQueryContext,
   type NoMatchDetail,
 } from "../src/lib/data/col-breakdown";
-import { SPLIT_REASON } from "../src/lib/col-revision";
+import { SPLIT_REASON, UNFLAGGED_REASONS } from "../src/lib/col-revision";
 
 // Keep in sync with build-taxa-summary.ts / species-duckdb.ts.
 const EXCLUDED_COL_IDS_SQL = `('6MB3T')`; // Homo sapiens
@@ -112,7 +112,12 @@ export async function run(): Promise<void> {
 
   const counts: Record<string, number> = {};
   const species: ColRevisionsFile["species"] = {};
+  // A reason the dashboard doesn't flag is still diagnosed (and still reported by
+  // the SSC group view, which reads the same classifier) — it just doesn't earn a
+  // flag or a bar here. See UNFLAGGED_REASONS for why extinct_unconfirmed doesn't.
+  const unflagged = new Set<string>(UNFLAGGED_REASONS);
   for (const d of details) {
+    if (unflagged.has(d.reason)) continue;
     counts[d.reason] = (counts[d.reason] ?? 0) + 1;
     species[String(d.id)] = {
       r: d.reason,
@@ -225,7 +230,10 @@ export async function run(): Promise<void> {
   const out: ColRevisionsFile = { counts, total: Object.keys(species).length, species };
   fs.writeFileSync(outPath, JSON.stringify(out));
   const kb = Math.round(fs.statSync(outPath).size / 1024);
-  console.log(`  CoL revisions: ${out.total} flagged species (${details.length} no-match, ${splitParents} with splits) → ${outPath} (${kb} KB, ${((Date.now() - started) / 1000).toFixed(1)}s)`);
+  const noMatchFlagged = details.filter((d) => !unflagged.has(d.reason)).length;
+  const skipped = details.length - noMatchFlagged;
+  console.log(`  CoL revisions: ${out.total} flagged species (${noMatchFlagged} no-match, ${splitParents} with splits) → ${outPath} (${kb} KB, ${((Date.now() - started) / 1000).toFixed(1)}s)`);
+  if (skipped) console.log(`    (${skipped} diagnosed but not flagged: ${UNFLAGGED_REASONS.join(", ")} — see col-revision.ts)`);
   for (const [reason, n] of Object.entries(counts).sort((a, b) => b[1] - a[1])) console.log(`    ${reason.padEnd(24)} ${n}`);
 }
 

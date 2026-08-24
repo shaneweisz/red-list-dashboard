@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import {
   REVISION_REASONS,
+  UNFLAGGED_REASONS,
   REVISION_REASON_SHORT,
   REVISION_REASON_SUMMARY,
   SPLIT_REASON,
@@ -21,8 +22,12 @@ import {
 // this file is the UI's side of that contract. A new reason added there with no
 // wording here would render as a bare snake_case code, which is what these catch.
 describe("revision vocabulary", () => {
+  // Wording must cover the reasons the dashboard flags AND the ones it only
+  // diagnoses — the SSC group view still renders those.
+  const ALL_REASONS = [...REVISION_REASONS, ...UNFLAGGED_REASONS];
+
   it("gives every reason a short label, a summary, and both sentence framings", () => {
-    for (const reason of REVISION_REASONS) {
+    for (const reason of ALL_REASONS) {
       expect(REVISION_REASON_SHORT[reason], `short label for ${reason}`).toBeTruthy();
       expect(REVISION_REASON_SUMMARY[reason], `summary for ${reason}`).toBeTruthy();
       if (reason === SPLIT_REASON) continue; // not a noMatchSentence case — see splitSentence
@@ -41,9 +46,23 @@ describe("revision vocabulary", () => {
   });
 
   it("keeps short labels short enough for a chart axis", () => {
-    for (const reason of REVISION_REASONS) {
+    for (const reason of ALL_REASONS) {
       expect(REVISION_REASON_SHORT[reason].length).toBeLessThanOrEqual(16);
     }
+  });
+});
+
+describe("UNFLAGGED_REASONS", () => {
+  it("keeps extinct_unconfirmed out of the dashboard's bars", () => {
+    // Not a taxonomic revision, and mostly a CoL data error — 25 of the 60 it
+    // caught were Least Concern or Near Threatened. See UNFLAGGED_REASONS.
+    expect(UNFLAGGED_REASONS).toContain("extinct_unconfirmed");
+    expect(REVISION_REASONS as readonly string[]).not.toContain("extinct_unconfirmed");
+  });
+
+  it("still gives it wording, since the SSC group view reports it", () => {
+    expect(noMatchExplanation({ reason: "extinct_unconfirmed" }, "Columba arquatrix"))
+      .toContain("flagged extinct");
   });
 });
 

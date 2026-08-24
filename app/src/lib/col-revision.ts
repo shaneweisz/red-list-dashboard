@@ -40,11 +40,36 @@ export const REVISION_REASONS = [
   "infraspecific",
   "not_in_base",
   "provisional",
-  "extinct_unconfirmed",
   "no_link",
   "missing_from_backbone",
   "classified_elsewhere",
 ] as const;
+
+/**
+ * Diagnosed by classifyNoMatch but deliberately NOT flagged on the dashboard.
+ *
+ * "extinct_unconfirmed" means CoL's record for the name is flagged extinct
+ * while the IUCN category isn't EX/EW. Two things disqualify it from a card
+ * called Possible Taxonomic Revision:
+ *
+ *  - It isn't a taxonomic revision. It is a disagreement about whether the
+ *    species still exists, which is a data-quality observation about CoL.
+ *  - It is mostly wrong. Of the 60 it caught, 25 were Least Concern or Near
+ *    Threatened — species that by definition are not extinct — and 14 of those
+ *    were Columba, where CoL flags 16 of the genus's 35 accepted species
+ *    extinct, including the common and abundant C. arquatrix and C. elphinstonii.
+ *    That is one contaminated upstream block, not a signal.
+ *
+ * The reason still exists and the SSC group view still reports it: there it
+ * sits in a panel explicitly about CoL-match diagnostics, which is the right
+ * home for "CoL says something odd here".
+ *
+ * Worth knowing separately: a false extinct flag also drops the species from
+ * col_described, since the extant universe is `extinct IS NOT TRUE OR IUCN says
+ * EX/EW`. 103 assessed species are excluded that way — a real undercount that
+ * predates this feature and wants its own fix.
+ */
+export const UNFLAGGED_REASONS = ["extinct_unconfirmed"] as const;
 
 export type RevisionReasonCode = (typeof REVISION_REASONS)[number];
 
