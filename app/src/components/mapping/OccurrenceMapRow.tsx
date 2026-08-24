@@ -3370,42 +3370,6 @@ export default function OccurrenceMapRow({
                   the side with room, so one opened near the top of the map
                   flips underneath its point instead of being cut off by the
                   map's edge — which is where the answer was least readable. */}
-              {/* The clicked ecoregion, named where it was clicked. */}
-              {showEcoregions && selectedEcoregion && selectedEcoregion.panelId === panelId && (
-                <MapPopup
-                  longitude={selectedEcoregion.lng}
-                  latitude={selectedEcoregion.lat}
-                  offset={10}
-                  maxWidth="260px"
-                  closeOnClick={false}
-                  onClose={() => setSelectedEcoregion(null)}
-                  className="occurrence-popup"
-                >
-                  <div className="text-[11px] text-zinc-700 dark:text-zinc-200 flex items-start gap-1.5">
-                    <span
-                      className="w-2.5 h-2.5 rounded-sm shrink-0 translate-y-1 border border-black/10"
-                      style={{ background: selectedEcoregion.properties.biomeColor }}
-                    />
-                    <div className="min-w-0">
-                      <div className="font-medium">{selectedEcoregion.properties.name}</div>
-                      <div className="text-zinc-400">{selectedEcoregion.properties.biome}</div>
-                      <div className="text-zinc-400">
-                        {selectedEcoregion.properties.realm} · {selectedEcoregion.properties.nnh}
-                      </div>
-                      {selectedEcoregion.properties.oneEarth && (
-                        <a
-                          href={oneEarthEcoregionUrl(selectedEcoregion.properties.oneEarth)}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="text-blue-600 dark:text-blue-400 hover:underline"
-                        >
-                          Read about it on One Earth
-                        </a>
-                      )}
-                    </div>
-                  </div>
-                </MapPopup>
-              )}
               {/* A hovered point from the loaded file. Its own popup because it
                   is not a GBIF record: there is no row for it in the table, and
                   the two distances are the only reason it's on the map. */}
@@ -3462,7 +3426,7 @@ export default function OccurrenceMapRow({
                 </MapPopup>
               )}
               {/* What's here: the ground's height, and what protects it. */}
-              {pointQuery?.panelId === panelId && (
+              {pointQuery?.panelId === panelId && pointQuery.kind === "point" && (
                 <MapPopup
                   longitude={pointQuery.lng}
                   latitude={pointQuery.lat}
@@ -3473,59 +3437,6 @@ export default function OccurrenceMapRow({
                   className="occurrence-popup"
                 >
                   <div className="text-[11px] text-zinc-700 dark:text-zinc-200 space-y-1.5">
-                    {pointQuery.kind === "areas" ? (
-                      <div className="space-y-1">
-                        {/* Says up front that there is more than one, before
-                            you have to infer it from the length of the list. */}
-                        {pointQuery.areas.length > 1 && (
-                          <div className="text-[10px] text-zinc-400 dark:text-zinc-500">
-                            {pointQuery.areas.length} overlapping designations here
-                          </div>
-                        )}
-                        {pointQuery.areas.map((area, index) => (
-                          <div
-                            key={area.sitePid}
-                            onMouseEnter={() => setPointQuery((prev) => (prev ? { ...prev, highlight: index } : prev))}
-                            className={`-mx-1 px-1 py-0.5 rounded flex gap-1.5 ${
-                              index === pointQuery.highlight ? "bg-zinc-100 dark:bg-zinc-800" : ""
-                            }`}
-                          >
-                            {/* The swatch is what ties this row to its outline
-                                on the map. Only drawn when there's more than
-                                one site — a single colour keyed to nothing is
-                                just decoration. */}
-                            {pointQuery.areas.length > 1 && (
-                              <span
-                                className="mt-1 w-2 h-2 rounded-sm shrink-0"
-                                style={{ background: highlightColour(index) }}
-                                title="This site's outline on the map"
-                              />
-                            )}
-                            <div className="min-w-0">
-                              <a
-                                href={protectedPlanetUrl(area)}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                title="Open this site on Protected Planet"
-                                className="font-medium text-blue-600 dark:text-blue-400 hover:underline"
-                              >
-                                {area.name}
-                              </a>
-                              <div className="text-zinc-500 dark:text-zinc-400">
-                                {[
-                                  area.designation,
-                                  area.iucnCategory ? `IUCN ${area.iucnCategory}` : null,
-                                  area.statusYear ? String(area.statusYear) : null,
-                                ]
-                                  .filter(Boolean)
-                                  .join(" · ")}
-                              </div>
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    ) : (
-                    <>
                     <div className="text-zinc-500 dark:text-zinc-400">
                       {/* Click the coordinates to copy them — the reason you
                           right-clicked a spot is usually to paste it somewhere
@@ -3719,8 +3630,6 @@ export default function OccurrenceMapRow({
                         Measure distance
                       </button>
                     </div>
-                    </>
-                    )}
                   </div>
                 </MapPopup>
               )}
@@ -4037,6 +3946,7 @@ export default function OccurrenceMapRow({
                 onPreview={setPreviewPlace}
               />
             )}
+            {renderClickInfo(panelId)}
           </div>
           {/* Top-right stack: what's loaded, then the basemap choice. Stacked
               in a flex column rather than each guessing the other's offset —
@@ -4332,6 +4242,137 @@ export default function OccurrenceMapRow({
    * toggle, and a click somewhere else to get the menu out of the way of the
    * map you were trying to read.
    */
+  /**
+   * What the last click landed on — the protected areas, the ecoregion — docked
+   * rather than anchored where you clicked.
+   *
+   * Both of these draw the boundary of the thing they name, and a popup pinned
+   * to the click sat on top of that boundary: you asked which park this is, and
+   * the answer covered the edge you were trying to see. The highlight on the map
+   * is what ties the panel to the ground, so the text doesn't have to be there
+   * too.
+   */
+  const renderClickInfo = (panelId: string) => {
+    const areasHere =
+      pointQuery?.panelId === panelId && pointQuery.kind === "areas" ? pointQuery : null;
+    const eco =
+      showEcoregions && selectedEcoregion?.panelId === panelId ? selectedEcoregion : null;
+    if (!areasHere && !eco) return null;
+    return (
+      <div className="bg-white dark:bg-zinc-800 rounded-lg shadow-md border border-zinc-200 dark:border-zinc-700 px-2 py-1.5 w-44 text-[11px] text-zinc-700 dark:text-zinc-200 space-y-1.5">
+        {areasHere && (
+          <div>
+            <div className="flex items-baseline gap-1 pb-0.5">
+              <span className="text-[9px] uppercase tracking-wide text-zinc-400 dark:text-zinc-500">
+                Protected areas
+              </span>
+              <button
+                onClick={() => setPointQuery(null)}
+                title="Close"
+                className="ml-auto text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300"
+              >
+                <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+      <div className="space-y-1">
+        {/* Says up front that there is more than one, before
+            you have to infer it from the length of the list. */}
+        {areasHere.areas.length > 1 && (
+          <div className="text-[10px] text-zinc-400 dark:text-zinc-500">
+            {areasHere.areas.length} overlapping designations here
+          </div>
+        )}
+        {areasHere.areas.map((area, index) => (
+          <div
+            key={area.sitePid}
+            onMouseEnter={() => setPointQuery((prev) => (prev ? { ...prev, highlight: index } : prev))}
+            className={`-mx-1 px-1 py-0.5 rounded flex gap-1.5 ${
+              index === areasHere.highlight ? "bg-zinc-100 dark:bg-zinc-800" : ""
+            }`}
+          >
+            {/* The swatch is what ties this row to its outline
+                on the map. Only drawn when there's more than
+                one site — a single colour keyed to nothing is
+                just decoration. */}
+            {areasHere.areas.length > 1 && (
+              <span
+                className="mt-1 w-2 h-2 rounded-sm shrink-0"
+                style={{ background: highlightColour(index) }}
+                title="This site's outline on the map"
+              />
+            )}
+            <div className="min-w-0">
+              <a
+                href={protectedPlanetUrl(area)}
+                target="_blank"
+                rel="noopener noreferrer"
+                title="Open this site on Protected Planet"
+                className="font-medium text-blue-600 dark:text-blue-400 hover:underline"
+              >
+                {area.name}
+              </a>
+              <div className="text-zinc-500 dark:text-zinc-400">
+                {[
+                  area.designation,
+                  area.iucnCategory ? `IUCN ${area.iucnCategory}` : null,
+                  area.statusYear ? String(area.statusYear) : null,
+                ]
+                  .filter(Boolean)
+                  .join(" · ")}
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
+          </div>
+        )}
+        {eco && (
+          <div className={areasHere ? "pt-1.5 border-t border-zinc-100 dark:border-zinc-700" : ""}>
+            <div className="flex items-baseline gap-1 pb-0.5">
+              <span className="text-[9px] uppercase tracking-wide text-zinc-400 dark:text-zinc-500">
+                Ecoregion
+              </span>
+              <button
+                onClick={() => setSelectedEcoregion(null)}
+                title="Close"
+                className="ml-auto text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300"
+              >
+                <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+            <div className="flex items-start gap-1.5">
+              <span
+                className="w-2.5 h-2.5 rounded-sm shrink-0 translate-y-1 border border-black/10"
+                style={{ background: eco.properties.biomeColor }}
+              />
+              <div className="min-w-0">
+                <div className="font-medium">{eco.properties.name}</div>
+                <div className="text-zinc-400">{eco.properties.biome}</div>
+                <div className="text-zinc-400">
+                  {eco.properties.realm} · {eco.properties.nnh}
+                </div>
+                {eco.properties.oneEarth && (
+                  <a
+                    href={oneEarthEcoregionUrl(eco.properties.oneEarth)}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-blue-600 dark:text-blue-400 hover:underline"
+                  >
+                    Read about it on One Earth
+                  </a>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  };
+
   const renderOverlayLayers = () => (
     <div className="flex flex-col bg-white dark:bg-zinc-800 rounded-lg shadow-md border border-zinc-200 dark:border-zinc-700 py-1 w-44">
       <button
