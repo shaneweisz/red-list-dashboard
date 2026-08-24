@@ -74,5 +74,27 @@ export const FOREST_LOSS_RAMP = ["#ff0080", "#7f00ff"] as const;
  * disturbance, which includes logging rotation, fire, storm and disease, so it
  * is not the same thing as habitat loss. The dataset's own caution.
  */
+/**
+ * The canopy-density threshold, or rather the absence of one.
+ *
+ * GFW's own map filters loss to pixels that had at least 30% canopy cover in
+ * 2000 — it's in their tile path (`/umd_tree_cover_loss/v1.11/tcd_30/…`). These
+ * tiles carry no such filter: Hansen publishes the loss year unthresholded and
+ * the 30% cut is something GFW's app applies on top.
+ *
+ * Kept unthresholded on purpose. A 25%-canopy woodland that has been cleared is
+ * still habitat gone, and filtering at 30% would quietly drop loss in exactly
+ * the dryland and savanna systems a lot of threatened plants live in. Measured
+ * on one cerrado tile the difference is real — GFW's own tiles show loss over
+ * 12.6% of it at tcd_30 against 13.5% at tcd_10 — and in dense forest it
+ * vanishes: an Amazon tile is identical at both.
+ *
+ * But it means this map shows more loss than globalforestwatch.org's default
+ * view of the same place, so it has to say so where the colours are explained
+ * rather than leave someone to find the discrepancy and assume we're wrong.
+ */
+export const FOREST_LOSS_THRESHOLD_NOTE =
+  "All canopy densities. Global Forest Watch's own map defaults to pixels above 30% canopy cover in 2000, so it shows less loss than this in sparsely wooded country.";
+
 export const FOREST_LOSS_CAVEAT =
   "Stand-replacement disturbance — includes logging rotation, fire and storm damage, not only permanent clearance. The 2001–2010 and 2011–2025 series were produced differently, so trends across that boundary aren't supported.";

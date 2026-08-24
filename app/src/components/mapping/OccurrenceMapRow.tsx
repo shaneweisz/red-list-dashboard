@@ -81,6 +81,7 @@ import {
   FOREST_LOSS_MAX_ZOOM,
   FOREST_LOSS_RAMP,
   FOREST_LOSS_SOURCE_NOTE,
+  FOREST_LOSS_THRESHOLD_NOTE,
   FOREST_LOSS_TILE_URL,
   FOREST_LOSS_URL,
 } from "@/lib/mapping/forest-loss";
@@ -3849,11 +3850,18 @@ export default function OccurrenceMapRow({
               years, recent clearance and twenty-year-old logging look the
               same. It can't be filtered to a year — see lib/forest-loss.ts —
               and the layer is named for the platform it comes from, since
-              that's the name an assessor knows it by. */}
+              that's the name an assessor knows it by.
+
+              What the colours don't mean is spelled out under them rather than
+              left in a title attribute. On a Red List tool "this pink is
+              logging rotation, not habitat destroyed" is not a hover-to-find
+              detail: someone reads loss inside a range and draws a conclusion
+              from it, so the correction belongs where the colour is. */}
           {showForestLoss && !loadingOccurrences && (
+            <div className="bg-white dark:bg-zinc-800 px-2 py-1.5 rounded text-[11px] text-zinc-600 dark:text-zinc-300 shadow max-w-md">
             <div
-              className="bg-white dark:bg-zinc-800 px-2 py-1.5 rounded text-[11px] text-zinc-600 dark:text-zinc-300 shadow flex items-center gap-1.5"
-              title={`${FOREST_LOSS_SOURCE_NOTE} ${FOREST_LOSS_CAVEAT}`}
+              className="flex items-center gap-1.5"
+              title={FOREST_LOSS_SOURCE_NOTE}
             >
               <a
                 href={FOREST_LOSS_URL}
@@ -3878,6 +3886,14 @@ export default function OccurrenceMapRow({
                 style={{ background: `linear-gradient(to right, ${FOREST_LOSS_RAMP[0]}, ${FOREST_LOSS_RAMP[1]})` }}
               />
               <span className="tabular-nums">{FOREST_LOSS_LAST_YEAR}</span>
+            </div>
+            <div className="pt-1 text-[10px] leading-snug text-zinc-500 dark:text-zinc-400">
+              <div>
+                <span className="font-medium">Loss is disturbance, not deforestation.</span>{" "}
+                {FOREST_LOSS_CAVEAT}
+              </div>
+              <div className="pt-0.5">{FOREST_LOSS_THRESHOLD_NOTE}</div>
+            </div>
             </div>
           )}
           {/* The habitat legend is 18 classes, which laid out flat covers a
@@ -4458,7 +4474,7 @@ export default function OccurrenceMapRow({
       </label>
       <label
         className="flex items-center gap-2 px-2 py-0.5 text-[11px] hover:bg-zinc-50 dark:hover:bg-zinc-700 cursor-pointer"
-        title={`${FOREST_LOSS_SOURCE_NOTE} Coloured by year of loss, ${FOREST_LOSS_FIRST_YEAR}\u2013${FOREST_LOSS_LAST_YEAR}. ${FOREST_LOSS_CAVEAT}`}
+        title={`${FOREST_LOSS_SOURCE_NOTE} Coloured by year of loss, ${FOREST_LOSS_FIRST_YEAR}\u2013${FOREST_LOSS_LAST_YEAR}. ${FOREST_LOSS_CAVEAT} ${FOREST_LOSS_THRESHOLD_NOTE}`}
       >
         <input
           type="checkbox"
