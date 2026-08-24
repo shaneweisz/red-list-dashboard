@@ -666,8 +666,10 @@ function SelectableHoverTooltip({ children, content }: { children: React.ReactNo
 // could only ever point at a single record.
 /** Split-off species per tooltip page. A handful of aggregates run long —
  *  Rubus fruticosus has 73 — and the list names every one of them rather than
- *  standing in for the tail, so it pages instead of growing without bound. */
-const SPLIT_PAGE_SIZE = 10;
+ *  standing in for the tail, so it pages instead of growing without bound.
+ *  Five keeps the panel to a glanceable height: entries wrap to two lines once
+ *  the old name is long, which a page of ten often is. */
+const SPLIT_PAGE_SIZE = 5;
 
 function RevisionTooltipContent({ flag, name }: { flag: ColRevision; name: string }) {
   // Resets to the first page on every open: the panel is only mounted while the
