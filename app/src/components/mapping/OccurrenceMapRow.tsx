@@ -2862,23 +2862,25 @@ export default function OccurrenceMapRow({
               onDragEnd={() => setPanning(false)}
             >
               <ScaleControl position="bottom-right" />
-              {/* Measuring, under the scale bar it's the fine-grained version
-                  of. It used to start from a right-clicked point, which made
-                  the first end a thing you had to have chosen before you knew
-                  you wanted to measure; now both ends are picked on the map
-                  after you ask. */}
+              {/* Measuring, in the gap between the scale bar and the
+                  attribution — the map's own furniture, which is what it is.
+                  Small and quiet: it's a tool you reach for occasionally, not
+                  a control the map is about. It used to start from a
+                  right-clicked point, which made the first end something you
+                  had to have chosen before you knew you wanted to measure; now
+                  both ends are picked on the map after you ask. */}
               {panelId === "main" || !splitView ? (
-                <div className="absolute bottom-20 right-2 z-[1000]">
+                <div className="absolute bottom-7 right-2 z-[1000]">
                   <button
                     onClick={() => setMeasure(measure ? null : [])}
                     title={measure ? "Stop measuring (or press Escape)" : "Measure the distance between two points on the map"}
-                    className={`inline-flex items-center gap-1 px-1.5 py-1 rounded shadow-md border text-[10px] transition-colors ${
+                    className={`inline-flex items-center gap-0.5 px-1 py-0.5 rounded text-[9px] transition-colors ${
                       measure
-                        ? "bg-blue-600 border-blue-700 text-white"
-                        : "bg-white dark:bg-zinc-800 border-zinc-200 dark:border-zinc-700 text-zinc-500 dark:text-zinc-400 hover:bg-zinc-50 dark:hover:bg-zinc-700"
+                        ? "bg-blue-600 text-white"
+                        : "bg-white/80 dark:bg-zinc-800/80 text-zinc-400 dark:text-zinc-500 hover:text-zinc-600 dark:hover:text-zinc-300"
                     }`}
                   >
-                    <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <svg className="w-2.5 h-2.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                       <path strokeLinecap="round" strokeLinejoin="round" d="M4 20L20 4M4 20v-5m0 5h5M20 4v5m0-5h-5" />
                     </svg>
                     Measure
@@ -3823,7 +3825,45 @@ export default function OccurrenceMapRow({
               about the two panels together. Everything else this used to hold
               now sits on the rows it describes. */}
           {!loadingOccurrences && !label && assessmentYear && !splitView && (
-            <div className="bg-white dark:bg-zinc-800 px-2 py-1 rounded shadow text-[10px] text-zinc-500 dark:text-zinc-400">
+            <div className="bg-white dark:bg-zinc-800 px-2 py-1 rounded shadow text-[10px] text-zinc-500 dark:text-zinc-400 flex items-center gap-2 flex-wrap">
+              {showGbif && (
+                <>
+                  {colorByDate ? (
+                    <span className="flex items-center gap-1">
+                      <span
+                        className="w-2.5 h-2.5 rounded-full shrink-0"
+                        style={{ background: dateToColor(minDateNum).fill, border: `1.5px solid ${dateToColor(minDateNum).stroke}` }}
+                      />
+                      <span className="tabular-nums">{minDateLabel}</span>
+                      <span>→</span>
+                      <span
+                        className="w-2.5 h-2.5 rounded-full shrink-0"
+                        style={{ background: dateToColor(maxDateNum).fill, border: `1.5px solid ${dateToColor(maxDateNum).stroke}` }}
+                      />
+                      <span className="tabular-nums">{maxDateLabel}</span>
+                    </span>
+                  ) : (
+                    <>
+                      <span className="flex items-center gap-1">
+                        <span className="w-2.5 h-2.5 rounded-full shrink-0 bg-gray-400 border-[1.5px] border-gray-500" />
+                        ≤{assessmentDate?.split("T")[0] ?? assessmentYear}
+                      </span>
+                      <span className="flex items-center gap-1">
+                        <span className="w-2.5 h-2.5 rounded-full shrink-0 bg-green-400 border-[1.5px] border-green-600" />
+                        After {assessmentDate?.split("T")[0] ?? assessmentYear}
+                      </span>
+                    </>
+                  )}
+                  <button
+                    onClick={() => setColorByDate(!colorByDate)}
+                    title={colorByDate ? "Colour by before/after the assessment date" : "Colour by date"}
+                    className="px-1.5 py-0.5 rounded border border-zinc-300 dark:border-zinc-600 hover:bg-zinc-100 dark:hover:bg-zinc-700 transition-colors"
+                  >
+                    {colorByDate ? "Color by before/after assess. date" : "Color by date"}
+                  </button>
+                  <span className="text-zinc-300 dark:text-zinc-600">|</span>
+                </>
+              )}
               <button
                 onClick={() => {
                   if (!splitDate && assessmentDate) setSplitDate(assessmentDate.split("T")[0]);
@@ -4792,8 +4832,11 @@ export default function OccurrenceMapRow({
         />
         <span className="flex-1 min-w-0 text-zinc-700 dark:text-zinc-200">GBIF points</span>
       </label>
-      {/* What the GBIF points' colours mean, under the row that draws them. */}
-      {showGbif && !label && (
+      {/* What the GBIF points' colours mean, under the row that draws them —
+          but only for a species with no assessment date. Where there is one,
+          this lives beside Split view, with the toggle that switches between
+          the two colourings, because they're the same question. */}
+      {showGbif && !label && !assessmentYear && (
         <div className="px-2 pb-0.5 pl-6 text-[10px] text-zinc-500 dark:text-zinc-400">
           {colorByDate ? (
             <div className="flex items-center gap-1">
