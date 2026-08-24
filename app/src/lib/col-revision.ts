@@ -120,6 +120,14 @@ export interface ColRevision {
   /** CoL's own accepted name for that col_id, when it's neither this species
    *  nor `detail` (i.e. the two were merged under some third name). */
   colName?: string;
+  /** The OTHER IUCN assessments filed under the same CoL record — the whole
+   *  lump group, of which `detail` names only the one that won the tie-break.
+   *  Each carries its own synonym record under the shared species (the
+   *  checkable evidence, present for ~62%) and its IUCN category, which is
+   *  where the awkwardness shows: one CoL species assessed both EX and LC. */
+  lumpedWith?: { name: string; colId?: string; category?: string }[];
+  /** CoL's accepted name for the shared record — what the group is filed under. */
+  lumpedUnder?: string;
   /** Species CoL now recognises that were likely split out of this one, each
    *  with its own CoL record and — as the evidence for the split — the old
    *  infraspecific name that now resolves to it ("Vallonia costata var. montana
@@ -215,13 +223,16 @@ export interface NoMatchSentence {
   after: string;
 }
 
-/** One species the old concept split into. */
+/** One species in a listed group — a split-off species, or another assessment
+ *  sharing a lumped record. */
 export interface SplitEntry {
   name: string;
   colId?: string;
   /** The old infraspecific name that now resolves here — the evidence. */
   previousName?: string;
   previousColId?: string;
+  /** IUCN category, shown for lump-group members. */
+  category?: string;
 }
 
 /**
@@ -347,11 +358,43 @@ export function splitSummary(flag: ColRevision, subject: string): SplitSummary |
   };
 }
 
+/**
+ * The lump half of the flag: IUCN assesses several species that CoL files as
+ * one. The mirror image of a split — many assessments to one CoL species rather
+ * than one assessment to many — so it gets the same treatment: say what it means
+ * for the assessment, then name the others with links to the evidence.
+ *
+ * Returns null when the group isn't known (an older artifact, or the SSC panel's
+ * data, which carries only the tie-break winner) — callers fall back to
+ * noMatchSentence.
+ */
+export function lumpSummary(flag: ColRevision, subject: string): SplitSummary | null {
+  const others = flag.lumpedWith ?? [];
+  if (flag.reason !== "lumped" || others.length === 0) return null;
+  const under = flag.lumpedUnder;
+  return {
+    lead: `${COL} treats ${subject} and `
+      + (others.length === 1 ? "1 other IUCN assessment" : `${others.length} other IUCN assessments`)
+      + ` as a single species${under ? `, ${under}` : ""}`
+      + ` — so more than one assessment covers what ${COL} counts as one species:`,
+    // A member with no synonym record of its own — typically the accepted name
+    // itself — links to the shared record, which IS its record.
+    entries: others.map((o) => (o.colId ? o : { ...o, colId: flag.colId })),
+  };
+}
+
 /** The summary flattened to one plain string, for a context that can't hold links. */
 export function splitSentence(flag: ColRevision, subject: string): string | null {
-  const s = splitSummary(flag, subject);
+  return flattenSummary(splitSummary(flag, subject));
+}
+
+/** A list summary as one plain string, for a context that can't hold links. */
+export function flattenSummary(s: SplitSummary | null): string | null {
   if (!s) return null;
-  const listed = s.entries.map((e) => (e.previousName ? `${e.name} (previously ${e.previousName})` : e.name));
+  const listed = s.entries.map((e) =>
+    e.previousName ? `${e.name} (previously ${e.previousName})`
+      : e.category ? `${e.name} (${e.category})`
+      : e.name);
   return `${s.lead} ${listed.join("; ")}.`;
 }
 
@@ -359,8 +402,12 @@ export function splitSentence(flag: ColRevision, subject: string): string | null
 export function revisionSentences(flag: ColRevision, subject: string): string[] {
   const out: string[] = [];
   if (flag.reason != null) {
-    const { before, detail, after } = noMatchSentence(flag, subject);
-    out.push(`${before}${detail ?? ""}${after}`);
+    const lump = flattenSummary(lumpSummary(flag, subject));
+    if (lump) out.push(lump);
+    else {
+      const { before, detail, after } = noMatchSentence(flag, subject);
+      out.push(`${before}${detail ?? ""}${after}`);
+    }
   }
   const split = splitSentence(flag, subject);
   if (split) out.push(split);

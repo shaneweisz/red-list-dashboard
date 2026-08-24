@@ -60,9 +60,12 @@ export interface ColRevisionsFile {
    *  species' CoL id, c = the CoL id to link to, n = CoL's own accepted name for
    *  that col_id, s = [name, col_id, previous name, previous col_id] of each
    *  species CoL likely split out of this one ("previous" being the old
-   *  infraspecific name that now resolves there — the evidence for the split). */
+   *  infraspecific name that now resolves there — the evidence for the split),
+   *  lw = the OTHER IUCN assessments sharing this species' CoL record
+   *  [name, its own synonym record, IUCN category], ln = CoL's accepted name for
+   *  that shared record. */
   species: Record<string, { r?: string; d?: string; i?: number; dc?: string; c?: string; n?: string;
-    s?: [string, string, string, string][] }>;
+    s?: [string, string, string, string][]; lw?: [string, string, string][]; ln?: string }>;
 }
 
 export async function run(): Promise<void> {
@@ -225,6 +228,61 @@ export async function run(): Promise<void> {
     counts[SPLIT_REASON] = splitParents;
   } else {
     console.log("  CoL revisions: backbone.parquet missing — split signal unavailable.");
+  }
+
+  // The other side of a lump: IUCN assesses several species that CoL files as
+  // one. The classifier already names the single assessment that won the
+  // accepted-name tie-break; this collects the WHOLE group, so the tooltip can
+  // say how many assessments describe one CoL species and name them all —
+  // 1,836 CoL records carry more than one assessment, and one carries 15.
+  //
+  // Each member's own synonym record under the shared species is the checkable
+  // evidence, exactly as the old infraspecific name is for a split: CoL's page
+  // for the accepted species lists it. 62% of members have one; the rest are
+  // linked to the shared record instead.
+  if (Object.keys(species).length) {
+    const lumpRows = await (await conn.run(`
+      WITH members AS (
+        SELECT l.col_id AS col_id, a.id AS id, a.scientific_name AS name, a.iucn_category AS category
+        FROM read_parquet('${link}') l
+        JOIN read_parquet('${assessedPath}') a ON a.id = l.id
+        WHERE l.src = 'redlist' AND l.col_id IS NOT NULL AND l.match_method != 'iucn_synonym_covered'
+      ),
+      groups AS (SELECT col_id FROM members GROUP BY col_id HAVING count(*) > 1),
+      pairs AS (
+        SELECT me.id AS id, me.col_id AS col_id, other.name AS other_name, other.category AS other_category,
+               syn.col_id AS other_syn_col_id
+        FROM members me
+        JOIN groups g ON g.col_id = me.col_id
+        JOIN members other ON other.col_id = me.col_id AND other.id != me.id
+        LEFT JOIN read_parquet('${backbonePath}') syn
+          ON lower(syn.scientific_name) = lower(other.name) AND syn.status = 'synonym' AND syn.parent_id = me.col_id
+      )
+      SELECT p.id AS id,
+             any_value(acc.scientific_name) AS accepted_name,
+             list(struct_pack(name := p.other_name, col_id := p.other_syn_col_id,
+                              category := p.other_category) ORDER BY p.other_name) AS others
+      FROM pairs p
+      LEFT JOIN read_parquet('${speciesGlob}', hive_partitioning=true) acc ON acc.col_id = p.col_id
+      GROUP BY p.id ORDER BY p.id`)).getRowObjects();
+
+    let lumped = 0;
+    for (const r of lumpRows) {
+      const entry = species[String(r.id)];
+      // Only the assessments the classifier actually flagged as lumped — the one
+      // that won the tie-break has a clean match and no flag to hang this on.
+      if (!entry || entry.r !== "lumped") continue;
+      const raw = r.others as { items?: unknown[] } | unknown[] | null;
+      const items = (Array.isArray(raw) ? raw : raw?.items ?? []) as { entries?: Record<string, unknown> }[];
+      const others = items
+        .map((it) => [String(it?.entries?.name ?? ""), String(it?.entries?.col_id ?? ""), String(it?.entries?.category ?? "")] as [string, string, string])
+        .filter(([n]) => n.length > 0);
+      if (!others.length) continue;
+      entry.lw = others;
+      if (r.accepted_name != null) entry.ln = String(r.accepted_name);
+      lumped++;
+    }
+    console.log(`  CoL revisions: ${lumped} lumped species carry their full group`);
   }
 
   const out: ColRevisionsFile = { counts, total: Object.keys(species).length, species };

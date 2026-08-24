@@ -16,7 +16,7 @@ import { CATEGORY_COLORS, TAXA_BY_ID, THREATENED_CATEGORIES } from "@/config/tax
 import { speciesMatchesNode, getNodeDef, getViewRootForNode, findNode, matchesBreakdownName, breakdownDisplayName } from "@/lib/taxonomy-utils";
 import { dynamicNodeDisplayName } from "@/lib/dynamic-taxon";
 import ReviewerChart from "./ReviewerChart";
-import { REVISION_REASONS, REVISION_REASON_SHORT, REVISION_REASON_SUMMARY, revisionReasons, matchesRevisionFilter, isFlagged, colUrl, colTaxonUrl, noMatchSentence, splitSummary, newRevisionTally, tallyRevision, type ColRevision } from "@/lib/col-revision";
+import { REVISION_REASONS, REVISION_REASON_SHORT, REVISION_REASON_SUMMARY, revisionReasons, matchesRevisionFilter, isFlagged, colUrl, colTaxonUrl, noMatchSentence, splitSummary, lumpSummary, type SplitSummary, newRevisionTally, tallyRevision, type ColRevision } from "@/lib/col-revision";
 import { parseAssessors } from "@/lib/parseAssessors";
 import { iucnRegionCountries, matchingRegions } from "@/lib/regions";
 import { useFilterParams, type SortField, type MapViewMode } from "@/hooks/useFilterParams";
@@ -727,52 +727,60 @@ function RevisionTooltipContent({ flag, name }: { flag: ColRevision; name: strin
   // sentence — for reasons that name no second species ("provisional",
   // "extinct flag") it is the only record there is to open, and even where a
   // second species IS named, "what does CoL say about THIS one" is the question
-  // the flag raises. For `lumped`/`synonym_of` it lands on the same record as
-  // `detail` by construction (that shared record is the whole finding), which is
-  // right rather than redundant: the XR-only id the assessment actually matched
-  // is the one CoL may since have retired.
-  const linkSubject = (text: string): React.ReactNode => {
-    const i = text.indexOf(name);
-    if (i < 0) return text;
+  // the flag raises. A lump's lead also names the CoL species the group is filed
+  // under, which is the most useful target in it, so that gets linked too.
+  const linkNames = (text: string, targets: { name: string; href: string }[]): React.ReactNode => {
+    const hit = targets
+      .map((t) => ({ ...t, at: text.indexOf(t.name) }))
+      .filter((t) => t.at >= 0)
+      .sort((a, b) => a.at - b.at)[0];
+    if (!hit) return text;
     return (
       <>
-        {text.slice(0, i)}
+        {text.slice(0, hit.at)}
         <a
-          href={colTaxonUrl(flag, name)}
+          href={hit.href}
           target="_blank"
           rel="noopener noreferrer"
           onClick={(e) => e.stopPropagation()}
           className="text-blue-300 hover:text-blue-200 underline"
         >
-          {name}
+          {hit.name}
         </a>
-        {text.slice(i + name.length)}
+        {linkNames(text.slice(hit.at + hit.name.length), targets.filter((t) => t.name !== hit.name))}
       </>
     );
   };
+  const linkSubject = (text: string): React.ReactNode => linkNames(text, [
+    { name, href: colTaxonUrl(flag, name) },
+    // For a lump, CoL's accepted name for the shared record — flag.colId IS that
+    // record, so it is the right target even when the name is nobody's own.
+    ...(flag.lumpedUnder && flag.colId ? [{ name: flag.lumpedUnder, href: colUrl(flag.colId) }] : []),
+  ]);
 
-  const sentences: React.ReactNode[] = [];
-  if (flag.reason != null) {
-    const s = noMatchSentence(flag, name);
-    sentences.push(
-      <span key="no-match">
-        {linkSubject(s.before)}
-        {s.detail != null && colLink(s.detail, flag.detailColId)}
-        {s.after}
-      </span>,
-    );
-  }
-  const split = splitSummary(flag, name);
-  if (split) {
-    sentences.push(
-      <span key="split">
-        {linkSubject(split.lead)}
+  // A listed group — split-off species, or the other assessments sharing a
+  // lumped CoL record. Both name several species, both page, and in both the
+  // second name on each row is the evidence, so they render the same way.
+  const renderList = (key: string, summary: SplitSummary) => {
+    const pages = Math.ceil(summary.entries.length / SPLIT_PAGE_SIZE);
+    const from = splitPage * SPLIT_PAGE_SIZE;
+    const to = Math.min(from + SPLIT_PAGE_SIZE, summary.entries.length);
+    const step = (delta: number) => (e: React.MouseEvent) => {
+      e.preventDefault();
+      e.stopPropagation();
+      setSplitPage((p) => Math.min(pages - 1, Math.max(0, p + delta)));
+    };
+    const arrow = "px-1 text-zinc-300 hover:text-white disabled:text-zinc-600 disabled:hover:text-zinc-600";
+    return (
+      <span key={key}>
+        {linkSubject(summary.lead)}
         <ul className="mt-1 space-y-0.5">
-          {split.entries.slice(splitPage * SPLIT_PAGE_SIZE, (splitPage + 1) * SPLIT_PAGE_SIZE).map((e) => (
+          {summary.entries.slice(from, to).map((e) => (
             <li key={e.name} className="flex gap-1.5">
               <span aria-hidden className="text-zinc-500">•</span>
               <span>
                 {colLink(e.name, e.colId)}
+                {e.category && <span className="text-zinc-400"> ({e.category})</span>}
                 {/* The old infraspecific name that now resolves to this species
                     IS the evidence for the split, and CoL only shows it from
                     this side — so link it too. */}
@@ -783,27 +791,36 @@ function RevisionTooltipContent({ flag, name }: { flag: ColRevision; name: strin
             </li>
           ))}
         </ul>
-        {split.entries.length > SPLIT_PAGE_SIZE && (() => {
-          const pages = Math.ceil(split.entries.length / SPLIT_PAGE_SIZE);
-          const from = splitPage * SPLIT_PAGE_SIZE;
-          const to = Math.min(from + SPLIT_PAGE_SIZE, split.entries.length);
-          const step = (delta: number) => (e: React.MouseEvent) => {
-            e.preventDefault();
-            e.stopPropagation();
-            setSplitPage((p) => Math.min(pages - 1, Math.max(0, p + delta)));
-          };
-          const arrow = "px-1 text-zinc-300 hover:text-white disabled:text-zinc-600 disabled:hover:text-zinc-600";
-          return (
-            <div className="mt-1.5 flex items-center gap-1 text-[11px] text-zinc-400">
-              <button type="button" onClick={step(-1)} disabled={splitPage === 0} className={arrow} aria-label="Previous species">‹</button>
-              <span>{from + 1}–{to} of {split.entries.length}</span>
-              <button type="button" onClick={step(1)} disabled={splitPage >= pages - 1} className={arrow} aria-label="More species">›</button>
-            </div>
-          );
-        })()}
-      </span>,
+        {summary.entries.length > SPLIT_PAGE_SIZE && (
+          <div className="mt-1.5 flex items-center gap-1 text-[11px] text-zinc-400">
+            <button type="button" onClick={step(-1)} disabled={splitPage === 0} className={arrow} aria-label="Previous species">‹</button>
+            <span>{from + 1}–{to} of {summary.entries.length}</span>
+            <button type="button" onClick={step(1)} disabled={splitPage >= pages - 1} className={arrow} aria-label="More species">›</button>
+          </div>
+        )}
+      </span>
     );
+  };
+
+  const sentences: React.ReactNode[] = [];
+  if (flag.reason != null) {
+    const lump = lumpSummary(flag, name);
+    if (lump) {
+      sentences.push(renderList("lump", lump));
+    } else {
+      const s = noMatchSentence(flag, name);
+      sentences.push(
+        <span key="no-match">
+          {linkSubject(s.before)}
+          {s.detail != null && colLink(s.detail, flag.detailColId)}
+          {s.after}
+        </span>,
+      );
+    }
   }
+  const split = splitSummary(flag, name);
+  if (split) sentences.push(renderList("split", split));
+
   return (
     <>
       {sentences.map((node, i) => (

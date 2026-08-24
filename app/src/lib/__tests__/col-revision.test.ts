@@ -12,6 +12,8 @@ import {
   noMatchExplanation,
   splitSentence,
   splitSummary,
+  lumpSummary,
+  flattenSummary,
   revisionSentences,
   colTaxonUrl,
   newRevisionTally,
@@ -236,6 +238,57 @@ describe("splitSummary", () => {
   });
 });
 
+describe("lumpSummary", () => {
+  const sus = {
+    reason: "lumped", detail: "Sus scrofa", colId: "53HGR", lumpedUnder: "Sus scrofa",
+    lumpedWith: [{ name: "Sus scrofa", category: "LC" }],
+  };
+  const limonium = {
+    reason: "lumped", colId: "X", lumpedUnder: "Limonium roridum",
+    lumpedWith: [
+      { name: "Limonium dolihiense", colId: "72DMW", category: "EN" },
+      { name: "Limonium helenae", colId: "72DP8", category: "EN" },
+    ],
+  };
+
+  it("is null unless the flag is a lump with its group known", () => {
+    expect(lumpSummary({ splitInto: [{ name: "A" }] }, "X")).toBeNull();
+    // The SSC panel's data carries only the tie-break winner, so callers there
+    // fall back to noMatchSentence rather than rendering an empty list.
+    expect(lumpSummary({ reason: "lumped", detail: "Sus scrofa" }, "Sus bucculentus")).toBeNull();
+  });
+
+  it("says how many assessments describe one CoL species, and what it is called", () => {
+    expect(lumpSummary(sus, "Sus bucculentus")!.lead).toBe(
+      "Catalogue of Life treats Sus bucculentus and 1 other IUCN assessment as a single species," +
+      " Sus scrofa — so more than one assessment covers what Catalogue of Life counts as one species:"
+    );
+    expect(lumpSummary(limonium, "Limonium chersonesum")!.lead)
+      .toContain("and 2 other IUCN assessments as a single species, Limonium roridum");
+  });
+
+  it("lists the other assessments, not the species itself", () => {
+    const entries = lumpSummary(limonium, "Limonium chersonesum")!.entries;
+    expect(entries.map((e) => e.name)).toEqual(["Limonium dolihiense", "Limonium helenae"]);
+    expect(entries.map((e) => e.name)).not.toContain("Limonium chersonesum");
+  });
+
+  it("carries each member's own CoL record and IUCN category", () => {
+    // The category is where the awkwardness shows — one CoL species assessed
+    // both Extinct and Least Concern.
+    const [first] = lumpSummary(limonium, "Limonium chersonesum")!.entries;
+    expect(first.colId).toBe("72DMW");
+    expect(first.category).toBe("EN");
+    expect(flattenSummary(lumpSummary(sus, "Sus bucculentus"))).toContain("Sus scrofa (LC)");
+  });
+
+  it("copes with an accepted name the group does not contain", () => {
+    // Limonium roridum is CoL's name for the group; none of the 15 assessed
+    // species is called that.
+    expect(lumpSummary(limonium, "Limonium chersonesum")!.lead).toContain("Limonium roridum");
+  });
+});
+
 describe("revisionSentences", () => {
   it("returns one sentence per signal, no-match first", () => {
     expect(revisionSentences({ reason: "no_link" }, "Bufo bufo")).toHaveLength(1);
@@ -246,6 +299,13 @@ describe("revisionSentences", () => {
     );
     expect(both).toHaveLength(2);
     expect(both[0]).toContain("is the same species as Leptoxis picta");
+    // With the group known, the lump half becomes the richer list instead.
+    const withGroup = revisionSentences(
+      { reason: "lumped", detail: "Leptoxis picta", lumpedUnder: "Leptoxis picta",
+        lumpedWith: [{ name: "Leptoxis picta", category: "EX" }] },
+      "Leptoxis foremani",
+    );
+    expect(withGroup[0]).toContain("as a single species, Leptoxis picta");
     expect(both[1]).toContain("Leptoxis coosaensis");
     expect(both[1]).toContain("has been split into");
   });

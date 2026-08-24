@@ -214,11 +214,11 @@ export function getColRevisions(): Map<number, ColRevision> {
   if (colRevisionsCache) return colRevisionsCache;
   const out = new Map<number, ColRevision>();
   if (fs.existsSync(COL_REVISIONS_PATH)) {
-    // Short-keyed on disk (r/d/i/dc/c/n/s, absent fields omitted) — one entry per
+    // Short-keyed on disk (r/d/i/dc/c/n/s/lw/ln, absent fields omitted) — one entry per
     // flagged species, so the shipped file stays small. See build-col-revisions.
     const file = JSON.parse(fs.readFileSync(COL_REVISIONS_PATH, "utf-8")) as {
       species: Record<string, { r?: string; d?: string; i?: number; dc?: string; c?: string; n?: string;
-        s?: [string, string, string, string][] }>;
+        s?: [string, string, string, string][]; lw?: [string, string, string][]; ln?: string }>;
     };
     for (const [id, e] of Object.entries(file.species ?? {})) {
       out.set(Number(id), {
@@ -231,6 +231,14 @@ export function getColRevisions(): Map<number, ColRevision> {
         // [name, col_id, previous name, previous col_id] on disk; an empty
         // string means CoL has nothing we can link to, so the UI renders that
         // part as plain text (or omits it).
+        ...(e.lw?.length ? {
+          lumpedWith: e.lw.map(([name, colId, category]) => ({
+            name,
+            ...(colId ? { colId } : {}),
+            ...(category ? { category } : {}),
+          })),
+        } : {}),
+        ...(e.ln != null ? { lumpedUnder: e.ln } : {}),
         ...(e.s?.length ? {
           splitInto: e.s.map(([name, colId, prevName, prevColId]) => ({
             name,
