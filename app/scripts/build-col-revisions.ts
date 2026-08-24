@@ -259,6 +259,7 @@ export async function run(): Promise<void> {
           ON lower(syn.scientific_name) = lower(other.name) AND syn.status = 'synonym' AND syn.parent_id = me.col_id
       )
       SELECT p.id AS id,
+             any_value(p.col_id) AS shared_col_id,
              any_value(acc.scientific_name) AS accepted_name,
              list(struct_pack(name := p.other_name, col_id := p.other_syn_col_id,
                               category := p.other_category) ORDER BY p.other_name) AS others
@@ -282,6 +283,10 @@ export async function run(): Promise<void> {
       if (!others.length) continue;
       entry.lw = others;
       if (r.accepted_name != null) entry.ln = String(r.accepted_name);
+      // The shared record — every member's link target, and the one the
+      // assessment that WON the tie-break never had, since it has no no-match
+      // detail to have carried it.
+      if (entry.c == null && r.shared_col_id != null) entry.c = String(r.shared_col_id);
       // "lumped" is now a signal derived from the group (see revisionReasons),
       // not a per-species reason, so drop the classifier's own label and the
       // winner-specific fields it came with. Anything else it diagnosed stays.

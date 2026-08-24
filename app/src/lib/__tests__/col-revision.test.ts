@@ -262,6 +262,23 @@ describe("lumpSentence", () => {
     expect(lumpSentence({ reason: "lumped", detail: "Sus scrofa" }, "Sus bucculentus")).toBeNull();
   });
 
+  it("keeps CoL's name as its own part, so it can be linked", () => {
+    const c = { colId: "347N2", lumpedUnder: "Dasycercus cristicauda",
+      lumpedWith: [{ name: "Dasycercus hillieri", category: "LC" }] };
+    const l = lumpSentence(c, "Dasycercus cristicauda", "EX")!;
+    expect(l.under).toEqual({ name: "Dasycercus cristicauda", colId: "347N2" });
+    expect(l.mid).not.toContain("Dasycercus");
+    expect(l.after).toBe(".");
+  });
+
+  it("gives every member a link target, falling back to the shared record", () => {
+    // Including the subject: the assessment that won the tie-break has no
+    // no-match detail, so its col_id comes from the group.
+    const l = lumpSentence(limonium, "Limonium crateriforme", "EN")!;
+    expect(l.members.every((m) => m.colId)).toBe(true);
+    expect(l.members[0].colId).toBe("72FJ7");
+  });
+
   it("reads as one sentence naming every assessment and CoL's name for them", () => {
     const c = { colId: "347N2", lumpedUnder: "Dasycercus cristicauda",
       lumpedWith: [{ name: "Dasycercus hillieri", category: "LC" }] };

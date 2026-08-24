@@ -374,6 +374,9 @@ export interface LumpSentence {
   before: string;
   /** Every assessment CoL files under one species, this one first. */
   members: { name: string; colId?: string; category?: string }[];
+  mid: string;
+  /** CoL's name for the merged species — its own part, so it can be a link. */
+  under?: { name: string; colId?: string };
   after: string;
 }
 
@@ -404,9 +407,11 @@ export function lumpSentence(
       // name — links to the shared record, which IS its record.
       ...others.map((o) => (o.colId ? o : { ...o, colId: flag.colId })),
     ],
+    mid: " as a single species",
     // Named even when it repeats one of the members: the first mention is "an
     // assessment", this one is "what CoL calls the merged species".
-    after: ` as a single species${flag.lumpedUnder ? `, ${flag.lumpedUnder}` : ""}.`,
+    ...(flag.lumpedUnder ? { under: { name: flag.lumpedUnder, colId: flag.colId } } : {}),
+    after: ".",
   };
 }
 
@@ -417,7 +422,7 @@ export function flattenLump(l: LumpSentence | null): string | null {
   const joined = parts.length > 1
     ? `${parts.slice(0, -1).join(", ")} and ${parts[parts.length - 1]}`
     : parts[0];
-  return `${l.before}${joined}${l.after}`;
+  return `${l.before}${joined}${l.mid}${l.under ? `, ${l.under.name}` : ""}${l.after}`;
 }
 
 /** The summary flattened to one plain string, for a context that can't hold links. */

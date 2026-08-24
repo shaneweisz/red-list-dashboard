@@ -818,6 +818,8 @@ function RevisionTooltipContent({ flag, name, category }: { flag: ColRevision; n
             {m.category && <span className="text-zinc-400"> ({m.category})</span>}
           </React.Fragment>
         ))}
+        {lump.mid}
+        {lump.under && <>{", "}{colLink(lump.under.name, lump.under.colId)}</>}
         {lump.after}
       </span>,
     );
