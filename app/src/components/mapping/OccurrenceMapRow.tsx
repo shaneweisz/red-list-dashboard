@@ -790,6 +790,8 @@ export default function OccurrenceMapRow({
   const [aooCellKm, setAooCellKm] = useState(2);
   const [aooCellOpen, setAooCellOpen] = useState(false);
   const [habitatLegendOpen, setHabitatLegendOpen] = useState(false);
+  /** Whether the tree cover loss legend's two caveats are showing. */
+  const [forestLossNotesOpen, setForestLossNotesOpen] = useState(false);
   const [biomeLegendOpen, setBiomeLegendOpen] = useState(false);
   /**
    * What's at the point last clicked: its elevation, and — when the overlay is
@@ -3852,11 +3854,11 @@ export default function OccurrenceMapRow({
               and the layer is named for the platform it comes from, since
               that's the name an assessor knows it by.
 
-              What the colours don't mean is spelled out under them rather than
-              left in a title attribute. On a Red List tool "this pink is
-              logging rotation, not habitat destroyed" is not a hover-to-find
-              detail: someone reads loss inside a range and draws a conclusion
-              from it, so the correction belongs where the colour is. */}
+              What the colours don't mean sits behind the chevron, the same way
+              the habitat classes do. Three lines of prose is a lot of map to
+              cover permanently, and the layer is now named "tree cover loss"
+              rather than "forest loss", which carries most of the correction on
+              its own. The rest is a click away, and in the row's tooltip. */}
           {showForestLoss && !loadingOccurrences && (
             <div className="bg-white dark:bg-zinc-800 px-2 py-1.5 rounded text-[11px] text-zinc-600 dark:text-zinc-300 shadow max-w-md">
             <div
@@ -3886,14 +3888,23 @@ export default function OccurrenceMapRow({
                 style={{ background: `linear-gradient(to right, ${FOREST_LOSS_RAMP[0]}, ${FOREST_LOSS_RAMP[1]})` }}
               />
               <span className="tabular-nums">{FOREST_LOSS_LAST_YEAR}</span>
+              <button
+                onClick={() => setForestLossNotesOpen((v) => !v)}
+                title={forestLossNotesOpen ? "Hide what this layer does and doesn't mean" : "What this layer does and doesn't mean"}
+                className="ml-auto text-[9px] text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300"
+              >
+                {forestLossNotesOpen ? "\u25be" : "\u25b8"}
+              </button>
             </div>
-            <div className="pt-1 text-[10px] leading-snug text-zinc-500 dark:text-zinc-400">
-              <div>
-                <span className="font-medium">Loss is disturbance, not deforestation.</span>{" "}
-                {FOREST_LOSS_CAVEAT}
+            {forestLossNotesOpen && (
+              <div className="pt-1 text-[10px] leading-snug text-zinc-500 dark:text-zinc-400">
+                <div>
+                  <span className="font-medium">Loss is disturbance, not deforestation.</span>{" "}
+                  {FOREST_LOSS_CAVEAT}
+                </div>
+                <div className="pt-0.5">{FOREST_LOSS_THRESHOLD_NOTE}</div>
               </div>
-              <div className="pt-0.5">{FOREST_LOSS_THRESHOLD_NOTE}</div>
-            </div>
+            )}
             </div>
           )}
           {/* The habitat legend is 18 classes, which laid out flat covers a
