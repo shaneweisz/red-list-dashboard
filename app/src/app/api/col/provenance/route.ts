@@ -3,6 +3,28 @@
  * on a taxon page ("Taxonomic scrutiny", "Source", "Original record"), for the
  * ⚑ tooltip on the dashboard.
  *
+ * Provenance only — who CoL credits, which dataset it came from, where to check
+ * it. CoL also rates each source (a 1-5 `confidence` and a `completeness`
+ * percentage) and neither is shown. Both grade the DATASET, but printed beside
+ * one record they read as a verdict on that record, and this tooltip exists
+ * because the record may be wrong.
+ *
+ * Dasycercus is the case that settled it. CoL recognises two species,
+ * cristicauda and blythi, sourced from ITIS — which CoL rates 5/5. Newman-Martin
+ * et al. (2023, Alcheringa) revised the genus to six, confirming hillieri as
+ * valid and describing three more; the Mammal Diversity Database and IUCN both
+ * follow that, and IUCN assesses all six. So CoL is three years behind here, and
+ * "Confidence: 5/5" on that record would have been our own UI contradicting the
+ * flag beside it.
+ *
+ * Deliberately provenance only: who CoL credits, which dataset it came from, and
+ * where to check it. CoL also rates each source (a 1-5 `confidence`, and a
+ * `completeness` percentage), and neither is shown. Both grade the DATASET, but
+ * beside a single record they read as a verdict on that record — and this
+ * tooltip exists precisely because the record may be wrong. Telling someone a
+ * record is 5/5 trustworthy in the same breath as "CoL may not have caught up
+ * here" is a contradiction, and the score is the half that is not ours to make.
+ *
  * None of this is in our own backbone: build-backbone reads NameUsage.tsv, which
  * carries names and ranks, not sectors. It takes three ChecklistBank calls to
  * assemble — taxon → sector → source dataset — which is why it lives behind one
@@ -28,10 +50,6 @@ export interface ColProvenance {
   /** "WoRMS Mollusca" / "MolluscaBase" — the source dataset CoL took it from. */
   sourceAlias?: string;
   sourceTitle?: string;
-  /** CoL's 1-5 rating of the source. Shown in preference to the sibling
-   *  `completeness` percentage, which measures coverage of the source's scope
-   *  rather than how much to trust the record, and reads as neither. */
-  confidence?: number;
   /** The record on the source's own site. */
   link?: string;
   /** ChecklistBank key for the source dataset, so the UI can link to its CoL page. */
@@ -42,7 +60,7 @@ export interface ColProvenance {
 // CoL release, so the ceiling is the number of sectors (a few thousand), not
 // the number of species.
 const sectorToSource = new Map<number, number | null>();
-const sourceMeta = new Map<number, { alias?: string; title?: string; confidence?: number }>();
+const sourceMeta = new Map<number, { alias?: string; title?: string }>();
 
 async function getJson(path: string): Promise<Record<string, unknown> | null> {
   const controller = new AbortController();
@@ -86,13 +104,11 @@ export async function GET(request: NextRequest) {
         sourceMeta.set(sourceKey, {
           alias: typeof src?.alias === "string" ? src.alias : undefined,
           title: typeof src?.title === "string" ? src.title : undefined,
-          confidence: typeof src?.confidence === "number" ? src.confidence : undefined,
         });
       }
       const meta = sourceMeta.get(sourceKey);
       if (meta?.alias != null) out.sourceAlias = meta.alias;
       if (meta?.title != null) out.sourceTitle = meta.title;
-      if (meta?.confidence != null) out.confidence = meta.confidence;
       out.sourceKey = sourceKey;
     }
   }
