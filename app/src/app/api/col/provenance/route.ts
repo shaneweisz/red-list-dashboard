@@ -28,8 +28,10 @@ export interface ColProvenance {
   /** "WoRMS Mollusca" / "MolluscaBase" — the source dataset CoL took it from. */
   sourceAlias?: string;
   sourceTitle?: string;
-  /** Source's self-reported completeness, shown as a percentage by CoL. */
-  completeness?: number;
+  /** CoL's 1-5 rating of the source. Shown in preference to the sibling
+   *  `completeness` percentage, which measures coverage of the source's scope
+   *  rather than how much to trust the record, and reads as neither. */
+  confidence?: number;
   /** The record on the source's own site. */
   link?: string;
   /** ChecklistBank key for the source dataset, so the UI can link to its CoL page. */
@@ -40,7 +42,7 @@ export interface ColProvenance {
 // CoL release, so the ceiling is the number of sectors (a few thousand), not
 // the number of species.
 const sectorToSource = new Map<number, number | null>();
-const sourceMeta = new Map<number, { alias?: string; title?: string; completeness?: number }>();
+const sourceMeta = new Map<number, { alias?: string; title?: string; confidence?: number }>();
 
 async function getJson(path: string): Promise<Record<string, unknown> | null> {
   const controller = new AbortController();
@@ -84,13 +86,13 @@ export async function GET(request: NextRequest) {
         sourceMeta.set(sourceKey, {
           alias: typeof src?.alias === "string" ? src.alias : undefined,
           title: typeof src?.title === "string" ? src.title : undefined,
-          completeness: typeof src?.completeness === "number" ? src.completeness : undefined,
+          confidence: typeof src?.confidence === "number" ? src.confidence : undefined,
         });
       }
       const meta = sourceMeta.get(sourceKey);
       if (meta?.alias != null) out.sourceAlias = meta.alias;
       if (meta?.title != null) out.sourceTitle = meta.title;
-      if (meta?.completeness != null) out.completeness = meta.completeness;
+      if (meta?.confidence != null) out.confidence = meta.confidence;
       out.sourceKey = sourceKey;
     }
   }

@@ -799,10 +799,13 @@ function ColProvenanceBlock({ colId }: { colId: string }) {
       {source && (
         <>
           <span className="text-zinc-500">Source:</span>
-          <span>
-            {data.sourceKey != null ? link(colDatasetUrl(data.sourceKey), source) : source}
-            {data.completeness != null && ` ${data.completeness}%`}
-          </span>
+          <span>{data.sourceKey != null ? link(colDatasetUrl(data.sourceKey), source) : source}</span>
+        </>
+      )}
+      {data.confidence != null && (
+        <>
+          <span className="text-zinc-500">Confidence:</span>
+          <span>{data.confidence}/5</span>
         </>
       )}
       {data.link && (
