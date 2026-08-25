@@ -251,6 +251,10 @@ interface ColumnDef {
   /** A control drawn in the header beside the label — the Included column's
    *  show/hide toggle. Its own clicks are kept off the sort handler. */
   headerExtra?: React.ReactNode;
+  /** Draws only `headerExtra` in the header: the eye says "shown" by itself,
+   *  and the word beside it was spending a column's width on saying it twice.
+   *  The label is still what the column picker lists. */
+  headerIconOnly?: boolean;
 }
 
 /**
@@ -389,14 +393,12 @@ interface OccurrenceListTableProps {
    * fields" on the map. The map can only draw a position; every other field
    * GBIF publishes is a column here, so that's where the answer lives.
    */
-  focusGbifId?: number | null;
   /** Pointer entered/left a row — the map highlights the matching record. */
   onHoverRow?: (feature: OccurrenceFeature | null) => void;
   /**
    * A row was clicked. The map pins that record's panel, the mirror of a click
    * on a point scrolling the table to its row.
    */
-  onSelectRow?: (feature: OccurrenceFeature) => void;
   /** Records the filters have excluded. They stay in the table, greyed, rather
    *  than vanishing — a record you can't see is a record you can't judge. */
   excludedIds?: Set<number>;
@@ -436,9 +438,7 @@ export default function OccurrenceListTable({
   onSaveGeoreference,
   onClearGeoreference,
   hoveredGbifId,
-  focusGbifId,
   onHoverRow,
-  onSelectRow,
   excludedIds,
   exclusions,
   onExclude,
@@ -574,9 +574,6 @@ export default function OccurrenceListTable({
    * that is entirely excluded already puts itself back instead.
    */
   // Held in refs so selecting a row doesn't rebuild every column definition.
-  const rowsRef = useRef<OccurrenceFeature[]>([]);
-  const onSelectRowRef = useRef(onSelectRow);
-  onSelectRowRef.current = onSelectRow;
 
   const excludeSelection = useCallback(() => {
     const ids = [...selectionRef.current];
@@ -597,12 +594,6 @@ export default function OccurrenceListTable({
       // anchor to the row it just clicked, selecting one row instead of a run.
       const anchor = lastClickedRow.current;
       lastClickedRow.current = gbifID;
-      // A plain click is "show me this one"; a shift-click is building a run,
-      // where pinning a panel per row would be noise.
-      if (!extend) {
-        const picked = rowsRef.current.find((r) => r.properties.gbifID === gbifID);
-        if (picked) onSelectRowRef.current?.(picked);
-      }
       setSelection((prev) => {
         const next = new Set(prev);
         if (extend && anchor != null) {
@@ -633,6 +624,7 @@ export default function OccurrenceListTable({
       {
         key: "included",
         label: "Shown",
+        headerIconOnly: true,
         title:
           "Whether this record counts. Unticking asks for a reason — drag down the column to hide a run of records (duplicates, usually) in one go.",
         className: "whitespace-nowrap",
@@ -1198,7 +1190,6 @@ export default function OccurrenceListTable({
   const matchSet = useMemo(() => new Set(matches), [matches]);
 
   rowOrderRef.current = rows.map((f) => f.properties.gbifID);
-  rowsRef.current = rows;
 
   const selectedIds = useMemo(
     () => rows.map((f) => f.properties.gbifID).filter((id) => selection.has(id)),
@@ -1222,14 +1213,6 @@ export default function OccurrenceListTable({
     container.scrollBy({ top: delta, behavior: "smooth" });
   };
 
-  // Deliberately not scrolling when the id is unchanged: asking for the same
-  // record twice should take you back to it, so the caller clears and re-sets.
-  useEffect(() => {
-    if (focusGbifId == null) return;
-    // After the row has been laid out, or there is nothing to scroll to yet.
-    const frame = requestAnimationFrame(() => scrollRowToTop(focusGbifId));
-    return () => cancelAnimationFrame(frame);
-  }, [focusGbifId]);
 
   const stepMatch = (delta: number) => {
     if (matches.length === 0) return;
@@ -1309,7 +1292,7 @@ export default function OccurrenceListTable({
                       dragColumn === col.key ? "opacity-40" : ""
                     } ${col.className ?? ""}`}
                   >
-                    {col.label}
+                    {!col.headerIconOnly && col.label}
                     <span className={`ml-1 ${active ? "text-zinc-400" : "text-transparent"}`}>
                       {active && !sortAsc ? "▼" : "▲"}
                     </span>
@@ -1410,9 +1393,7 @@ export default function OccurrenceListTable({
                 onMouseEnter={() => onHoverRow?.(f)}
                 onMouseLeave={() => onHoverRow?.(null)}
                 className={`border-b border-zinc-100 dark:border-zinc-800 ${
-                  focusGbifId === id
-                    ? "bg-blue-50 dark:bg-blue-950/40 ring-1 ring-inset ring-blue-400"
-                    : hoveredGbifId === id
+                  hoveredGbifId === id
                     ? "bg-blue-50 dark:bg-blue-950/40"
                     : currentMatch === id
                       ? "bg-amber-100 dark:bg-amber-900/40"

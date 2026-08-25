@@ -821,8 +821,6 @@ export default function OccurrenceMapRow({
    * of duplicates is the real one — have no other way in from the map.
    */
 
-  /** A record the table should scroll to and pick out. */
-  const [focusRecord, setFocusRecord] = useState<number | null>(null);
   const [showRangeMetrics, setShowRangeMetrics] = useState(false);
   /**
    * The AOO grid's cell width, in kilometres.
@@ -1180,6 +1178,12 @@ export default function OccurrenceMapRow({
    */
   const [hoverSource, setHoverSource] = useState<"map" | "list" | null>(null);
   /** A hovered point from the loaded IUCN point file, which is not a GBIF record. */
+  /**
+   * Where to hang the panel for a record that has no coordinates of its own:
+   * the imported point that matched it. Keyed by record so it can never be
+   * left over from the last one hovered.
+   */
+  const [hoverAnchor, setHoverAnchor] = useState<{ gbifID: number; lng: number; lat: number } | null>(null);
   const [pointFileHover, setPointFileHover] = useState<{
     row: number;
     lat: number;
@@ -2282,11 +2286,6 @@ export default function OccurrenceMapRow({
           setHoveredPanel(panelId);
           pinTooltip();
         }
-        // And take the table to it. The map can only draw a position; every
-        // other field GBIF publishes is a column down there, so a click on a
-        // point should put the record in front of you both ways.
-        setFocusRecord(null);
-        window.setTimeout(() => setFocusRecord(gbifID), 0);
         return;
       }
     }
@@ -2585,10 +2584,18 @@ export default function OccurrenceMapRow({
       const merged = comparison?.matched
         ? occurrencesByGbifId.get(comparison.matched.gbifID)
         : undefined;
+      const [lng, lat] = (filePoint.geometry as GeoJSON.Point).coordinates as [number, number];
       if (merged) {
         setPointFileHover(null);
         cancelHoverClear();
         setHoverSource("map");
+        // The imported point is where the panel hangs when the record has no
+        // position of its own — which is the usual case for a matched row,
+        // since a coordinate GBIF never published is why the assessor
+        // georeferenced it into the file. Anchored to the record's own
+        // coordinates the panel had nowhere to go, so hovering these points
+        // showed nothing at all.
+        setHoverAnchor({ gbifID: merged.properties.gbifID, lng, lat });
         if (merged.properties.gbifID !== hoveredFeature?.properties.gbifID) {
           setGroupIndex(0);
           unpinTooltip();
@@ -2597,7 +2604,14 @@ export default function OccurrenceMapRow({
         setHoveredPanel(panelId);
         return;
       }
-      const [lng, lat] = (filePoint.geometry as GeoJSON.Point).coordinates as [number, number];
+      // Nothing in the file matched a GBIF record here, so the row gets its
+      // own popup — and the record panel has to go. It draws over the map from
+      // a portal, so a panel left up from the record you crossed on the way
+      // covered the popup for the point you're actually on.
+      cancelHoverClear();
+      unpinTooltip();
+      setHoveredFeature(null);
+      setHoveredPanel(null);
       setPointFileHover({ row, lat, lng, panelId });
       return;
     }
@@ -2862,8 +2876,11 @@ export default function OccurrenceMapRow({
     if (!hoveredFeature) return null;
     const mine = georeferences[hoveredFeature.properties.gbifID];
     if (mine) return [mine.decimalLongitude, mine.decimalLatitude];
-    return hoveredFeature.geometry?.coordinates ?? null;
-  }, [hoveredFeature, georeferences]);
+    if (hoveredFeature.geometry?.coordinates) return hoveredFeature.geometry.coordinates;
+    return hoverAnchor && hoverAnchor.gbifID === hoveredFeature.properties.gbifID
+      ? [hoverAnchor.lng, hoverAnchor.lat]
+      : null;
+  }, [hoveredFeature, georeferences, hoverAnchor]);
 
   /**
    * Records sharing a position, keyed by rounded coordinates.
@@ -3305,15 +3322,16 @@ export default function OccurrenceMapRow({
                 const shown = hoveredGroup[Math.min(groupIndex, hoveredGroup.length - 1)] ?? hoveredFeature;
                 const hInat = inatPhotosByGbifId.get(shown.properties.gbifID);
                 const mine = georeferences[shown.properties.gbifID];
+                // Built here because this is where the assessor's own
+                // coordinates, the cleaning flags and the native-range check
+                // all live.
+                const { fields, notes } = recordFields(shown, mine, hInat);
                 return (
                   <MapOccurrenceTooltip
                     lat={hLat}
                     lng={hLon}
-                    // Every field the record has, in reading order, for the
-                    // panel to page through. Built here because this is where
-                    // the assessor's own coordinates, the cleaning flags and
-                    // the native-range check all live.
-                    fields={recordFields(shown, mine, hInat)}
+                    fields={fields}
+                    notes={notes}
                     images={shown.properties.images}
                     page={
                       hoveredGroup.length > 1
@@ -4427,10 +4445,20 @@ export default function OccurrenceMapRow({
         ? [mine.decimalLongitude, mine.decimalLatitude]
         : feature.geometry?.coordinates;
       const uncertainty = mine?.coordinateUncertaintyInMeters ?? p.coordinateUncertaintyInMeters;
-      const rows: { label: string; value: string; flag?: boolean }[] = [];
+      // What GBIF publishes about the record, and what this dashboard says
+      // about it, kept apart. Mixed together, "Outside native range" read as
+      // another field off the record rather than a call we made about it.
+      const rows: { label: string; value: string }[] = [];
+      const notes: { label: string; value: string; flag?: boolean }[] = [];
+      const text = (value: unknown) =>
+        (Array.isArray(value) ? value.join(", ") : value == null ? "" : String(value)).trim();
       const add = (label: string, value: unknown) => {
-        const text = Array.isArray(value) ? value.join(", ") : value == null ? "" : String(value);
-        if (text.trim()) rows.push({ label, value: text });
+        const t = text(value);
+        if (t) rows.push({ label, value: t });
+      };
+      const note = (label: string, value: unknown, flag = false) => {
+        const t = text(value);
+        if (t) notes.push({ label, value: t, flag });
       };
       add("Species", p.species);
       add("Basis", formatBasisOfRecord(p.basisOfRecord));
@@ -4457,17 +4485,18 @@ export default function OccurrenceMapRow({
       add("Identified by", p.identifiedBy);
       add("Elevation", p.elevation ?? p.verbatimElevation);
       add("Dataset", p.datasetName);
+      add("GBIF id", p.gbifID);
       if (!mine) {
-        add(
+        note(
           "Flagged",
-          (p.qualityFlags ?? []).map((f) => QUALITY_FLAG_LABELS[f as QualityFlag] || f).join(", ")
+          (p.qualityFlags ?? []).map((f) => QUALITY_FLAG_LABELS[f as QualityFlag] || f).join(", "),
+          true
         );
       }
       if (isOutsideNativeRange(p.countryCode, effectiveNativeCountries)) {
-        add("Range", `Outside native range${p.country ? ` (${p.country})` : ""}`);
+        note("Range", `Outside native range${p.country ? ` (${p.country})` : ""}`, true);
       }
-      add("Hidden", exclusions[p.gbifID]?.justification);
-      add("GBIF id", p.gbifID);
+      note("Hidden", exclusions[p.gbifID]?.justification);
 
       /*
        * The imported point for this record, folded in rather than given a
@@ -4482,7 +4511,7 @@ export default function OccurrenceMapRow({
       if (imported) {
         const point = imported.point;
         const drift = imported.fromGbif;
-        rows.push({
+        notes.push({
           label: "Imported CSV",
           value:
             drift == null
@@ -4501,14 +4530,14 @@ export default function OccurrenceMapRow({
           const a = String(csv ?? "").trim();
           const b = String(gbif ?? "").trim();
           if (!a || same(a, b)) return;
-          rows.push({ label: `CSV ${label}`, value: b ? `${a} — GBIF: ${b}` : a, flag: !!b });
+          notes.push({ label: `CSV ${label}`, value: b ? `${a} — GBIF: ${b}` : a, flag: !!b });
         };
         differs("year", point.fields.event_year, p.year);
         differs("catalogue no.", point.fields.catalog_no, p.catalogNumber);
         differs("recorded by", point.fields.recordedby, p.recordedBy);
         differs("basis", point.fields.basisofrec, p.basisOfRecord);
       }
-      return rows;
+      return { fields: rows, notes };
     },
     [effectiveNativeCountries, exclusions, pointFileByGbifId]
   );
@@ -6298,24 +6327,10 @@ export default function OccurrenceMapRow({
                   loading={loadingOccurrences}
                   isOutsideNativeRange={isOutsideNativeRangeForList}
                   georeferences={georeferences}
-                  focusGbifId={focusRecord}
                   onSaveGeoreference={saveGeoreferenceInline}
                   onClearGeoreference={clearGeoreference}
                   hoveredGbifId={hoveredFeature?.properties.gbifID ?? null}
                   onHoverRow={handleHoverRow}
-                  // The mirror of clicking a point: picking a row pins that
-                  // record's panel on the map, so the two views agree about
-                  // what you're looking at whichever one you touched.
-                  onSelectRow={(feature) => {
-                    cancelHoverClear();
-                    setGroupIndex(0);
-                    // "map", not "list": the panel this pins is the map's
-                    // own, and it only renders for a map-sourced hover.
-                    setHoverSource("map");
-                    setHoveredFeature(feature);
-                    setHoveredPanel("main");
-                    pinTooltip();
-                  }}
                   excludedIds={excludedIds}
                   exclusions={exclusions}
                   onExclude={setPendingExclusion}

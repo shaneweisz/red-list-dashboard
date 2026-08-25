@@ -17,18 +17,24 @@ interface MapOccurrenceTooltipProps {
    * plain columns say the same things and let you compare one record with the
    * next without decoding the formatting first.
    */
+  fields: { label: string; value: string }[];
   /**
-   * `flag` marks a row where an imported CSV and GBIF disagree — the one
-   * thing in a merged record worth picking out of the table.
+   * What this dashboard says about the record, as opposed to what GBIF
+   * publishes about it: the coordinate-cleaning flags, whether it falls
+   * outside the native range, why it's hidden, how an imported CSV row
+   * disagrees with it.
+   *
+   * Kept out of the table and below it. Mixed in, an inference of ours read
+   * as another field off the record, and the table stopped being a copy of
+   * what the publisher sent. `flag` marks the ones worth picking out.
    */
-  fields: { label: string; value: string; flag?: boolean }[];
+  notes?: { label: string; value: string; flag?: boolean }[];
   /**
    * Photographs the publisher attached to the record, from GBIF's media.
    *
-   * Drawn in a fixed-height strip. The earlier attempt let the picture size
-   * itself, so the panel grew and shrank under the pointer as you paged
-   * between records stacked on one spot; reserving the height means the
-   * fields below it never move.
+   * Drawn beside the panel at a size worth looking at — a herbarium sheet is
+   * the record, and a 64px thumbnail of one says only that a photograph
+   * exists. Clicking opens the full image.
    */
   images?: { url: string; title?: string; creator?: string; license?: string; rightsHolder?: string }[];
   /** Position within the records sharing this point, when more than one does. */
@@ -46,9 +52,6 @@ interface MapOccurrenceTooltipProps {
    */
   actions?: React.ReactNode;
 }
-
-/** Fields shown at once before the table pages. */
-const FIELDS_PER_PAGE = 7;
 
 export default function MapOccurrenceTooltip(props: MapOccurrenceTooltipProps) {
   const { current: map } = useMap();
@@ -70,10 +73,6 @@ export default function MapOccurrenceTooltip(props: MapOccurrenceTooltipProps) {
    * NotFoundError, which takes the whole page down.
    */
   const [brokenImages, setBrokenImages] = useState<string[]>([]);
-  /** Which page of the record's fields is showing. */
-  const [fieldPage, setFieldPage] = useState(0);
-  /** The photograph under the pointer, shown at a size worth looking at. */
-  const [zoomed, setZoomed] = useState<string | null>(null);
   const observerRef = useRef<ResizeObserver | null>(null);
   const panelRef = useCallback((el: HTMLDivElement | null) => {
     observerRef.current?.disconnect();
@@ -108,9 +107,6 @@ export default function MapOccurrenceTooltip(props: MapOccurrenceTooltipProps) {
   const fixedY = containerRect.top + pos.y;
 
   const shownImages = (props.images ?? []).filter((i) => !brokenImages.includes(i.url));
-  const totalPages = Math.max(1, Math.ceil(props.fields.length / FIELDS_PER_PAGE));
-  const first = Math.min(fieldPage, totalPages - 1) * FIELDS_PER_PAGE;
-  const pageFields = props.fields.slice(first, first + FIELDS_PER_PAGE);
 
   const tooltipWidth = 220;
   // Beside the point rather than above it: the map is far wider than it is
@@ -164,16 +160,24 @@ export default function MapOccurrenceTooltip(props: MapOccurrenceTooltipProps) {
     />
   );
 
-  // Beside the panel rather than inside it. A specimen photograph in a 220px
-  // column is a thumbnail of a thumbnail; given its own strip it can be looked
-  // at, and hovering one opens it wide enough to read a label off.
-  const IMAGE_STRIP = 64;
-  /** How wide a thumbnail opens to when the pointer is on it. */
-  const ZOOM_WIDTH = 280;
-  const zoomedImage = shownImages.find((i) => i.url === zoomed);
-  const imagesLeft = showLeft
-    ? panelLeft - IMAGE_STRIP - 6
-    : panelLeft + tooltipWidth + 6;
+  /**
+   * The photographs, in a column of their own beside the panel.
+   *
+   * Wide enough to read a herbarium label off from the start. They used to be
+   * 64px thumbnails that opened on hover, which meant the one thing on the
+   * record you can actually look at was the one thing you had to go and find.
+   *
+   * The column takes the far side of the panel where there's room for it, and
+   * the near side where there isn't, so it never lands off the map.
+   */
+  const IMAGE_WIDTH = 260;
+  const outerLeft = showLeft ? panelLeft - IMAGE_WIDTH - 6 : panelLeft + tooltipWidth + 6;
+  const innerLeft = showLeft ? panelLeft + tooltipWidth + 6 : panelLeft - IMAGE_WIDTH - 6;
+  const fits = (x: number) => x >= containerRect.left + 4 && x + IMAGE_WIDTH <= containerRect.right - 4;
+  const imagesLeft = Math.max(
+    containerRect.left + 4,
+    Math.min(fits(outerLeft) || !fits(innerLeft) ? outerLeft : innerLeft, containerRect.right - IMAGE_WIDTH - 4)
+  );
 
   return createPortal(
     <>
@@ -184,14 +188,15 @@ export default function MapOccurrenceTooltip(props: MapOccurrenceTooltipProps) {
           left: imagesLeft,
           top: clampedY,
           transform: "translateY(-50%)",
-          width: IMAGE_STRIP,
+          width: IMAGE_WIDTH,
+          maxHeight: "min(70vh, 420px)",
           zIndex: 10000,
           pointerEvents: "auto",
         }}
         onMouseEnter={props.onPointerEnter}
-        onMouseLeave={() => { setZoomed(null); props.onPointerLeave?.(); }}
+        onMouseLeave={props.onPointerLeave}
         data-occurrence-images
-        className="flex flex-col gap-1"
+        className="flex flex-col gap-1 overflow-y-auto"
       >
         {shownImages.map((image) => (
           <a
@@ -199,19 +204,18 @@ export default function MapOccurrenceTooltip(props: MapOccurrenceTooltipProps) {
             href={image.url}
             target="_blank"
             rel="noopener noreferrer"
-            onMouseEnter={() => setZoomed(image.url)}
             // Credit belongs with the picture: GBIF media carries the
             // publisher's own rights statement and it travels with it.
             title={[image.title, image.creator, image.rightsHolder, image.license]
               .filter(Boolean)
               .join(" · ")}
-            className="relative block rounded overflow-hidden bg-zinc-100 dark:bg-zinc-800 shadow-md"
+            className="block rounded-lg overflow-hidden bg-white dark:bg-zinc-900 shadow-xl border border-zinc-200 dark:border-zinc-700"
           >
             <img
               src={image.url}
               alt={image.title ?? "Specimen photograph"}
               loading="lazy"
-              className="w-full h-16 object-cover"
+              className="w-full max-h-[19rem] object-contain"
               onError={() => {
                 // A publisher's dead image link shouldn't leave a
                 // broken-image glyph sitting beside the panel — but it has to
@@ -220,35 +224,14 @@ export default function MapOccurrenceTooltip(props: MapOccurrenceTooltipProps) {
                 setBrokenImages((prev) => (prev.includes(image.url) ? prev : [...prev, image.url]));
               }}
             />
+            {image.creator && (
+              <span className="block px-1.5 py-1 text-[10px] text-zinc-500 dark:text-zinc-400 truncate">
+                © {image.creator}
+                {image.license ? ` · ${image.license.replace(/^https?:\/\//, "")}` : ""}
+              </span>
+            )}
           </a>
         ))}
-      </div>
-    )}
-    {/* The enlargement sits outside the strip on purpose. The strip is
-        translated, which makes it the containing block for anything fixed
-        inside it, and each thumbnail clips its own overflow — so an
-        enlargement rendered within the thumbnail was positioned against the
-        strip and then cropped to 64px, which is exactly the thumbnail it was
-        meant to escape. */}
-    {zoomedImage && (
-      <div
-        style={{
-          position: "fixed",
-          left: showLeft ? imagesLeft - ZOOM_WIDTH - 6 : imagesLeft + IMAGE_STRIP + 6,
-          top: Math.max(8, clampedY - 140),
-          width: ZOOM_WIDTH,
-          zIndex: 10001,
-          pointerEvents: "none",
-        }}
-        className="rounded-lg overflow-hidden shadow-2xl border-2 border-white dark:border-zinc-700 bg-white dark:bg-zinc-900"
-      >
-        <img src={zoomedImage.url} alt="" className="w-full max-h-[19rem] object-contain" />
-        {zoomedImage.creator && (
-          <span className="block px-1.5 py-1 text-[10px] text-zinc-500 dark:text-zinc-400 truncate">
-            © {zoomedImage.creator}
-            {zoomedImage.license ? ` · ${zoomedImage.license.replace(/^https?:\/\//, "")}` : ""}
-          </span>
-        )}
       </div>
     )}
     <div
@@ -262,9 +245,11 @@ export default function MapOccurrenceTooltip(props: MapOccurrenceTooltipProps) {
         transform: "translateY(-50%)",
         width: tooltipWidth,
         zIndex: 10000,
-        // Interactive when it has controls: you have to be able to reach the
-        // pager — or the edit link — without the tooltip vanishing on the way.
-        pointerEvents: props.page || props.actions ? "auto" : "none",
+        // Interactive when there is something to reach: the record pager, an
+        // action, or a field list long enough to scroll. Inert otherwise, so a
+        // panel with four lines in it can't get between the pointer and the
+        // map.
+        pointerEvents: props.page || props.actions || props.fields.length > 8 ? "auto" : "none",
       }}
       onMouseEnter={props.onPointerEnter}
       onMouseLeave={props.onPointerLeave}
@@ -335,52 +320,43 @@ export default function MapOccurrenceTooltip(props: MapOccurrenceTooltipProps) {
             </div>
           )}
           {/* The record as a table. One type, one colour, two columns: the
-              label you are looking up and the value it has. */}
+              label you are looking up and the value it has.
+
+              Scrolled rather than paged. Paging meant a record's fields were
+              split across three screens with no way to see two of them at
+              once, and the field you wanted was never on the page you were
+              looking at. */}
+          <div className="max-h-[220px] overflow-y-auto overscroll-contain">
           <table className="w-full border-collapse">
             <tbody>
-              {pageFields.map((field) => (
+              {props.fields.map((field) => (
                 <tr key={field.label} className="align-top">
-                  <td
-                    className={`py-[1px] pr-1.5 whitespace-nowrap ${
-                      field.flag ? "text-amber-600 dark:text-amber-500" : "text-zinc-400 dark:text-zinc-500"
-                    }`}
-                  >
+                  <td className="py-[1px] pr-1.5 whitespace-nowrap text-zinc-400 dark:text-zinc-500">
                     {field.label}
                   </td>
-                  <td
-                    className={`py-[1px] break-words ${
-                      field.flag ? "text-amber-700 dark:text-amber-400" : "text-zinc-700 dark:text-zinc-200"
-                    }`}
-                  >
-                    {field.value}
-                  </td>
+                  <td className="py-[1px] break-words text-zinc-700 dark:text-zinc-200">{field.value}</td>
                 </tr>
               ))}
             </tbody>
           </table>
-          {totalPages > 1 && (
-            <div className="flex items-center gap-1 pt-1 mt-1 border-t border-zinc-100 dark:border-zinc-800 text-[10px] text-zinc-400">
-              <span className="tabular-nums">
-                {first + 1}–{Math.min(first + FIELDS_PER_PAGE, props.fields.length)} of {props.fields.length}
-              </span>
-              <button
-                onClick={() => setFieldPage((n) => (n - 1 + totalPages) % totalPages)}
-                title="Previous fields"
-                className="ml-auto p-0.5 hover:text-zinc-700 dark:hover:text-zinc-200"
-              >
-                <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
-                </svg>
-              </button>
-              <button
-                onClick={() => setFieldPage((n) => (n + 1) % totalPages)}
-                title="More fields"
-                className="p-0.5 hover:text-zinc-700 dark:hover:text-zinc-200"
-              >
-                <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
-                </svg>
-              </button>
+          </div>
+          {props.notes && props.notes.length > 0 && (
+            <div className="pt-1 mt-1 border-t border-zinc-100 dark:border-zinc-800 space-y-0.5">
+              {props.notes.map((note) => (
+                <div
+                  key={note.label}
+                  className={`flex gap-1.5 ${
+                    note.flag ? "text-amber-700 dark:text-amber-400" : "text-zinc-600 dark:text-zinc-300"
+                  }`}
+                >
+                  <span
+                    className={`shrink-0 ${note.flag ? "text-amber-600 dark:text-amber-500" : "text-zinc-400 dark:text-zinc-500"}`}
+                  >
+                    {note.label}
+                  </span>
+                  <span className="break-words">{note.value}</span>
+                </div>
+              ))}
             </div>
           )}
         </div>
