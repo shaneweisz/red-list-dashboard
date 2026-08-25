@@ -53,7 +53,18 @@ beforeAll(async () => {
       ('4XWZ9', '4XWZC', 'synonym', 'species', 'Sminthopsis fuliginosus'),
       ('C5', NULL, 'accepted', 'species', 'Aloeides dentatis'),
       ('C6', NULL, 'accepted', 'species', 'Aloeides dentatus'),
-      ('MIS', 'C3', 'misapplied', 'species', 'Felis domestica')
+      ('MIS', 'C3', 'misapplied', 'species', 'Felis domestica'),
+      -- CoL holding ONE species as two accepted records, which is what a normalised
+      -- collision actually is. Both normalise to "ascaltis lamarck".
+      ('D1', NULL, 'accepted', 'species', 'Ascaltis lamarckii'),
+      ('D2', NULL, 'accepted', 'species', 'Ascaltis lamarcki'),
+      -- Provisionally accepted: absent from col_acc, so pass 1 cannot see it even
+      -- though the name is spelled identically.
+      ('PV1', NULL, 'provisionally accepted', 'species', 'Idaea josephinae'),
+      -- An accepted record must outrank a provisional one for the same key.
+      ('PV2', NULL, 'provisionally accepted', 'species', 'Aloeides dentatum'),
+      -- Species-rank synonym reachable only by normalising.
+      ('SY2', 'C3', 'synonym', 'species', 'Felis catta')
     ) v(col_id, parent_id, status, rank, scientific_name)`, "backbone.parquet");
 
   // Our IUCN-assessed species.
@@ -72,8 +83,14 @@ beforeAll(async () => {
       (8::BIGINT, 'Ochotona nubrica', 'mammalia', 'ochotonidae', 'C7'),
       (9::BIGINT, 'Ochotona hamica', 'mammalia', 'ochotonidae', 'SS1'),
       (10::BIGINT, 'Felis domestica', 'mammalia', 'felidae', 'MIS'),
-      -- Pass 1 must win over pass 4 for this one.
-      (11::BIGINT, 'Aloeides dentatis', 'insecta', 'lycaenidae', 'C6')
+      -- Pass 1 must win over the variant passes for this one.
+      (11::BIGINT, 'Aloeides dentatis', 'insecta', 'lycaenidae', 'C6'),
+      -- Ambiguous: normalises onto two accepted CoL records (D1/D2).
+      (12::BIGINT, 'Ascaltis lamarckii', 'insecta', 'lycaenidae', NULL::VARCHAR),
+      -- Provisionally accepted, spelled identically — no GBIF key at all.
+      (13::BIGINT, 'Idaea josephinae', 'insecta', 'geometridae', NULL::VARCHAR),
+      -- Reaches a species-rank SYNONYM only after normalising → accepted parent C3.
+      (14::BIGINT, 'Felis cattus', 'mammalia', 'felidae', NULL::VARCHAR)
     ) v(id, scientific_name, class_name, family, gbif_species_key)`, "assessed.parquet");
 
   // GBIF-only species (no IUCN synonyms).
@@ -85,7 +102,7 @@ beforeAll(async () => {
   // the synonym "Macronycteris vittatus" — which is CoL's accepted name (C2).
   fs.writeFileSync(path.join(tmp, "redlist", "mammals.csv"),
     "sis_taxon_id,synonyms\n1,\n2,\n3,Macronycteris vittatus:NEW\n4,\n5,Sasia africana:NEW\n" +
-    "6,\n7,\n8,\n9,\n10,\n11,\n");
+    "6,\n7,\n8,\n9,\n10,\n11,\n12,\n13,\n14,\n");
 
   await run({ dataDir: tmp });
   link = path.join(tmp, "species_link.parquet");
@@ -128,30 +145,46 @@ describe("build-matching ladder", () => {
 
 });
 
-describe("build-matching pass 4 — GBIF-key variant match", () => {
-  // The two cases this pass exists for. Both were reported as having no CoL match
-  // at all, while the col_id sat in the same row as the GBIF species key.
-  it("takes a CoL id the Red List spelling missed (Ochotona pallasii / pallasi)", async () => {
+describe("build-matching passes 4-6 — normalised name and provisional", () => {
+  // The two reported cases. Both were reported as having no CoL match at all.
+  it("matches an accepted name the Red List spells differently (Ochotona pallasii / pallasi)", async () => {
     const r = (await rows()).find((x) => Number(x.id) === 6)!;
-    expect([r.col_id, r.match_method]).toEqual(["48DGM", "gbif_key_variant"]);
+    expect([r.col_id, r.match_method]).toEqual(["48DGM", "accepted_variant"]);
   });
 
-  it("resolves a variant that is a CoL SYNONYM to its accepted parent", async () => {
-    // Sminthopsis fuliginosa is CoL's Sminthopsis fuliginosus, a synonym of
-    // S. griseoventer. The link must point at the accepted species, exactly as the
-    // CoL-synonym pass does — otherwise griseoventer keeps counting as unassessed.
+  it("resolves a normalised SYNONYM to its accepted parent (Sminthopsis fuliginosa)", async () => {
+    // CoL's Sminthopsis fuliginosus is a synonym of S. griseoventer. The link must
+    // point at the accepted species, exactly as pass 2 does — otherwise griseoventer
+    // keeps counting as unassessed while its assessment sits unmatched.
     const r = (await rows()).find((x) => Number(x.id) === 7)!;
-    expect([r.col_id, r.match_method]).toEqual(["4XWZC", "gbif_key_variant"]);
+    expect([r.col_id, r.match_method]).toEqual(["4XWZC", "synonym_variant"]);
   });
 
-  it("refuses a key pointing at a congener with a different epithet", async () => {
-    // A wrong key must not hand one species another's identity. This is the failure
-    // mode the pass is most dangerous for, so it is pinned rather than assumed.
+  it("reaches a species-rank synonym that only normalising exposes", async () => {
+    const r = (await rows()).find((x) => Number(x.id) === 14)!;
+    expect([r.col_id, r.match_method]).toEqual(["C3", "synonym_variant"]);
+  });
+
+  it("links a name CoL only PROVISIONALLY accepts, with no GBIF key involved", async () => {
+    // Spelled identically; unmatched purely because col_acc is the accepted-only
+    // universe. Nothing about this species is a spelling variant.
+    const r = (await rows()).find((x) => Number(x.id) === 13)!;
+    expect([r.col_id, r.match_method]).toEqual(["PV1", "provisional"]);
+  });
+
+  it("refuses an ambiguous normalised key instead of guessing", async () => {
+    // Ascaltis lamarckii and Ascaltis lamarcki are one species CoL holds twice.
+    // Picking either would hand the assessment to whichever sorted first.
+    const r = (await rows()).find((x) => Number(x.id) === 12)!;
+    expect([r.col_id, r.match_method]).toEqual([null, "unmatched"]);
+  });
+
+  it("refuses a genus transfer — that is a taxonomic act, not a spelling", async () => {
     const r = (await rows()).find((x) => Number(x.id) === 8)!;
     expect([r.col_id, r.match_method]).toEqual([null, "unmatched"]);
   });
 
-  it("refuses a key pointing at a subspecies", async () => {
+  it("refuses a subspecies: a rank disagreement is not a spelling one", async () => {
     const r = (await rows()).find((x) => Number(x.id) === 9)!;
     expect([r.col_id, r.match_method]).toEqual([null, "unmatched"]);
   });
@@ -161,9 +194,9 @@ describe("build-matching pass 4 — GBIF-key variant match", () => {
     expect([r.col_id, r.match_method]).toEqual([null, "unmatched"]);
   });
 
-  it("never outranks a real name match", async () => {
-    // Aloeides dentatis IS a CoL accepted name (C5); its GBIF key points at the
-    // variant spelling C6. The name the assessment actually uses must win.
+  it("never outranks an exact name match", async () => {
+    // Aloeides dentatis IS a CoL accepted name (C5), and also normalises onto the
+    // accepted C6 and the provisional PV2. The name the assessment uses must win.
     const r = (await rows()).find((x) => Number(x.id) === 11)!;
     expect([r.col_id, r.match_method]).toEqual(["C5", "accepted"]);
   });

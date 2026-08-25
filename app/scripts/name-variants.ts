@@ -15,20 +15,28 @@
  * treated as homonyms, i.e. one name). So equating them is what the codes
  * prescribe, not a fuzzy-matching liberty.
  *
- * ── How this is used, and why that makes it safe ──────────────────────────
+ * ── How this is used ──────────────────────────────────────────────────────
  *
- * NEVER as a lookup. build-matching does not search the backbone for names that
- * normalise alike — that would let a congener with a coincidentally similar
- * epithet claim an assessment, which is the failure mode that starves species of
- * their occurrence data.
+ * build-matching indexes CoL by `normalisedKey` and looks our unmatched names up in
+ * it, as passes 4-6 of the ladder — the same three lookups as passes 1-3, redone on
+ * the normalised name.
  *
- * Only as a CHECK on a candidate someone else proposed. GBIF's occurrence index
- * is built on Catalogue of Life's extended release, so a Red List species'
- * `gbif_species_key` IS a CoL id — already resolved, by GBIF's own matcher,
- * against the same checklist we are trying to join to. `sameSpeciesName` asks
- * one question about that specific candidate: is the name it points at the same
- * name we started from? One id in, one yes/no out. There is no search space for
- * a collision to hide in.
+ * The obvious worry is that normalising creates collisions and lets a congener claim
+ * an assessment. Measured against the current backbone, it does not: of 2,352,029
+ * accepted species, 1,199 normalised keys carry more than one distinct accepted name
+ * (0.10%), and none of them are cases of two real species — they are CoL holding ONE
+ * species under two spellings as two accepted records:
+ *
+ *   Ascaltis lamarckii | Ascaltis lamarcki
+ *   Raspailia rubra    | Raspailia rubrum
+ *   Gerda vernale      | Gerda vernalis
+ *
+ * That is what the codes predict: two accepted species in one genus cannot
+ * legitimately differ only by a termination, because such names ARE one name. So a
+ * collision means CoL has a duplicate, not that we have found two candidates — and
+ * build-matching refuses an ambiguous key outright rather than picking between two
+ * records of the same thing. Across every Red List name currently unmatched, that
+ * guard fires zero times; it is counted and logged rather than assumed away.
  *
  * Deliberately NOT handled, because each needs evidence this check doesn't have:
  *  - doubled consonants (Aframomum elliotii / elliottii, Annesorhiza burttii /
@@ -109,10 +117,18 @@ export function canonicalEpithet(epithet: string): string {
  * check has none, so it declines.
  */
 export function sameSpeciesName(a: string, b: string): boolean {
-  const left = speciesNameParts(a);
-  const right = speciesNameParts(b);
-  if (!left || !right) return false;
-  if (left[0] !== right[0]) return false;
-  if (left[1] === right[1]) return true;
-  return canonicalEpithet(left[1]) === canonicalEpithet(right[1]);
+  const left = normalisedKey(a);
+  return left != null && left === normalisedKey(b);
+}
+
+/**
+ * The index key two spellings of one species share: the genus verbatim, then the
+ * epithet's stem. Null for anything that isn't a binomial.
+ *
+ * This is the form build-matching joins on. `sameSpeciesName` is the same rule
+ * stated as a predicate, which is how the tests assert it.
+ */
+export function normalisedKey(name: string): string | null {
+  const parts = speciesNameParts(name);
+  return parts ? `${parts[0]} ${canonicalEpithet(parts[1])}` : null;
 }

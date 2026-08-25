@@ -1,19 +1,18 @@
 /**
- * name-variants test: the orthographic-variant check build-matching uses to
- * validate a GBIF-proposed CoL id.
+ * name-variants test: the rule build-matching indexes Catalogue of Life by in
+ * passes 4-6 of the matching ladder.
  *
- * Every positive case here is a real Red List assessment whose name Catalogue of
- * Life spells differently, taken from the 373 assessed species that were reported
- * as having no CoL match at all while their gbif_species_key already resolved to
- * a CoL record. Every negative is a real case from the same set that must NOT be
- * swept up: a genus transfer, a doubled consonant, a patronymic gender change.
+ * Every positive case is a real Red List assessment whose name CoL spells
+ * differently, drawn from the species reported as having no CoL match at all.
+ * Every negative is a real case from the same set that must NOT be swept up: a
+ * genus transfer, a doubled consonant, a patronymic gender change.
  *
  * The negatives matter more than the positives. A missed variant leaves one
- * species flagged as unmatched, which is visible and recoverable; a wrong match
- * silently hands one species' occurrence records and assessment to another.
+ * species visibly unmatched, which is recoverable; a wrong match silently hands
+ * one species' occurrence records and assessment to another.
  */
 import { describe, it, expect } from "vitest";
-import { sameSpeciesName, canonicalEpithet, speciesNameParts } from "../name-variants";
+import { sameSpeciesName, canonicalEpithet, speciesNameParts, normalisedKey } from "../name-variants";
 
 describe("speciesNameParts", () => {
   it("drops a parenthesised subgenus", () => {
@@ -102,5 +101,24 @@ describe("sameSpeciesName — differences that need evidence this check hasn't g
     // epithets equal. These pairs differ before the ending, so they must survive.
     expect(sameSpeciesName("Acacia alba", "Acacia albida")).toBe(false);
     expect(sameSpeciesName("Allium nigrum", "Allium nigricans")).toBe(false);
+  });
+});
+
+describe("normalisedKey — the form build-matching indexes on", () => {
+  it("gives one species' spellings a single key", () => {
+    expect(normalisedKey("Ochotona pallasii")).toBe(normalisedKey("Ochotona (Pika) pallasi"));
+    expect(normalisedKey("Sminthopsis fuliginosa")).toBe(normalisedKey("Sminthopsis fuliginosus"));
+    // The CoL duplicate that makes the ambiguity guard necessary.
+    expect(normalisedKey("Ascaltis lamarckii")).toBe(normalisedKey("Ascaltis lamarcki"));
+  });
+
+  it("keeps distinct species apart", () => {
+    expect(normalisedKey("Ochotona pallasii")).not.toBe(normalisedKey("Ochotona curzoniae"));
+    expect(normalisedKey("Agrochola kindermannii")).not.toBe(normalisedKey("Anchoscelis kindermanni"));
+  });
+
+  it("is null for anything that is not a binomial", () => {
+    expect(normalisedKey("Ochotona pallasi hamica")).toBeNull();
+    expect(normalisedKey("Ochotona")).toBeNull();
   });
 });
