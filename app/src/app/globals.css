@@ -214,21 +214,29 @@ input[type="range"].dual-range-thumb:focus-visible::-moz-range-thumb {
  * Scoped to this map so other maps in the app keep MapLibre's own behaviour.
  */
 /*
- * The map's footer: scale bar and attribution on one line, the way Google Maps
- * does it, rather than stacked as two separate bars.
+ * The map's footer: the scale sitting directly on the attribution, as one
+ * block in the corner rather than two bars with air between them.
  *
- * MapLibre puts both in this column and lets it grow upward; a scale sitting
- * above a two-line credit strip reads as two pieces of chrome instead of one
- * footer, and cost twice the height at the bottom of the map.
+ * The scale is flattened to a hairline — its own height is a MapLibre default
+ * sized for a control standing alone, and here it only has to mark a length.
  */
 .occurrence-map .maplibregl-ctrl-bottom-right {
   display: flex;
-  flex-direction: row;
+  flex-direction: column;
   align-items: flex-end;
-  gap: 6px;
+  gap: 2px;
+  /* Clear of the map's own bottom edge, which the attribution used to sit on. */
+  padding-bottom: 6px;
 }
 .occurrence-map .maplibregl-ctrl-bottom-right .maplibregl-ctrl {
-  margin-bottom: 0;
+  margin: 0;
+}
+.occurrence-map .maplibregl-ctrl-scale {
+  height: 12px;
+  line-height: 11px;
+  font-size: 9px;
+  padding: 0 4px;
+  border-width: 1px;
 }
 
 /*
