@@ -471,6 +471,11 @@ export function colUrl(colId: string): string {
   return `https://www.catalogueoflife.org/data/taxon/${colId}`;
 }
 
+/** A source dataset's page on CoL — where a record came from. */
+export function colDatasetUrl(key: number): string {
+  return `https://www.catalogueoflife.org/data/dataset/${key}`;
+}
+
 export function colTaxonUrl(flag: ColRevision, scientificName: string): string {
   return flag.colId
     ? colUrl(flag.colId)

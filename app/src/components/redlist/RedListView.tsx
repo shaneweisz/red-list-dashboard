@@ -16,7 +16,7 @@ import { CATEGORY_COLORS, TAXA_BY_ID, THREATENED_CATEGORIES } from "@/config/tax
 import { speciesMatchesNode, getNodeDef, getViewRootForNode, findNode, matchesBreakdownName, breakdownDisplayName } from "@/lib/taxonomy-utils";
 import { dynamicNodeDisplayName } from "@/lib/dynamic-taxon";
 import ReviewerChart from "./ReviewerChart";
-import { REVISION_REASONS, REVISION_REASON_SHORT, REVISION_REASON_SUMMARY, revisionReasons, matchesRevisionFilter, isFlagged, colUrl, colTaxonUrl, noMatchSentence, splitSummary, lumpSentence, type SplitSummary, newRevisionTally, tallyRevision, barTotal, type ColRevision } from "@/lib/col-revision";
+import { REVISION_REASONS, REVISION_REASON_SHORT, REVISION_REASON_SUMMARY, revisionReasons, matchesRevisionFilter, isFlagged, colUrl, colDatasetUrl, colTaxonUrl, noMatchSentence, splitSummary, lumpSentence, type SplitSummary, newRevisionTally, tallyRevision, barTotal, type ColRevision } from "@/lib/col-revision";
 import type { ColProvenance } from "@/app/api/col/provenance/route";
 import { parseAssessors } from "@/lib/parseAssessors";
 import { iucnRegionCountries, matchingRegions } from "@/lib/regions";
@@ -735,37 +735,41 @@ function ColProvenanceBlock({ colId }: { colId: string }) {
   const scrutiny = [data.scrutinizer, data.scrutinizerDate].filter(Boolean).join(", ");
   if (!source && !scrutiny && !data.link) return null;
 
+  // Label: value on one line each, not CoL's own heading-above-value layout —
+  // three lines instead of six, which matters in a panel that already carries a
+  // sentence and possibly a paged list.
+  const row = (label: string, value: React.ReactNode) => (
+    <div>
+      <span className="text-zinc-500">{label}:</span> {value}
+    </div>
+  );
+  const link = (href: string, text: string) => (
+    <a
+      href={href}
+      target="_blank"
+      rel="noopener noreferrer"
+      onClick={(e) => e.stopPropagation()}
+      className="text-blue-300 hover:text-blue-200 underline"
+    >
+      {text}
+    </a>
+  );
+  // The full URL wraps to two or three lines and says less than its host does.
+  let recordHost = "";
+  if (data.link) {
+    try { recordHost = new URL(data.link).hostname.replace(/^www\./, ""); } catch { recordHost = data.link; }
+  }
+
   return (
-    <div className="mt-2 pt-2 border-t border-zinc-600/60 space-y-1 text-[11px] text-zinc-400">
-      {scrutiny && (
-        <div>
-          <div className="text-zinc-500">Taxonomic scrutiny</div>
-          <div>{scrutiny}</div>
-        </div>
-      )}
-      {source && (
-        <div>
-          <div className="text-zinc-500">Source</div>
-          <div>
-            {source}
-            {data.completeness != null && ` ${data.completeness}%`}
-          </div>
-        </div>
-      )}
-      {data.link && (
-        <div>
-          <div className="text-zinc-500">Original record</div>
-          <a
-            href={data.link}
-            target="_blank"
-            rel="noopener noreferrer"
-            onClick={(e) => e.stopPropagation()}
-            className="text-blue-300 hover:text-blue-200 underline break-all"
-          >
-            {data.link}
-          </a>
-        </div>
-      )}
+    <div className="mt-2 pt-2 border-t border-zinc-600/60 space-y-0.5 text-[11px] text-zinc-400">
+      {scrutiny && row("Taxonomic scrutiny", scrutiny)}
+      {source && row("Source", (
+        <>
+          {data.sourceKey != null ? link(colDatasetUrl(data.sourceKey), source) : source}
+          {data.completeness != null && ` ${data.completeness}%`}
+        </>
+      ))}
+      {data.link && row("Original record", link(data.link, recordHost))}
     </div>
   );
 }

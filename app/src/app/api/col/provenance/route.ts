@@ -32,6 +32,8 @@ export interface ColProvenance {
   completeness?: number;
   /** The record on the source's own site. */
   link?: string;
+  /** ChecklistBank key for the source dataset, so the UI can link to its CoL page. */
+  sourceKey?: number;
 }
 
 // Process-lifetime, and deliberately unbounded: both are keyed by ids from one
@@ -89,6 +91,7 @@ export async function GET(request: NextRequest) {
       if (meta?.alias != null) out.sourceAlias = meta.alias;
       if (meta?.title != null) out.sourceTitle = meta.title;
       if (meta?.completeness != null) out.completeness = meta.completeness;
+      out.sourceKey = sourceKey;
     }
   }
 
