@@ -153,6 +153,10 @@ const ExclusionDialog = dynamic(
   () => import("./ExclusionDialog"),
   { ssr: false }
 );
+const MapShapeCallout = dynamic(
+  () => import("./MapShapeCallout"),
+  { ssr: false }
+);
 const MapPlaceSearch = dynamic(
   () => import("./MapPlaceSearch"),
   { ssr: false }
@@ -396,6 +400,18 @@ type BasemapKey = keyof typeof BASEMAP_STYLES;
  * Determine whether an occurrence record is "new" (recorded after the assessment date).
  * Uses full date comparison when eventDate is available, falls back to year comparison.
  */
+/** Every position in a geometry, flattened — enough to take a bounding box. */
+function positionsOf(geometry: GeoJSON.Geometry): GeoJSON.Position[] {
+  const out: GeoJSON.Position[] = [];
+  const walk = (node: unknown) => {
+    if (!Array.isArray(node)) return;
+    if (typeof node[0] === "number") out.push(node as GeoJSON.Position);
+    else for (const child of node) walk(child);
+  };
+  if ("coordinates" in geometry) walk(geometry.coordinates);
+  return out;
+}
+
 /** The latitude Web Mercator stops at, and so the top edge of a world PNG. */
 const MERCATOR_LIMIT = 85.051129;
 
@@ -2895,6 +2911,9 @@ export default function OccurrenceMapRow({
               onDragEnd={() => setPanning(false)}
             >
               <ScaleControl position="bottom-right" />
+              {/* Inside the map, because it positions itself against a shape
+                  the map has projected. */}
+              {renderClickInfo(panelId)}
               {/* Measuring, above the scale bar it's the fine-grained
                   version of. Small and quiet: it's a tool you reach for
                   occasionally, not a control the map is about. It used to start
@@ -3987,7 +4006,6 @@ export default function OccurrenceMapRow({
                 onPreview={setPreviewPlace}
               />
             )}
-            {renderClickInfo(panelId)}
           </div>
           {/* Top-right stack: what's loaded, then the basemap choice. Stacked
               in a flex column rather than each guessing the other's offset —
@@ -4315,8 +4333,31 @@ export default function OccurrenceMapRow({
       showEcoregions && selectedEcoregion?.panelId === panelId ? selectedEcoregion : null;
     const hab = showHabitat && clickedHabitat?.panelId === panelId ? clickedHabitat : null;
     if (!areasHere && !eco && !hab) return null;
+
+    // The extent of everything being highlighted, so the callout can sit
+    // outside it. Habitat has no shape — it's a raster read at a point — so on
+    // its own it anchors to the click.
+    const shapes: GeoJSON.Geometry[] = [];
+    for (const area of areasHere?.areas ?? []) if (area.geometry) shapes.push(area.geometry);
+    if (eco) shapes.push(eco.geometry);
+    let bounds: [number, number, number, number] | null = null;
+    for (const shape of shapes) {
+      for (const position of positionsOf(shape)) {
+        bounds = bounds
+          ? [
+              Math.min(bounds[0], position[0]),
+              Math.min(bounds[1], position[1]),
+              Math.max(bounds[2], position[0]),
+              Math.max(bounds[3], position[1]),
+            ]
+          : [position[0], position[1], position[0], position[1]];
+      }
+    }
+    const at = areasHere ?? eco ?? { lng: pointQuery?.lng ?? 0, lat: pointQuery?.lat ?? 0 };
+
     return (
-      <div className="bg-white dark:bg-zinc-800 rounded-lg shadow-md border border-zinc-200 dark:border-zinc-700 px-2 py-1.5 w-44 text-[11px] text-zinc-700 dark:text-zinc-200 space-y-1.5">
+      <MapShapeCallout bounds={bounds} lng={at.lng} lat={at.lat}>
+      <div className="bg-white dark:bg-zinc-800 rounded-lg shadow-md border border-zinc-200 dark:border-zinc-700 px-2 py-1.5 text-[11px] text-zinc-700 dark:text-zinc-200 space-y-1.5">
         {areasHere && (
           <div>
             <div className="flex items-baseline gap-1 pb-0.5">
@@ -4469,6 +4510,7 @@ export default function OccurrenceMapRow({
           </div>
         )}
       </div>
+      </MapShapeCallout>
     );
   };
 
