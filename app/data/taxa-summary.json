@@ -67,7 +67,7 @@
     "mean_gbif_obs": 951.6338130241226,
     "median_gbif_obs": 24,
     "col_described": 12860,
-    "col_ne": 2441
+    "col_ne": 2439
   },
   {
     "table1a_taxon_group": "amphibians",
@@ -113,7 +113,7 @@
     "mean_gbif_obs": 3938.5080607426944,
     "median_gbif_obs": 20,
     "col_described": 37289,
-    "col_ne": 8058
+    "col_ne": 8057
   },
   {
     "table1a_taxon_group": "beetles",
@@ -135,7 +135,7 @@
     "mean_gbif_obs": 312.81929570075,
     "median_gbif_obs": 5,
     "col_described": 264850,
-    "col_ne": 262593
+    "col_ne": 262592
   },
   {
     "table1a_taxon_group": "butterflies_and_moths",
@@ -158,7 +158,7 @@
     "mean_gbif_obs": 1944.4601112685666,
     "median_gbif_obs": 12,
     "col_described": 167869,
-    "col_ne": 165750
+    "col_ne": 165746
   },
   {
     "table1a_taxon_group": "flies_and_mosquitoes",
@@ -201,7 +201,7 @@
     "mean_gbif_obs": 365.52520218448774,
     "median_gbif_obs": 7,
     "col_described": 132024,
-    "col_ne": 131172
+    "col_ne": 131171
   },
   {
     "table1a_taxon_group": "true_bugs",
@@ -267,7 +267,7 @@
     "mean_gbif_obs": 3191.1989701338825,
     "median_gbif_obs": 17,
     "col_described": 6494,
-    "col_ne": 355
+    "col_ne": 348
   },
   {
     "table1a_taxon_group": "other_insects",
@@ -312,7 +312,7 @@
     "mean_gbif_obs": 539.8603725521414,
     "median_gbif_obs": 6,
     "col_described": 89652,
-    "col_ne": 80170
+    "col_ne": 80153
   },
   {
     "table1a_taxon_group": "crustaceans",
@@ -337,7 +337,7 @@
     "mean_gbif_obs": 666.0499688153502,
     "median_gbif_obs": 6,
     "col_described": 69280,
-    "col_ne": 65953
+    "col_ne": 65940
   },
   {
     "table1a_taxon_group": "arachnids",
@@ -436,7 +436,7 @@
     "mean_gbif_obs": 819.2686608631228,
     "median_gbif_obs": 7,
     "col_described": 142417,
-    "col_ne": 141319
+    "col_ne": 141317
   },
   {
     "table1a_taxon_group": "mosses",
@@ -480,7 +480,7 @@
     "mean_gbif_obs": 1370.860829639012,
     "median_gbif_obs": 33,
     "col_described": 14135,
-    "col_ne": 13265
+    "col_ne": 13263
   },
   {
     "table1a_taxon_group": "gymnosperms",
@@ -526,7 +526,7 @@
     "mean_gbif_obs": 1608.2594514007112,
     "median_gbif_obs": 28,
     "col_described": 356867,
-    "col_ne": 281650
+    "col_ne": 281631
   },
   {
     "table1a_taxon_group": "green_algae",
@@ -562,7 +562,7 @@
     "mean_gbif_obs": 566.8297804645243,
     "median_gbif_obs": 72,
     "col_described": 1500,
-    "col_ne": 1492
+    "col_ne": 1491
   },
   {
     "table1a_taxon_group": "mushrooms",

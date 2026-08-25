@@ -21,7 +21,7 @@
         "LR/cd": 3
       },
       "colDescribed": 934363,
-      "colNe": 920707
+      "colNe": 920694
     },
     {
       "id": "inv-arachnids",
@@ -62,7 +62,7 @@
         "EW": 12
       },
       "colDescribed": 89652,
-      "colNe": 80170
+      "colNe": 80153
     },
     {
       "id": "inv-crustaceans",
@@ -85,7 +85,7 @@
         "EW": 1
       },
       "colDescribed": 69280,
-      "colNe": 65953
+      "colNe": 65940
     },
     {
       "id": "inv-corals",
@@ -155,7 +155,7 @@
         "NT": 99
       },
       "colDescribed": 142417,
-      "colNe": 141319
+      "colNe": 141317
     }
   ],
   "plantae": [
@@ -180,7 +180,7 @@
         "LR/lc": 116
       },
       "colDescribed": 356867,
-      "colNe": 281650
+      "colNe": 281631
     },
     {
       "id": "pl-gymnosperms",
@@ -219,7 +219,7 @@
         "EW": 1
       },
       "colDescribed": 14135,
-      "colNe": 13265
+      "colNe": 13263
     },
     {
       "id": "pl-mosses",
@@ -271,7 +271,7 @@
         "CR": 6
       },
       "colDescribed": 1500,
-      "colNe": 1492
+      "colNe": 1491
     }
   ],
   "fungi": [

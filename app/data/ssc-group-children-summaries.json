@@ -1015,7 +1015,7 @@
             {
               "id": 277135178,
               "name": "Dasycercus archeri",
-              "reason": "no_link"
+              "reason": "provisional"
             },
             {
               "id": 277136064,
@@ -1027,12 +1027,12 @@
             {
               "id": 277136460,
               "name": "Dasycercus marlowi",
-              "reason": "no_link"
+              "reason": "provisional"
             },
             {
               "id": 277136489,
               "name": "Dasycercus woolleyae",
-              "reason": "no_link"
+              "reason": "provisional"
             }
           ]
         },
@@ -1212,7 +1212,7 @@
             {
               "id": 14186,
               "name": "Myotis oreias",
-              "reason": "no_link"
+              "reason": "provisional"
             },
             {
               "id": 14260,
@@ -5318,11 +5318,11 @@
             194835,
             197211,
             13152793,
-            14669579,
             42483977,
             42485185,
             44974254,
             44977870,
+            104776718,
             109464537,
             120689911
           ],
@@ -5389,11 +5389,6 @@
               "detailId": 178641
             },
             {
-              "id": 14669579,
-              "name": "Sphenomorphus veunsaiensis",
-              "reason": "no_link"
-            },
-            {
               "id": 42483977,
               "name": "Emoia ahli",
               "reason": "not_in_base"
@@ -5416,6 +5411,13 @@
               "reason": "lumped",
               "detail": "Acontias lineatus",
               "detailId": 44960378
+            },
+            {
+              "id": 104776718,
+              "name": "Sphenomorphus sheai",
+              "reason": "lumped",
+              "detail": "Sphenomorphus veunsaiensis",
+              "detailId": 14669579
             },
             {
               "id": 109464537,
@@ -6902,12 +6904,12 @@
         "LC": 3578
       },
       "colDescribed": 6626,
-      "colNe": 1185,
+      "colNe": 1183,
       "colBreakdown": [
         {
           "name": "Snake and Lizard Red List Authority",
           "count": 6626,
-          "neCount": 1185,
+          "neCount": 1183,
           "trueAssessed": 5393,
           "noMatchIds": [
             9370,
@@ -6935,7 +6937,6 @@
             172770,
             176227,
             176260,
-            176284,
             176358,
             191986,
             192150,
@@ -6944,7 +6945,6 @@
             199776,
             201751,
             202837,
-            203031,
             203073,
             13264660,
             13264749,
@@ -7018,7 +7018,7 @@
             {
               "id": 63777,
               "name": "Eridiphas marcosensis",
-              "reason": "no_link"
+              "reason": "provisional"
             },
             {
               "id": 63876,
@@ -7165,11 +7165,6 @@
               "detailId": 203201
             },
             {
-              "id": 176284,
-              "name": "Xenocalamus michellii",
-              "reason": "no_link"
-            },
-            {
               "id": 176358,
               "name": "Atractus paravertebralis",
               "reason": "lumped",
@@ -7218,11 +7213,6 @@
               "reason": "lumped",
               "detail": "Thamnophis saurita",
               "detailId": 63991
-            },
-            {
-              "id": 203031,
-              "name": "Celestus hewardi",
-              "reason": "no_link"
             },
             {
               "id": 203073,
@@ -9596,12 +9586,12 @@
         "LR/nt": 1
       },
       "colDescribed": 33303,
-      "colNe": 7704,
+      "colNe": 7703,
       "colBreakdown": [
         {
           "name": "No / Other SSC Group",
           "count": 33303,
-          "neCount": 7704,
+          "neCount": 7703,
           "trueAssessed": 25717,
           "noMatchIds": [
             11072,
@@ -9977,7 +9967,6 @@
             252732869,
             252732999,
             252733159,
-            252733172,
             253234430,
             253234546,
             255537238,
@@ -11881,7 +11870,7 @@
             {
               "id": 218581808,
               "name": "Oxynoemacheilus eliasi",
-              "reason": "no_link"
+              "reason": "provisional"
             },
             {
               "id": 218603257,
@@ -12333,19 +12322,14 @@
               "reason": "not_in_base"
             },
             {
-              "id": 252733172,
-              "name": "Diplecogaster roseiocula",
-              "reason": "no_link"
-            },
-            {
               "id": 253234430,
               "name": "Turcinoemacheilus ansari",
-              "reason": "no_link"
+              "reason": "provisional"
             },
             {
               "id": 253234546,
               "name": "Turcinoemacheilus christofferi",
-              "reason": "no_link"
+              "reason": "provisional"
             },
             {
               "id": 255537238,
@@ -12382,7 +12366,7 @@
             {
               "id": 261552481,
               "name": "Paloa villadolidi",
-              "reason": "no_link"
+              "reason": "provisional"
             },
             {
               "id": 272007642,
@@ -13148,7 +13132,7 @@
         "EW": 12
       },
       "colDescribed": 89652,
-      "colNe": 80170
+      "colNe": 80153
     },
     {
       "id": "ssc-spider-scorpion",
@@ -13275,7 +13259,7 @@
             {
               "id": 246671741,
               "name": "Hogna veseyensis",
-              "reason": "no_link"
+              "reason": "provisional"
             }
           ],
           "splitDetails": [
@@ -13323,7 +13307,7 @@
         "LR/lc": 15
       },
       "colDescribed": 21631,
-      "colNe": 20319,
+      "colNe": 20317,
       "colBreakdown": [
         {
           "name": "papilionidae",
@@ -14467,7 +14451,7 @@
             {
               "id": 10940,
               "name": "Joiceya praeclarus",
-              "reason": "no_link"
+              "reason": "classified_elsewhere"
             },
             {
               "id": 11543,
@@ -15248,18 +15232,9 @@
         {
           "name": "riodinidae",
           "count": 1495,
-          "neCount": 1487,
+          "neCount": 1485,
           "trueAssessed": 7,
-          "noMatchIds": [
-            159883
-          ],
-          "noMatchDetails": [
-            {
-              "id": 159883,
-              "name": "Abisara rutherfordii",
-              "reason": "no_link"
-            }
-          ],
+          "noMatchIds": [],
           "splitDetails": [
             {
               "colId": "9BNPP",
@@ -15934,12 +15909,12 @@
             {
               "id": 19198463,
               "name": "Anthophora laevigata",
-              "reason": "no_link"
+              "reason": "provisional"
             },
             {
               "id": 19198465,
               "name": "Anthophora uniciliata",
-              "reason": "no_link"
+              "reason": "provisional"
             },
             {
               "id": 21215147,
@@ -16856,7 +16831,7 @@
         "EX": 1
       },
       "colDescribed": 6494,
-      "colNe": 355
+      "colNe": 348
     },
     {
       "id": "ssc-ant",
@@ -16876,15 +16851,14 @@
         "DD": 10
       },
       "colDescribed": 14663,
-      "colNe": 14469,
+      "colNe": 14468,
       "colBreakdown": [
         {
           "name": "formicidae",
           "count": 14663,
-          "neCount": 14469,
+          "neCount": 14468,
           "trueAssessed": 213,
           "noMatchIds": [
-            1675,
             1831,
             4403,
             4405,
@@ -16910,11 +16884,6 @@
           ],
           "noMatchDetails": [
             {
-              "id": 1675,
-              "name": "Antichthonidris bidentatus",
-              "reason": "no_link"
-            },
-            {
               "id": 1831,
               "name": "Aphaenogaster bidentatus",
               "reason": "not_in_base"
@@ -16927,12 +16896,12 @@
             {
               "id": 4405,
               "name": "Chalepoxenus spinosus",
-              "reason": "no_link"
+              "reason": "provisional"
             },
             {
               "id": 4407,
               "name": "Chalepoxenus tauricus",
-              "reason": "no_link"
+              "reason": "provisional"
             },
             {
               "id": 6808,
@@ -16952,7 +16921,7 @@
             {
               "id": 7845,
               "name": "Epimyrma africana",
-              "reason": "no_link"
+              "reason": "provisional"
             },
             {
               "id": 7849,
@@ -16992,12 +16961,12 @@
             {
               "id": 18379,
               "name": "Protomognathus americanus",
-              "reason": "no_link"
+              "reason": "provisional"
             },
             {
               "id": 19693,
               "name": "Rhoptromyrmex schmitzi",
-              "reason": "no_link"
+              "reason": "provisional"
             },
             {
               "id": 20919,
@@ -17035,12 +17004,12 @@
             {
               "id": 21569,
               "name": "Teleutomyrmex schneideri",
-              "reason": "provisional"
+              "reason": "no_link"
             },
             {
               "id": 21570,
               "name": "Teleutomyrmex kutteri",
-              "reason": "no_link"
+              "reason": "provisional"
             }
           ],
           "splitDetails": [
@@ -17179,7 +17148,7 @@
         "EX": 6
       },
       "colDescribed": 3363,
-      "colNe": 830,
+      "colNe": 819,
       "colBreakdown": [
         {
           "name": "astacidae",
@@ -17305,7 +17274,7 @@
             {
               "id": 197883,
               "name": "Macrobrachium bombayense",
-              "reason": "no_link"
+              "reason": "classified_elsewhere"
             },
             {
               "id": 197940,
@@ -17563,7 +17532,7 @@
             {
               "id": 197883,
               "name": "Macrobrachium bombayense",
-              "reason": "no_link"
+              "reason": "classified_elsewhere"
             },
             {
               "id": 197940,
@@ -17809,7 +17778,7 @@
             {
               "id": 197883,
               "name": "Macrobrachium bombayense",
-              "reason": "no_link"
+              "reason": "classified_elsewhere"
             },
             {
               "id": 197940,
@@ -18025,7 +17994,7 @@
             {
               "id": 197883,
               "name": "Macrobrachium bombayense",
-              "reason": "no_link"
+              "reason": "classified_elsewhere"
             },
             {
               "id": 197940,
@@ -18112,31 +18081,22 @@
         {
           "name": "potamidae",
           "count": 1017,
-          "neCount": 255,
+          "neCount": 246,
           "trueAssessed": 816,
           "noMatchIds": [
             15885,
             15886,
             133959,
-            133961,
             134027,
             134060,
-            134225,
-            134366,
             134367,
             134428,
-            134475,
             134524,
-            134629,
-            134660,
             134730,
             134786,
-            134857,
-            134859,
             134886,
             134928,
             135015,
-            135062,
             135094,
             196884,
             197608,
@@ -18187,11 +18147,6 @@
               "reason": "not_in_base"
             },
             {
-              "id": 133961,
-              "name": "Isolapotamon borneensis",
-              "reason": "no_link"
-            },
-            {
               "id": 134027,
               "name": "Geothelphusa lanyu",
               "reason": "lumped",
@@ -18201,16 +18156,6 @@
             {
               "id": 134060,
               "name": "Sinolapotamon patelifer",
-              "reason": "no_link"
-            },
-            {
-              "id": 134225,
-              "name": "Himalayapotamon marinelli",
-              "reason": "no_link"
-            },
-            {
-              "id": 134366,
-              "name": "Potamiscus rangoonense",
               "reason": "no_link"
             },
             {
@@ -18226,26 +18171,11 @@
               "reason": "not_in_base"
             },
             {
-              "id": 134475,
-              "name": "Potamiscus tumidulum",
-              "reason": "no_link"
-            },
-            {
               "id": 134524,
               "name": "Geothelphusa lutao",
               "reason": "lumped",
               "detail": "Geothelphusa tawu",
               "detailId": 134004
-            },
-            {
-              "id": 134629,
-              "name": "Heterochelamon purpureomanualis",
-              "reason": "no_link"
-            },
-            {
-              "id": 134660,
-              "name": "Quadramon mooleyitensis",
-              "reason": "no_link"
             },
             {
               "id": 134730,
@@ -18258,16 +18188,6 @@
               "id": 134786,
               "name": "Stoliczia tweedei",
               "reason": "not_in_base"
-            },
-            {
-              "id": 134857,
-              "name": "Potamiscus yongshengense",
-              "reason": "no_link"
-            },
-            {
-              "id": 134859,
-              "name": "Pararanguna semilunatum",
-              "reason": "no_link"
             },
             {
               "id": 134886,
@@ -18287,11 +18207,6 @@
               "id": 135015,
               "name": "Sinopotamon jianglenense",
               "reason": "not_in_base"
-            },
-            {
-              "id": 135062,
-              "name": "Trichopotamon sikkimensis",
-              "reason": "no_link"
             },
             {
               "id": 135094,
@@ -18371,7 +18286,7 @@
             {
               "id": 197883,
               "name": "Macrobrachium bombayense",
-              "reason": "no_link"
+              "reason": "classified_elsewhere"
             },
             {
               "id": 197940,
@@ -18455,12 +18370,6 @@
             }
           ],
           "splitDetails": [
-            {
-              "colId": "6VVKT",
-              "parentId": 134723,
-              "parentName": "Potamiscus yunnanense",
-              "parentCategory": "DD"
-            },
             {
               "colId": "72MPD",
               "parentId": 134979,
@@ -18743,7 +18652,7 @@
             {
               "id": 197883,
               "name": "Macrobrachium bombayense",
-              "reason": "no_link"
+              "reason": "classified_elsewhere"
             },
             {
               "id": 197940,
@@ -18868,13 +18777,12 @@
         {
           "name": "gecarcinucidae",
           "count": 734,
-          "neCount": 124,
+          "neCount": 123,
           "trueAssessed": 646,
           "noMatchIds": [
             15885,
             15886,
             134241,
-            134450,
             134818,
             134832,
             134906,
@@ -18927,11 +18835,6 @@
               "reason": "lumped",
               "detail": "Snaha escheri",
               "detailId": 134083
-            },
-            {
-              "id": 134450,
-              "name": "Lepidothelphusa cognetti",
-              "reason": "no_link"
             },
             {
               "id": 134818,
@@ -19023,7 +18926,7 @@
             {
               "id": 197883,
               "name": "Macrobrachium bombayense",
-              "reason": "no_link"
+              "reason": "classified_elsewhere"
             },
             {
               "id": 197940,
@@ -19355,7 +19258,7 @@
             {
               "id": 197883,
               "name": "Macrobrachium bombayense",
-              "reason": "no_link"
+              "reason": "classified_elsewhere"
             },
             {
               "id": 197940,
@@ -19456,12 +19359,11 @@
         {
           "name": "trichodactylidae",
           "count": 320,
-          "neCount": 5,
+          "neCount": 4,
           "trueAssessed": 348,
           "noMatchIds": [
             15885,
             15886,
-            133997,
             134446,
             196884,
             197608,
@@ -19505,11 +19407,6 @@
               "id": 15886,
               "name": "Palaemonetes cummingi",
               "reason": "classified_elsewhere"
-            },
-            {
-              "id": 133997,
-              "name": "Zilchiopsis cryptodus",
-              "reason": "no_link"
             },
             {
               "id": 134446,
@@ -19589,7 +19486,7 @@
             {
               "id": 197883,
               "name": "Macrobrachium bombayense",
-              "reason": "no_link"
+              "reason": "classified_elsewhere"
             },
             {
               "id": 197940,
@@ -19867,7 +19764,7 @@
             {
               "id": 197883,
               "name": "Macrobrachium bombayense",
-              "reason": "no_link"
+              "reason": "classified_elsewhere"
             },
             {
               "id": 197940,
@@ -20157,7 +20054,7 @@
             {
               "id": 197883,
               "name": "Macrobrachium bombayense",
-              "reason": "no_link"
+              "reason": "classified_elsewhere"
             },
             {
               "id": 197940,
@@ -20365,7 +20262,7 @@
             {
               "id": 197883,
               "name": "Macrobrachium bombayense",
-              "reason": "no_link"
+              "reason": "classified_elsewhere"
             },
             {
               "id": 197940,
@@ -20573,7 +20470,7 @@
             {
               "id": 197883,
               "name": "Macrobrachium bombayense",
-              "reason": "no_link"
+              "reason": "classified_elsewhere"
             },
             {
               "id": 197940,
@@ -20781,7 +20678,7 @@
             {
               "id": 197883,
               "name": "Macrobrachium bombayense",
-              "reason": "no_link"
+              "reason": "classified_elsewhere"
             },
             {
               "id": 197940,
@@ -20989,7 +20886,7 @@
             {
               "id": 197883,
               "name": "Macrobrachium bombayense",
-              "reason": "no_link"
+              "reason": "classified_elsewhere"
             },
             {
               "id": 197940,
@@ -21425,7 +21322,7 @@
         "CR": 10
       },
       "colDescribed": 7574,
-      "colNe": 6541,
+      "colNe": 6540,
       "colBreakdown": [
         {
           "name": "baraudia",
@@ -23474,18 +23371,9 @@
         {
           "name": "scatonomus",
           "count": 11,
-          "neCount": 10,
+          "neCount": 9,
           "trueAssessed": 2,
-          "noMatchIds": [
-            137121
-          ],
-          "noMatchDetails": [
-            {
-              "id": 137121,
-              "name": "Scatonomus xanthopygus",
-              "reason": "no_link"
-            }
-          ]
+          "noMatchIds": []
         },
         {
           "name": "sceliages",
@@ -23945,12 +23833,12 @@
         "CR": 7
       },
       "colDescribed": 5144,
-      "colNe": 4814,
+      "colNe": 4812,
       "colBreakdown": [
         {
           "name": "crassiclitellata",
           "count": 4969,
-          "neCount": 4648,
+          "neCount": 4646,
           "trueAssessed": 343,
           "noMatchIds": [
             103108835,
@@ -23959,7 +23847,6 @@
             103113109,
             103114721,
             103120360,
-            103126656,
             103131793,
             103131863,
             103132762,
@@ -24015,7 +23902,6 @@
             233432346,
             233432765,
             233435677,
-            233693564,
             233694939,
             233694960,
             233694981
@@ -24050,11 +23936,6 @@
               "id": 103120360,
               "name": "Neodrilus campestris",
               "reason": "not_in_base"
-            },
-            {
-              "id": 103126656,
-              "name": "Rhododrilus tetratheca",
-              "reason": "no_link"
             },
             {
               "id": 103131793,
@@ -24339,11 +24220,6 @@
               "detail": "Rhinodrilus brasiliensis"
             },
             {
-              "id": 233693564,
-              "name": "Neogaster americana",
-              "reason": "no_link"
-            },
-            {
               "id": 233694939,
               "name": "Holoscolex alatus",
               "reason": "not_in_base"
@@ -24483,12 +24359,12 @@
         "EW": 1
       },
       "colDescribed": 1037065,
-      "colNe": 1033568,
+      "colNe": 1033564,
       "colBreakdown": [
         {
           "name": "No / Other SSC Group",
           "count": 1037065,
-          "neCount": 1033568,
+          "neCount": 1033564,
           "trueAssessed": 3946,
           "noMatchIds": [
             862,
@@ -24527,7 +24403,6 @@
             18489,
             18490,
             18491,
-            21008,
             21106,
             22374,
             39307,
@@ -25059,7 +24934,6 @@
             259794007,
             259794081,
             259797173,
-            259797432,
             259797471,
             259797513,
             259797555,
@@ -25094,7 +24968,6 @@
             260131971,
             260139129,
             260186878,
-            260206822,
             260209446,
             260238150,
             260288329,
@@ -25164,7 +25037,7 @@
             {
               "id": 6862,
               "name": "Dryophthorus distinguendus",
-              "reason": "no_link"
+              "reason": "provisional"
             },
             {
               "id": 6863,
@@ -25302,11 +25175,6 @@
               "id": 18491,
               "name": "Fabaeformiscandona aemonae",
               "reason": "not_in_base"
-            },
-            {
-              "id": 21008,
-              "name": "Stygobromus smithii",
-              "reason": "no_link"
             },
             {
               "id": 21106,
@@ -26114,7 +25982,7 @@
             {
               "id": 47265341,
               "name": "Aulacochilus chevrolati",
-              "reason": "no_link"
+              "reason": "provisional"
             },
             {
               "id": 47265439,
@@ -26226,37 +26094,37 @@
             {
               "id": 64303157,
               "name": "Homoeodera elateroides",
-              "reason": "no_link"
+              "reason": "provisional"
             },
             {
               "id": 64303202,
               "name": "Homoeodera edithia",
-              "reason": "no_link"
+              "reason": "provisional"
             },
             {
               "id": 64303213,
               "name": "Homoeodera scolytoides",
-              "reason": "no_link"
+              "reason": "provisional"
             },
             {
               "id": 64303225,
               "name": "Homoeodera major",
-              "reason": "no_link"
+              "reason": "provisional"
             },
             {
               "id": 64303236,
               "name": "Homoeodera compositarum",
-              "reason": "no_link"
+              "reason": "provisional"
             },
             {
               "id": 65544310,
               "name": "Cryptommata cucullata",
-              "reason": "no_link"
+              "reason": "provisional"
             },
             {
               "id": 65544432,
               "name": "Microxylobius calcaratus",
-              "reason": "no_link"
+              "reason": "provisional"
             },
             {
               "id": 65544467,
@@ -26266,12 +26134,12 @@
             {
               "id": 65546665,
               "name": "Microxylobius lucifugus",
-              "reason": "no_link"
+              "reason": "provisional"
             },
             {
               "id": 65546753,
               "name": "Pseudostenoscelis asteriperda",
-              "reason": "no_link"
+              "reason": "provisional"
             },
             {
               "id": 65585463,
@@ -26286,17 +26154,17 @@
             {
               "id": 65585575,
               "name": "Homoeodera nodulipennis",
-              "reason": "no_link"
+              "reason": "provisional"
             },
             {
               "id": 65585585,
               "name": "Homoeodera globulosa",
-              "reason": "no_link"
+              "reason": "provisional"
             },
             {
               "id": 65585601,
               "name": "Homoeodera asteris",
-              "reason": "no_link"
+              "reason": "provisional"
             },
             {
               "id": 65592826,
@@ -26306,12 +26174,12 @@
             {
               "id": 65686181,
               "name": "Pachymastax crassus",
-              "reason": "no_link"
+              "reason": "provisional"
             },
             {
               "id": 65686197,
               "name": "Pseudostenoscelis sculpturata",
-              "reason": "no_link"
+              "reason": "provisional"
             },
             {
               "id": 65686469,
@@ -26326,12 +26194,12 @@
             {
               "id": 65688003,
               "name": "Homoeodera rotundipennis",
-              "reason": "no_link"
+              "reason": "provisional"
             },
             {
               "id": 65688228,
               "name": "Hexacoptus ferrugineus",
-              "reason": "no_link"
+              "reason": "provisional"
             },
             {
               "id": 65880080,
@@ -26346,22 +26214,22 @@
             {
               "id": 65880126,
               "name": "Tychiorhinus lineatus",
-              "reason": "no_link"
+              "reason": "provisional"
             },
             {
               "id": 65880233,
               "name": "Chalcotrogus oblongior",
-              "reason": "no_link"
+              "reason": "provisional"
             },
             {
               "id": 65880268,
               "name": "Pseudostenoscelis compositarum",
-              "reason": "no_link"
+              "reason": "provisional"
             },
             {
               "id": 65880410,
               "name": "Acarodes gutta",
-              "reason": "no_link"
+              "reason": "provisional"
             },
             {
               "id": 65880793,
@@ -26376,52 +26244,52 @@
             {
               "id": 65881560,
               "name": "Chalcotrogus apionoides",
-              "reason": "no_link"
+              "reason": "provisional"
             },
             {
               "id": 65881569,
               "name": "Chalcotrogus semipolitus",
-              "reason": "no_link"
+              "reason": "provisional"
             },
             {
               "id": 65893010,
               "name": "Eucoptoderus vermiculatus",
-              "reason": "no_link"
+              "reason": "provisional"
             },
             {
               "id": 65893025,
               "name": "Eucoptoderus affinis",
-              "reason": "no_link"
+              "reason": "provisional"
             },
             {
               "id": 65894031,
               "name": "Homoeodera paivae",
-              "reason": "no_link"
+              "reason": "provisional"
             },
             {
               "id": 65894033,
               "name": "Homoeodera longefasciata",
-              "reason": "no_link"
+              "reason": "provisional"
             },
             {
               "id": 65894066,
               "name": "Homoeodera pygmaea",
-              "reason": "no_link"
+              "reason": "provisional"
             },
             {
               "id": 65894074,
               "name": "Homoeodera alutaceicollis",
-              "reason": "no_link"
+              "reason": "provisional"
             },
             {
               "id": 65894104,
               "name": "Homoeodera coriacea",
-              "reason": "no_link"
+              "reason": "provisional"
             },
             {
               "id": 65894138,
               "name": "Homoeodera pumilio",
-              "reason": "no_link"
+              "reason": "provisional"
             },
             {
               "id": 66180586,
@@ -26436,57 +26304,57 @@
             {
               "id": 66183290,
               "name": "Microxylobius lacertosus",
-              "reason": "no_link"
+              "reason": "provisional"
             },
             {
               "id": 66183368,
               "name": "Microxylobius sculpturatus",
-              "reason": "no_link"
+              "reason": "provisional"
             },
             {
               "id": 66183379,
               "name": "Microxylobius dimidiatus",
-              "reason": "no_link"
+              "reason": "provisional"
             },
             {
               "id": 66183430,
               "name": "Microxylobius granulosus",
-              "reason": "no_link"
+              "reason": "provisional"
             },
             {
               "id": 66183433,
               "name": "Microxylobius vestitus",
-              "reason": "no_link"
+              "reason": "provisional"
             },
             {
               "id": 66183463,
               "name": "Microxylobius opacus",
-              "reason": "no_link"
+              "reason": "provisional"
             },
             {
               "id": 66185257,
               "name": "Pentarthrodes dicksoniae",
-              "reason": "no_link"
+              "reason": "provisional"
             },
             {
               "id": 66185855,
               "name": "Pseudomesoxenus minutissimus",
-              "reason": "no_link"
+              "reason": "provisional"
             },
             {
               "id": 66187757,
               "name": "Tapiromimus gibbirostris",
-              "reason": "no_link"
+              "reason": "provisional"
             },
             {
               "id": 66220628,
               "name": "Tychiorhinus subochraceus",
-              "reason": "no_link"
+              "reason": "provisional"
             },
             {
               "id": 66220682,
               "name": "Tychiorhinus porrectus",
-              "reason": "no_link"
+              "reason": "provisional"
             },
             {
               "id": 66221631,
@@ -26591,7 +26459,7 @@
             {
               "id": 68447405,
               "name": "Acanthinomerus wollastoni",
-              "reason": "no_link"
+              "reason": "provisional"
             },
             {
               "id": 68447436,
@@ -27257,7 +27125,7 @@
             {
               "id": 188988355,
               "name": "Agrotis kuamauna",
-              "reason": "provisional"
+              "reason": "no_link"
             },
             {
               "id": 189556853,
@@ -27347,17 +27215,17 @@
             {
               "id": 200197855,
               "name": "Curculio quelparticola",
-              "reason": "no_link"
+              "reason": "provisional"
             },
             {
               "id": 200197903,
               "name": "Curculio hallasanensis",
-              "reason": "no_link"
+              "reason": "provisional"
             },
             {
               "id": 200200437,
               "name": "Polygraphus nobuchii",
-              "reason": "no_link"
+              "reason": "provisional"
             },
             {
               "id": 212424927,
@@ -27534,7 +27402,7 @@
             {
               "id": 223919228,
               "name": "Trichoceble dogueti",
-              "reason": "no_link"
+              "reason": "provisional"
             },
             {
               "id": 223969077,
@@ -27586,12 +27454,12 @@
             {
               "id": 225221679,
               "name": "Globicornis semilimbata",
-              "reason": "no_link"
+              "reason": "provisional"
             },
             {
               "id": 225221689,
               "name": "Globicornis creticus",
-              "reason": "no_link"
+              "reason": "provisional"
             },
             {
               "id": 225221699,
@@ -27995,11 +27863,6 @@
               "reason": "provisional"
             },
             {
-              "id": 259797432,
-              "name": "Odontognophos margaritatus",
-              "reason": "no_link"
-            },
-            {
               "id": 259797471,
               "name": "Nyctobrya pinkeri",
               "reason": "no_link"
@@ -28173,11 +28036,6 @@
               "id": 260186878,
               "name": "Apamea kuusamoensis",
               "reason": "not_in_base"
-            },
-            {
-              "id": 260206822,
-              "name": "Agrochola kindermannii",
-              "reason": "no_link"
             },
             {
               "id": 260209446,
@@ -28542,12 +28400,12 @@
         "EX": 9
       },
       "colDescribed": 31992,
-      "colNe": 29570,
+      "colNe": 29568,
       "colBreakdown": [
         {
           "name": "orchidaceae",
           "count": 31992,
-          "neCount": 29570,
+          "neCount": 29568,
           "trueAssessed": 2443,
           "noMatchIds": [
             39568,
@@ -28582,7 +28440,6 @@
             43320135,
             43320359,
             43324087,
-            43324202,
             43324274,
             43324365,
             43324499,
@@ -28591,7 +28448,6 @@
             43325601,
             43325614,
             43325630,
-            43325915,
             49184722,
             57478022,
             58388811,
@@ -28819,11 +28675,6 @@
               "detailId": 43325902
             },
             {
-              "id": 43324202,
-              "name": "Phragmipedium brasiliense",
-              "reason": "no_link"
-            },
-            {
               "id": 43324274,
               "name": "Phragmipedium christiansenianum",
               "reason": "lumped",
@@ -28876,11 +28727,6 @@
               "reason": "lumped",
               "detail": "Phragmipedium lindleyanum",
               "detailId": 43324877
-            },
-            {
-              "id": 43325915,
-              "name": "Phragmipedium tetzlaffianum",
-              "reason": "no_link"
             },
             {
               "id": 49184722,
@@ -31760,7 +31606,7 @@
             {
               "id": 38657,
               "name": "Pritchardia woodfordiana",
-              "reason": "no_link"
+              "reason": "provisional"
             },
             {
               "id": 38716,
@@ -31793,7 +31639,7 @@
             {
               "id": 17060828,
               "name": "Dypsis thouarsiana",
-              "reason": "no_link"
+              "reason": "provisional"
             },
             {
               "id": 44392678,
@@ -32975,12 +32821,12 @@
         "LR/lc": 104
       },
       "colDescribed": 337252,
-      "colNe": 266738,
+      "colNe": 266718,
       "colBreakdown": [
         {
           "name": "No / Other SSC Group",
           "count": 337252,
-          "neCount": 266738,
+          "neCount": 266718,
           "trueAssessed": 71284,
           "noMatchIds": [
             30419,
@@ -33011,7 +32857,6 @@
             31267,
             31283,
             31286,
-            31327,
             31341,
             31342,
             31345,
@@ -33165,7 +33010,6 @@
             35720,
             35736,
             35875,
-            35897,
             35928,
             35962,
             35966,
@@ -33260,7 +33104,6 @@
             38787,
             38809,
             38827,
-            38835,
             38891,
             38892,
             38901,
@@ -33293,7 +33136,6 @@
             43179,
             43201,
             43215,
-            43238,
             43377,
             43378,
             43386,
@@ -33303,11 +33145,9 @@
             43478,
             43555,
             43596,
-            43598,
             43599,
             43647,
             43651,
-            43668,
             43678,
             43701,
             43893,
@@ -33436,7 +33276,6 @@
             63045,
             63407,
             63466,
-            63467,
             63471,
             63477,
             63479,
@@ -33448,7 +33287,6 @@
             63600,
             63604,
             63606,
-            63607,
             63609,
             63610,
             63611,
@@ -33673,7 +33511,6 @@
             193903,
             194062,
             194129,
-            194159,
             194179,
             194203,
             194275,
@@ -33722,7 +33559,6 @@
             200422,
             200428,
             200438,
-            200448,
             200494,
             200532,
             200561,
@@ -33757,8 +33593,6 @@
             13490739,
             13506888,
             13534896,
-            15112893,
-            15114775,
             18007459,
             18943598,
             19224959,
@@ -33950,7 +33784,6 @@
             89252500,
             89253079,
             89774259,
-            89797614,
             89964327,
             90327917,
             90978602,
@@ -34032,7 +33865,6 @@
             115630978,
             115698170,
             115943888,
-            115945879,
             115947713,
             116134318,
             116167859,
@@ -34312,7 +34144,6 @@
             145295897,
             145299119,
             145300450,
-            145301591,
             145301815,
             145303132,
             145304181,
@@ -34350,7 +34181,6 @@
             146652107,
             147140953,
             147421662,
-            147519685,
             147632343,
             147632404,
             147635061,
@@ -34361,7 +34191,6 @@
             147864256,
             148322115,
             148432738,
-            148542477,
             148593389,
             148594415,
             148594454,
@@ -34655,7 +34484,6 @@
             177838001,
             178529559,
             179300782,
-            179954232,
             180035886,
             180051486,
             180246488,
@@ -35009,7 +34837,6 @@
             236695130,
             236697047,
             236697728,
-            237352404,
             237352888,
             237728097,
             237728216,
@@ -35063,7 +34890,6 @@
             263014437,
             270161268,
             273243620,
-            276265231,
             289851588
           ],
           "noMatchDetails": [
@@ -35254,11 +35080,6 @@
               "reason": "lumped",
               "detail": "Euonymus hamiltonianus",
               "detailId": 147654187
-            },
-            {
-              "id": 31327,
-              "name": "Pyrus anatolica",
-              "reason": "no_link"
             },
             {
               "id": 31341,
@@ -36202,7 +36023,7 @@
             {
               "id": 35185,
               "name": "Myodocarpus angustialatus",
-              "reason": "no_link"
+              "reason": "provisional"
             },
             {
               "id": 35186,
@@ -36285,11 +36106,6 @@
               "reason": "lumped",
               "detail": "Pouteria gardneri",
               "detailId": 154664586
-            },
-            {
-              "id": 35897,
-              "name": "Aquilaria banaensis",
-              "reason": "no_link"
             },
             {
               "id": 35928,
@@ -36918,11 +36734,6 @@
               "detailId": 150284816
             },
             {
-              "id": 38835,
-              "name": "Litosanthes capitulatus",
-              "reason": "no_link"
-            },
-            {
               "id": 38891,
               "name": "Meriania peltata",
               "reason": "infraspecific",
@@ -37134,11 +36945,6 @@
               "reason": "not_in_base"
             },
             {
-              "id": 43238,
-              "name": "Guzmania barbiei",
-              "reason": "no_link"
-            },
-            {
               "id": 43377,
               "name": "Dasphyllum argenteum",
               "reason": "not_in_base"
@@ -37196,11 +37002,6 @@
               "detailId": 43593
             },
             {
-              "id": 43598,
-              "name": "Blechnum socialis",
-              "reason": "no_link"
-            },
-            {
               "id": 43599,
               "name": "Blechnum sodiroi",
               "reason": "lumped",
@@ -37218,11 +37019,6 @@
               "id": 43651,
               "name": "Elaphoglossum heliconiaefolium",
               "reason": "not_in_base"
-            },
-            {
-              "id": 43668,
-              "name": "Elaphoglossum rupicolum",
-              "reason": "no_link"
             },
             {
               "id": 43678,
@@ -37444,7 +37240,7 @@
             {
               "id": 45040,
               "name": "Melhania milleri",
-              "reason": "no_link"
+              "reason": "provisional"
             },
             {
               "id": 45042,
@@ -38001,11 +37797,6 @@
               "detail": "Calligonum leucocladum"
             },
             {
-              "id": 63467,
-              "name": "Calligonum calcareum",
-              "reason": "no_link"
-            },
-            {
               "id": 63471,
               "name": "Crataegus darvasica",
               "reason": "lumped",
@@ -38034,9 +37825,7 @@
             {
               "id": 63522,
               "name": "Crataegus korolkowi",
-              "reason": "infraspecific",
-              "detail": "Crataegus pinnatifida",
-              "detailId": 61957322
+              "reason": "no_link"
             },
             {
               "id": 63523,
@@ -38069,11 +37858,6 @@
               "id": 63606,
               "name": "Ceramium prostratum",
               "reason": "not_in_base"
-            },
-            {
-              "id": 63607,
-              "name": "Ceramium templetonii",
-              "reason": "no_link"
             },
             {
               "id": 63609,
@@ -39404,11 +39188,6 @@
               "reason": "not_in_base"
             },
             {
-              "id": 194159,
-              "name": "Nymphoides macrospermum",
-              "reason": "no_link"
-            },
-            {
               "id": 194179,
               "name": "Quercus kerangasensis",
               "reason": "lumped",
@@ -39714,11 +39493,6 @@
               "reason": "not_in_base"
             },
             {
-              "id": 200448,
-              "name": "Salvia andreji",
-              "reason": "no_link"
-            },
-            {
               "id": 200494,
               "name": "Klasea caucasica",
               "reason": "infraspecific",
@@ -39923,16 +39697,6 @@
               "name": "Chrysanthemoides monilifera",
               "reason": "infraspecific",
               "detail": "Osteospermum moniliferum"
-            },
-            {
-              "id": 15112893,
-              "name": "Magnolia elegantifolia",
-              "reason": "no_link"
-            },
-            {
-              "id": 15114775,
-              "name": "Magnolia mirifolia",
-              "reason": "no_link"
             },
             {
               "id": 18007459,
@@ -41115,11 +40879,6 @@
               "detailId": 89738361
             },
             {
-              "id": 89797614,
-              "name": "Gagea pampaninii",
-              "reason": "no_link"
-            },
-            {
               "id": 89964327,
               "name": "Quercus paxtalensis",
               "reason": "lumped",
@@ -41617,11 +41376,6 @@
               "reason": "not_in_base"
             },
             {
-              "id": 115945879,
-              "name": "Cynanchum freemani",
-              "reason": "no_link"
-            },
-            {
               "id": 115947713,
               "name": "Eugenia cruegeri",
               "reason": "lumped",
@@ -41893,7 +41647,7 @@
             {
               "id": 122971191,
               "name": "Prunus boissieri",
-              "reason": "no_link"
+              "reason": "provisional"
             },
             {
               "id": 123040531,
@@ -42646,7 +42400,7 @@
             {
               "id": 136806394,
               "name": "Cyanotis namuliensis",
-              "reason": "no_link"
+              "reason": "provisional"
             },
             {
               "id": 136814105,
@@ -43441,11 +43195,6 @@
               "detailId": 192556205
             },
             {
-              "id": 145301591,
-              "name": "Cinnamomum bhamoensis",
-              "reason": "no_link"
-            },
-            {
               "id": 145301815,
               "name": "Cinnamomum bladenense",
               "reason": "provisional"
@@ -43681,11 +43430,6 @@
               "detailId": 205097051
             },
             {
-              "id": 147519685,
-              "name": "Carramboa rodriguezii",
-              "reason": "no_link"
-            },
-            {
               "id": 147632343,
               "name": "Photinia glomerata",
               "reason": "not_in_base"
@@ -43724,7 +43468,7 @@
             {
               "id": 147860799,
               "name": "Myginda fasciculata",
-              "reason": "no_link"
+              "reason": "provisional"
             },
             {
               "id": 147864256,
@@ -43742,11 +43486,6 @@
               "reason": "lumped",
               "detail": "Alchornea triplinervia",
               "detailId": 60759001
-            },
-            {
-              "id": 148542477,
-              "name": "Uladendron codesuri",
-              "reason": "no_link"
             },
             {
               "id": 148593389,
@@ -44463,7 +44202,9 @@
             {
               "id": 154823138,
               "name": "Cryptocarya edanoii",
-              "reason": "no_link"
+              "reason": "lumped",
+              "detail": "Cryptocarya diversifolia",
+              "detailId": 159080720
             },
             {
               "id": 154823216,
@@ -45671,11 +45412,6 @@
               "reason": "lumped",
               "detail": "Citharexylum spinosum",
               "detailId": 60330342
-            },
-            {
-              "id": 179954232,
-              "name": "Pandanus juliferus",
-              "reason": "no_link"
             },
             {
               "id": 180035886,
@@ -47352,7 +47088,7 @@
             {
               "id": 220890606,
               "name": "Webera myrtifolia",
-              "reason": "no_link"
+              "reason": "provisional"
             },
             {
               "id": 220978783,
@@ -47447,7 +47183,7 @@
             {
               "id": 224195025,
               "name": "Anatherostipa coroi",
-              "reason": "no_link"
+              "reason": "provisional"
             },
             {
               "id": 224609354,
@@ -47845,7 +47581,7 @@
             {
               "id": 234377081,
               "name": "Mimosa ouyrarema",
-              "reason": "no_link"
+              "reason": "provisional"
             },
             {
               "id": 234732530,
@@ -47936,11 +47672,6 @@
               "id": 236697728,
               "name": "Lycopodiella raiateensis",
               "reason": "not_in_base"
-            },
-            {
-              "id": 237352404,
-              "name": "Helichrysum harennense",
-              "reason": "no_link"
             },
             {
               "id": 237352888,
@@ -48049,7 +47780,7 @@
             {
               "id": 240797043,
               "name": "Harpalyce flexuosa",
-              "reason": "no_link"
+              "reason": "provisional"
             },
             {
               "id": 240869271,
@@ -48273,11 +48004,6 @@
               "reason": "lumped",
               "detail": "Quercus libani",
               "detailId": 194187
-            },
-            {
-              "id": 276265231,
-              "name": "Machilus attenuatus",
-              "reason": "no_link"
             },
             {
               "id": 289851588,
