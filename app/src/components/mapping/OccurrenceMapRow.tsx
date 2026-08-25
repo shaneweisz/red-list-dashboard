@@ -4504,7 +4504,13 @@ export default function OccurrenceMapRow({
         );
       }
       if (isOutsideNativeRange(p.countryCode, effectiveNativeCountries)) {
-        note("Range", `Outside native range${p.country ? ` (${p.country})` : ""}`, { flag: true });
+        note(
+          "Outside range",
+          p.country
+            ? `Recorded in ${p.country}, outside the native range this assessment gives the species`
+            : "Recorded outside the native range this assessment gives the species",
+          { icon: "flag" }
+        );
       }
       note("Hidden", exclusions[p.gbifID]?.justification, { icon: "hidden" });
 
