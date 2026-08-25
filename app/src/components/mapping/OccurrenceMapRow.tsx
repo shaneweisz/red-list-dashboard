@@ -776,7 +776,15 @@ export default function OccurrenceMapRow({
   }, [showEcoregions, ecoregions, ecoregionsLoading]);
 
   /** Whether the Overlays panel is rolled up to its header. */
-  const [overlaysCollapsed, setOverlaysCollapsed] = useState(false);
+  const [overlaysCollapsed, setOverlaysCollapsed] = useState(!fullscreenProp);
+  /**
+   * Whether the basemap list is showing, or just its icon.
+   *
+   * Open on the fullscreen page, where there's room for six names down the
+   * side; folded to one button on the dashboard, where the map is half the
+   * width and the basemap is the least of what you came for.
+   */
+  const [basemapOpen, setBasemapOpen] = useState(!!fullscreenProp);
   const [showRangeMetrics, setShowRangeMetrics] = useState(false);
   /**
    * The AOO grid's cell width, in kilometres.
@@ -3653,7 +3661,7 @@ export default function OccurrenceMapRow({
               another. */}
           <div className="absolute bottom-2 left-2 z-[1000] flex flex-col items-start gap-1.5 max-w-[90%]">
           {fullscreen && mounted && renderRangeMetrics()}
-          {fullscreen && !loadingOccurrences && mounted && renderRecordLayers(label)}
+          {!loadingOccurrences && mounted && renderRecordLayers(label)}
           {/* The measuring tool's running total. First in the stack because
               it's a live mode, not a legend. */}
           {measure && (
@@ -4043,21 +4051,41 @@ export default function OccurrenceMapRow({
                 when the map underneath is what matters. */}
             {!loadingOccurrences && mounted && renderOverlayLayers()}
             {!loadingOccurrences && mounted && (
-              <div className="flex flex-col gap-0.5 bg-white dark:bg-zinc-800 rounded-lg shadow-md border border-zinc-200 dark:border-zinc-700 p-1">
-                {(Object.entries(BASEMAP_STYLES) as [BasemapKey, (typeof BASEMAP_STYLES)[BasemapKey]][]).map(([key, opt]) => (
-                  <button
-                    key={key}
-                    onClick={() => setBasemap(key)}
-                    className={`px-2 py-0.5 rounded text-left text-[10px] transition-colors ${
-                      basemap === key
-                        ? "bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300 font-medium"
-                        : "text-zinc-500 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-700"
-                    }`}
-                  >
-                    {opt.label}
-                  </button>
-                ))}
-              </div>
+              basemapOpen ? (
+                <div className="flex flex-col gap-0.5 bg-white dark:bg-zinc-800 rounded-lg shadow-md border border-zinc-200 dark:border-zinc-700 p-1">
+                  {(Object.entries(BASEMAP_STYLES) as [BasemapKey, (typeof BASEMAP_STYLES)[BasemapKey]][]).map(([key, opt]) => (
+                    <button
+                      key={key}
+                      onClick={() => {
+                        setBasemap(key);
+                        // Where the list is folded away by default, choosing
+                        // puts it back — the map is what you wanted to see.
+                        if (!fullscreen) setBasemapOpen(false);
+                      }}
+                      className={`px-2 py-0.5 rounded text-left text-[10px] transition-colors ${
+                        basemap === key
+                          ? "bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300 font-medium"
+                          : "text-zinc-500 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-700"
+                      }`}
+                    >
+                      {opt.label}
+                    </button>
+                  ))}
+                </div>
+              ) : (
+                <button
+                  onClick={() => setBasemapOpen(true)}
+                  title={`Basemap: ${BASEMAP_STYLES[basemap].label}. Click to change.`}
+                  aria-label="Choose a basemap"
+                  className="p-1.5 rounded-lg bg-white dark:bg-zinc-800 shadow-md border border-zinc-200 dark:border-zinc-700 text-zinc-500 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200"
+                >
+                  {/* The stacked-sheets mark every map uses for this. */}
+                  <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M12 3l9 5-9 5-9-5 9-5z" />
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M3 13l9 5 9-5" />
+                  </svg>
+                </button>
+              )
             )}
           </div>
         </div>
@@ -4807,7 +4835,7 @@ export default function OccurrenceMapRow({
           are deciding about; GBIF's points are the ground they're decided
           against, and they carry the most explanation, so they anchor the
           bottom rather than pushing everything else down. */}
-      {visibleGeoreferences.length > 0 && (
+      {fullscreen && visibleGeoreferences.length > 0 && (
         <label className="flex items-center gap-1.5 px-2 py-0.5 hover:bg-zinc-50 dark:hover:bg-zinc-700 cursor-pointer text-[11px]">
           <input
             type="checkbox"
@@ -4823,7 +4851,7 @@ export default function OccurrenceMapRow({
           </span>
         </label>
       )}
-      {pointFile && (
+      {fullscreen && pointFile && (
         <label className="flex items-center gap-1.5 px-2 py-0.5 hover:bg-zinc-50 dark:hover:bg-zinc-700 cursor-pointer text-[11px]">
           <input
             type="checkbox"
