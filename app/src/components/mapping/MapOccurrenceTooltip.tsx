@@ -38,6 +38,15 @@ interface MapOccurrenceTooltipProps {
   page?: { index: number; total: number; onPrev: () => void; onNext: () => void };
   /** Dismisses a pinned tooltip. */
   onClose?: () => void;
+  /**
+   * What you can do with this record, drawn as a block at the foot of the
+   * panel once it's been clicked.
+   *
+   * They belong here rather than in a menu of their own: the panel already
+   * names the record and is already pointing at it, and a second popup for the
+   * same point meant two boxes explaining one dot.
+   */
+  actions?: React.ReactNode;
   /** True once the reader has paged through: the tooltip is now click-dismissed. */
   pinned?: boolean;
   /** Keeps the tooltip up while the pointer is on it, so its controls are usable. */
@@ -183,7 +192,7 @@ export default function MapOccurrenceTooltip(props: MapOccurrenceTooltipProps) {
         zIndex: 10000,
         // Interactive when it has controls: you have to be able to reach the
         // pager — or the edit link — without the tooltip vanishing on the way.
-        pointerEvents: props.page ? "auto" : "none",
+        pointerEvents: props.page || props.actions ? "auto" : "none",
       }}
       onMouseEnter={props.onPointerEnter}
       onMouseLeave={props.onPointerLeave}
@@ -359,6 +368,11 @@ export default function MapOccurrenceTooltip(props: MapOccurrenceTooltipProps) {
             </div>
           )}
         </div>
+        {props.actions && (
+          <div className="border-t border-zinc-100 dark:border-zinc-800 p-1 space-y-0.5 text-[11px] text-zinc-700 dark:text-zinc-200">
+            {props.actions}
+          </div>
+        )}
         </div>
       </div>
     </div>,
