@@ -4459,9 +4459,13 @@ export default function OccurrenceMapRow({
         const t = text(value);
         if (t) rows.push({ label, value: t });
       };
-      const note = (label: string, value: unknown, flag = false) => {
+      const note = (
+        label: string,
+        value: unknown,
+        opts: { flag?: boolean; icon?: "flag" | "hidden" } = {}
+      ) => {
         const t = text(value);
-        if (t) notes.push({ label, value: t, flag });
+        if (t) notes.push({ label, value: t, ...opts });
       };
       add("Species", p.species);
       add("Basis", formatBasisOfRecord(p.basisOfRecord));
@@ -4490,16 +4494,19 @@ export default function OccurrenceMapRow({
       add("Dataset", p.datasetName);
       add("GBIF id", p.gbifID);
       if (!mine) {
+        // A mark rather than a line: which cleaning tests a record failed is
+        // worth a hover, not four lines of a panel that has the record's own
+        // fields to show.
         note(
           "Flagged",
           (p.qualityFlags ?? []).map((f) => QUALITY_FLAG_LABELS[f as QualityFlag] || f).join(", "),
-          true
+          { icon: "flag" }
         );
       }
       if (isOutsideNativeRange(p.countryCode, effectiveNativeCountries)) {
-        note("Range", `Outside native range${p.country ? ` (${p.country})` : ""}`, true);
+        note("Range", `Outside native range${p.country ? ` (${p.country})` : ""}`, { flag: true });
       }
-      note("Hidden", exclusions[p.gbifID]?.justification);
+      note("Hidden", exclusions[p.gbifID]?.justification, { icon: "hidden" });
 
       /*
        * The imported point for this record, folded in rather than given a

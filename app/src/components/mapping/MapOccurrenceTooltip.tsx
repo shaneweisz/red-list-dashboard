@@ -27,8 +27,13 @@ interface MapOccurrenceTooltipProps {
    * Kept out of the table and below it. Mixed in, an inference of ours read
    * as another field off the record, and the table stopped being a copy of
    * what the publisher sent. `flag` marks the ones worth picking out.
+   *
+   * `icon` draws one as a mark rather than a line of text, with its reason on
+   * hover: what you need at a glance is that a record is flagged or hidden,
+   * and four cleaning tests spelled out cost more of the panel than the
+   * record's own fields.
    */
-  notes?: { label: string; value: string; flag?: boolean }[];
+  notes?: { label: string; value: string; flag?: boolean; icon?: "flag" | "hidden" }[];
   /**
    * Photographs the publisher attached to the record, from GBIF's media.
    *
@@ -107,6 +112,8 @@ export default function MapOccurrenceTooltip(props: MapOccurrenceTooltipProps) {
   const fixedY = containerRect.top + pos.y;
 
   const shownImages = (props.images ?? []).filter((i) => !brokenImages.includes(i.url));
+  const iconNotes = (props.notes ?? []).filter((n) => n.icon);
+  const textNotes = (props.notes ?? []).filter((n) => !n.icon);
 
   const tooltipWidth = 220;
   // Beside the point rather than above it: the map is far wider than it is
@@ -340,9 +347,40 @@ export default function MapOccurrenceTooltip(props: MapOccurrenceTooltipProps) {
             </tbody>
           </table>
           </div>
-          {props.notes && props.notes.length > 0 && (
+          {(iconNotes.length > 0 || textNotes.length > 0) && (
             <div className="pt-1 mt-1 border-t border-zinc-100 dark:border-zinc-800 space-y-0.5">
-              {props.notes.map((note) => (
+              {iconNotes.length > 0 && (
+                <div className="flex items-center gap-2 pb-0.5">
+                  {iconNotes.map((note) => (
+                    <span
+                      key={note.label}
+                      title={`${note.label}: ${note.value}`}
+                      className={`inline-flex items-center gap-1 ${
+                        note.icon === "hidden"
+                          ? "text-zinc-500 dark:text-zinc-400"
+                          : "text-amber-600 dark:text-amber-500"
+                      }`}
+                    >
+                      {note.icon === "hidden" ? (
+                        <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                          <path
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            d="M2.5 12S6 5.5 12 5.5c1.7 0 3.2.5 4.5 1.2M21.5 12s-1.3 2.4-3.7 4.2M4 20L20 4"
+                          />
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M9.9 14.1a3 3 0 014.2-4.2" />
+                        </svg>
+                      ) : (
+                        <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M5 21V4m0 0h11l-1.5 3.5L16 11H5" />
+                        </svg>
+                      )}
+                      <span className="text-[10px]">{note.label}</span>
+                    </span>
+                  ))}
+                </div>
+              )}
+              {textNotes.map((note) => (
                 <div
                   key={note.label}
                   className={`flex gap-1.5 ${
