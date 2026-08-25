@@ -3635,7 +3635,7 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
     </div>
   );
 
-  // Possible Taxonomic Revision (prototype) — the SSC-group view's "No 1:1 CoL
+  // Taxonomic differences from Catalogue of Life — the SSC-group view's "No 1:1 CoL
   // Match" diagnostic, surfaced as an ordinary dashboard filter. The coarse
   // Flagged/Clean toggle sits in the header (it's a two-way choice, not a bar);
   // the bars below break the flagged bucket down by reason, which is the part
@@ -3670,8 +3670,8 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
       <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-3 flex flex-col">
         <div className="flex items-center justify-between gap-2 mb-1 min-h-[24px]">
           <span className="text-sm font-semibold text-zinc-900 dark:text-zinc-100 flex items-center gap-1">
-            Possible Taxonomic Revision
-            <HoverTooltip text="Species whose taxonomy may have moved since they were assessed: either the IUCN name has no clean one-to-one match in the current Catalogue of Life checklist (lumped, demoted to a subspecies, or not in the checklist yet), or Catalogue of Life now recognises species likely split out of it. A flag to check, not a confirmed change — some are genuine species-boundary disagreements between the two databases, and the split signal is a name-pattern heuristic. The no-match half is the same diagnostic the SSC group view shows as 'No 1:1 CoL Match'.">
+            Taxonomic differences from Catalogue of Life
+            <HoverTooltip text="Assessed species whose name Catalogue of Life treats differently: either the IUCN name has no clean one-to-one match in the current Catalogue of Life checklist (lumped, now a subspecies, or not in the checklist yet), or Catalogue of Life now recognises species likely split out of it. Two checklists can differ without either being wrong — the Red List assesses the taxon its assessors scoped, Catalogue of Life maintains a nomenclatural checklist — so this says where they differ, not who is right. The split signal is a name-pattern heuristic. The no-match half is the same diagnostic the SSC group view shows as 'No 1:1 CoL Match'.">
               <svg className="w-3 h-3 text-zinc-400 dark:text-zinc-500 cursor-help" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                 <circle cx="12" cy="12" r="10" />
                 <path d="M12 16v-4M12 8h.01" />
@@ -3767,7 +3767,7 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
         ) : (
           <div style={{ height: 90 }} className="flex items-center justify-center">
             <span className="text-sm text-zinc-400 dark:text-zinc-500">
-              {colTally.clean > 0 ? "No taxonomic revisions flagged here" : "No Catalogue of Life match data"}
+              {colTally.clean > 0 ? "No differences flagged here" : "No Catalogue of Life match data"}
             </span>
           </div>
         )}
@@ -5131,7 +5131,7 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
                   {threatsCard}
                 </div>
 
-                {/* Possible Taxonomic Revision — assessed-only: the flag is a
+                {/* Taxonomic differences from CoL — assessed-only: the flag is a
                     property of an IUCN assessment's name, so it has no meaning
                     in the Not Evaluated (new-assessments) view, whose rows are
                     CoL species with no assessment to disagree with. */}
@@ -5426,7 +5426,7 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
                 onClick={() => setColMatch(null)}
                 className="px-3 py-1.5 text-sm font-medium rounded-full bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-500 flex items-center gap-1 hover:opacity-80"
               >
-                {colMatch === "flagged" ? "⚑ Possible taxonomic revision" : "Clean CoL match"}
+                {colMatch === "flagged" ? "⚑ Differs from Catalogue of Life" : "Clean CoL match"}
                 <span className="text-sm">×</span>
               </button>
             )}
@@ -5793,7 +5793,8 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
                             {s.scientific_name}
                           </span>
                           {/* Possible-taxonomic-revision flag — see the
-                              "Possible Taxonomic Revision" filter card. Only
+                              "Taxonomic differences from Catalogue of Life"
+                              filter card. Only
                               the ~6% of assessed species CoL disagrees with (or
                               has split something out of) carry one, so this is a
                               rare marker, not a per-row decoration. It opens the
@@ -5812,7 +5813,7 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
                                 target="_blank"
                                 rel="noopener noreferrer"
                                 onClick={(e) => e.stopPropagation()}
-                                aria-label={`Possible taxonomic revision — ${revisionReasons(s.col_revision!).map(r => REVISION_REASON_SUMMARY[r] ?? r).join("; ")}. Open in Catalogue of Life`}
+                                aria-label={`Differs from Catalogue of Life — ${revisionReasons(s.col_revision!).map(r => REVISION_REASON_SUMMARY[r] ?? r).join("; ")}. Open in Catalogue of Life`}
                                 className="ml-1 align-middle text-amber-600 dark:text-amber-500 hover:text-amber-700 dark:hover:text-amber-400 text-xs"
                               >
                                 ⚑

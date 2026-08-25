@@ -198,7 +198,7 @@ export function getCountryStats(): Record<string, { species: number; outdated: n
 }
 
 /**
- * sis_taxon_id → the "possible taxonomic revision" flag, for the ~6% of
+ * sis_taxon_id → the taxonomic-difference flag, for the ~6% of
  * assessed species carrying one (data/col-revisions.json, built by
  * scripts/build-col-revisions.ts). Two independent signals share the entry: no
  * clean 1:1 Catalogue of Life match, and species CoL has likely split out of

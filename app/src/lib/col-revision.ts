@@ -1,5 +1,5 @@
 /**
- * The "possible taxonomic revision" vocabulary — one place for the signals the
+ * The taxonomic-difference vocabulary — one place for the signals the
  * dashboard flags on an assessed species, and everything the UI says about them.
  *
  * Two independent signals live on one flag:
@@ -19,9 +19,9 @@
  *  - the SSC-group view's per-group "No 1:1 CoL Match" panel (TaxaSummary.tsx),
  *    which shows the explanation in a narrow table cell, beside a column that
  *    already names the species (it has its own, separate split display);
- *  - the main assessed dashboard's "Possible Taxonomic Revision" filter chart +
- *    per-row flag (RedListView.tsx), where the explanation stands alone in a
- *    tooltip and so has to name the species itself.
+ *  - the main assessed dashboard's "Taxonomic differences from Catalogue of
+ *    Life" filter chart + per-row flag (RedListView.tsx), where the explanation
+ *    stands alone in a tooltip and so has to name the species itself.
  *
  * Hence noMatchSentence's `subject`: one switch, one set of verbs and nouns, two
  * framings — rather than two independently-drifting sets of wording.
@@ -50,9 +50,9 @@ export const REVISION_REASONS = [
  *
  * "extinct_unconfirmed" means CoL's record for the name is flagged extinct
  * while the IUCN category isn't EX/EW. Two things disqualify it from a card
- * called Possible Taxonomic Revision:
+ * about taxonomic differences:
  *
- *  - It isn't a taxonomic revision. It is a disagreement about whether the
+ *  - It isn't a taxonomic difference. It is a disagreement about whether the
  *    species still exists, which is a data-quality observation about CoL.
  *  - It is mostly wrong. Of the 60 it caught, 25 were Least Concern or Near
  *    Threatened — species that by definition are not extinct — and 14 of those
@@ -76,8 +76,16 @@ export type RevisionReasonCode = (typeof REVISION_REASONS)[number];
 /** Short label for a chart axis / filter chip. Kept to a couple of words —
  *  the sentence below is what a tooltip or table cell shows. */
 export const REVISION_REASON_SHORT: Record<string, string> = {
-  split: "Split",
-  lumped: "Lumped",
+  // These two, alone among the labels, name an action rather than a state, so
+  // bare they leave the agent open — a reader can as easily hear "the Red List
+  // split this" as "CoL did". The card title names Catalogue of Life, but a
+  // filter chip carries the label away from the title, so it has to stand up
+  // by itself. The other five are already unmistakably CoL's vocabulary
+  // ("In XR, not Base", "Provisionally accepted") and don't need the suffix —
+  // and the y-axis is 130px, so spending it where it isn't needed costs a
+  // second line.
+  split: "Split on CoL",
+  lumped: "Lumped on CoL",
   // Not "Renamed": two thirds are genus transfers, which a rename describes
   // well, but the rest are synonymies onto a different species (Dalbergia
   // campenonii -> D. emirnensis), where nothing was renamed. "Different name"
