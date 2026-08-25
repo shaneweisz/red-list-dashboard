@@ -153,6 +153,10 @@ const ExclusionDialog = dynamic(
   () => import("./ExclusionDialog"),
   { ssr: false }
 );
+const MapMeasureButton = dynamic(
+  () => import("./MapMeasureButton"),
+  { ssr: false }
+);
 const MapShapeCallout = dynamic(
   () => import("./MapShapeCallout"),
   { ssr: false }
@@ -2864,7 +2868,7 @@ export default function OccurrenceMapRow({
         };
 
     return (
-      <div className={`flex-1 flex flex-col rounded-lg overflow-hidden border border-zinc-200 dark:border-zinc-700 relative isolate z-0${fullscreen ? " min-h-0" : ""}`}>
+      <div className={`occurrence-map flex-1 flex flex-col rounded-lg overflow-hidden border border-zinc-200 dark:border-zinc-700 relative isolate z-0${fullscreen ? " min-h-0" : ""}`}>
         <div className={`${
           fullscreen
             ? "flex-1 min-h-[240px]"
@@ -2914,29 +2918,17 @@ export default function OccurrenceMapRow({
               {/* Inside the map, because it positions itself against a shape
                   the map has projected. */}
               {renderClickInfo(panelId)}
-              {/* Measuring, above the scale bar it's the fine-grained
-                  version of. Small and quiet: it's a tool you reach for
-                  occasionally, not a control the map is about. It used to start
-                  from a right-clicked point, which made the first end something
-                  you had to have chosen before you knew you wanted to measure;
-                  now both ends are picked on the map after you ask. */}
+              {/* Measuring, above the map's own bottom-right controls — the
+                  fine-grained version of the scale bar it sits on. It used to
+                  start from a right-clicked point, which made the first end
+                  something you had to have chosen before you knew you wanted
+                  to measure; now both ends are picked on the map after you
+                  ask. */}
               {fullscreen && (panelId === "main" || !splitView) ? (
-                <div className="absolute bottom-20 right-2 z-[1000]">
-                  <button
-                    onClick={() => setMeasure(measure ? null : [])}
-                    title={measure ? "Stop measuring (or press Escape)" : "Measure the distance between two points on the map"}
-                    className={`inline-flex items-center gap-0.5 px-1 py-0.5 rounded text-[9px] transition-colors ${
-                      measure
-                        ? "bg-blue-600 text-white"
-                        : "bg-white/80 dark:bg-zinc-800/80 text-zinc-400 dark:text-zinc-500 hover:text-zinc-600 dark:hover:text-zinc-300"
-                    }`}
-                  >
-                    <svg className="w-2.5 h-2.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M4 20L20 4M4 20v-5m0 5h5M20 4v5m0-5h-5" />
-                    </svg>
-                    Measure
-                  </button>
-                </div>
+                <MapMeasureButton
+                  active={!!measure}
+                  onToggle={() => setMeasure(measure ? null : [])}
+                />
               ) : null}
               {/* Sampling effort — the very bottom of the stack. It answers
                   whether a blank area is empty because the species isn't there
