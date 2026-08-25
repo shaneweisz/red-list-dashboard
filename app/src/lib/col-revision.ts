@@ -79,7 +79,11 @@ export const REVISION_REASON_SHORT: Record<string, string> = {
   split: "Split",
   lumped: "Lumped",
   synonym_of: "Renamed",
-  infraspecific: "Subspecies",
+  // Not "Subspecies": on an axis, "Subspecies 1,102" reads as a count of
+  // subspecies, when these are species IUCN assesses that CoL ranks BELOW
+  // species — which is the disagreement, not an agreed fact. "Demoted" names
+  // what CoL did, like Split, Lumped and Renamed beside it.
+  infraspecific: "Demoted",
   not_in_base: "Not in checklist",
   provisional: "Provisional",
   extinct_unconfirmed: "Extinct flag",
