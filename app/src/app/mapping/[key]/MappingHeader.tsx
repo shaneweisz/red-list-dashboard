@@ -44,7 +44,6 @@ export default function MappingHeader({
       {commonName && (
         <span className="text-xs text-zinc-500 dark:text-zinc-400 truncate">{commonName}</span>
       )}
-      <span className="text-[11px] text-zinc-400 shrink-0">GBIF occurrences</span>
       <div className="ml-auto flex items-center gap-2 shrink-0">
         <ThemeToggle />
         <AuthStatus />
