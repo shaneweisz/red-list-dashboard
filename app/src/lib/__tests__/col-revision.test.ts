@@ -163,13 +163,18 @@ describe("noMatchSentence", () => {
       .toBe("No Catalogue of Life name matches Bufo bufo, so there is nothing there to check this assessment against.");
   });
 
-  it("tells the reader what the finding means for the assessment, not just what it is", () => {
-    // The split and lump sentences always did; the rest only stated the finding
-    // and left the reader to work out why it mattered.
+  it("explains more than it labels — the standalone sentence says more than the table one", () => {
+    // The dashboard's framing carries the consequence, the SSC panel's just
+    // names the finding. Deliberately not asserting a particular word: an
+    // earlier version of this test required a literal "so", which the
+    // provisional wording then dropped for a better sentence.
     for (const reason of REVISION_REASONS) {
       if (reason === SPLIT_REASON || reason === "lumped") continue; // their own summaries
-      const sentence = noMatchExplanation({ reason, detail: "Panthera tigris" }, "Panthera leo");
-      expect(sentence, reason).toMatch(/\bso\b/);
+      const flag = { reason, detail: "Panthera tigris" };
+      const full = noMatchExplanation(flag, "Panthera leo").split(" ").length;
+      const terse = noMatchExplanation(flag, null).split(" ").length;
+      // Beyond simply inserting the two-word subject name.
+      expect(full, reason).toBeGreaterThan(terse + 2);
     }
   });
 

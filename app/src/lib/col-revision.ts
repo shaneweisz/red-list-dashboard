@@ -298,7 +298,7 @@ export function noMatchSentence(flag: ColRevision, subject: string | null): NoMa
       // synonym of an accepted species. Usually a genus transfer IUCN hasn't
       // adopted (Sorbus minima -> Hedlundia minima).
       return subject
-        ? { before: `${COL}'s checklist calls ${s}`, detail: flag.detail, after: ", so this assessment is published under a name it no longer accepts." }
+        ? { before: `This assessment is published under ${subject}, but according to ${COL} the accepted name for this species is `, detail: flag.detail, after: "." }
         : { before: "Filed as a synonym of ", detail: flag.detail, after: "" };
     case "infraspecific":
       return subject
@@ -317,7 +317,10 @@ export function noMatchSentence(flag: ColRevision, subject: string | null): NoMa
         : { before: `In ${COL}'s extended release only, not its curated checklist`, after: "" };
     case "provisional":
       return subject
-        ? { before: `${COL} lists ${s}only provisionally, so whether it stands as a species of its own is unsettled there.`, after: "" }
+        // Quoting CoL's own two status values rather than paraphrasing them: the
+        // distinction between them IS the finding, and a reader who goes to look
+        // will see those exact words on the page.
+        ? { before: `${COL} currently lists ${subject} as a 'provisionally accepted species', not yet an 'accepted species'.`, after: "" }
         : { before: `Listed by ${COL} only provisionally`, after: "" };
     // Usually a species-boundary disagreement, not a data error: e.g. Equus ferus
     // (wild horse) — CoL treats it and Equus przewalskii as two species, one of
