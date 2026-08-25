@@ -214,6 +214,36 @@ input[type="range"].dual-range-thumb:focus-visible::-moz-range-thumb {
  * Scoped to this map so other maps in the app keep MapLibre's own behaviour.
  */
 /*
+ * The map's footer: scale bar and attribution on one line, the way Google Maps
+ * does it, rather than stacked as two separate bars.
+ *
+ * MapLibre puts both in this column and lets it grow upward; a scale sitting
+ * above a two-line credit strip reads as two pieces of chrome instead of one
+ * footer, and cost twice the height at the bottom of the map.
+ */
+.occurrence-map .maplibregl-ctrl-bottom-right {
+  display: flex;
+  flex-direction: row;
+  align-items: flex-end;
+  gap: 6px;
+}
+.occurrence-map .maplibregl-ctrl-bottom-right .maplibregl-ctrl {
+  margin-bottom: 0;
+}
+
+/*
+ * Small print, deliberately. CC BY asks for credit "reasonable to the medium",
+ * and 10px is what a map's own furniture is set in — legible at arm's length,
+ * and every credit still spelled out rather than abbreviated or hidden behind
+ * a toggle, which is the part that actually matters.
+ */
+.occurrence-map .maplibregl-ctrl-attrib,
+.occurrence-map .maplibregl-ctrl-attrib-inner {
+  font-size: 10px;
+  line-height: 1.35;
+}
+
+/*
  * Capped on the control column, not the attribution itself: MapLibre's
  * bottom-right container shrink-wraps its contents, so a percentage on the
  * attribution resolves against a box the attribution is itself sizing. The

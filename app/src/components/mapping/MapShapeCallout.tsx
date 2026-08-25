@@ -94,10 +94,14 @@ export default function MapShapeCallout({
     x = clampX(midX - width / 2);
     y = rect.top - GAP - height;
   } else {
-    // The shape fills the screen: sit in whichever corner its centre isn't in,
-    // so the panel covers the least of the boundary that's actually visible.
+    // The shape fills the screen. Sit on the side its centre isn't, and always
+    // in the upper half: the bottom of the map is where the legends, the tools
+    // cog and the scale-and-attribution footer live, and a callout there covers
+    // furniture rather than boundary. TOP clears the place search and the
+    // loaded-records line that sit along the very top.
+    const TOP = 48;
     x = midX > container.width / 2 ? EDGE : container.width - width - EDGE;
-    y = midY > container.height / 2 ? EDGE : container.height - height - EDGE;
+    y = Math.min(TOP, Math.max(EDGE, container.height - height - EDGE));
   }
 
   return createPortal(

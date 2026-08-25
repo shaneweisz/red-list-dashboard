@@ -153,8 +153,8 @@ const ExclusionDialog = dynamic(
   () => import("./ExclusionDialog"),
   { ssr: false }
 );
-const MapMeasureButton = dynamic(
-  () => import("./MapMeasureButton"),
+const MapToolsMenu = dynamic(
+  () => import("./MapToolsMenu"),
   { ssr: false }
 );
 const MapShapeCallout = dynamic(
@@ -801,11 +801,12 @@ export default function OccurrenceMapRow({
   /**
    * Whether the basemap list is showing, or just its icon.
    *
-   * Open on the fullscreen page, where there's room for six names down the
-   * side; folded to one button on the dashboard, where the map is half the
-   * width and the basemap is the least of what you came for.
+   * Folded to one button until asked for. Six basemap names down the side of
+   * the map is a lot of furniture for a choice most people make once, if ever.
    */
-  const [basemapOpen, setBasemapOpen] = useState(!!fullscreenProp);
+  const [basemapOpen, setBasemapOpen] = useState(false);
+  /** Whether the map's tools menu — EOO/AOO and measuring — is showing. */
+  const [toolsOpen, setToolsOpen] = useState(false);
   const [showRangeMetrics, setShowRangeMetrics] = useState(false);
   /**
    * The AOO grid's cell width, in kilometres.
@@ -2918,17 +2919,19 @@ export default function OccurrenceMapRow({
               {/* Inside the map, because it positions itself against a shape
                   the map has projected. */}
               {renderClickInfo(panelId)}
-              {/* Measuring, above the map's own bottom-right controls — the
-                  fine-grained version of the scale bar it sits on. It used to
-                  start from a right-clicked point, which made the first end
-                  something you had to have chosen before you knew you wanted
-                  to measure; now both ends are picked on the map after you
-                  ask. */}
+              {/* The map's tools, behind one cog above its bottom-right
+                  controls: the EOO/AOO switch and its figures, and measuring.
+                  Both were panels of their own in opposite corners, which is a
+                  lot of standing furniture for two things used occasionally. */}
               {fullscreen && (panelId === "main" || !splitView) ? (
-                <MapMeasureButton
-                  active={!!measure}
-                  onToggle={() => setMeasure(measure ? null : [])}
-                />
+                <MapToolsMenu
+                  open={toolsOpen}
+                  onToggle={() => setToolsOpen((v) => !v)}
+                  measuring={!!measure}
+                  onMeasureToggle={() => setMeasure(measure ? null : [])}
+                >
+                  {renderRangeMetrics()}
+                </MapToolsMenu>
               ) : null}
               {/* Sampling effort — the very bottom of the stack. It answers
                   whether a blank area is empty because the species isn't there
@@ -3684,7 +3687,6 @@ export default function OccurrenceMapRow({
               legend that only appears with its overlay can't land on top of
               another. */}
           <div className="absolute bottom-2 left-2 z-[1000] flex flex-col items-start gap-1.5 max-w-[90%]">
-          {fullscreen && mounted && renderRangeMetrics()}
           {!loadingOccurrences && mounted && renderRecordLayers(label)}
           {/* The measuring tool's running total. First in the stack because
               it's a live mode, not a legend. */}
@@ -3704,172 +3706,180 @@ export default function OccurrenceMapRow({
               </button>
             </div>
           )}
-          {/* Sampling effort is a colour ramp with no numbers worth reading, so
-              the legend says what the ends mean rather than what they measure.
-              It also carries the citation: an image source takes no
-              attribution in the MapLibre style spec, and the licence this
-              dataset is offered under asks for one. */}
-          {showSamplingEffort && effortLayer && !loadingOccurrences && (
-            <div
-              className="bg-white dark:bg-zinc-800 px-2 py-1.5 rounded text-[11px] text-zinc-600 dark:text-zinc-300 shadow flex items-center gap-1.5"
-              title="GBIF records per 10 km cell, all taxa, on a log scale. A gap here means nobody has looked, which is not the same as the species being absent."
-            >
-              <span className="text-zinc-500 dark:text-zinc-400">
-                GBIF sampling effort
-                {effortLayer ? ` · ${EFFORT_GROUP_LABELS[effortLayer.group]}` : ""}
-              </span>
-              <span className="flex items-center">
-                {EFFORT_LEGEND.map((step) => (
-                  <span key={step} className="w-3.5 h-2.5" style={{ background: step }} />
-                ))}
-              </span>
-              <span className="text-zinc-400">less → more</span>
-              <a
-                href={EFFORT_PAPER_URL}
-                target="_blank"
-                rel="noopener noreferrer"
-                title="Global sampling effort of GBIF biodiversity data — El-Gabbas 2026, Diversity and Distributions"
-                className="text-zinc-400 hover:underline"
+          {/* One card for every overlay legend that's showing. They were four
+              separate cards stacked in the corner, which read as four unrelated
+              notices rather than one key to the layers you have on. */}
+          {!loadingOccurrences &&
+            (showSamplingEffort || showEcoregions || showForestLoss || showHabitat) && (
+            <div className="bg-white dark:bg-zinc-800 px-2 py-1.5 rounded shadow text-[11px] text-zinc-600 dark:text-zinc-300 space-y-1.5 divide-y divide-zinc-100 dark:divide-zinc-700 max-w-full">
+            {/* Sampling effort is a colour ramp with no numbers worth reading, so
+                the legend says what the ends mean rather than what they measure.
+                It also carries the citation: an image source takes no
+                attribution in the MapLibre style spec, and the licence this
+                dataset is offered under asks for one. */}
+            {showSamplingEffort && effortLayer && !loadingOccurrences && (
+              <div
+                className="flex items-center gap-1.5"
+                title="GBIF records per 10 km cell, all taxa, on a log scale. A gap here means nobody has looked, which is not the same as the species being absent."
               >
-                El-Gabbas 2026
-              </a>
-            </div>
-          )}
-          {/* Fourteen biomes is too many to lay flat over a map, so the legend
-              opens only when asked — the same shape the habitat legend uses. */}
-          {showEcoregions && ecoregions && !loadingOccurrences && (
-            <div className="bg-white dark:bg-zinc-800 px-2 py-1.5 rounded text-[11px] text-zinc-600 dark:text-zinc-300 shadow max-w-xs">
-              <button
-                onClick={() => setBiomeLegendOpen((v) => !v)}
-                title={biomeLegendOpen ? "Hide the biomes" : "Show what the ecoregion colours mean"}
-                className="flex items-center gap-1.5 w-full"
-              >
-                <span className="text-zinc-500 dark:text-zinc-400">Terrestrial ecoregions</span>
-                <span className="text-zinc-400">{ecoregions.features.length} in 14 biomes</span>
-                <span className="text-[9px] ml-auto">{biomeLegendOpen ? "\u25be" : "\u25b8"}</span>
-              </button>
-              {biomeLegendOpen && (
-                <div className="mt-1 pt-1 border-t border-zinc-100 dark:border-zinc-700 space-y-0.5">
-                  {BIOMES.map((biome) => (
-                    <div key={biome.name} className="flex items-center gap-1.5">
-                      <span
-                        className="w-2.5 h-2.5 rounded-sm shrink-0 border border-black/10"
-                        style={{ background: biome.color }}
-                      />
-                      <span className="truncate text-[10px]">{biome.name}</span>
-                    </div>
+                <span className="text-zinc-500 dark:text-zinc-400">
+                  GBIF sampling effort
+                  {effortLayer ? ` · ${EFFORT_GROUP_LABELS[effortLayer.group]}` : ""}
+                </span>
+                <span className="flex items-center">
+                  {EFFORT_LEGEND.map((step) => (
+                    <span key={step} className="w-3.5 h-2.5" style={{ background: step }} />
                   ))}
-                  <a
-                    href="https://doi.org/10.1093/biosci/bix014"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="block pt-0.5 text-[10px] text-zinc-400 hover:underline"
-                  >
-                    Dinerstein et al. 2017 (CC BY 4.0)
-                  </a>
-                </div>
-              )}
-            </div>
-          )}
-          {/* Forest loss reads as a colour ramp, so it needs one: without the
-              years, recent clearance and twenty-year-old logging look the
-              same. It can't be filtered to a year — see lib/forest-loss.ts —
-              and the layer is named for the platform it comes from, since
-              that's the name an assessor knows it by.
-
-              What the colours don't mean sits behind the chevron, the same way
-              the habitat classes do. Three lines of prose is a lot of map to
-              cover permanently, and the layer is now named "tree cover loss"
-              rather than "forest loss", which carries most of the correction on
-              its own. The rest is a click away, and in the row's tooltip. */}
-          {showForestLoss && !loadingOccurrences && (
-            <div className="bg-white dark:bg-zinc-800 px-2 py-1.5 rounded text-[11px] text-zinc-600 dark:text-zinc-300 shadow max-w-md">
-            <div
-              className="flex items-center gap-1.5"
-              title={FOREST_LOSS_SOURCE_NOTE}
-            >
-              <a
-                href={FOREST_LOSS_URL}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-zinc-500 dark:text-zinc-400 hover:underline"
-              >
-                Global Forest Watch
-              </a>
-              <a
-                href={FOREST_LOSS_DATASET_URL}
-                target="_blank"
-                rel="noopener noreferrer"
-                title="Hansen/UMD Global Forest Change — the dataset itself, with its methods"
-                className="text-zinc-500 dark:text-zinc-400 hover:underline"
-              >
-                tree cover loss
-              </a>
-              <span className="tabular-nums">{FOREST_LOSS_FIRST_YEAR}</span>
-              <span
-                className="h-2 w-16 rounded-sm"
-                style={{ background: `linear-gradient(to right, ${FOREST_LOSS_RAMP[0]}, ${FOREST_LOSS_RAMP[1]})` }}
-              />
-              <span className="tabular-nums">{FOREST_LOSS_LAST_YEAR}</span>
-              <button
-                onClick={() => setForestLossNotesOpen((v) => !v)}
-                title={forestLossNotesOpen ? "Hide what this layer does and doesn't mean" : "What this layer does and doesn't mean"}
-                className="ml-auto text-[9px] text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300"
-              >
-                {forestLossNotesOpen ? "\u25be" : "\u25b8"}
-              </button>
-            </div>
-            {forestLossNotesOpen && (
-              <div className="pt-1 text-[10px] leading-snug text-zinc-500 dark:text-zinc-400">
-                <div>
-                  <span className="font-medium">Loss is disturbance, not deforestation.</span>{" "}
-                  {FOREST_LOSS_CAVEAT}
-                </div>
-                <div className="pt-0.5">{FOREST_LOSS_THRESHOLD_NOTE}</div>
-              </div>
-            )}
-            </div>
-          )}
-          {/* The habitat legend is 18 classes, which laid out flat covers a
-              third of the map. Collapsed to its colours by default: the click
-              popup names the class under a point, so the full list is a
-              reminder rather than the way you read the layer. */}
-          {showHabitat && !loadingOccurrences && (
-            <div className="bg-white dark:bg-zinc-800 px-2 py-1.5 rounded text-[11px] text-zinc-600 dark:text-zinc-300 shadow max-w-full">
-              <div className="flex items-center gap-1.5">
-                <button
-                  onClick={() => setHabitatLegendOpen((v) => !v)}
-                  title={habitatLegendOpen ? "Hide the habitat classes" : "Show what the habitat colours mean"}
-                  className="flex items-center gap-1.5 text-zinc-500 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200"
-                >
-                  <span className="flex rounded-sm overflow-hidden">
-                    {HABITAT_LEGEND.map((entry) => (
-                      <span key={entry.code} className="w-1.5 h-2.5" style={{ background: entry.color }} />
-                    ))}
-                  </span>
-                  IUCN habitat types
-                  <span className="text-[9px]">{habitatLegendOpen ? "\u25be" : "\u25b8"}</span>
-                </button>
+                </span>
+                <span className="text-zinc-400">less → more</span>
                 <a
-                  href={HABITAT_SCHEME_URL}
+                  href={EFFORT_PAPER_URL}
                   target="_blank"
                   rel="noopener noreferrer"
-                  title="IUCN Habitats Classification Scheme — click the map for the class at a point"
-                  className="text-zinc-300 hover:text-zinc-500 dark:text-zinc-600 dark:hover:text-zinc-400"
+                  title="Global sampling effort of GBIF biodiversity data — El-Gabbas 2026, Diversity and Distributions"
+                  className="text-zinc-400 hover:underline"
                 >
-                  <FaInfoCircle className="w-3 h-3" />
+                  El-Gabbas 2026
                 </a>
               </div>
-              {habitatLegendOpen && (
-                <div className="flex flex-wrap items-center gap-x-2 gap-y-1 pt-1.5 max-w-[42rem]">
-                  {HABITAT_LEGEND.map((entry) => (
-                    <span key={entry.code} className="flex items-center gap-1">
-                      <span className="w-2.5 h-2.5 rounded-sm shrink-0" style={{ background: entry.color }} />
-                      {entry.name}
-                    </span>
-                  ))}
+            )}
+            {/* Fourteen biomes is too many to lay flat over a map, so the legend
+                opens only when asked — the same shape the habitat legend uses. */}
+            {showEcoregions && ecoregions && !loadingOccurrences && (
+              <div className="max-w-xs">
+                <button
+                  onClick={() => setBiomeLegendOpen((v) => !v)}
+                  title={biomeLegendOpen ? "Hide the biomes" : "Show what the ecoregion colours mean"}
+                  className="flex items-center gap-1.5 w-full"
+                >
+                  <span className="text-zinc-500 dark:text-zinc-400">Terrestrial ecoregions</span>
+                  <span className="text-zinc-400">{ecoregions.features.length} in 14 biomes</span>
+                  <span className="text-[9px] ml-auto">{biomeLegendOpen ? "\u25be" : "\u25b8"}</span>
+                </button>
+                {biomeLegendOpen && (
+                  <div className="mt-1 pt-1 border-t border-zinc-100 dark:border-zinc-700 space-y-0.5">
+                    {BIOMES.map((biome) => (
+                      <div key={biome.name} className="flex items-center gap-1.5">
+                        <span
+                          className="w-2.5 h-2.5 rounded-sm shrink-0 border border-black/10"
+                          style={{ background: biome.color }}
+                        />
+                        <span className="truncate text-[10px]">{biome.name}</span>
+                      </div>
+                    ))}
+                    <a
+                      href="https://doi.org/10.1093/biosci/bix014"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="block pt-0.5 text-[10px] text-zinc-400 hover:underline"
+                    >
+                      Dinerstein et al. 2017 (CC BY 4.0)
+                    </a>
+                  </div>
+                )}
+              </div>
+            )}
+            {/* Forest loss reads as a colour ramp, so it needs one: without the
+                years, recent clearance and twenty-year-old logging look the
+                same. It can't be filtered to a year — see lib/forest-loss.ts —
+                and the layer is named for the platform it comes from, since
+                that's the name an assessor knows it by.
+
+                What the colours don't mean sits behind the chevron, the same way
+                the habitat classes do. Three lines of prose is a lot of map to
+                cover permanently, and the layer is now named "tree cover loss"
+                rather than "forest loss", which carries most of the correction on
+                its own. The rest is a click away, and in the row's tooltip. */}
+            {showForestLoss && !loadingOccurrences && (
+              <div className="max-w-md">
+              <div
+                className="flex items-center gap-1.5"
+                title={FOREST_LOSS_SOURCE_NOTE}
+              >
+                <a
+                  href={FOREST_LOSS_URL}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-zinc-500 dark:text-zinc-400 hover:underline"
+                >
+                  Global Forest Watch
+                </a>
+                <a
+                  href={FOREST_LOSS_DATASET_URL}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  title="Hansen/UMD Global Forest Change — the dataset itself, with its methods"
+                  className="text-zinc-500 dark:text-zinc-400 hover:underline"
+                >
+                  tree cover loss
+                </a>
+                <span className="tabular-nums">{FOREST_LOSS_FIRST_YEAR}</span>
+                <span
+                  className="h-2 w-16 rounded-sm"
+                  style={{ background: `linear-gradient(to right, ${FOREST_LOSS_RAMP[0]}, ${FOREST_LOSS_RAMP[1]})` }}
+                />
+                <span className="tabular-nums">{FOREST_LOSS_LAST_YEAR}</span>
+                <button
+                  onClick={() => setForestLossNotesOpen((v) => !v)}
+                  title={forestLossNotesOpen ? "Hide what this layer does and doesn't mean" : "What this layer does and doesn't mean"}
+                  className="ml-auto text-[9px] text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300"
+                >
+                  {forestLossNotesOpen ? "\u25be" : "\u25b8"}
+                </button>
+              </div>
+              {forestLossNotesOpen && (
+                <div className="pt-1 text-[10px] leading-snug text-zinc-500 dark:text-zinc-400">
+                  <div>
+                    <span className="font-medium">Loss is disturbance, not deforestation.</span>{" "}
+                    {FOREST_LOSS_CAVEAT}
+                  </div>
+                  <div className="pt-0.5">{FOREST_LOSS_THRESHOLD_NOTE}</div>
                 </div>
               )}
+              </div>
+            )}
+            {/* The habitat legend is 18 classes, which laid out flat covers a
+                third of the map. Collapsed to its colours by default: the click
+                popup names the class under a point, so the full list is a
+                reminder rather than the way you read the layer. */}
+            {showHabitat && !loadingOccurrences && (
+              <div className="max-w-full">
+                <div className="flex items-center gap-1.5">
+                  <button
+                    onClick={() => setHabitatLegendOpen((v) => !v)}
+                    title={habitatLegendOpen ? "Hide the habitat classes" : "Show what the habitat colours mean"}
+                    className="flex items-center gap-1.5 text-zinc-500 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200"
+                  >
+                    <span className="flex rounded-sm overflow-hidden">
+                      {HABITAT_LEGEND.map((entry) => (
+                        <span key={entry.code} className="w-1.5 h-2.5" style={{ background: entry.color }} />
+                      ))}
+                    </span>
+                    IUCN habitat types
+                    <span className="text-[9px]">{habitatLegendOpen ? "\u25be" : "\u25b8"}</span>
+                  </button>
+                  <a
+                    href={HABITAT_SCHEME_URL}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    title="IUCN Habitats Classification Scheme — click the map for the class at a point"
+                    className="text-zinc-300 hover:text-zinc-500 dark:text-zinc-600 dark:hover:text-zinc-400"
+                  >
+                    <FaInfoCircle className="w-3 h-3" />
+                  </a>
+                </div>
+                {habitatLegendOpen && (
+                  <div className="flex flex-wrap items-center gap-x-2 gap-y-1 pt-1.5 max-w-[42rem]">
+                    {HABITAT_LEGEND.map((entry) => (
+                      <span key={entry.code} className="flex items-center gap-1">
+                        <span className="w-2.5 h-2.5 rounded-sm shrink-0" style={{ background: entry.color }} />
+                        {entry.name}
+                      </span>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
             </div>
           )}
           {/* The split-view panels still need their own colour key: the
@@ -4076,9 +4086,9 @@ export default function OccurrenceMapRow({
                       key={key}
                       onClick={() => {
                         setBasemap(key);
-                        // Where the list is folded away by default, choosing
-                        // puts it back — the map is what you wanted to see.
-                        if (!fullscreen) setBasemapOpen(false);
+                        // Choosing puts the list away: the map is what you
+                        // wanted to see.
+                        setBasemapOpen(false);
                       }}
                       className={`px-2 py-0.5 rounded text-left text-[10px] transition-colors ${
                         basemap === key
