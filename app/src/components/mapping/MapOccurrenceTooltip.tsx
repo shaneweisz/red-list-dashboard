@@ -37,6 +37,12 @@ interface MapOccurrenceTooltipProps {
    * exists. Clicking opens the full image.
    */
   images?: { url: string; title?: string; creator?: string; license?: string; rightsHolder?: string }[];
+  /**
+   * What the cleaning tests and the native-range check say about this record,
+   * as one line. Drawn as a flag in the panel's top corner, with the line
+   * itself on hover — worth seeing at a glance, not worth six rows.
+   */
+  mark?: string | null;
   /** Position within the records sharing this point, when more than one does. */
   page?: { index: number; total: number; onPrev: () => void; onNext: () => void };
   /** Dismisses a pinned tooltip. */
@@ -73,6 +79,13 @@ export default function MapOccurrenceTooltip(props: MapOccurrenceTooltipProps) {
    * NotFoundError, which takes the whole page down.
    */
   const [brokenImages, setBrokenImages] = useState<string[]>([]);
+  /**
+   * Whether the flag's reasons are showing.
+   *
+   * Its own bubble rather than a `title`: the browser holds a title back for
+   * about a second, which is long enough that the flag read as unexplained.
+   */
+  const [markOpen, setMarkOpen] = useState(false);
   const observerRef = useRef<ResizeObserver | null>(null);
   const panelRef = useCallback((el: HTMLDivElement | null) => {
     observerRef.current?.disconnect();
@@ -234,6 +247,22 @@ export default function MapOccurrenceTooltip(props: MapOccurrenceTooltipProps) {
         ))}
       </div>
     )}
+    {props.mark && markOpen && (
+      <div
+        style={{
+          position: "fixed",
+          left: panelLeft,
+          top: clampedY - height / 2 + 22,
+          width: tooltipWidth,
+          zIndex: 10002,
+          pointerEvents: "none",
+        }}
+        data-occurrence-mark
+        className="rounded-md bg-zinc-900/95 dark:bg-zinc-700 px-1.5 py-1 text-[10px] leading-snug text-white shadow-lg"
+      >
+        {props.mark}
+      </div>
+    )}
     <div
       data-occurrence-tooltip=""
       style={{
@@ -267,14 +296,14 @@ export default function MapOccurrenceTooltip(props: MapOccurrenceTooltipProps) {
               the buttons along, so at "10 of 120 records here" the row grew
               past the panel and the close button was clipped off its edge by
               the panel's own overflow-hidden. */}
-          {((props.page && props.page.total > 1) || props.onClose) && (
+          {((props.page && props.page.total > 1) || props.onClose || props.mark) && (
             <div className="flex items-center gap-1 pb-1 mb-1 border-b border-zinc-100 dark:border-zinc-800 text-[10px] text-zinc-500 dark:text-zinc-400">
               {props.page && props.page.total > 1 && (
                 <span
                   className="tabular-nums truncate min-w-0"
                   title={`Record ${props.page.index + 1} of ${props.page.total} at this point`}
                 >
-                  {props.page.index + 1} of {props.page.total} here
+                  {props.page.index + 1} of {props.page.total} records here
                 </span>
               )}
               {props.pinned && (
@@ -283,6 +312,21 @@ export default function MapOccurrenceTooltip(props: MapOccurrenceTooltipProps) {
                 </span>
               )}
               <div className="ml-auto flex items-center shrink-0">
+                {/* Drawn even when there's nothing to say, invisibly. The
+                    controls in this row are right-aligned, so a flag that came
+                    and went as you paged through the records at a point moved
+                    the buttons beside it out from under the pointer. */}
+                <span
+                  onMouseEnter={() => props.mark && setMarkOpen(true)}
+                  onMouseLeave={() => setMarkOpen(false)}
+                  className={`p-0.5 ${
+                    props.mark ? "text-amber-600 dark:text-amber-500 cursor-help" : "invisible"
+                  }`}
+                >
+                  <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M5 21V4m0 0h11l-1.5 3.5L16 11H5" />
+                  </svg>
+                </span>
                 {props.page && props.page.total > 1 && (
                   <>
                     <button

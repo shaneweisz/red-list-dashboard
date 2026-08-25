@@ -3239,38 +3239,6 @@ export default function OccurrenceMapRow({
                   />
                 </Source>
               )}
-              {/* A flag beside any record the cleaning tests or the native
-                  range have something to say about, with what they say on
-                  hover. Beside the point rather than in its panel: what you
-                  want from a flag is to see, across a whole distribution at
-                  once, which records are being questioned — and you can't open
-                  fifty panels to find out. Struck-out records don't get one:
-                  they're already drawn grey, and a flag on a record you've
-                  already set aside is telling you something you acted on. */}
-              {panelOccurrences.map((o) => {
-                const marks = exclusions[o.properties.gbifID] ? null : recordMarks(o);
-                if (!marks) return null;
-                const mine = georeferences[o.properties.gbifID];
-                const position = mine
-                  ? [mine.decimalLongitude, mine.decimalLatitude]
-                  : o.geometry?.coordinates;
-                if (!position) return null;
-                return (
-                  <MapLibreMarker
-                    key={`mark-${o.properties.gbifID}`}
-                    longitude={position[0]}
-                    latitude={position[1]}
-                    anchor="bottom-left"
-                    offset={[3, -3]}
-                  >
-                    <span title={marks} className="block text-amber-600 drop-shadow-sm cursor-help">
-                      <svg className="w-2.5 h-2.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={3}>
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M5 22V3m0 0h12l-2 4 2 4H5" />
-                      </svg>
-                    </span>
-                  </MapLibreMarker>
-                );
-              })}
               {/* The assessor's own georeferences — drawn above the GBIF points
                   in a colour used nowhere else, with the uncertainty radius to
                   scale. They are never merged into the GBIF layer or into any
@@ -3367,6 +3335,7 @@ export default function OccurrenceMapRow({
                     lng={hLon}
                     fields={fields}
                     notes={notes}
+                    mark={recordMarks(shown)}
                     images={shown.properties.images}
                     page={
                       hoveredGroup.length > 1
@@ -3398,7 +3367,12 @@ export default function OccurrenceMapRow({
                     // way to act on it. Clicking only pins the panel, so the
                     // buttons stay put while you reach for them.
                     actions={renderRecordActions(shown.properties.gbifID)}
-                    onClose={tooltipPinned ? closeTooltip : undefined}
+                    // Always there, pinned or not. It used to appear only
+                    // once the panel was pinned, and since these controls are
+                    // right-aligned, it arrived exactly where the next-record
+                    // arrow had been — so paging to the second record put a
+                    // close button under a pointer that was mid-page.
+                    onClose={closeTooltip}
                     pinned={tooltipPinned}
                   />
                 );
@@ -4474,11 +4448,11 @@ export default function OccurrenceMapRow({
 
   /**
    * What this dashboard has to say about a record, as one line of hover text
-   * for the flag drawn beside its point.
+   * for the flag in the corner of its panel.
    *
-   * On the map rather than in the panel: whether a record is questioned is
-   * the kind of thing you want to see across a whole distribution at once,
-   * and it was costing the panel lines that the record's own fields wanted.
+   * A mark rather than rows of prose: that a record is questioned is worth
+   * seeing at a glance, and six cleaning tests spelled out cost more of the
+   * panel than the record's own fields.
    */
   const recordMarks = useCallback(
     (feature: OccurrenceFeature) => {
@@ -4633,13 +4607,13 @@ export default function OccurrenceMapRow({
                       close();
                     }}
                     title="Everything else at this exact position is struck out as a duplicate of this one, with the reason recorded and undoable"
-                    className="flex w-full items-center gap-1.5 px-1 py-1 rounded hover:bg-zinc-100 dark:hover:bg-zinc-800"
+                    className="flex w-full items-start gap-1.5 px-1 py-1 rounded text-left hover:bg-zinc-100 dark:hover:bg-zinc-800"
                   >
-                    <svg className="w-3 h-3 shrink-0 text-zinc-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <svg className="w-3 h-3 mt-0.5 shrink-0 text-zinc-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                       <rect x="9" y="9" width="12" height="12" rx="2" />
                       <path strokeLinecap="round" strokeLinejoin="round" d="M5 15V5a2 2 0 012-2h10" />
                     </svg>
-                    Keep this one of {stacked.length}
+                    Keep this one of {stacked.length}, mark the remainder as duplicates
                   </button>
                 )}
       </>
