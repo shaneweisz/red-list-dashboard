@@ -78,16 +78,25 @@ export type RevisionReasonCode = (typeof REVISION_REASONS)[number];
 export const REVISION_REASON_SHORT: Record<string, string> = {
   split: "Split",
   lumped: "Lumped",
-  synonym_of: "Renamed",
-  // Not "Subspecies": on an axis, "Subspecies 1,102" reads as a count of
-  // subspecies, when these are species IUCN assesses that CoL ranks BELOW
-  // species — which is the disagreement, not an agreed fact. "Demoted" names
-  // what CoL did, like Split, Lumped and Renamed beside it.
-  infraspecific: "Demoted",
-  not_in_base: "Not in checklist",
-  provisional: "Provisional",
+  // Not "Renamed": two thirds are genus transfers, which a rename describes
+  // well, but the rest are synonymies onto a different species (Dalbergia
+  // campenonii -> D. emirnensis), where nothing was renamed. "Different name"
+  // covers both, and summarises the sentence — CoL's accepted name is not the
+  // one this assessment was published under.
+  synonym_of: "Different name",
+  // Not "Subspecies" (reads as a count of subspecies) and not "Demoted"
+  // (accurate, but nobody says it) — the label mirrors the sentence.
+  infraspecific: "Now a subspecies",
+  // CoL's own two products, named as CoL names them. "Not in checklist" invited
+  // the reading that CoL has nothing at all, when the record is in XR.
+  not_in_base: "In XR, not Base",
+  // CoL's exact status wording, which the sentence now quotes.
+  provisional: "Provisionally accepted",
+  // "Unmatched" left open what it failed to match. This is also what the SSC
+  // group view has always called it ("No 1:1 CoL Match").
+  no_link: "No CoL match",
+  // Diagnosed but not a dashboard bar (UNFLAGGED_REASONS); the SSC panel uses it.
   extinct_unconfirmed: "Extinct flag",
-  no_link: "Unmatched",
   missing_from_backbone: "Dangling link",
   classified_elsewhere: "Reclassified",
 };

@@ -50,8 +50,10 @@ describe("revision vocabulary", () => {
   });
 
   it("keeps short labels short enough for a chart axis", () => {
+    // The axis is 130px at 11px type — about 22 characters before it wraps to a
+    // second line, which is the practical ceiling.
     for (const reason of ALL_REASONS) {
-      expect(REVISION_REASON_SHORT[reason].length).toBeLessThanOrEqual(16);
+      expect(REVISION_REASON_SHORT[reason].length, reason).toBeLessThanOrEqual(22);
     }
   });
 });

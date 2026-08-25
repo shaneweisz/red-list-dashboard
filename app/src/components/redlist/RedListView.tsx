@@ -3728,7 +3728,7 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
                   if (reasons.length) rangeSelectColReasons(reasons, event);
                 }}
                 barColor="#d97706"
-                yAxisWidth={96}
+                yAxisWidth={130}
                 rightMargin={60}
                 labelFormatter={(short: string) => {
                   const reason = shortToReason.get(short);
