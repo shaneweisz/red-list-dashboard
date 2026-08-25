@@ -16,7 +16,7 @@ import { CATEGORY_COLORS, TAXA_BY_ID, THREATENED_CATEGORIES } from "@/config/tax
 import { speciesMatchesNode, getNodeDef, getViewRootForNode, findNode, matchesBreakdownName, breakdownDisplayName } from "@/lib/taxonomy-utils";
 import { dynamicNodeDisplayName } from "@/lib/dynamic-taxon";
 import ReviewerChart from "./ReviewerChart";
-import { REVISION_REASONS, REVISION_REASON_SHORT, REVISION_REASON_SUMMARY, revisionReasons, matchesRevisionFilter, isFlagged, colUrl, colDatasetUrl, colTaxonUrl, noMatchSentence, splitSummary, lumpSentence, type SplitSummary, newRevisionTally, tallyRevision, barTotal, type ColRevision } from "@/lib/col-revision";
+import { REVISION_REASONS, REVISION_REASON_SHORT, REVISION_REASON_SUMMARY, revisionReasons, matchesRevisionFilter, isFlagged, colUrl, colDatasetUrl, colTaxonUrl, noMatchSentence, splitSummary, lumpSentence, type SplitSummary, newRevisionTally, tallyRevision, barTotal, REVISION_CAVEAT, type ColRevision } from "@/lib/col-revision";
 import type { ColProvenance } from "@/app/api/col/provenance/route";
 import { parseAssessors } from "@/lib/parseAssessors";
 import { iucnRegionCountries, matchingRegions } from "@/lib/regions";
@@ -968,6 +968,7 @@ function RevisionTooltipContent({ flag, name, category }: { flag: ColRevision; n
           <div key={i}>{node}</div>
         ))}
       </div>
+      <p className="mt-2 text-[11px] italic leading-snug text-zinc-400">{REVISION_CAVEAT}</p>
       {flag.colId && <ColProvenanceBlock colId={flag.colId} />}
     </>
   );
@@ -3750,6 +3751,9 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
                 {" "}total {barTotal(colTally).toLocaleString()}, not {colTally.flagged.toLocaleString()}.
               </p>
             )}
+            <p className="mt-1.5 text-[11px] italic leading-snug text-zinc-500 dark:text-zinc-400">
+              {REVISION_CAVEAT}
+            </p>
             {selectedColReasons.size > 0 && (
               <button
                 type="button"

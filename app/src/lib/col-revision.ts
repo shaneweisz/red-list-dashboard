@@ -115,6 +115,19 @@ export const REVISION_REASON_SUMMARY: Record<string, string> = {
   classified_elsewhere: "Catalogue of Life files it under a different group",
 };
 
+/**
+ * The standing caveat, shown on the chart and in every flag tooltip.
+ *
+ * This feature reports what Catalogue of Life says, and CoL is demonstrably
+ * wrong sometimes — it recognises two Dasycercus species where the 2023
+ * revision, the Mammal Diversity Database and IUCN itself all recognise six,
+ * and it flags Columba arquatrix extinct. A reader who takes a flag as a
+ * correction to an assessment has misread it, so the UI says so rather than
+ * relying on them to infer it.
+ */
+export const REVISION_CAVEAT =
+  "Flagged for information only — Catalogue of Life can be out of date or incorrect.";
+
 /** The per-species flag the dashboard carries on every assessed row (null when
  *  the species has neither signal — the large majority). */
 export interface ColRevision {
