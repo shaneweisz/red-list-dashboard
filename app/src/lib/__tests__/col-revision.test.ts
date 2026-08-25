@@ -50,11 +50,22 @@ describe("revision vocabulary", () => {
   });
 
   it("keeps short labels short enough for a chart axis", () => {
-    // The axis is 130px at 11px type — about 22 characters before it wraps to a
-    // second line, which is the practical ceiling.
+    // The axis is 168px at 11px type — about 19 characters before it wraps to a
+    // second line. The cap here is 28, not 19: synonym_of deliberately spends a
+    // second line on "CoL's accepted name differs", because dropping "accepted"
+    // to fit would make the label trivially true (every species has other names
+    // in CoL). The cap exists to stop labels growing without anyone deciding to,
+    // so it sits just above the one label that made that trade on purpose.
     for (const reason of ALL_REASONS) {
-      expect(REVISION_REASON_SHORT[reason].length, reason).toBeLessThanOrEqual(22);
+      expect(REVISION_REASON_SHORT[reason].length, reason).toBeLessThanOrEqual(28);
     }
+  });
+
+  it("keeps every BAR but the one deliberate exception on a single line", () => {
+    // Only the dashboard's bars sit on the 130px axis. UNFLAGGED_REASONS are
+    // rendered by the SSC panel in a table cell, which has room.
+    const twoLine = REVISION_REASONS.filter((r) => REVISION_REASON_SHORT[r].length > 18);
+    expect(twoLine).toEqual(["synonym_of"]);
   });
 });
 
@@ -64,6 +75,16 @@ describe("UNFLAGGED_REASONS", () => {
     // caught were Least Concern or Near Threatened. See UNFLAGGED_REASONS.
     expect(UNFLAGGED_REASONS).toContain("extinct_unconfirmed");
     expect(REVISION_REASONS as readonly string[]).not.toContain("extinct_unconfirmed");
+  });
+
+  it("keeps CoL's own editorial state out of the bars too", () => {
+    // not_in_base and provisional describe which CoL release carries the record
+    // and how sure its editors are — not anything that happened to the taxon.
+    // Neither finishes "…so this assessment may need a look because…".
+    for (const reason of ["not_in_base", "provisional"]) {
+      expect(UNFLAGGED_REASONS as readonly string[], reason).toContain(reason);
+      expect(REVISION_REASONS as readonly string[], reason).not.toContain(reason);
+    }
   });
 
   it("still gives it wording, since the SSC group view reports it", () => {

@@ -38,8 +38,6 @@ export const REVISION_REASONS = [
   "lumped",
   "synonym_of",
   "infraspecific",
-  "not_in_base",
-  "provisional",
   "no_link",
   "missing_from_backbone",
   "classified_elsewhere",
@@ -60,41 +58,71 @@ export const REVISION_REASONS = [
  *    extinct, including the common and abundant C. arquatrix and C. elphinstonii.
  *    That is one contaminated upstream block, not a signal.
  *
- * The reason still exists and the SSC group view still reports it: there it
- * sits in a panel explicitly about CoL-match diagnostics, which is the right
- * home for "CoL says something odd here".
+ * "not_in_base" (1,786) and "provisional" (244) fail the same test, and were
+ * removed for it after they had shipped as bars.
+ *
+ * The test: every other bar finishes the sentence "…so this assessment may need
+ * a look because…". Split — it may cover populations now assigned elsewhere.
+ * Lumped — it may double-count with another assessment. Subspecies on CoL — the
+ * rank may have moved under it. For "the record is in CoL's extended release but
+ * not its curated checklist", the honest ending is "…so nothing, necessarily".
+ * Nothing has been split, lumped, renamed or demoted; both describe CoL's own
+ * editorial state — which of its two release products carries the record, and
+ * how confident its editors are — rather than the taxon.
+ *
+ * They also cost the reader CoL's product vocabulary. "XR", "Base" and
+ * "provisionally accepted" name CoL's releases and internal statuses; a Red List
+ * assessor has no reason to know any of them, and at 1,786 not_in_base was the
+ * third-largest bar, crowding the signals that do carry an action.
+ *
+ * The counter-argument, and why it resolves: sampling showed not_in_base names
+ * often ARE synonyms in current usage (80% sit in a genus the curated checklist
+ * covers thoroughly). But wherever that can actually be established the
+ * classifier already reports it as synonym_of, which names the accepted species.
+ * not_in_base is precisely the residue where we cannot say what it means.
+ *
+ * All three still exist, and the SSC group view still reports them: there they
+ * sit in a panel explicitly about CoL-match diagnostics, which is the right home
+ * for "CoL says something odd here".
  *
  * Worth knowing separately: a false extinct flag also drops the species from
  * col_described, since the extant universe is `extinct IS NOT TRUE OR IUCN says
  * EX/EW`. 103 assessed species are excluded that way — a real undercount that
  * predates this feature and wants its own fix.
  */
-export const UNFLAGGED_REASONS = ["extinct_unconfirmed"] as const;
+export const UNFLAGGED_REASONS = ["extinct_unconfirmed", "not_in_base", "provisional"] as const;
 
 export type RevisionReasonCode = (typeof REVISION_REASONS)[number];
 
 /** Short label for a chart axis / filter chip. Kept to a couple of words —
  *  the sentence below is what a tooltip or table cell shows. */
 export const REVISION_REASON_SHORT: Record<string, string> = {
-  // These two, alone among the labels, name an action rather than a state, so
-  // bare they leave the agent open — a reader can as easily hear "the Red List
-  // split this" as "CoL did". The card title names Catalogue of Life, but a
-  // filter chip carries the label away from the title, so it has to stand up
-  // by itself. The other five are already unmistakably CoL's vocabulary
-  // ("In XR, not Base", "Provisionally accepted") and don't need the suffix —
-  // and the y-axis is 130px, so spending it where it isn't needed costs a
-  // second line.
+  // "on CoL" goes on every label that names something BOTH databases do, and
+  // nowhere else. Splitting, lumping and assigning a rank are all acts either
+  // party could have performed, so bare they leave the agent open — a reader can
+  // as easily hear "the Red List split this" as "CoL did". The card title names
+  // Catalogue of Life, but a filter chip carries the label away from the title,
+  // so it has to stand up by itself.
+  //
+  // The remaining two say who they mean without help: "No CoL match" names CoL
+  // outright, and "CoL's accepted name differs" is about CoL's accepted name.
   split: "Split on CoL",
   lumped: "Lumped on CoL",
   // Not "Renamed": two thirds are genus transfers, which a rename describes
   // well, but the rest are synonymies onto a different species (Dalbergia
-  // campenonii -> D. emirnensis), where nothing was renamed. "Different name"
-  // covers both, and summarises the sentence — CoL's accepted name is not the
-  // one this assessment was published under.
-  synonym_of: "Different name",
-  // Not "Subspecies" (reads as a count of subspecies) and not "Demoted"
-  // (accurate, but nobody says it) — the label mirrors the sentence.
-  infraspecific: "Now a subspecies",
+  // campenonii -> D. emirnensis), where nothing was renamed.
+  //
+  // "Accepted" is load-bearing and worth the second line it costs on the axis.
+  // Every species has other names in CoL — synonyms, basionyms — so "CoL name
+  // differs" is trivially true of almost all of them. The finding is about which
+  // name CoL ACCEPTS. Not "Synonym on CoL", which fits on one line but states
+  // the assessment's name as the deficient one rather than naming the difference.
+  synonym_of: "CoL's accepted name differs",
+  // Not bare "Subspecies", which reads as a count of them, and not "Demoted"
+  // (accurate, but nobody says it). The "on CoL" suffix is earned for the same
+  // reason Split and Lumped earn it: a rank is something both parties assign, so
+  // without an agent the label leaves open who did the demoting.
+  infraspecific: "Subspecies on CoL",
   // CoL's own two products, named as CoL names them. "Not in checklist" invited
   // the reading that CoL has nothing at all, when the record is in XR.
   not_in_base: "In XR, not Base",
@@ -103,7 +131,7 @@ export const REVISION_REASON_SHORT: Record<string, string> = {
   // "Unmatched" left open what it failed to match. This is also what the SSC
   // group view has always called it ("No 1:1 CoL Match").
   no_link: "No CoL match",
-  // Diagnosed but not a dashboard bar (UNFLAGGED_REASONS); the SSC panel uses it.
+  // Diagnosed but not dashboard bars (UNFLAGGED_REASONS); the SSC panel uses them.
   extinct_unconfirmed: "Extinct flag",
   missing_from_backbone: "Dangling link",
   classified_elsewhere: "Reclassified",
