@@ -384,6 +384,12 @@ interface OccurrenceListTableProps {
   onClearGeoreference?: (feature: OccurrenceFeature) => void;
   /** The record currently highlighted on the map, so its row can match. */
   hoveredGbifId?: number | null;
+  /**
+   * A record the table should scroll to and pick out — set by "View all GBIF
+   * fields" on the map. The map can only draw a position; every other field
+   * GBIF publishes is a column here, so that's where the answer lives.
+   */
+  focusGbifId?: number | null;
   /** Pointer entered/left a row — the map highlights the matching record. */
   onHoverRow?: (feature: OccurrenceFeature | null) => void;
   /** Records the filters have excluded. They stay in the table, greyed, rather
@@ -425,6 +431,7 @@ export default function OccurrenceListTable({
   onSaveGeoreference,
   onClearGeoreference,
   hoveredGbifId,
+  focusGbifId,
   onHoverRow,
   excludedIds,
   exclusions,
@@ -1197,6 +1204,15 @@ export default function OccurrenceListTable({
     container.scrollBy({ top: delta, behavior: "smooth" });
   };
 
+  // Deliberately not scrolling when the id is unchanged: asking for the same
+  // record twice should take you back to it, so the caller clears and re-sets.
+  useEffect(() => {
+    if (focusGbifId == null) return;
+    // After the row has been laid out, or there is nothing to scroll to yet.
+    const frame = requestAnimationFrame(() => scrollRowToTop(focusGbifId));
+    return () => cancelAnimationFrame(frame);
+  }, [focusGbifId]);
+
   const stepMatch = (delta: number) => {
     if (matches.length === 0) return;
     const next = (matchIndex + delta + matches.length) % matches.length;
@@ -1376,7 +1392,9 @@ export default function OccurrenceListTable({
                 onMouseEnter={() => onHoverRow?.(f)}
                 onMouseLeave={() => onHoverRow?.(null)}
                 className={`border-b border-zinc-100 dark:border-zinc-800 ${
-                  hoveredGbifId === id
+                  focusGbifId === id
+                    ? "bg-blue-50 dark:bg-blue-950/40 ring-1 ring-inset ring-blue-400"
+                    : hoveredGbifId === id
                     ? "bg-blue-50 dark:bg-blue-950/40"
                     : currentMatch === id
                       ? "bg-amber-100 dark:bg-amber-900/40"

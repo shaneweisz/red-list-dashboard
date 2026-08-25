@@ -807,6 +807,22 @@ export default function OccurrenceMapRow({
   const [basemapOpen, setBasemapOpen] = useState(false);
   /** Whether the map's tools menu — EOO/AOO and measuring — is showing. */
   const [toolsOpen, setToolsOpen] = useState(false);
+  /**
+   * The record whose menu is open, from clicking its point.
+   *
+   * A click used to open gbif.org straight away, which is one of four things
+   * you might want and the only one that leaves the page. The others — read
+   * every field in the table, strike the record out, settle which of a stack
+   * of duplicates is the real one — have no other way in from the map.
+   */
+  const [recordMenu, setRecordMenu] = useState<{
+    gbifID: number;
+    lng: number;
+    lat: number;
+    panelId: string;
+  } | null>(null);
+  /** A record the table should scroll to and pick out. */
+  const [focusRecord, setFocusRecord] = useState<number | null>(null);
   const [showRangeMetrics, setShowRangeMetrics] = useState(false);
   /**
    * The AOO grid's cell width, in kilometres.
@@ -2231,9 +2247,10 @@ export default function OccurrenceMapRow({
     }
     const features = e.features;
     if (features && features.length > 0) {
-      const gbifID = features[0].properties?.gbifID;
+      const gbifID = Number(features[0].properties?.gbifID);
       if (gbifID) {
-        window.open(`https://www.gbif.org/occurrence/${gbifID}`, "_blank");
+        const [lng, lat] = (features[0].geometry as GeoJSON.Point).coordinates as [number, number];
+        setRecordMenu({ gbifID, lng, lat, panelId });
         return;
       }
     }
@@ -2919,6 +2936,101 @@ export default function OccurrenceMapRow({
               {/* Inside the map, because it positions itself against a shape
                   the map has projected. */}
               {renderClickInfo(panelId)}
+              {/* What you can do with the record you clicked. */}
+              {recordMenu?.panelId === panelId && (() => {
+                const record = occurrencesByGbifId.get(recordMenu.gbifID);
+                const excluded = !!exclusions[recordMenu.gbifID];
+                // Keyed off the record's own coordinates rather than the
+                // clicked feature's: MapLibre hands back geometry that has been
+                // through its tile encoding, and the rounding no longer lands
+                // on the same key the grouping was built with.
+                const mine = georeferences[recordMenu.gbifID];
+                const position = mine
+                  ? [mine.decimalLongitude, mine.decimalLatitude]
+                  : record?.geometry?.coordinates;
+                const key = position
+                  ? `${position[0].toFixed(4)},${position[1].toFixed(4)}`
+                  : null;
+                const stacked = (key && coLocatedByPosition.get(key)) || [];
+                const others = stacked.filter((o) => o.properties.gbifID !== recordMenu.gbifID);
+                const close = () => setRecordMenu(null);
+                return (
+                  <MapPopup
+                    longitude={recordMenu.lng}
+                    latitude={recordMenu.lat}
+                    offset={12}
+                    maxWidth="240px"
+                    closeOnClick={false}
+                    onClose={close}
+                    className="occurrence-popup"
+                  >
+                    <div className="text-[11px] text-zinc-700 dark:text-zinc-200 min-w-[11rem]">
+                      <div className="px-1 pb-1 text-[10px] text-zinc-400 truncate">
+                        {record?.properties.eventDate ?? record?.properties.year ?? "This record"}
+                        {record?.properties.catalogNumber ? ` · ${record.properties.catalogNumber}` : ""}
+                      </div>
+                      <button
+                        onClick={() => {
+                          window.open(`https://www.gbif.org/occurrence/${recordMenu.gbifID}`, "_blank", "noopener,noreferrer");
+                          close();
+                        }}
+                        className="flex w-full items-center gap-1.5 px-1 py-1 rounded hover:bg-zinc-100 dark:hover:bg-zinc-800"
+                      >
+                        <svg className="w-3 h-3 shrink-0 text-zinc-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M14 3h7v7M10 14L21 3M21 14v7h-7M3 10V3h7" />
+                        </svg>
+                        Open on GBIF
+                      </button>
+                      <button
+                        onClick={() => {
+                          setFocusRecord(recordMenu.gbifID);
+                          close();
+                        }}
+                        title="Scroll the table to this record and pick it out — every field GBIF publishes for it is a column there"
+                        className="flex w-full items-center gap-1.5 px-1 py-1 rounded hover:bg-zinc-100 dark:hover:bg-zinc-800"
+                      >
+                        <svg className="w-3 h-3 shrink-0 text-zinc-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                          <rect x="3" y="4" width="18" height="16" rx="2" />
+                          <path strokeLinecap="round" d="M3 10h18M9 10v10" />
+                        </svg>
+                        View all GBIF fields
+                      </button>
+                      <button
+                        onClick={() => {
+                          if (excluded) includeAgain([recordMenu.gbifID]);
+                          else setPendingExclusion([recordMenu.gbifID]);
+                          close();
+                        }}
+                        className="flex w-full items-center gap-1.5 px-1 py-1 rounded hover:bg-zinc-100 dark:hover:bg-zinc-800"
+                      >
+                        <svg className="w-3 h-3 shrink-0 text-zinc-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                          <path strokeLinecap="round" strokeLinejoin="round" d={excluded ? "M5 13l4 4L19 7" : "M6 18L18 6M6 6l12 12"} />
+                        </svg>
+                        {excluded ? "Put this record back" : "Exclude this record"}
+                      </button>
+                      {others.length > 0 && (
+                        <button
+                          onClick={() => {
+                            excludeAs(
+                              others.map((o) => o.properties.gbifID),
+                              `Duplicate of GBIF ${recordMenu.gbifID}`
+                            );
+                            close();
+                          }}
+                          title="Everything else at this exact position is struck out as a duplicate of this one, with the reason recorded and undoable"
+                          className="flex w-full items-center gap-1.5 px-1 py-1 rounded hover:bg-zinc-100 dark:hover:bg-zinc-800"
+                        >
+                          <svg className="w-3 h-3 shrink-0 text-zinc-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                            <rect x="9" y="9" width="12" height="12" rx="2" />
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M5 15V5a2 2 0 012-2h10" />
+                          </svg>
+                          Keep this one of {stacked.length}
+                        </button>
+                      )}
+                    </div>
+                  </MapPopup>
+                );
+              })()}
               {/* The map's tools, behind one cog above its bottom-right
                   controls: the EOO/AOO switch and its figures, and measuring.
                   Both were panels of their own in opposite corners, which is a
@@ -3178,7 +3290,7 @@ export default function OccurrenceMapRow({
                       <GeoreferenceMarkerDot
                         hovered={hoveredFeature?.properties.gbifID === g.gbifID}
                         onClick={() =>
-                          window.open(`https://www.gbif.org/occurrence/${g.gbifID}`, "_blank", "noopener,noreferrer")
+                          setRecordMenu({ gbifID: g.gbifID, lng: g.decimalLongitude, lat: g.decimalLatitude, panelId })
                         }
                         onEnter={() => handleMarkerHover(g.gbifID)}
                         onLeave={() => handleHoverRow(null)}
@@ -4180,7 +4292,12 @@ export default function OccurrenceMapRow({
     {!loadingOccurrences && (
       <div className="text-[11px] text-zinc-700 dark:text-zinc-200">
         <button
-          onClick={() => setShowRangeMetrics((v) => !v)}
+          onClick={() => {
+            setShowRangeMetrics((v) => !v);
+            // Switching them off is the end of using them, so the menu folds
+            // back to its button rather than sitting open over the map.
+            if (showRangeMetrics) setToolsOpen(false);
+          }}
           className={`flex items-center gap-1.5 w-full px-1.5 py-1 rounded text-[11px] transition-colors ${
             showRangeMetrics
               ? "bg-blue-600 text-white"
@@ -6008,6 +6125,7 @@ export default function OccurrenceMapRow({
                   loading={loadingOccurrences}
                   isOutsideNativeRange={isOutsideNativeRangeForList}
                   georeferences={georeferences}
+                  focusGbifId={focusRecord}
                   onSaveGeoreference={saveGeoreferenceInline}
                   onClearGeoreference={clearGeoreference}
                   hoveredGbifId={hoveredFeature?.properties.gbifID ?? null}

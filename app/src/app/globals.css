@@ -222,9 +222,12 @@ input[type="range"].dual-range-thumb:focus-visible::-moz-range-thumb {
  */
 .occurrence-map .maplibregl-ctrl-bottom-right {
   display: flex;
-  flex-direction: column;
+  /* Reversed, because MapLibre adds the scale first and the attribution
+     second: this puts the credits on the left and the scale at the far right,
+     past the ⓘ, as one footer line. */
+  flex-direction: row-reverse;
   align-items: flex-end;
-  gap: 2px;
+  gap: 6px;
   /* Clear of the map's own bottom edge, which the attribution used to sit on. */
   padding-bottom: 6px;
 }

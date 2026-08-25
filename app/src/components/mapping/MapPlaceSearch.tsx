@@ -99,8 +99,8 @@ export default function MapPlaceSearch({ getCentre, onSelect, onPreview }: MapPl
   };
 
   return (
-    <div ref={rootRef} className="w-72 max-w-[80vw]">
-      <div className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-white dark:bg-zinc-800 border border-zinc-300 dark:border-zinc-600 shadow-md focus-within:border-blue-400 focus-within:ring-1 focus-within:ring-blue-400 transition-colors">
+    <div ref={rootRef} className="w-56 max-w-[80vw]">
+      <div className="flex items-center gap-1.5 px-2.5 py-2.5 rounded-lg bg-white dark:bg-zinc-800 border border-zinc-300 dark:border-zinc-600 shadow-md focus-within:border-blue-400 focus-within:ring-1 focus-within:ring-blue-400 transition-colors">
         <svg className="w-4 h-4 shrink-0 text-zinc-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
           <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-4.35-4.35M17 11a6 6 0 11-12 0 6 6 0 0112 0z" />
         </svg>
@@ -132,7 +132,7 @@ export default function MapPlaceSearch({ getCentre, onSelect, onPreview }: MapPl
             }
           }}
           placeholder="Search for a locality"
-          className="flex-1 min-w-0 bg-transparent text-xs text-zinc-800 dark:text-zinc-100 placeholder:text-zinc-500 dark:placeholder:text-zinc-400 focus:outline-none"
+          className="flex-1 min-w-0 bg-transparent text-[13px] text-zinc-800 dark:text-zinc-100 placeholder:text-zinc-500 dark:placeholder:text-zinc-400 focus:outline-none"
         />
         {query !== "" && (
           <button
