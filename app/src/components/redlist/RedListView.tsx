@@ -648,11 +648,26 @@ function HoverTooltip({ children, text }: { children: React.ReactNode; text: str
 // than replacing it: this one costs a timer and a second set of handlers per
 // instance, and the ~40 plain tooltips (icons, badges, column headers) hold
 // nothing worth selecting.
-function SelectableHoverTooltip({ children, content }: { children: React.ReactNode; content: React.ReactNode }) {
+/** How long the panel will wait for `prepare` before opening regardless. Long
+ *  enough for a warm ChecklistBank call (~90ms) plus slack, short enough that a
+ *  slow or dead one never holds the tooltip hostage. */
+const PREPARE_MAX_WAIT_MS = 400;
+
+function SelectableHoverTooltip({ children, content, prepare }: {
+  children: React.ReactNode;
+  content: React.ReactNode;
+  /** Warm anything the panel needs before it opens, so nothing lands late and
+   *  reflows it. Bounded by PREPARE_MAX_WAIT_MS; failure is not a blocker. */
+  prepare?: () => Promise<unknown>;
+}) {
   const [isOpen, setIsOpen] = useState(false);
   const [position, setPosition] = useState({ top: 0, left: 0, maxHeight: 0 });
   const triggerRef = useRef<HTMLSpanElement>(null);
   const closeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Bumped on every enter/leave so a resolving prepare() from an earlier hover
+  // can't open a panel the pointer has already left.
+  const hoverToken = useRef(0);
 
   const open = () => {
     if (closeTimer.current) clearTimeout(closeTimer.current);
@@ -666,16 +681,34 @@ function SelectableHoverTooltip({ children, content }: { children: React.ReactNo
     }
     setIsOpen(true);
   };
+
+  const enter = () => {
+    const token = ++hoverToken.current;
+    if (!prepare || isOpen) { open(); return; }
+    // Position now (the trigger's box is what it is), but hold the reveal until
+    // the panel's content is settled — otherwise the provenance block lands a
+    // beat later and shoves everything taller under the pointer.
+    let done = false;
+    const reveal = () => {
+      if (done || hoverToken.current !== token) return;
+      done = true;
+      open();
+    };
+    void prepare().then(reveal, reveal);
+    setTimeout(reveal, PREPARE_MAX_WAIT_MS);
+  };
+
   // Grace period, not an immediate close: the pointer has to cross a few px of
   // dead space to reach the panel, and every one of those frames is a mouseleave.
   const scheduleClose = () => {
+    hoverToken.current++;
     if (closeTimer.current) clearTimeout(closeTimer.current);
     closeTimer.current = setTimeout(() => setIsOpen(false), 220);
   };
   useEffect(() => () => { if (closeTimer.current) clearTimeout(closeTimer.current); }, []);
 
   return (
-    <span ref={triggerRef} onMouseEnter={open} onMouseLeave={scheduleClose}>
+    <span ref={triggerRef} onMouseEnter={enter} onMouseLeave={scheduleClose}>
       {children}
       {isOpen && typeof document !== "undefined" && createPortal(
         <div
@@ -701,48 +734,40 @@ function SelectableHoverTooltip({ children, content }: { children: React.ReactNo
 /** Provenance per CoL record, cached for the page's lifetime — the tooltip
  *  unmounts on every close, so without this a second hover refetches. */
 const colProvenanceCache = new Map<string, ColProvenance | null>();
+const colProvenanceInFlight = new Map<string, Promise<void>>();
 
 /**
- * Where CoL's record came from — scrutiny, source dataset, and the record on
- * the source's own site. Fetched only when a tooltip actually opens (this
- * component mounts with it), and rendered only once it arrives, so a slow or
- * unreachable ChecklistBank costs nothing but the block's absence.
+ * Warm the cache for one CoL record. Awaited by the tooltip BEFORE it opens, so
+ * the provenance block is there from the first frame rather than appearing a
+ * moment later and shoving the panel taller — see SelectableHoverTooltip's
+ * `prepare`. Never rejects: a failed lookup caches null and the block is simply
+ * absent.
+ */
+function prefetchColProvenance(colId: string): Promise<void> {
+  if (colProvenanceCache.has(colId)) return Promise.resolve();
+  const existing = colProvenanceInFlight.get(colId);
+  if (existing) return existing;
+  const p = fetch(`/api/col/provenance?colId=${encodeURIComponent(colId)}`)
+    .then((r) => (r.ok ? r.json() : null))
+    .catch(() => null)
+    .then((d: ColProvenance | null) => { colProvenanceCache.set(colId, d); })
+    .finally(() => { colProvenanceInFlight.delete(colId); });
+  colProvenanceInFlight.set(colId, p);
+  return p;
+}
+
+/**
+ * Where CoL's record came from — scrutiny, source dataset, and the record on the
+ * source's own site. Reads the cache only: whatever `prepare` managed to fetch
+ * before the panel opened is what shows, and nothing arrives later to reflow it.
  */
 function ColProvenanceBlock({ colId }: { colId: string }) {
-  // Read the cache at render rather than seeding state from it: a state
-  // initialiser only runs on mount, so a cached value would go stale if colId
-  // ever changed, and setting state from the effect to fix that is a cascading
-  // render.
-  const cached = colProvenanceCache.get(colId);
-  const [fetched, setFetched] = useState<ColProvenance | null | undefined>(undefined);
-  const data = colProvenanceCache.has(colId) ? cached : fetched;
-
-  useEffect(() => {
-    if (colProvenanceCache.has(colId)) return;
-    let live = true;
-    fetch(`/api/col/provenance?colId=${encodeURIComponent(colId)}`)
-      .then((r) => (r.ok ? r.json() : null))
-      .then((d: ColProvenance | null) => {
-        colProvenanceCache.set(colId, d);
-        if (live) setFetched(d);
-      })
-      .catch(() => { if (live) setFetched(null); });
-    return () => { live = false; };
-  }, [colId]);
-
+  const data = colProvenanceCache.get(colId);
   if (!data) return null;
   const source = [data.sourceAlias, data.sourceTitle].filter(Boolean).join(": ");
   const scrutiny = [data.scrutinizer, data.scrutinizerDate].filter(Boolean).join(", ");
   if (!source && !scrutiny && !data.link) return null;
 
-  // Label: value on one line each, not CoL's own heading-above-value layout —
-  // three lines instead of six, which matters in a panel that already carries a
-  // sentence and possibly a paged list.
-  const row = (label: string, value: React.ReactNode) => (
-    <div>
-      <span className="text-zinc-500">{label}:</span> {value}
-    </div>
-  );
   const link = (href: string, text: string) => (
     <a
       href={href}
@@ -760,16 +785,32 @@ function ColProvenanceBlock({ colId }: { colId: string }) {
     try { recordHost = new URL(data.link).hostname.replace(/^www\./, ""); } catch { recordHost = data.link; }
   }
 
+  // A two-column grid rather than inline text: the label column sizes to the
+  // longest label, so the values line up instead of starting at three different
+  // places.
   return (
-    <div className="mt-2 pt-2 border-t border-zinc-600/60 space-y-0.5 text-[11px] text-zinc-400">
-      {scrutiny && row("Taxonomic scrutiny", scrutiny)}
-      {source && row("Source", (
+    <div className="mt-2 pt-2 border-t border-zinc-600/60 grid grid-cols-[max-content_1fr] gap-x-2 gap-y-0.5 text-[11px] text-zinc-400">
+      {scrutiny && (
         <>
-          {data.sourceKey != null ? link(colDatasetUrl(data.sourceKey), source) : source}
-          {data.completeness != null && ` ${data.completeness}%`}
+          <span className="text-zinc-500">Taxonomic scrutiny:</span>
+          <span>{scrutiny}</span>
         </>
-      ))}
-      {data.link && row("Original record", link(data.link, recordHost))}
+      )}
+      {source && (
+        <>
+          <span className="text-zinc-500">Source:</span>
+          <span>
+            {data.sourceKey != null ? link(colDatasetUrl(data.sourceKey), source) : source}
+            {data.completeness != null && ` ${data.completeness}%`}
+          </span>
+        </>
+      )}
+      {data.link && (
+        <>
+          <span className="text-zinc-500">Original record:</span>
+          <span>{link(data.link, recordHost)}</span>
+        </>
+      )}
     </div>
   );
 }
@@ -5754,7 +5795,10 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
                               "give me all of these" case. A species can carry
                               both signals, hence a list of sentences. */}
                           {isFlagged(s.col_revision) && (
-                            <SelectableHoverTooltip content={<RevisionTooltipContent flag={s.col_revision!} name={s.scientific_name} category={s.category} />}>
+                            <SelectableHoverTooltip
+                              content={<RevisionTooltipContent flag={s.col_revision!} name={s.scientific_name} category={s.category} />}
+                              prepare={s.col_revision!.colId ? () => prefetchColProvenance(s.col_revision!.colId!) : undefined}
+                            >
                               <a
                                 href={colTaxonUrl(s.col_revision!, s.scientific_name)}
                                 target="_blank"
