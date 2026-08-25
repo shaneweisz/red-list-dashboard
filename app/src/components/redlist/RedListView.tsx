@@ -765,7 +765,9 @@ function ColProvenanceBlock({ colId }: { colId: string }) {
   const data = colProvenanceCache.get(colId);
   if (!data) return null;
   const source = [data.sourceAlias, data.sourceTitle].filter(Boolean).join(": ");
-  const scrutiny = [data.scrutinizer, data.scrutinizerDate].filter(Boolean).join(", ");
+  // Name only: CoL's scrutinizerDate is a batch timestamp, not the date this
+  // record was vetted, so pairing the two states something untrue.
+  const scrutiny = data.scrutinizer;
   if (!source && !scrutiny && !data.link) return null;
 
   const link = (href: string, text: string) => (

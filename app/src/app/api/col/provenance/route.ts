@@ -1,7 +1,8 @@
 /**
  * Where a Catalogue of Life record came from — the provenance block CoL shows
  * on a taxon page ("Taxonomic scrutiny", "Source", "Original record"), for the
- * ⚑ tooltip on the dashboard.
+ * ⚑ tooltip on the dashboard — minus the parts that grade or date the record
+ * rather than trace it (see `scrutinizer` and the note below).
  *
  * Provenance only — who CoL credits, which dataset it came from, where to check
  * it. CoL also rates each source (a 1-5 `confidence` and a `completeness`
@@ -44,9 +45,17 @@ const API = "https://api.checklistbank.org";
 const TIMEOUT_MS = 6000;
 
 export interface ColProvenance {
-  /** "Bieler, Rüdiger" — who vetted the record, when CoL records it. */
+  /** "Bieler, Rüdiger" — who CoL credits for this record. Per-record: two taxa
+   *  in the same batch can carry different names, or none.
+   *
+   *  The sibling `scrutinizerDate` is deliberately NOT fetched. It is not a
+   *  per-record scrutiny date: 18 consecutive mammal records sampled from one
+   *  source all carried 2024-06-25, including ones with no scrutinizer at all,
+   *  so it is a batch refresh timestamp. Printed as "<person>, <date>" it
+   *  asserts that person vetted the record then — which for Dasycercus
+   *  cristicauda meant crediting Colin P. Groves with 2025-03-19, seven years
+   *  after he died. */
   scrutinizer?: string;
-  scrutinizerDate?: string;
   /** "WoRMS Mollusca" / "MolluscaBase" — the source dataset CoL took it from. */
   sourceAlias?: string;
   sourceTitle?: string;
@@ -88,7 +97,6 @@ export async function GET(request: NextRequest) {
 
   const out: ColProvenance = {};
   if (typeof taxon.scrutinizer === "string") out.scrutinizer = taxon.scrutinizer;
-  if (typeof taxon.scrutinizerDate === "string") out.scrutinizerDate = taxon.scrutinizerDate;
   if (typeof taxon.link === "string") out.link = taxon.link;
 
   const sectorKey = typeof taxon.sectorKey === "number" ? taxon.sectorKey : null;
