@@ -239,12 +239,15 @@ const COUNTRY_TO_IUCN_REGION: Record<string, string> = {
   // North Asia
   RU: "North Asia",
 
-  // Oceania
-  AS: "Oceania", AU: "Oceania", CK: "Oceania", FJ: "Oceania", FM: "Oceania",
-  GU: "Oceania", KI: "Oceania", MH: "Oceania", MP: "Oceania", NC: "Oceania",
-  NF: "Oceania", NR: "Oceania", NU: "Oceania", NZ: "Oceania", PF: "Oceania",
-  PG: "Oceania", PN: "Oceania", PW: "Oceania", SB: "Oceania", TK: "Oceania",
-  TO: "Oceania", TV: "Oceania", VU: "Oceania", WF: "Oceania", WS: "Oceania",
+  // Oceania — including the Indian Ocean and Pacific island territories IUCN
+  // files here (Christmas Island, Cocos, US Minor Outlying Islands), which
+  // used to fall through to "Other" and so sat outside every region filter.
+  AS: "Oceania", AU: "Oceania", CC: "Oceania", CK: "Oceania", CX: "Oceania",
+  FJ: "Oceania", FM: "Oceania", GU: "Oceania", KI: "Oceania", MH: "Oceania",
+  MP: "Oceania", NC: "Oceania", NF: "Oceania", NR: "Oceania", NU: "Oceania",
+  NZ: "Oceania", PF: "Oceania", PG: "Oceania", PN: "Oceania", PW: "Oceania",
+  SB: "Oceania", TK: "Oceania", TO: "Oceania", TV: "Oceania", UM: "Oceania",
+  VU: "Oceania", WF: "Oceania", WS: "Oceania",
 
   // South America
   AR: "South America", BO: "South America", BR: "South America", CL: "South America",
@@ -256,6 +259,7 @@ const COUNTRY_TO_IUCN_REGION: Record<string, string> = {
   AF: "South and Southeast Asia", BD: "South and Southeast Asia",
   BN: "South and Southeast Asia", BT: "South and Southeast Asia",
   ID: "South and Southeast Asia", IN: "South and Southeast Asia",
+  IO: "South and Southeast Asia",
   KH: "South and Southeast Asia", LA: "South and Southeast Asia",
   LK: "South and Southeast Asia", MM: "South and Southeast Asia",
   MV: "South and Southeast Asia", MY: "South and Southeast Asia",

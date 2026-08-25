@@ -38,21 +38,77 @@ export const NAME_TO_ALPHA2: Record<string, string> = {
   "United Arab Emirates": "AE", "United Kingdom": "GB", "United States of America": "US",
   "Uruguay": "UY", "Uzbekistan": "UZ", "Vanuatu": "VU", "Venezuela": "VE", "Vietnam": "VN",
   "Yemen": "YE", "Zambia": "ZM", "Zimbabwe": "ZW", "Palestine": "PS",
-  "North Macedonia": "MK", "New Caledonia": "NC", "W. Sahara": "EH", "Fr. S. Antarctic Lands": "TF",
+  "Macedonia": "MK", "New Caledonia": "NC", "W. Sahara": "EH", "Fr. S. Antarctic Lands": "TF",
   "Falkland Is.": "FK",
-  // Small/micro nations not in 110m TopoJSON but useful for search
-  "Andorra": "AD", "Antigua and Barbuda": "AG", "Bahamas": "BS", "Bahrain": "BH", "Barbados": "BB",
-  "Belize": "BZ", "Cape Verde": "CV", "Comoros": "KM", "Dominica": "DM", "Grenada": "GD",
-  "Kiribati": "KI", "Liechtenstein": "LI", "Maldives": "MV", "Malta": "MT", "Marshall Islands": "MH",
+  // Small/micro nations not in the 50m TopoJSON at all — kept spelled out since
+  // there's no shape to match against; only useful for search.
+  "Andorra": "AD", "Bahamas": "BS", "Bahrain": "BH", "Barbados": "BB",
+  "Belize": "BZ", "Comoros": "KM", "Dominica": "DM", "Grenada": "GD",
+  "Kiribati": "KI", "Liechtenstein": "LI", "Maldives": "MV", "Malta": "MT",
   "Mauritius": "MU", "Micronesia": "FM", "Monaco": "MC", "Nauru": "NR", "Palau": "PW",
-  "Samoa": "WS", "San Marino": "SM", "São Tomé and Príncipe": "ST", "Seychelles": "SC",
-  "Saint Kitts and Nevis": "KN", "Saint Lucia": "LC", "Saint Vincent and the Grenadines": "VC",
-  "Tonga": "TO", "Tuvalu": "TV", "Vatican City": "VA",
-  // Somaliland, N. Cyprus, and Kosovo: IUCN's own public presentation doesn't
-  // treat any of these as a distinct country of occurrence, so they resolve
-  // to their parent here too, matching NAME_TO_ALPHA2 in WorldMap.tsx (see
-  // that file for the full reasoning, incl. the Kosovo-specific check
-  // against IUCN's "Geographic Range" field for a Kosovo-tagged species).
+  "Samoa": "WS", "San Marino": "SM", "Seychelles": "SC", "Saint Lucia": "LC",
+  "Tonga": "TO", "Tuvalu": "TV",
+  // These ARE present in the 50m TopoJSON, just under an abbreviated/different
+  // name than the long form above — keyed here by the exact shape name so the
+  // map coloring lookup (NAME_TO_ALPHA2[geo.properties.name]) actually matches.
+  // (Long display names still shown elsewhere via ALPHA2_TO_NAME's own overrides below.)
+  "Antigua and Barb.": "AG", "Cabo Verde": "CV", "São Tomé and Principe": "ST",
+  "St. Kitts and Nevis": "KN", "St. Vin. and Gren.": "VC", "Vatican": "VA",
+  "Marshall Is.": "MH",
+  // Additional territories present as their own shape in the 50m TopoJSON that
+  // had no entry at all before (always rendered as "No data" regardless of the
+  // underlying Red List data).
+  "American Samoa": "AS", "Anguilla": "AI", "Aruba": "AW", "Bermuda": "BM",
+  "Br. Indian Ocean Ter.": "IO", "British Virgin Is.": "VG", "Cayman Is.": "KY",
+  "Cook Is.": "CK", "Curaçao": "CW", "Faeroe Is.": "FO", "Fr. Polynesia": "PF",
+  "Guam": "GU", "Guernsey": "GG", "Heard I. and McDonald Is.": "HM", "Hong Kong": "HK",
+  "Isle of Man": "IM", "Jersey": "JE", "Macao": "MO", "Montserrat": "MS",
+  "N. Mariana Is.": "MP", "Niue": "NU", "Norfolk Island": "NF", "Pitcairn Is.": "PN",
+  "S. Geo. and the Is.": "GS", "Saint Helena": "SH", "Sint Maarten": "SX",
+  "St-Barthélemy": "BL", "St-Martin": "MF", "St. Pierre and Miquelon": "PM",
+  "Turks and Caicos Is.": "TC", "U.S. Virgin Is.": "VI", "Wallis and Futuna Is.": "WF",
+  "Åland": "AX",
+  // Overseas territories the 50m TopoJSON draws *inside* another country's
+  // shape rather than as their own (French Guiana inside France, and so on).
+  // splitEmbeddedTerritories in map-territories.ts cuts each out into a
+  // feature labelled with the name below, so these entries are what let the
+  // map resolve it — see that module for why the split is needed at all.
+  "French Guiana": "GF", "Guadeloupe": "GP", "Martinique": "MQ",
+  "Réunion": "RE", "Mayotte": "YT", "Bonaire, Sint Eustatius and Saba": "BQ",
+  "Svalbard and Jan Mayen": "SJ", "Tokelau": "TK",
+  "Christmas Island": "CX", "Cocos (Keeling) Islands": "CC",
+  // Ashmore and Cartier has no ISO alpha-2 of its own — ISO files the reefs
+  // under Australia, so IUCN records anything found there as AU. Mapping the
+  // shape keeps it coloured with Australia instead of reading as a data gap.
+  // ("Siachen Glacier", the only other unmapped shape, stays unmapped: Natural
+  // Earth deliberately attributes it to neither India nor Pakistan, and IUCN's
+  // own location list has no code for it either, so neither do we.)
+  "Ashmore and Cartier Is.": "AU",
+  // Somaliland, N. Cyprus, and Kosovo are drawn as their own shape in the
+  // TopoJSON, but IUCN's public presentation doesn't treat any of them as a
+  // distinct country — fold each into its parent rather than leaving a
+  // "no data" gap that reads as a bug.
+  //
+  // Somaliland/N. Cyprus: IUCN's own Red List country standard (ISO 3166-1 +
+  // UN country names, per redlist.org/resources/country-codes) has no
+  // distinct code for either — both fold into Somalia/Cyprus, the same way
+  // IUCN's own species assessments do (e.g. the Gerenuk assessment's formal
+  // country field lists "Somalia", even though its range-description text
+  // separately mentions "Somaliland").
+  //
+  // Kosovo: unlike those two, IUCN's internal SIS database *does* carry a
+  // distinct location code (YUG-KO, a legacy former-Yugoslavia sub-code, not
+  // a modern ISO alpha-2) — which looked at first like grounds to treat it
+  // as its own country. But checking IUCN's own public page for a
+  // Kosovo-tagged species (Terranigra kosovica, iucnredlist.org/species/
+  // 155681/222427224) shows the official "Geographic Range" field lists only
+  // "Serbia" — Kosovo appears solely in the free-text range description,
+  // exactly how other legacy sub-codes (RU-EU "European Russia", FRA-FR
+  // "France (mainland)") behave: real in the internal data model, but never
+  // surfaced as their own entry in IUCN's own public country-of-occurrence
+  // presentation. So it gets the same treatment as Somaliland/N. Cyprus, not
+  // the Palestine/Taiwan/W. Sahara treatment (which do have their own
+  // "Geographic Range" line).
   "Somaliland": "SO", "N. Cyprus": "CY", "Kosovo": "RS",
 };
 
@@ -61,14 +117,11 @@ export const NAME_TO_ALPHA2: Record<string, string> = {
 export const ALPHA2_TO_NAME: Record<string, string> = {
   // From TopoJSON (use these names for map consistency)
   ...Object.fromEntries(Object.entries(NAME_TO_ALPHA2).map(([name, code]) => [code, name])),
-  // Display-name overrides for the fold-ins above (must come after the spread
-  // so they win over "Somaliland"/"N. Cyprus"/"Kosovo" as the last writer).
-  "SO": "Somalia", "CY": "Cyprus", "RS": "Serbia",
   // Additional countries and territories not in TopoJSON
   "AD": "Andorra", "AG": "Antigua and Barbuda", "AI": "Anguilla", "AQ": "Antarctica",
   "AS": "American Samoa", "AW": "Aruba", "AX": "Åland Islands", "BB": "Barbados",
-  "BH": "Bahrain", "BL": "Saint Barthélemy", "BM": "Bermuda", "BQ": "Bonaire",
-  "BS": "Bahamas", "BV": "Bouvet Island", "BZ": "Belize", "CC": "Cocos Islands",
+  "BH": "Bahrain", "BL": "Saint Barthélemy", "BM": "Bermuda", "BQ": "Bonaire, Sint Eustatius and Saba",
+  "BS": "Bahamas", "BV": "Bouvet Island", "BZ": "Belize", "CC": "Cocos (Keeling) Islands",
   "CK": "Cook Islands", "CV": "Cape Verde", "CW": "Curaçao", "CX": "Christmas Island",
   "DM": "Dominica", "FK": "Falkland Islands", "FM": "Micronesia", "FO": "Faroe Islands",
   "GD": "Grenada", "GF": "French Guiana", "GG": "Guernsey", "GI": "Gibraltar",
@@ -76,11 +129,31 @@ export const ALPHA2_TO_NAME: Record<string, string> = {
   "HM": "Heard Island", "IM": "Isle of Man", "IO": "British Indian Ocean Territory",
   "JE": "Jersey", "KI": "Kiribati", "KM": "Comoros", "KN": "Saint Kitts and Nevis",
   "KY": "Cayman Islands", "LC": "Saint Lucia", "LI": "Liechtenstein", "MC": "Monaco",
-  "MF": "Saint Martin", "MH": "Marshall Islands", "MO": "Macao", "MP": "Northern Mariana Islands",
+  "MF": "Saint Martin", "MH": "Marshall Islands", "MK": "North Macedonia", "MO": "Macao", "MP": "Northern Mariana Islands",
   "MQ": "Martinique", "MS": "Montserrat", "MT": "Malta", "MU": "Mauritius", "MV": "Maldives",
   "NF": "Norfolk Island", "NR": "Nauru", "NU": "Niue", "PF": "French Polynesia",
   "PM": "Saint Pierre and Miquelon", "PN": "Pitcairn", "PW": "Palau", "RE": "Réunion",
-  "SC": "Seychelles", "SH": "Saint Helena", "SJ": "Svalbard", "SM": "San Marino",
+  "SC": "Seychelles", "SH": "Saint Helena", "SJ": "Svalbard and Jan Mayen", "SM": "San Marino",
+  // Overrides for names the spread above would otherwise win with: each of
+  // these codes is also keyed by a shape that folds into it ("Somaliland",
+  // "N. Cyprus", "Kosovo", "Ashmore and Cartier Is."), and the spread takes
+  // the LAST key that maps to a code.
+  "SO": "Somalia", "CY": "Cyprus", "RS": "Serbia", "AU": "Australia",
+  // The shapes carry abbreviated labels ("Dem. Rep. Congo", "Solomon Is."),
+  // and this table is what the list view, tooltip and filter chips show — so
+  // spell them out. Names follow IUCN's own location_lookup, except that CD
+  // keeps this table's natural word order rather than ISO's inverted
+  // "Congo, The Democratic Republic of the".
+  "BA": "Bosnia and Herzegovina", "CD": "Democratic Republic of the Congo",
+  "CF": "Central African Republic", "DO": "Dominican Republic",
+  "EH": "Western Sahara", "GQ": "Equatorial Guinea", "SB": "Solomon Islands",
+  "SS": "South Sudan", "TF": "French Southern Territories",
+  // Not an ISO code at all: IUCN's own location code for range that falls in
+  // disputed territory, recorded alongside real countries (a South China Sea
+  // coral lists DT next to CN, TW, VN and PH). 1,808 assessed species carry
+  // it, so it needs a label rather than showing as a bare "DT" row — but it
+  // has no shape on the map, and shouldn't have one.
+  "DT": "Disputed Territory",
   "ST": "São Tomé and Príncipe", "SV": "El Salvador", "SX": "Sint Maarten",
   "TC": "Turks and Caicos", "TK": "Tokelau", "TO": "Tonga", "TV": "Tuvalu",
   "UM": "U.S. Minor Outlying Islands", "VA": "Vatican City", "VC": "Saint Vincent and the Grenadines",
