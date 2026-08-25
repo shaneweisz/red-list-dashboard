@@ -52,6 +52,7 @@ import { formatDistance, pathLengthMetres } from "@/lib/mapping/geo-distance";
 import {
   clearPointFile,
   comparePointFile,
+  type PointComparison,
   loadPointFile,
   normaliseCatalogNumber,
   POINT_FILE_COLOR,
@@ -2575,8 +2576,29 @@ export default function OccurrenceMapRow({
     // the one drawn on top and the one the cursor is visibly over.
     const filePoint = features?.find((f) => String(f.layer?.id ?? "").startsWith("pointfile-circles-"));
     if (filePoint) {
+      const row = Number(filePoint.properties?.row);
+      // Where the imported point belongs to a record that's on the map, show
+      // that record's panel — which carries the import folded into it, and
+      // says where the two disagree. Two panels for one specimen made you diff
+      // them by eye, which is the job the comparison exists to do.
+      const comparison = pointFileComparison?.rows.find((r) => r.point.row === row);
+      const merged = comparison?.matched
+        ? occurrencesByGbifId.get(comparison.matched.gbifID)
+        : undefined;
+      if (merged) {
+        setPointFileHover(null);
+        cancelHoverClear();
+        setHoverSource("map");
+        if (merged.properties.gbifID !== hoveredFeature?.properties.gbifID) {
+          setGroupIndex(0);
+          unpinTooltip();
+        }
+        setHoveredFeature(merged);
+        setHoveredPanel(panelId);
+        return;
+      }
       const [lng, lat] = (filePoint.geometry as GeoJSON.Point).coordinates as [number, number];
-      setPointFileHover({ row: Number(filePoint.properties?.row), lat, lng, panelId });
+      setPointFileHover({ row, lat, lng, panelId });
       return;
     }
     setPointFileHover(null);
@@ -2626,7 +2648,7 @@ export default function OccurrenceMapRow({
     } else if (!tooltipHeld) {
       clearHoverSoon();
     }
-  }, [isTouchDevice, occurrencesByGbifId, tooltipHeld, hoveredFeature, clearHoverSoon, cancelHoverClear, unpinTooltip]);
+  }, [isTouchDevice, occurrencesByGbifId, tooltipHeld, hoveredFeature, clearHoverSoon, cancelHoverClear, unpinTooltip, pointFileComparison]);
 
   const handleMapMouseLeave = useCallback(() => {
     setHoveringPoint(false);
@@ -4390,6 +4412,14 @@ export default function OccurrenceMapRow({
    * range — because a value is easier to compare between two records than a
    * shade of amber.
    */
+  const pointFileByGbifId = useMemo(() => {
+    const map = new Map<number, PointComparison>();
+    for (const row of pointFileComparison?.rows ?? []) {
+      if (row.matched) map.set(row.matched.gbifID, row);
+    }
+    return map;
+  }, [pointFileComparison]);
+
   const recordFields = useCallback(
     (feature: OccurrenceFeature, mine?: Georeference, inat?: InatObservation) => {
       const p = feature.properties;
@@ -4397,7 +4427,7 @@ export default function OccurrenceMapRow({
         ? [mine.decimalLongitude, mine.decimalLatitude]
         : feature.geometry?.coordinates;
       const uncertainty = mine?.coordinateUncertaintyInMeters ?? p.coordinateUncertaintyInMeters;
-      const rows: { label: string; value: string }[] = [];
+      const rows: { label: string; value: string; flag?: boolean }[] = [];
       const add = (label: string, value: unknown) => {
         const text = Array.isArray(value) ? value.join(", ") : value == null ? "" : String(value);
         if (text.trim()) rows.push({ label, value: text });
@@ -4436,11 +4466,51 @@ export default function OccurrenceMapRow({
       if (isOutsideNativeRange(p.countryCode, effectiveNativeCountries)) {
         add("Range", `Outside native range${p.country ? ` (${p.country})` : ""}`);
       }
-      add("Excluded", exclusions[p.gbifID]?.justification);
+      add("Hidden", exclusions[p.gbifID]?.justification);
       add("GBIF id", p.gbifID);
+
+      /*
+       * The imported point for this record, folded in rather than given a
+       * panel of its own.
+       *
+       * Two tooltips for one specimen — GBIF's and the assessment's — made you
+       * hold both in your head and diff them by eye, which is the whole task.
+       * Only what differs is listed: agreement is the expected case and saying
+       * so on every row buries the one line that matters.
+       */
+      const imported = pointFileByGbifId.get(p.gbifID);
+      if (imported) {
+        const point = imported.point;
+        const drift = imported.fromGbif;
+        rows.push({
+          label: "Imported CSV",
+          value:
+            drift == null
+              ? `row ${point.row}`
+              : drift < 100
+                ? `row ${point.row} · same position`
+                : `row ${point.row} · ${drift >= 1000 ? `${(drift / 1000).toFixed(1)} km` : `${Math.round(drift)} m`} from GBIF's`,
+        });
+        // Only a real disagreement is worth a row. The two sides spell the
+        // same value differently — "PreservedSpecimen" against GBIF's
+        // "PRESERVED_SPECIMEN", "J. Smith" against "J Smith" — so they're
+        // compared with case, spacing and punctuation taken out.
+        const same = (x: string, y: string) =>
+          x.toLowerCase().replace(/[^a-z0-9]/g, "") === y.toLowerCase().replace(/[^a-z0-9]/g, "");
+        const differs = (label: string, csv: unknown, gbif: unknown) => {
+          const a = String(csv ?? "").trim();
+          const b = String(gbif ?? "").trim();
+          if (!a || same(a, b)) return;
+          rows.push({ label: `CSV ${label}`, value: b ? `${a} — GBIF: ${b}` : a, flag: !!b });
+        };
+        differs("year", point.fields.event_year, p.year);
+        differs("catalogue no.", point.fields.catalog_no, p.catalogNumber);
+        differs("recorded by", point.fields.recordedby, p.recordedBy);
+        differs("basis", point.fields.basisofrec, p.basisOfRecord);
+      }
       return rows;
     },
-    [effectiveNativeCountries, exclusions]
+    [effectiveNativeCountries, exclusions, pointFileByGbifId]
   );
 
   const renderRecordActions = (gbifID: number) => {
@@ -4482,7 +4552,7 @@ export default function OccurrenceMapRow({
                   <svg className="w-3 h-3 shrink-0 text-zinc-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                     <path strokeLinecap="round" strokeLinejoin="round" d={excluded ? "M5 13l4 4L19 7" : "M6 18L18 6M6 6l12 12"} />
                   </svg>
-                  {excluded ? "Put this record back" : "Exclude this record"}
+                  {excluded ? "Show this record" : "Hide this record"}
                 </button>
                 {others.length > 0 && (
                   <button
@@ -5075,13 +5145,12 @@ export default function OccurrenceMapRow({
             onChange={() => setShowPointFile((v) => !v)}
             className="w-3 h-3 rounded accent-blue-600 shrink-0"
           />
-          <button
-            onClick={(e) => { e.preventDefault(); e.stopPropagation(); setPointFileOpen(true); }}
-            title={`${pointFile.fileName} — click for how it compares`}
-            className="flex-1 min-w-0 text-left text-zinc-700 dark:text-zinc-200 truncate hover:underline"
+          <span
+            title={pointFile.fileName}
+            className="flex-1 min-w-0 text-zinc-700 dark:text-zinc-200 truncate"
           >
             Imported CSV
-          </button>
+          </span>
           <span className="tabular-nums text-[10px] text-zinc-400">
             {pointFile.points.length.toLocaleString()}
           </span>
@@ -5131,7 +5200,7 @@ export default function OccurrenceMapRow({
             className="w-2.5 h-2.5 rounded-full shrink-0 border-[1.5px]"
             style={{ background: "#d1d5db", borderColor: "#9ca3af", opacity: 0.6 }}
           />
-          <span className="flex-1 min-w-0 text-zinc-500 dark:text-zinc-400 truncate">Excluded</span>
+          <span className="flex-1 min-w-0 text-zinc-500 dark:text-zinc-400 truncate">Hidden</span>
           <span className="tabular-nums text-[10px] text-zinc-400">
             {struckOutCount.toLocaleString()}
           </span>
@@ -6234,6 +6303,19 @@ export default function OccurrenceMapRow({
                   onClearGeoreference={clearGeoreference}
                   hoveredGbifId={hoveredFeature?.properties.gbifID ?? null}
                   onHoverRow={handleHoverRow}
+                  // The mirror of clicking a point: picking a row pins that
+                  // record's panel on the map, so the two views agree about
+                  // what you're looking at whichever one you touched.
+                  onSelectRow={(feature) => {
+                    cancelHoverClear();
+                    setGroupIndex(0);
+                    // "map", not "list": the panel this pins is the map's
+                    // own, and it only renders for a map-sourced hover.
+                    setHoverSource("map");
+                    setHoveredFeature(feature);
+                    setHoveredPanel("main");
+                    pinTooltip();
+                  }}
                   excludedIds={excludedIds}
                   exclusions={exclusions}
                   onExclude={setPendingExclusion}

@@ -392,6 +392,11 @@ interface OccurrenceListTableProps {
   focusGbifId?: number | null;
   /** Pointer entered/left a row — the map highlights the matching record. */
   onHoverRow?: (feature: OccurrenceFeature | null) => void;
+  /**
+   * A row was clicked. The map pins that record's panel, the mirror of a click
+   * on a point scrolling the table to its row.
+   */
+  onSelectRow?: (feature: OccurrenceFeature) => void;
   /** Records the filters have excluded. They stay in the table, greyed, rather
    *  than vanishing — a record you can't see is a record you can't judge. */
   excludedIds?: Set<number>;
@@ -433,6 +438,7 @@ export default function OccurrenceListTable({
   hoveredGbifId,
   focusGbifId,
   onHoverRow,
+  onSelectRow,
   excludedIds,
   exclusions,
   onExclude,
@@ -567,6 +573,11 @@ export default function OccurrenceListTable({
    * Re-including needs no justification; excluding always does, so a selection
    * that is entirely excluded already puts itself back instead.
    */
+  // Held in refs so selecting a row doesn't rebuild every column definition.
+  const rowsRef = useRef<OccurrenceFeature[]>([]);
+  const onSelectRowRef = useRef(onSelectRow);
+  onSelectRowRef.current = onSelectRow;
+
   const excludeSelection = useCallback(() => {
     const ids = [...selectionRef.current];
     if (ids.length === 0) return;
@@ -586,6 +597,12 @@ export default function OccurrenceListTable({
       // anchor to the row it just clicked, selecting one row instead of a run.
       const anchor = lastClickedRow.current;
       lastClickedRow.current = gbifID;
+      // A plain click is "show me this one"; a shift-click is building a run,
+      // where pinning a panel per row would be noise.
+      if (!extend) {
+        const picked = rowsRef.current.find((r) => r.properties.gbifID === gbifID);
+        if (picked) onSelectRowRef.current?.(picked);
+      }
       setSelection((prev) => {
         const next = new Set(prev);
         if (extend && anchor != null) {
@@ -615,9 +632,9 @@ export default function OccurrenceListTable({
       // says why it shouldn't.
       {
         key: "included",
-        label: "Included",
+        label: "Shown",
         title:
-          "Whether this record counts. Unchecking asks for a reason — drag down the column to exclude a run of records (duplicates, usually) in one go.",
+          "Whether this record counts. Unticking asks for a reason — drag down the column to hide a run of records (duplicates, usually) in one go.",
         className: "whitespace-nowrap",
         headerExtra: (
           <button
@@ -630,8 +647,8 @@ export default function OccurrenceListTable({
             onDragStart={(e) => e.preventDefault()}
             title={
               showExcluded
-                ? "Hide the excluded rows"
-                : "Show the excluded rows again (greyed out, in place)"
+                ? "Take the hidden rows out of the table"
+                : "Show the hidden rows again (greyed out, in place)"
             }
             className={`ml-1 align-middle ${
               showExcluded
@@ -682,12 +699,12 @@ export default function OccurrenceListTable({
                 }}
                 title={
                   byFilter
-                    ? "Excluded by your filters"
+                    ? "Hidden by your filters"
                     : selected
-                      ? "Excludes every selected record, under one reason"
+                      ? "Hides every selected record, under one reason"
                       : byHand
                         ? `Excluded: ${byHand.justification} — click to put it back`
-                        : "Counted. Uncheck to exclude it, with a reason."
+                        : "Counted. Untick to hide it, with a reason."
                 }
                 className={`w-3 h-3 rounded accent-emerald-600 disabled:opacity-60 cursor-pointer ${
                   selected ? "ring-2 ring-blue-400" : ""
@@ -1181,6 +1198,7 @@ export default function OccurrenceListTable({
   const matchSet = useMemo(() => new Set(matches), [matches]);
 
   rowOrderRef.current = rows.map((f) => f.properties.gbifID);
+  rowsRef.current = rows;
 
   const selectedIds = useMemo(
     () => rows.map((f) => f.properties.gbifID).filter((id) => selection.has(id)),
@@ -1388,7 +1406,7 @@ export default function OccurrenceListTable({
                 onMouseDown={(e) => {
                   if (e.shiftKey) e.preventDefault();
                 }}
-                title="Click to select \u2014 shift-click for a run, \u2318/Ctrl-click to pick rows out \u2014 then untick any one of them to exclude the lot."
+                title="Click to select \u2014 shift-click for a run, \u2318/Ctrl-click to pick rows out \u2014 then untick any one of them to hide the lot."
                 onMouseEnter={() => onHoverRow?.(f)}
                 onMouseLeave={() => onHoverRow?.(null)}
                 className={`border-b border-zinc-100 dark:border-zinc-800 ${
@@ -1442,7 +1460,7 @@ export default function OccurrenceListTable({
               <tr>
                 <td colSpan={visibleColumns.length} className="px-3 py-8 text-center text-zinc-400 text-sm">
                   {sorted.length > 0
-                    ? "Every record here is excluded — show them again from the Included column."
+                    ? "Every record here is hidden — show them again from the Shown column."
                     : "No occurrences match the current filters."}
                 </td>
               </tr>
@@ -1465,7 +1483,7 @@ export default function OccurrenceListTable({
               {selectedIds.length.toLocaleString()} selected
             </span>
             <span className="text-zinc-400">
-              untick any of them to exclude them together
+              untick any of them to hide them together
             </span>
             <button onClick={() => setSelection(new Set())} className="hover:underline">
               Clear

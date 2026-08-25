@@ -17,7 +17,11 @@ interface MapOccurrenceTooltipProps {
    * plain columns say the same things and let you compare one record with the
    * next without decoding the formatting first.
    */
-  fields: { label: string; value: string }[];
+  /**
+   * `flag` marks a row where an imported CSV and GBIF disagree — the one
+   * thing in a merged record worth picking out of the table.
+   */
+  fields: { label: string; value: string; flag?: boolean }[];
   /**
    * Photographs the publisher attached to the record, from GBIF's media.
    *
@@ -68,6 +72,8 @@ export default function MapOccurrenceTooltip(props: MapOccurrenceTooltipProps) {
   const [brokenImages, setBrokenImages] = useState<string[]>([]);
   /** Which page of the record's fields is showing. */
   const [fieldPage, setFieldPage] = useState(0);
+  /** The photograph under the pointer, shown at a size worth looking at. */
+  const [zoomed, setZoomed] = useState<string | null>(null);
   const observerRef = useRef<ResizeObserver | null>(null);
   const panelRef = useCallback((el: HTMLDivElement | null) => {
     observerRef.current?.disconnect();
@@ -158,7 +164,93 @@ export default function MapOccurrenceTooltip(props: MapOccurrenceTooltipProps) {
     />
   );
 
+  // Beside the panel rather than inside it. A specimen photograph in a 220px
+  // column is a thumbnail of a thumbnail; given its own strip it can be looked
+  // at, and hovering one opens it wide enough to read a label off.
+  const IMAGE_STRIP = 64;
+  /** How wide a thumbnail opens to when the pointer is on it. */
+  const ZOOM_WIDTH = 280;
+  const zoomedImage = shownImages.find((i) => i.url === zoomed);
+  const imagesLeft = showLeft
+    ? panelLeft - IMAGE_STRIP - 6
+    : panelLeft + tooltipWidth + 6;
+
   return createPortal(
+    <>
+    {shownImages.length > 0 && (
+      <div
+        style={{
+          position: "fixed",
+          left: imagesLeft,
+          top: clampedY,
+          transform: "translateY(-50%)",
+          width: IMAGE_STRIP,
+          zIndex: 10000,
+          pointerEvents: "auto",
+        }}
+        onMouseEnter={props.onPointerEnter}
+        onMouseLeave={() => { setZoomed(null); props.onPointerLeave?.(); }}
+        data-occurrence-images
+        className="flex flex-col gap-1"
+      >
+        {shownImages.map((image) => (
+          <a
+            key={image.url}
+            href={image.url}
+            target="_blank"
+            rel="noopener noreferrer"
+            onMouseEnter={() => setZoomed(image.url)}
+            // Credit belongs with the picture: GBIF media carries the
+            // publisher's own rights statement and it travels with it.
+            title={[image.title, image.creator, image.rightsHolder, image.license]
+              .filter(Boolean)
+              .join(" · ")}
+            className="relative block rounded overflow-hidden bg-zinc-100 dark:bg-zinc-800 shadow-md"
+          >
+            <img
+              src={image.url}
+              alt={image.title ?? "Specimen photograph"}
+              loading="lazy"
+              className="w-full h-16 object-cover"
+              onError={() => {
+                // A publisher's dead image link shouldn't leave a
+                // broken-image glyph sitting beside the panel — but it has to
+                // go by not being rendered, not by being pulled out of the DOM
+                // behind React's back.
+                setBrokenImages((prev) => (prev.includes(image.url) ? prev : [...prev, image.url]));
+              }}
+            />
+          </a>
+        ))}
+      </div>
+    )}
+    {/* The enlargement sits outside the strip on purpose. The strip is
+        translated, which makes it the containing block for anything fixed
+        inside it, and each thumbnail clips its own overflow — so an
+        enlargement rendered within the thumbnail was positioned against the
+        strip and then cropped to 64px, which is exactly the thumbnail it was
+        meant to escape. */}
+    {zoomedImage && (
+      <div
+        style={{
+          position: "fixed",
+          left: showLeft ? imagesLeft - ZOOM_WIDTH - 6 : imagesLeft + IMAGE_STRIP + 6,
+          top: Math.max(8, clampedY - 140),
+          width: ZOOM_WIDTH,
+          zIndex: 10001,
+          pointerEvents: "none",
+        }}
+        className="rounded-lg overflow-hidden shadow-2xl border-2 border-white dark:border-zinc-700 bg-white dark:bg-zinc-900"
+      >
+        <img src={zoomedImage.url} alt="" className="w-full max-h-[19rem] object-contain" />
+        {zoomedImage.creator && (
+          <span className="block px-1.5 py-1 text-[10px] text-zinc-500 dark:text-zinc-400 truncate">
+            © {zoomedImage.creator}
+            {zoomedImage.license ? ` · ${zoomedImage.license.replace(/^https?:\/\//, "")}` : ""}
+          </span>
+        )}
+      </div>
+    )}
     <div
       data-occurrence-tooltip=""
       style={{
@@ -248,10 +340,18 @@ export default function MapOccurrenceTooltip(props: MapOccurrenceTooltipProps) {
             <tbody>
               {pageFields.map((field) => (
                 <tr key={field.label} className="align-top">
-                  <td className="py-[1px] pr-1.5 text-zinc-400 dark:text-zinc-500 whitespace-nowrap">
+                  <td
+                    className={`py-[1px] pr-1.5 whitespace-nowrap ${
+                      field.flag ? "text-amber-600 dark:text-amber-500" : "text-zinc-400 dark:text-zinc-500"
+                    }`}
+                  >
                     {field.label}
                   </td>
-                  <td className="py-[1px] text-zinc-700 dark:text-zinc-200 break-words">
+                  <td
+                    className={`py-[1px] break-words ${
+                      field.flag ? "text-amber-700 dark:text-amber-400" : "text-zinc-700 dark:text-zinc-200"
+                    }`}
+                  >
                     {field.value}
                   </td>
                 </tr>
@@ -283,52 +383,6 @@ export default function MapOccurrenceTooltip(props: MapOccurrenceTooltipProps) {
               </button>
             </div>
           )}
-          {/* A specimen photograph settles identifications a locality string
-              can't. Last in the panel and at a fixed height, so the text above
-              it never moves while it loads. */}
-          {shownImages.length > 0 && (
-            <div className="pt-1">
-              <div className="flex gap-1 h-14 overflow-x-auto">
-                {shownImages.map((image) => (
-                  <a
-                    key={image.url}
-                    href={image.url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    onClick={(e) => e.stopPropagation()}
-                    // Credit belongs with the picture: GBIF media carries the
-                    // publisher's own rights statement and it travels with it.
-                    title={[image.title, image.creator, image.rightsHolder, image.license]
-                      .filter(Boolean)
-                      .join(" · ")}
-                    className="block h-14 shrink-0 rounded overflow-hidden bg-zinc-100 dark:bg-zinc-800"
-                  >
-                    <img
-                      src={image.url}
-                      alt={image.title ?? "Specimen photograph"}
-                      loading="lazy"
-                      className="h-14 w-auto object-cover"
-                      onError={() => {
-                        // A publisher's dead image link shouldn't leave a
-                        // broken-image glyph sitting in the panel — but it has
-                        // to go by not being rendered, not by being pulled out
-                        // of the DOM behind React's back.
-                        setBrokenImages((prev) =>
-                          prev.includes(image.url) ? prev : [...prev, image.url]
-                        );
-                      }}
-                    />
-                  </a>
-                ))}
-              </div>
-              {shownImages[0].creator && (
-                <div className="text-[10px] text-zinc-400 truncate">
-                  © {shownImages[0].creator}
-                  {shownImages[0].license ? ` · ${shownImages[0].license.replace(/^https?:\/\//, "")}` : ""}
-                </div>
-              )}
-            </div>
-          )}
         </div>
         {props.actions && (
           <div className="border-t border-zinc-100 dark:border-zinc-800 p-1 space-y-0.5 text-[11px] text-zinc-700 dark:text-zinc-200">
@@ -337,7 +391,8 @@ export default function MapOccurrenceTooltip(props: MapOccurrenceTooltipProps) {
         )}
         </div>
       </div>
-    </div>,
+    </div>
+    </>,
     document.body
   );
 }
