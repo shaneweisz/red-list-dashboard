@@ -776,7 +776,8 @@ export default function OccurrenceMapRow({
   }, [showEcoregions, ecoregions, ecoregionsLoading]);
 
   /** Whether the Overlays panel is rolled up to its header. */
-  const [overlaysCollapsed, setOverlaysCollapsed] = useState(!fullscreenProp);
+  const [overlaysOpen, setOverlaysOpen] = useState(false);
+  const overlaysRef = useRef<HTMLDivElement>(null);
   /**
    * Whether the basemap list is showing, or just its icon.
    *
@@ -1099,6 +1100,18 @@ export default function OccurrenceMapRow({
     document.addEventListener("mousedown", handler);
     return () => document.removeEventListener("mousedown", handler);
   }, [cleaningFilterOpen]);
+
+  // Close the overlays dropdown on outside click
+  useEffect(() => {
+    if (!overlaysOpen) return;
+    const handler = (e: MouseEvent) => {
+      if (overlaysRef.current && !overlaysRef.current.contains(e.target as Node)) {
+        setOverlaysOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [overlaysOpen]);
 
   // Close date-range popover on outside click
   useEffect(() => {
@@ -4044,12 +4057,7 @@ export default function OccurrenceMapRow({
                 )}
               </div>
             )}
-            {/* The context layers, then the basemap under them: both are what
-                the records get read against, so they sit together, opposite the
-                records themselves. Open by default — a layer nobody knows is
-                there is a layer nobody uses — and collapsible to its header for
-                when the map underneath is what matters. */}
-            {!loadingOccurrences && mounted && renderOverlayLayers()}
+            {/* The basemap, on the map it paints. */}
             {!loadingOccurrences && mounted && (
               basemapOpen ? (
                 <div className="flex flex-col gap-0.5 bg-white dark:bg-zinc-800 rounded-lg shadow-md border border-zinc-200 dark:border-zinc-700 p-1">
@@ -4465,25 +4473,8 @@ export default function OccurrenceMapRow({
   };
 
   const renderOverlayLayers = () => (
-    <div className="flex flex-col bg-white dark:bg-zinc-800 rounded-lg shadow-md border border-zinc-200 dark:border-zinc-700 py-1 w-44">
-      <button
-        onClick={() => setOverlaysCollapsed((v) => !v)}
-        title={overlaysCollapsed ? "Show the context layers" : "Hide the context layers"}
-        className="flex items-center gap-1 px-2 pb-0.5 text-[9px] uppercase tracking-wide text-zinc-400 dark:text-zinc-500 hover:text-zinc-600 dark:hover:text-zinc-300"
-      >
-        <svg
-          className={`w-2.5 h-2.5 shrink-0 transition-transform ${overlaysCollapsed ? "-rotate-90" : ""}`}
-          fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}
-        >
-          <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
-        </svg>
-        <span>Overlays</span>
-        <span className="ml-auto tabular-nums normal-case tracking-normal">
-          {overlayToggleValues.filter(Boolean).length} of {overlayToggleValues.length}
-        </span>
-      </button>
-      {!overlaysCollapsed && (
-        <>
+    <div className="flex flex-col py-1 w-56">
+      <>
       {assessmentId && canViewRangeMap && (
         <>
           <label
@@ -4821,8 +4812,7 @@ export default function OccurrenceMapRow({
           )}
         </div>
       )}
-        </>
-      )}
+      </>
     </div>
   );
 
@@ -5596,6 +5586,38 @@ export default function OccurrenceMapRow({
                         );
                       })()
                     )}
+                  </div>
+                )}
+              </div>
+              {/* Overlays — context layers, back in the toolbar with the
+                  filters. On the map they were a panel covering the ground
+                  they describe, which on the dashboard's half-width map was a
+                  third of it. */}
+              <div className="relative" ref={overlaysRef}>
+                <button
+                  onClick={() => setOverlaysOpen(!overlaysOpen)}
+                  className={`inline-flex items-center gap-1.5 px-2 py-1 rounded border text-xs transition-colors ${
+                    overlaysOpen
+                      ? "bg-zinc-100 dark:bg-zinc-800 border-zinc-400 dark:border-zinc-500"
+                      : "border-zinc-300 dark:border-zinc-600 hover:bg-zinc-50 dark:hover:bg-zinc-800"
+                  } text-zinc-700 dark:text-zinc-300`}
+                  title="Context layers: protected areas, tree cover loss, IUCN habitat types, terrestrial ecoregions, POWO/IUCN native countries, GBIF sampling effort"
+                >
+                  <svg className="w-3.5 h-3.5 text-zinc-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M12 3l9 5-9 5-9-5 9-5z" />
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M3 13l9 5 9-5" />
+                  </svg>
+                  Overlays
+                  <span className="text-[10px] text-zinc-400 tabular-nums">
+                    {overlayToggleValues.filter(Boolean).length} of {overlayToggleValues.length}
+                  </span>
+                  <svg className={`w-3 h-3 text-zinc-400 transition-transform ${overlaysOpen ? "rotate-180" : ""}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+                  </svg>
+                </button>
+                {overlaysOpen && (
+                  <div className="absolute left-0 top-full mt-1 z-50 bg-white dark:bg-zinc-900 rounded-lg border border-zinc-200 dark:border-zinc-700 shadow-lg">
+                    {renderOverlayLayers()}
                   </div>
                 )}
               </div>
