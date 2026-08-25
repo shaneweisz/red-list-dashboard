@@ -794,7 +794,12 @@ function ColProvenanceBlock({ colId }: { colId: string }) {
     <div className="mt-2 pt-2 border-t border-zinc-600/60 grid grid-cols-[max-content_1fr] gap-x-2 gap-y-0.5 text-[11px] text-zinc-400">
       {scrutiny && (
         <>
-          <span className="text-zinc-500">Taxonomic scrutiny:</span>
+          {/* Not CoL's own page label, "Taxonomic scrutiny" — that names the
+              activity and reads as a fragment once its date is gone. ColDP
+              defines the field as "the person who is the latest scrutinizer who
+              revised or reviewed the taxonomic concept", which is a person, so
+              the label is a person's. */}
+          <span className="text-zinc-500">Reviewed by:</span>
           <span>{scrutiny}</span>
         </>
       )}
