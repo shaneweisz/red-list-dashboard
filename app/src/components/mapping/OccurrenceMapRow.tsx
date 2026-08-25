@@ -3239,6 +3239,38 @@ export default function OccurrenceMapRow({
                   />
                 </Source>
               )}
+              {/* A flag beside any record the cleaning tests or the native
+                  range have something to say about, with what they say on
+                  hover. Beside the point rather than in its panel: what you
+                  want from a flag is to see, across a whole distribution at
+                  once, which records are being questioned — and you can't open
+                  fifty panels to find out. Struck-out records don't get one:
+                  they're already drawn grey, and a flag on a record you've
+                  already set aside is telling you something you acted on. */}
+              {panelOccurrences.map((o) => {
+                const marks = exclusions[o.properties.gbifID] ? null : recordMarks(o);
+                if (!marks) return null;
+                const mine = georeferences[o.properties.gbifID];
+                const position = mine
+                  ? [mine.decimalLongitude, mine.decimalLatitude]
+                  : o.geometry?.coordinates;
+                if (!position) return null;
+                return (
+                  <MapLibreMarker
+                    key={`mark-${o.properties.gbifID}`}
+                    longitude={position[0]}
+                    latitude={position[1]}
+                    anchor="bottom-left"
+                    offset={[3, -3]}
+                  >
+                    <span title={marks} className="block text-amber-600 drop-shadow-sm cursor-help">
+                      <svg className="w-2.5 h-2.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={3}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M5 22V3m0 0h12l-2 4 2 4H5" />
+                      </svg>
+                    </span>
+                  </MapLibreMarker>
+                );
+              })}
               {/* The assessor's own georeferences — drawn above the GBIF points
                   in a colour used nowhere else, with the uncertainty radius to
                   scale. They are never merged into the GBIF layer or into any
@@ -4428,10 +4460,9 @@ export default function OccurrenceMapRow({
    * A record's fields as label/value pairs, in the order an assessor reads
    * them: what it is, where and when, who says so, then the caveats.
    *
-   * Everything the old panel encoded in colour and weight is a row here — the
-   * assessor's own coordinates, the cleaning flags, being outside the native
-   * range — because a value is easier to compare between two records than a
-   * shade of amber.
+   * What GBIF publishes, and nothing else: the cleaning flags and the
+   * native-range check are marks on the map beside the point they concern,
+   * where they can be seen without opening anything.
    */
   const pointFileByGbifId = useMemo(() => {
     const map = new Map<number, PointComparison>();
@@ -4440,6 +4471,26 @@ export default function OccurrenceMapRow({
     }
     return map;
   }, [pointFileComparison]);
+
+  /**
+   * What this dashboard has to say about a record, as one line of hover text
+   * for the flag drawn beside its point.
+   *
+   * On the map rather than in the panel: whether a record is questioned is
+   * the kind of thing you want to see across a whole distribution at once,
+   * and it was costing the panel lines that the record's own fields wanted.
+   */
+  const recordMarks = useCallback(
+    (feature: OccurrenceFeature) => {
+      const p = feature.properties;
+      const marks = (p.qualityFlags ?? []).map((f) => QUALITY_FLAG_LABELS[f as QualityFlag] || f);
+      if (isOutsideNativeRange(p.countryCode, effectiveNativeCountries)) {
+        marks.push(`Outside the native range${p.country ? ` (recorded in ${p.country})` : ""}`);
+      }
+      return marks.length ? marks.join(" · ") : null;
+    },
+    [effectiveNativeCountries]
+  );
 
   const recordFields = useCallback(
     (feature: OccurrenceFeature, mine?: Georeference, inat?: InatObservation) => {
@@ -4459,14 +4510,7 @@ export default function OccurrenceMapRow({
         const t = text(value);
         if (t) rows.push({ label, value: t });
       };
-      const note = (
-        label: string,
-        value: unknown,
-        opts: { flag?: boolean; icon?: "flag" | "hidden" } = {}
-      ) => {
-        const t = text(value);
-        if (t) notes.push({ label, value: t, ...opts });
-      };
+
       add("Species", p.species);
       add("Basis", formatBasisOfRecord(p.basisOfRecord));
       add("Date", p.eventDate ?? p.year);
@@ -4493,26 +4537,6 @@ export default function OccurrenceMapRow({
       add("Elevation", p.elevation ?? p.verbatimElevation);
       add("Dataset", p.datasetName);
       add("GBIF id", p.gbifID);
-      if (!mine) {
-        // A mark rather than a line: which cleaning tests a record failed is
-        // worth a hover, not four lines of a panel that has the record's own
-        // fields to show.
-        note(
-          "Flagged",
-          (p.qualityFlags ?? []).map((f) => QUALITY_FLAG_LABELS[f as QualityFlag] || f).join(", "),
-          { icon: "flag" }
-        );
-      }
-      if (isOutsideNativeRange(p.countryCode, effectiveNativeCountries)) {
-        note(
-          "Outside range",
-          p.country
-            ? `Recorded in ${p.country}, outside the native range this assessment gives the species`
-            : "Recorded outside the native range this assessment gives the species",
-          { icon: "flag" }
-        );
-      }
-      note("Hidden", exclusions[p.gbifID]?.justification, { icon: "hidden" });
 
       /*
        * The imported point for this record, folded in rather than given a
@@ -4555,7 +4579,7 @@ export default function OccurrenceMapRow({
       }
       return { fields: rows, notes };
     },
-    [effectiveNativeCountries, exclusions, pointFileByGbifId]
+    [pointFileByGbifId]
   );
 
   const renderRecordActions = (gbifID: number) => {
