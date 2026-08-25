@@ -17,6 +17,7 @@ import { speciesMatchesNode, getNodeDef, getViewRootForNode, findNode, matchesBr
 import { dynamicNodeDisplayName } from "@/lib/dynamic-taxon";
 import ReviewerChart from "./ReviewerChart";
 import { REVISION_REASONS, REVISION_REASON_SHORT, REVISION_REASON_SUMMARY, revisionReasons, matchesRevisionFilter, isFlagged, colUrl, colTaxonUrl, noMatchSentence, splitSummary, lumpSentence, type SplitSummary, newRevisionTally, tallyRevision, barTotal, type ColRevision } from "@/lib/col-revision";
+import type { ColProvenance } from "@/app/api/col/provenance/route";
 import { parseAssessors } from "@/lib/parseAssessors";
 import { iucnRegionCountries, matchingRegions } from "@/lib/regions";
 import { useFilterParams, type SortField, type MapViewMode } from "@/hooks/useFilterParams";
@@ -697,6 +698,79 @@ function SelectableHoverTooltip({ children, content }: { children: React.ReactNo
 // Catalogue of Life record — those names are the actionable part ("what is
 // Hedlundia minima?"), and a link per name beats one link on the flag, which
 // could only ever point at a single record.
+/** Provenance per CoL record, cached for the page's lifetime — the tooltip
+ *  unmounts on every close, so without this a second hover refetches. */
+const colProvenanceCache = new Map<string, ColProvenance | null>();
+
+/**
+ * Where CoL's record came from — scrutiny, source dataset, and the record on
+ * the source's own site. Fetched only when a tooltip actually opens (this
+ * component mounts with it), and rendered only once it arrives, so a slow or
+ * unreachable ChecklistBank costs nothing but the block's absence.
+ */
+function ColProvenanceBlock({ colId }: { colId: string }) {
+  // Read the cache at render rather than seeding state from it: a state
+  // initialiser only runs on mount, so a cached value would go stale if colId
+  // ever changed, and setting state from the effect to fix that is a cascading
+  // render.
+  const cached = colProvenanceCache.get(colId);
+  const [fetched, setFetched] = useState<ColProvenance | null | undefined>(undefined);
+  const data = colProvenanceCache.has(colId) ? cached : fetched;
+
+  useEffect(() => {
+    if (colProvenanceCache.has(colId)) return;
+    let live = true;
+    fetch(`/api/col/provenance?colId=${encodeURIComponent(colId)}`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d: ColProvenance | null) => {
+        colProvenanceCache.set(colId, d);
+        if (live) setFetched(d);
+      })
+      .catch(() => { if (live) setFetched(null); });
+    return () => { live = false; };
+  }, [colId]);
+
+  if (!data) return null;
+  const source = [data.sourceAlias, data.sourceTitle].filter(Boolean).join(": ");
+  const scrutiny = [data.scrutinizer, data.scrutinizerDate].filter(Boolean).join(", ");
+  if (!source && !scrutiny && !data.link) return null;
+
+  return (
+    <div className="mt-2 pt-2 border-t border-zinc-600/60 space-y-1 text-[11px] text-zinc-400">
+      {scrutiny && (
+        <div>
+          <div className="text-zinc-500">Taxonomic scrutiny</div>
+          <div>{scrutiny}</div>
+        </div>
+      )}
+      {source && (
+        <div>
+          <div className="text-zinc-500">Source</div>
+          <div>
+            {source}
+            {data.completeness != null && ` ${data.completeness}%`}
+          </div>
+        </div>
+      )}
+      {data.link && (
+        <div>
+          <div className="text-zinc-500">Original record</div>
+          <a
+            href={data.link}
+            target="_blank"
+            rel="noopener noreferrer"
+            onClick={(e) => e.stopPropagation()}
+            className="text-blue-300 hover:text-blue-200 underline break-all"
+          >
+            {data.link}
+          </a>
+        </div>
+      )}
+    </div>
+  );
+}
+
+
 /** Split-off species per tooltip page. A handful of aggregates run long —
  *  Rubus fruticosus has 73 — and the list names every one of them rather than
  *  standing in for the tail, so it pages instead of growing without bound.
@@ -838,12 +912,14 @@ function RevisionTooltipContent({ flag, name, category }: { flag: ColRevision; n
 
   return (
     <>
-      {sentences.map((node, i) => (
-        <React.Fragment key={i}>
-          {i > 0 && " "}
-          {node}
-        </React.Fragment>
-      ))}
+      {/* One block per signal: a species can be both lumped and split, and the
+          two are separate findings rather than one running sentence. */}
+      <div className="space-y-2">
+        {sentences.map((node, i) => (
+          <div key={i}>{node}</div>
+        ))}
+      </div>
+      {flag.colId && <ColProvenanceBlock colId={flag.colId} />}
     </>
   );
 }
