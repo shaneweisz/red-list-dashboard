@@ -2914,7 +2914,10 @@ export default function OccurrenceMapRow({
   useEffect(() => {
     if (!tooltipPinned) return;
     const onPointerDown = (e: MouseEvent) => {
-      if ((e.target as HTMLElement).closest("[data-occurrence-tooltip]")) return;
+      // The photographs count as part of the panel even though they're drawn
+      // beside it: without this, pressing on one closed the panel, and the
+      // link was unmounted before its own click could open the image.
+      if ((e.target as HTMLElement).closest("[data-occurrence-tooltip],[data-occurrence-images]")) return;
       closeTooltip();
     };
     const onKey = (e: KeyboardEvent) => {
