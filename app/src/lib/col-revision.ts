@@ -264,8 +264,12 @@ export interface SplitSummary {
 const COL = "Catalogue of Life";
 
 /**
- * Plain-language "what did Catalogue of Life actually do to this species", for
- * the no-match half of the flag.
+ * Plain-language "what did Catalogue of Life actually do to this species, and
+ * what does that mean for this assessment", for the no-match half of the flag.
+ *
+ * Each standalone sentence carries both halves, matching the split and lump
+ * ones: the finding, then what follows from it. Stating only the finding left a
+ * reader to work out why it mattered, which is the whole job of a flag.
  *
  * `subject` is the species name for a standalone tooltip, or null where the
  * surrounding UI already names it (the SSC panel's table cell), which drops the
@@ -290,11 +294,11 @@ export function noMatchSentence(flag: ColRevision, subject: string | null): NoMa
       // synonym of an accepted species. Usually a genus transfer IUCN hasn't
       // adopted (Sorbus minima -> Hedlundia minima).
       return subject
-        ? { before: `${COL}'s checklist files ${s}as a synonym of `, detail: flag.detail, after: "." }
+        ? { before: `${COL}'s checklist calls ${s}`, detail: flag.detail, after: ", so this assessment is published under a name it no longer accepts." }
         : { before: "Filed as a synonym of ", detail: flag.detail, after: "" };
     case "infraspecific":
       return subject
-        ? { before: `According to ${COL}, ${s}is no longer a species of its own — it is now a subspecies of `, detail: flag.detail, after: "." }
+        ? { before: `${COL} ranks ${s}as a subspecies of `, detail: flag.detail, after: ", so this assessment covers what it treats as part of another species." }
         : { before: "Now a subspecies of ", detail: flag.detail, after: "" };
     // Deliberately NOT "hasn't added it yet": that implies a backlog the
     // checklist is working through, and for most of these it isn't true. Only
@@ -305,11 +309,11 @@ export function noMatchSentence(flag: ColRevision, subject: string | null): NoMa
     // from, so say that instead.
     case "not_in_base":
       return subject
-        ? { before: `${COL} has a record for ${s}but only in its extended release — the curated checklist doesn't include it.`, after: "" }
+        ? { before: `${COL}'s curated checklist doesn't accept ${subject}, so the name survives only in its extended release.`, after: "" }
         : { before: `In ${COL}'s extended release only, not its curated checklist`, after: "" };
     case "provisional":
       return subject
-        ? { before: `${COL} lists ${s}only provisionally, not as a fully accepted species.`, after: "" }
+        ? { before: `${COL} lists ${s}only provisionally, so whether it stands as a species of its own is unsettled there.`, after: "" }
         : { before: `Listed by ${COL} only provisionally`, after: "" };
     // Usually a species-boundary disagreement, not a data error: e.g. Equus ferus
     // (wild horse) — CoL treats it and Equus przewalskii as two species, one of
@@ -323,19 +327,19 @@ export function noMatchSentence(flag: ColRevision, subject: string | null): NoMa
       // (Equus ferus), and some are simply wrong upstream — CoL flags
       // Columba elphinstonii (a Least Concern, extant pigeon) extinct.
       return subject
-        ? { before: `${COL}'s record for ${s}is flagged extinct, which this assessment's category contradicts — often a CoL data error.`, after: "" }
+        ? { before: `${COL} marks ${s}extinct and this assessment doesn't, so one of them is wrong about whether it survives.`, after: "" }
         : { before: `${COL}'s record is flagged extinct; this assessment's category contradicts it`, after: "" };
     case "no_link":
       return subject
-        ? { before: `${s}hasn't been matched to a ${COL} name yet.`, after: "" }
+        ? { before: `No ${COL} name matches ${subject}, so there is nothing there to check this assessment against.`, after: "" }
         : { before: `Not yet matched to a ${COL} name`, after: "" };
     case "missing_from_backbone":
       return subject
-        ? { before: `${s}links to a ${COL} record that no longer resolves.`, after: "" }
+        ? { before: `${s}links to a ${COL} record that no longer resolves, so the match needs redoing.`, after: "" }
         : { before: `Links to a ${COL} record that no longer resolves`, after: "" };
     case "classified_elsewhere":
       return subject
-        ? { before: `${COL} classifies ${s}under a different group here.`, after: "" }
+        ? { before: `${COL} files ${s}under a different group, so it won't appear where this assessment places it.`, after: "" }
         : { before: `${COL} classifies it under a different group here`, after: "" };
     default:
       // An unrecognised code renders as itself rather than as "undefined" — the

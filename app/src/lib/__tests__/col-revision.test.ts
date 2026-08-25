@@ -66,7 +66,7 @@ describe("UNFLAGGED_REASONS", () => {
 
   it("still gives it wording, since the SSC group view reports it", () => {
     expect(noMatchExplanation({ reason: "extinct_unconfirmed" }, "Columba arquatrix"))
-      .toContain("flagged extinct");
+      .toContain("marks Columba arquatrix extinct");
   });
 });
 
@@ -160,7 +160,25 @@ describe("noMatchSentence", () => {
 
   it("reads as a complete sentence for reasons with no second species", () => {
     expect(noMatchExplanation({ reason: "no_link" }, "Bufo bufo"))
-      .toBe("Bufo bufo hasn't been matched to a Catalogue of Life name yet.");
+      .toBe("No Catalogue of Life name matches Bufo bufo, so there is nothing there to check this assessment against.");
+  });
+
+  it("tells the reader what the finding means for the assessment, not just what it is", () => {
+    // The split and lump sentences always did; the rest only stated the finding
+    // and left the reader to work out why it mattered.
+    for (const reason of REVISION_REASONS) {
+      if (reason === SPLIT_REASON || reason === "lumped") continue; // their own summaries
+      const sentence = noMatchExplanation({ reason, detail: "Panthera tigris" }, "Panthera leo");
+      expect(sentence, reason).toMatch(/\bso\b/);
+    }
+  });
+
+  it("keeps the SSC panel's framing terse — it renders in a table column", () => {
+    for (const reason of REVISION_REASONS) {
+      if (reason === SPLIT_REASON) continue;
+      const terse = noMatchExplanation({ reason, detail: "Panthera tigris" }, null);
+      expect(terse.split(" ").length, reason).toBeLessThanOrEqual(12);
+    }
   });
 
   it("does not promise the checklist will add a name it has declined", () => {
