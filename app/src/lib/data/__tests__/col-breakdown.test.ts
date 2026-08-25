@@ -178,6 +178,17 @@ describe("classifyNoMatch — checklist coverage", () => {
     expect(result.reason).toBe("not_in_base");
   });
 
+  it("synonym_of: not claimed when the name did not change", () => {
+    // CoL keeps duplicate records for some names — Metacanthus concolor has
+    // three — so the name can be "a synonym of" itself. That is not a rename.
+    const result = classifyNoMatch({
+      ...baseRow, name: "Metacanthus concolor",
+      linked_col_id: "XRONLY", linked_name: "Metacanthus concolor", linked_in_base: false,
+      syn_name: "Metacanthus concolor", syn_col_id: "VFXNC",
+    });
+    expect(result.reason).toBe("not_in_base");
+  });
+
   it("provisional: an unlinked name CoL holds provisionally isn't 'no CoL name at all'", () => {
     // Idaea josephinae: unmatched by build-matching (it only links accepted
     // names), but CoL does hold C7CM2 for it.

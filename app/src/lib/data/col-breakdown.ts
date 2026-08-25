@@ -142,7 +142,13 @@ export function classifyNoMatch(row: Record<string, unknown>): NoMatchDetail {
     // name is a synonym of a species the curated checklist accepts.
     const synonymName = coveredName ?? synName;
     const synonymColId = coveredColId ?? synColId;
-    if (synonymName && synonymColId) {
+    // A "synonym of" the SAME name is not a rename — it is CoL holding more than
+    // one record for one name. Metacanthus concolor (White, 1878) has three:
+    // two accepted under different parents and a synonym pointing at one of
+    // them. Reported as synonym_of it would read "files Metacanthus concolor as
+    // a synonym of Metacanthus concolor". Fall through to not_in_base, which is
+    // true of the record actually matched.
+    if (synonymName && synonymColId && synonymName.toLowerCase() !== name.toLowerCase()) {
       // Link to the ACCEPTED record, not the XR-only one this assessment matched:
       // that XR id is exactly the one CoL may since have retired (Sorbus minima's
       // VJSZQ now 404s as "removed"), and the accepted record is what a reader wants.
