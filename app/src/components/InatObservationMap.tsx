@@ -132,10 +132,16 @@ export default function InatObservationMap({ observations, scientificName, mount
             <MapOccurrenceTooltip
               lat={hovered.decimalLatitude}
               lng={hovered.decimalLongitude}
-              species={scientificName}
-              eventDate={hovered.date ?? undefined}
-              observer={hovered.observer}
-              imageUrl={hovered.imageUrl ? getThumbUrl(hovered.imageUrl) : null}
+              fields={[
+                { label: "Species", value: scientificName },
+                ...(hovered.date ? [{ label: "Date", value: hovered.date }] : []),
+                ...(hovered.observer ? [{ label: "Observer", value: hovered.observer }] : []),
+                {
+                  label: "Coordinates",
+                  value: `${hovered.decimalLatitude.toFixed(4)}, ${hovered.decimalLongitude.toFixed(4)}`,
+                },
+              ]}
+              images={hovered.imageUrl ? [{ url: getThumbUrl(hovered.imageUrl) }] : undefined}
             />
           )}
         </MapGL>

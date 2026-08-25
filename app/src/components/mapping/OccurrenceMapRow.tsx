@@ -404,6 +404,10 @@ type BasemapKey = keyof typeof BASEMAP_STYLES;
  * Determine whether an occurrence record is "new" (recorded after the assessment date).
  * Uses full date comparison when eventDate is available, falls back to year comparison.
  */
+/** The table's own labels for GBIF's basisOfRecord constants, reused here. */
+const formatBasisOfRecord = (basis?: string) =>
+  basis ? BASIS_LABELS[basis] ?? basis.replace(/_/g, " ").toLowerCase() : "";
+
 /** Every position in a geometry, flattened — enough to take a bounding box. */
 function positionsOf(geometry: GeoJSON.Geometry): GeoJSON.Position[] {
   const out: GeoJSON.Position[] = [];
@@ -2127,7 +2131,7 @@ export default function OccurrenceMapRow({
       if (struckOut) {
         // Grey and faint, whatever the colour mode would have made it: the
         // point is that it's still there and no longer counted.
-        strokeColor = "#9ca3af";
+        strokeColor = "#6b7280";
         fillColor = "#d1d5db";
       } else if (feature.properties.coordinateStatus === "issue") {
         // Amber regardless of the colour mode: a record GBIF flags shouldn't be
@@ -2161,9 +2165,9 @@ export default function OccurrenceMapRow({
           ...feature.properties,
           _fillColor: fillColor,
           _strokeColor: strokeColor,
-          _radius: struckOut ? 4 : radius,
-          _strokeWidth: struckOut ? 1.5 : strokeWidth,
-          _opacity: struckOut ? 0.45 : 1,
+          _radius: struckOut ? 4.5 : radius,
+          _strokeWidth: struckOut ? 2 : strokeWidth,
+          _opacity: struckOut ? 0.8 : 1,
         },
         geometry: feature.geometry,
       };
@@ -2277,6 +2281,11 @@ export default function OccurrenceMapRow({
           setHoveredPanel(panelId);
           pinTooltip();
         }
+        // And take the table to it. The map can only draw a position; every
+        // other field GBIF publishes is a column down there, so a click on a
+        // point should put the record in front of you both ways.
+        setFocusRecord(null);
+        window.setTimeout(() => setFocusRecord(gbifID), 0);
         return;
       }
     }
@@ -3278,27 +3287,11 @@ export default function OccurrenceMapRow({
                   <MapOccurrenceTooltip
                     lat={hLat}
                     lng={hLon}
-                    species={shown.properties.species}
-                    basisOfRecord={shown.properties.basisOfRecord}
-                    datasetName={shown.properties.datasetName}
-                    institution={
-                      shown.properties.basisOfRecord === "PRESERVED_SPECIMEN"
-                        ? [shown.properties.institutionCode, shown.properties.collectionCode]
-                            .filter(Boolean)
-                            .join(" · ")
-                        : undefined
-                    }
-                    eventDate={shown.properties.eventDate}
-                    coordinateUncertaintyInMeters={mine?.coordinateUncertaintyInMeters ?? shown.properties.coordinateUncertaintyInMeters}
-                    imageUrl={hInat?.imageUrl ?? null}
-                    observer={hInat?.observer ?? null}
-                    qualityFlags={mine ? undefined : shown.properties.qualityFlags}
-                    outsideNativeRange={isOutsideNativeRange(shown.properties.countryCode, effectiveNativeCountries)}
-                    country={shown.properties.country}
-                    locality={shown.properties.locality || shown.properties.verbatimLocality}
-                    yourGeoreference={
-                      mine ? { protocol: mine.georeferenceProtocol, remarks: mine.georeferenceRemarks } : undefined
-                    }
+                    // Every field the record has, in reading order, for the
+                    // panel to page through. Built here because this is where
+                    // the assessor's own coordinates, the cleaning flags and
+                    // the native-range check all live.
+                    fields={recordFields(shown, mine, hInat)}
                     images={shown.properties.images}
                     page={
                       hoveredGroup.length > 1
@@ -4388,6 +4381,68 @@ export default function OccurrenceMapRow({
    * striking a record out means finding it there too, and settling which of a
    * stack of duplicate sheets is the real one had no single gesture at all.
    */
+  /**
+   * A record's fields as label/value pairs, in the order an assessor reads
+   * them: what it is, where and when, who says so, then the caveats.
+   *
+   * Everything the old panel encoded in colour and weight is a row here — the
+   * assessor's own coordinates, the cleaning flags, being outside the native
+   * range — because a value is easier to compare between two records than a
+   * shade of amber.
+   */
+  const recordFields = useCallback(
+    (feature: OccurrenceFeature, mine?: Georeference, inat?: InatObservation) => {
+      const p = feature.properties;
+      const position = mine
+        ? [mine.decimalLongitude, mine.decimalLatitude]
+        : feature.geometry?.coordinates;
+      const uncertainty = mine?.coordinateUncertaintyInMeters ?? p.coordinateUncertaintyInMeters;
+      const rows: { label: string; value: string }[] = [];
+      const add = (label: string, value: unknown) => {
+        const text = Array.isArray(value) ? value.join(", ") : value == null ? "" : String(value);
+        if (text.trim()) rows.push({ label, value: text });
+      };
+      add("Species", p.species);
+      add("Basis", formatBasisOfRecord(p.basisOfRecord));
+      add("Date", p.eventDate ?? p.year);
+      add("Locality", p.locality || p.verbatimLocality);
+      add("Country", p.country);
+      if (position) {
+        add("Coordinates", `${position[1].toFixed(4)}, ${position[0].toFixed(4)}`);
+      }
+      add(
+        mine ? "Radius" : "GPS uncertainty",
+        uncertainty == null ? null : uncertainty >= 1000 ? `${(uncertainty / 1000).toFixed(1)} km` : `${uncertainty} m`
+      );
+      if (mine) {
+        add("Coordinates by", "You");
+        add("Method", mine.georeferenceProtocol);
+        add("Note", mine.georeferenceRemarks);
+      }
+      if (p.basisOfRecord === "PRESERVED_SPECIMEN") {
+        add("Institution", [p.institutionCode, p.collectionCode].filter(Boolean).join(" · "));
+      }
+      add("Catalogue no.", p.catalogNumber);
+      add("Recorded by", p.recordedBy ?? inat?.observer);
+      add("Identified by", p.identifiedBy);
+      add("Elevation", p.elevation ?? p.verbatimElevation);
+      add("Dataset", p.datasetName);
+      if (!mine) {
+        add(
+          "Flagged",
+          (p.qualityFlags ?? []).map((f) => QUALITY_FLAG_LABELS[f as QualityFlag] || f).join(", ")
+        );
+      }
+      if (isOutsideNativeRange(p.countryCode, effectiveNativeCountries)) {
+        add("Range", `Outside native range${p.country ? ` (${p.country})` : ""}`);
+      }
+      add("Excluded", exclusions[p.gbifID]?.justification);
+      add("GBIF id", p.gbifID);
+      return rows;
+    },
+    [effectiveNativeCountries, exclusions]
+  );
+
   const renderRecordActions = (gbifID: number) => {
     const record = occurrencesByGbifId.get(gbifID);
     const excluded = !!exclusions[gbifID];
@@ -4415,20 +4470,6 @@ export default function OccurrenceMapRow({
                     <path strokeLinecap="round" strokeLinejoin="round" d="M14 3h7v7M10 14L21 3M21 14v7h-7M3 10V3h7" />
                   </svg>
                   Open on GBIF
-                </button>
-                <button
-                  onClick={() => {
-                    setFocusRecord(gbifID);
-                    close();
-                  }}
-                  title="Scroll the table to this record and pick it out — every field GBIF publishes for it is a column there"
-                  className="flex w-full items-center gap-1.5 px-1 py-1 rounded hover:bg-zinc-100 dark:hover:bg-zinc-800"
-                >
-                  <svg className="w-3 h-3 shrink-0 text-zinc-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                    <rect x="3" y="4" width="18" height="16" rx="2" />
-                    <path strokeLinecap="round" d="M3 10h18M9 10v10" />
-                  </svg>
-                  View all GBIF fields
                 </button>
                 <button
                   onClick={() => {
@@ -5057,24 +5098,24 @@ export default function OccurrenceMapRow({
         <span className="tabular-nums text-[10px] text-zinc-400">
           {(mappedOccurrences.length - struckOutCount).toLocaleString()}
         </span>
-      {/* The ramp beside the name rather than under it: two dots and their
-            years fit on the row, and a key on the line below read as a second
-            layer in the list. */}
-        {showGbif && !label && !assessmentYear && colorByDate && (
-          <span className="flex items-center gap-0.5 shrink-0 text-[9px] tabular-nums text-zinc-400">
-            <span
-              className="w-2 h-2 rounded-full shrink-0"
-              style={{ background: dateToColor(minDateNum).fill, border: `1px solid ${dateToColor(minDateNum).stroke}` }}
-            />
-            {minDateLabel}
-            <span
-              className="w-2 h-2 rounded-full shrink-0 ml-0.5"
-              style={{ background: dateToColor(maxDateNum).fill, border: `1px solid ${dateToColor(maxDateNum).stroke}` }}
-            />
-            {maxDateLabel}
-          </span>
-        )}
       </label>
+      {/* The colour key on a row of its own. Sharing the name's row with the
+          count left no width for either, and the name wrapped. */}
+      {showGbif && !label && !assessmentYear && colorByDate && (
+        <div className="flex items-center gap-1 px-2 pb-0.5 pl-6 text-[10px] tabular-nums text-zinc-400">
+          <span
+            className="w-2.5 h-2.5 rounded-full shrink-0"
+            style={{ background: dateToColor(minDateNum).fill, border: `1.5px solid ${dateToColor(minDateNum).stroke}` }}
+          />
+          {minDateLabel}
+          <span>→</span>
+          <span
+            className="w-2.5 h-2.5 rounded-full shrink-0"
+            style={{ background: dateToColor(maxDateNum).fill, border: `1.5px solid ${dateToColor(maxDateNum).stroke}` }}
+          />
+          {maxDateLabel}
+        </div>
+      )}
         {/* Struck-out records get their own row rather than being folded into
           the one above: the count that matters is what's still counted, and
           the greyed points need a key of their own to be read as deliberate. */}

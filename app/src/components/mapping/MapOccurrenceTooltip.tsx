@@ -3,36 +3,21 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useMap } from "react-map-gl/maplibre";
-import { QUALITY_FLAG_LABELS, type QualityFlag } from "@/lib/mapping/coordinate-cleaning";
 
 interface MapOccurrenceTooltipProps {
   lat: number;
   lng: number;
-  species: string;
-  basisOfRecord?: string;
-  datasetName?: string;
   /**
-   * Where a preserved specimen is held — institution and collection codes.
+   * Every field this record has, as label/value pairs, in the order they
+   * should be read.
    *
-   * A sheet is somewhere: which herbarium holds it is how you go and look at
-   * it, how you weigh the determination, and often the only way to tell two
-   * duplicates of one gathering apart.
+   * A table rather than a styled summary. The panel used to pick a dozen
+   * fields and give each its own colour and weight — italic species, amber
+   * flags, violet georeference — which made a record look like a verdict. Two
+   * plain columns say the same things and let you compare one record with the
+   * next without decoding the formatting first.
    */
-  institution?: string;
-  eventDate?: string;
-  coordinateUncertaintyInMeters?: number | null;
-  /** Kept for the caller's sake; the tooltip no longer draws it. A photograph
-   *  is the slowest thing in the panel and it resized under the pointer as you
-   *  paged between records — the fields are what's being read. */
-  imageUrl?: string | null;
-  observer?: string | null;
-  qualityFlags?: string[];
-  outsideNativeRange?: boolean;
-  country?: string;
-  /** The record's locality text — the only thing an ungeoreferenced record has. */
-  locality?: string;
-  /** Present when these coordinates are the assessor's own, not GBIF's. */
-  yourGeoreference?: { protocol?: string; remarks?: string };
+  fields: { label: string; value: string }[];
   /**
    * Photographs the publisher attached to the record, from GBIF's media.
    *
@@ -46,37 +31,20 @@ interface MapOccurrenceTooltipProps {
   page?: { index: number; total: number; onPrev: () => void; onNext: () => void };
   /** Dismisses a pinned tooltip. */
   onClose?: () => void;
-  /**
-   * What you can do with this record, drawn as a block at the foot of the
-   * panel once it's been clicked.
-   *
-   * They belong here rather than in a menu of their own: the panel already
-   * names the record and is already pointing at it, and a second popup for the
-   * same point meant two boxes explaining one dot.
-   */
-  actions?: React.ReactNode;
   /** True once the reader has paged through: the tooltip is now click-dismissed. */
   pinned?: boolean;
   /** Keeps the tooltip up while the pointer is on it, so its controls are usable. */
   onPointerEnter?: () => void;
   onPointerLeave?: () => void;
+  /**
+   * What you can do with this record, drawn as a block at the foot of the
+   * panel.
+   */
+  actions?: React.ReactNode;
 }
 
-// Format basisOfRecord to human-readable string
-function formatBasis(basis?: string): string {
-  if (!basis) return "";
-  const labels: Record<string, string> = {
-    HUMAN_OBSERVATION: "Human observation",
-    PRESERVED_SPECIMEN: "Preserved specimen",
-    MACHINE_OBSERVATION: "Machine observation",
-    FOSSIL_SPECIMEN: "Fossil specimen",
-    LIVING_SPECIMEN: "Living specimen",
-    MATERIAL_SAMPLE: "Material sample",
-    OCCURRENCE: "Occurrence",
-    MATERIAL_CITATION: "Material citation",
-  };
-  return labels[basis] || basis.replace(/_/g, " ").toLowerCase();
-}
+/** Fields shown at once before the table pages. */
+const FIELDS_PER_PAGE = 7;
 
 export default function MapOccurrenceTooltip(props: MapOccurrenceTooltipProps) {
   const { current: map } = useMap();
@@ -98,6 +66,8 @@ export default function MapOccurrenceTooltip(props: MapOccurrenceTooltipProps) {
    * NotFoundError, which takes the whole page down.
    */
   const [brokenImages, setBrokenImages] = useState<string[]>([]);
+  /** Which page of the record's fields is showing. */
+  const [fieldPage, setFieldPage] = useState(0);
   const observerRef = useRef<ResizeObserver | null>(null);
   const panelRef = useCallback((el: HTMLDivElement | null) => {
     observerRef.current?.disconnect();
@@ -126,13 +96,15 @@ export default function MapOccurrenceTooltip(props: MapOccurrenceTooltipProps) {
 
   const container = map.getContainer();
   const containerRect = container.getBoundingClientRect();
-  const uncertainty = props.coordinateUncertaintyInMeters;
 
   // Convert container-relative position to viewport-fixed position
   const fixedX = containerRect.left + pos.x;
   const fixedY = containerRect.top + pos.y;
 
   const shownImages = (props.images ?? []).filter((i) => !brokenImages.includes(i.url));
+  const totalPages = Math.max(1, Math.ceil(props.fields.length / FIELDS_PER_PAGE));
+  const first = Math.min(fieldPage, totalPages - 1) * FIELDS_PER_PAGE;
+  const pageFields = props.fields.slice(first, first + FIELDS_PER_PAGE);
 
   const tooltipWidth = 220;
   // Beside the point rather than above it: the map is far wider than it is
@@ -270,68 +242,45 @@ export default function MapOccurrenceTooltip(props: MapOccurrenceTooltipProps) {
               </div>
             </div>
           )}
-          <div className="font-medium italic text-zinc-900 dark:text-zinc-100">
-            {props.species}
-          </div>
-          {props.locality && (
-            <div className="text-zinc-600 dark:text-zinc-300">{props.locality}</div>
-          )}
-          {props.basisOfRecord && (
-            <div className="text-zinc-500 dark:text-zinc-400">
-              {formatBasis(props.basisOfRecord)}
-            </div>
-          )}
-          {props.institution && (
-            <div className="text-zinc-600 dark:text-zinc-300" title="Holding institution · collection">
-              {props.institution}
-            </div>
-          )}
-          {props.datasetName && (
-            <div className="text-zinc-500 dark:text-zinc-400 truncate" title={props.datasetName}>
-              {props.datasetName}
-            </div>
-          )}
-          {props.eventDate && (
-            <div className="text-zinc-600 dark:text-zinc-300">{props.eventDate}</div>
-          )}
-          {uncertainty != null && (
-            <div className="text-zinc-400">
-              {props.yourGeoreference ? "Radius" : "GPS Uncertainty"}: {uncertainty >= 1000
-                ? `${(uncertainty / 1000).toFixed(1)}km`
-                : `${uncertainty}m`}
-            </div>
-          )}
-          {props.observer && (
-            <div className="text-zinc-500 dark:text-zinc-400">by {props.observer}</div>
-          )}
-          <div className={`tabular-nums ${props.yourGeoreference ? "text-violet-600 dark:text-violet-400" : "text-zinc-400"}`}>
-            {props.lat.toFixed(4)}, {props.lng.toFixed(4)}
-          </div>
-          {/* Says whose coordinates these are, so an assessor's own reading of
-              a locality can never be mistaken for a published position. */}
-          {props.yourGeoreference && (
-            <div className="pt-0.5">
-              <div className="flex items-baseline gap-1 text-violet-600 dark:text-violet-400 font-medium">
-                <span>
-                  ◆ Your georeference
-                  {props.yourGeoreference.protocol ? ` · ${props.yourGeoreference.protocol}` : ""}
-                </span>
-              </div>
-              {props.yourGeoreference.remarks && (
-                <div className="text-[10px] text-zinc-500 dark:text-zinc-400">
-                  {props.yourGeoreference.remarks}
-                </div>
-              )}
-            </div>
-          )}
-          {props.qualityFlags && props.qualityFlags.length > 0 && (
-            <div className="text-amber-600 dark:text-amber-400 font-medium pt-0.5">
-              ⚠ Flagged: {props.qualityFlags.map((f) => QUALITY_FLAG_LABELS[f as QualityFlag] || f).join(", ")}
-            </div>
-          )}
-          {props.outsideNativeRange && (
-            <div className="text-amber-600 dark:text-amber-400 font-medium pt-0.5">
-              🌍 Outside native range{props.country ? ` (${props.country})` : ""}
+          {/* The record as a table. One type, one colour, two columns: the
+              label you are looking up and the value it has. */}
+          <table className="w-full border-collapse">
+            <tbody>
+              {pageFields.map((field) => (
+                <tr key={field.label} className="align-top">
+                  <td className="py-[1px] pr-1.5 text-zinc-400 dark:text-zinc-500 whitespace-nowrap">
+                    {field.label}
+                  </td>
+                  <td className="py-[1px] text-zinc-700 dark:text-zinc-200 break-words">
+                    {field.value}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          {totalPages > 1 && (
+            <div className="flex items-center gap-1 pt-1 mt-1 border-t border-zinc-100 dark:border-zinc-800 text-[10px] text-zinc-400">
+              <span className="tabular-nums">
+                {first + 1}–{Math.min(first + FIELDS_PER_PAGE, props.fields.length)} of {props.fields.length}
+              </span>
+              <button
+                onClick={() => setFieldPage((n) => (n - 1 + totalPages) % totalPages)}
+                title="Previous fields"
+                className="ml-auto p-0.5 hover:text-zinc-700 dark:hover:text-zinc-200"
+              >
+                <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
+                </svg>
+              </button>
+              <button
+                onClick={() => setFieldPage((n) => (n + 1) % totalPages)}
+                title="More fields"
+                className="p-0.5 hover:text-zinc-700 dark:hover:text-zinc-200"
+              >
+                <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+                </svg>
+              </button>
             </div>
           )}
           {/* A specimen photograph settles identifications a locality string
