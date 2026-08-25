@@ -11,6 +11,14 @@ interface MapOccurrenceTooltipProps {
   species: string;
   basisOfRecord?: string;
   datasetName?: string;
+  /**
+   * Where a preserved specimen is held — institution and collection codes.
+   *
+   * A sheet is somewhere: which herbarium holds it is how you go and look at
+   * it, how you weigh the determination, and often the only way to tell two
+   * duplicates of one gathering apart.
+   */
+  institution?: string;
   eventDate?: string;
   coordinateUncertaintyInMeters?: number | null;
   /** Kept for the caller's sake; the tooltip no longer draws it. A photograph
@@ -271,6 +279,11 @@ export default function MapOccurrenceTooltip(props: MapOccurrenceTooltipProps) {
           {props.basisOfRecord && (
             <div className="text-zinc-500 dark:text-zinc-400">
               {formatBasis(props.basisOfRecord)}
+            </div>
+          )}
+          {props.institution && (
+            <div className="text-zinc-600 dark:text-zinc-300" title="Holding institution · collection">
+              {props.institution}
             </div>
           )}
           {props.datasetName && (

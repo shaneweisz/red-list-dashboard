@@ -815,7 +815,7 @@ export default function OccurrenceMapRow({
    * every field in the table, strike the record out, settle which of a stack
    * of duplicates is the real one — have no other way in from the map.
    */
-  const [recordMenu, setRecordMenu] = useState<{ gbifID: number; panelId: string } | null>(null);
+
   /** A record the table should scroll to and pick out. */
   const [focusRecord, setFocusRecord] = useState<number | null>(null);
   const [showRangeMetrics, setShowRangeMetrics] = useState(false);
@@ -1002,6 +1002,8 @@ export default function OccurrenceMapRow({
    */
   const [showMyGeoreferences, setShowMyGeoreferences] = useState(true);
   const [showPointFile, setShowPointFile] = useState(true);
+  /** Whether struck-out records stay on the map, greyed, or come off it. */
+  const [showExcludedOnMap, setShowExcludedOnMap] = useState(true);
 
   /**
    * Outside fullscreen the map draws GBIF's records and nothing else.
@@ -1218,7 +1220,6 @@ export default function OccurrenceMapRow({
     }
   }, []);
   const closeTooltip = useCallback(() => {
-    setRecordMenu(null);
     cancelHoverClear();
     unpinTooltip();
     setTooltipHeld(false);
@@ -1609,6 +1610,23 @@ export default function OccurrenceMapRow({
   // less anything struck out by hand. The list still shows all of it, greyed.
   const includedOccurrences = useMemo(
     () => filteredOccurrences.filter((o) => !exclusions[o.properties.gbifID]),
+    [filteredOccurrences, exclusions]
+  );
+
+  /**
+   * What the map draws: the records that survived the filters, kept and struck
+   * out alike. The struck-out ones are greyed rather than removed — a record
+   * you have judged and set aside is a different thing from a record nobody
+   * collected, and the map couldn't tell you which a gap was.
+   */
+  const mappedOccurrences = useMemo(
+    () => (showExcludedOnMap ? filteredOccurrences : includedOccurrences),
+    [showExcludedOnMap, filteredOccurrences, includedOccurrences]
+  );
+
+  /** How many of the filtered records the assessor has struck out. */
+  const struckOutCount = useMemo(
+    () => filteredOccurrences.filter((o) => exclusions[o.properties.gbifID]).length,
     [filteredOccurrences, exclusions]
   );
 
@@ -2102,10 +2120,16 @@ export default function OccurrenceMapRow({
     // same filter pipeline so the list can show them, and dropped here.
     const features = panelOccurrences.filter(hasPosition).map((feature) => {
       const isFeatureHovered = hoveredFeature?.properties.gbifID === feature.properties.gbifID;
+      const struckOut = !!exclusions[feature.properties.gbifID];
 
       let strokeColor: string;
       let fillColor: string;
-      if (feature.properties.coordinateStatus === "issue") {
+      if (struckOut) {
+        // Grey and faint, whatever the colour mode would have made it: the
+        // point is that it's still there and no longer counted.
+        strokeColor = "#9ca3af";
+        fillColor = "#d1d5db";
+      } else if (feature.properties.coordinateStatus === "issue") {
         // Amber regardless of the colour mode: a record GBIF flags shouldn't be
         // indistinguishable from one it vouches for just because it happens to
         // be recent.
@@ -2137,15 +2161,15 @@ export default function OccurrenceMapRow({
           ...feature.properties,
           _fillColor: fillColor,
           _strokeColor: strokeColor,
-          _radius: radius,
-          _strokeWidth: strokeWidth,
-          _opacity: 1,
+          _radius: struckOut ? 4 : radius,
+          _strokeWidth: struckOut ? 1.5 : strokeWidth,
+          _opacity: struckOut ? 0.45 : 1,
         },
         geometry: feature.geometry,
       };
     });
     return { type: "FeatureCollection", features };
-  }, [hoveredFeature, colorByDate, assessmentDate, assessmentYear]);
+  }, [hoveredFeature, colorByDate, assessmentDate, assessmentYear, exclusions]);
 
   // FitBounds helper using map ref
   const fitMapToBbox = useCallback((bbox: [number, number, number, number]) => {
@@ -2253,7 +2277,6 @@ export default function OccurrenceMapRow({
           setHoveredPanel(panelId);
           pinTooltip();
         }
-        setRecordMenu({ gbifID, panelId });
         return;
       }
     }
@@ -3203,7 +3226,6 @@ export default function OccurrenceMapRow({
                         onClick={() => {
                           handleMarkerHover(g.gbifID);
                           pinTooltip();
-                          setRecordMenu({ gbifID: g.gbifID, panelId });
                         }}
                         onEnter={() => handleMarkerHover(g.gbifID)}
                         onLeave={() => handleHoverRow(null)}
@@ -3259,6 +3281,13 @@ export default function OccurrenceMapRow({
                     species={shown.properties.species}
                     basisOfRecord={shown.properties.basisOfRecord}
                     datasetName={shown.properties.datasetName}
+                    institution={
+                      shown.properties.basisOfRecord === "PRESERVED_SPECIMEN"
+                        ? [shown.properties.institutionCode, shown.properties.collectionCode]
+                            .filter(Boolean)
+                            .join(" · ")
+                        : undefined
+                    }
                     eventDate={shown.properties.eventDate}
                     coordinateUncertaintyInMeters={mine?.coordinateUncertaintyInMeters ?? shown.properties.coordinateUncertaintyInMeters}
                     imageUrl={hInat?.imageUrl ?? null}
@@ -3295,15 +3324,12 @@ export default function OccurrenceMapRow({
                       setTooltipHeld(false);
                       clearHoverSoon();
                     }}
-                    // The actions belong to whichever record the panel is
-                    // showing, not the one that happened to be clicked: at a
-                    // point several records share, you page to the one you mean
-                    // and act on that.
-                    actions={
-                      recordMenu?.panelId === panelId
-                        ? renderRecordActions(shown.properties.gbifID)
-                        : undefined
-                    }
+                    // Always offered, not only once clicked: they're what the
+                    // panel is for, and hiding them behind a second gesture
+                    // meant hovering told you about a record and gave you no
+                    // way to act on it. Clicking only pins the panel, so the
+                    // buttons stay put while you reach for them.
+                    actions={renderRecordActions(shown.properties.gbifID)}
                     onClose={tooltipPinned ? closeTooltip : undefined}
                     pinned={tooltipPinned}
                   />
@@ -4375,7 +4401,7 @@ export default function OccurrenceMapRow({
     const key = position ? `${position[0].toFixed(4)},${position[1].toFixed(4)}` : null;
     const stacked = (key && coLocatedByPosition.get(key)) || [];
     const others = stacked.filter((o) => o.properties.gbifID !== gbifID);
-    const close = () => { setRecordMenu(null); closeTooltip(); };
+    const close = () => closeTooltip();
     return (
       <>
                 <button
@@ -4973,7 +4999,10 @@ export default function OccurrenceMapRow({
   );
 
   const renderRecordLayers = (label: string | null) => (
-    <div className="flex flex-col bg-white dark:bg-zinc-800 rounded-lg shadow-md border border-zinc-200 dark:border-zinc-700 py-1 w-44">
+    // Wider than it was: the GBIF row now carries a count and, for a species
+    // with no assessment date, the colour ramp as well, and at w-44 the name
+    // wrapped to two lines.
+    <div className="flex flex-col bg-white dark:bg-zinc-800 rounded-lg shadow-md border border-zinc-200 dark:border-zinc-700 py-1 w-52">
       <div className="px-2 pb-0.5 text-[9px] uppercase tracking-wide text-zinc-400 dark:text-zinc-500">
         Records
       </div>
@@ -5025,7 +5054,10 @@ export default function OccurrenceMapRow({
           className="w-3 h-3 rounded accent-blue-500 shrink-0"
         />
         <span className="flex-1 min-w-0 text-zinc-700 dark:text-zinc-200">GBIF points</span>
-        {/* The ramp beside the name rather than under it: two dots and their
+        <span className="tabular-nums text-[10px] text-zinc-400">
+          {(mappedOccurrences.length - struckOutCount).toLocaleString()}
+        </span>
+      {/* The ramp beside the name rather than under it: two dots and their
             years fit on the row, and a key on the line below read as a second
             layer in the list. */}
         {showGbif && !label && !assessmentYear && colorByDate && (
@@ -5043,6 +5075,27 @@ export default function OccurrenceMapRow({
           </span>
         )}
       </label>
+        {/* Struck-out records get their own row rather than being folded into
+          the one above: the count that matters is what's still counted, and
+          the greyed points need a key of their own to be read as deliberate. */}
+      {showGbif && struckOutCount > 0 && (
+        <label className="flex items-center gap-1.5 px-2 py-0.5 hover:bg-zinc-50 dark:hover:bg-zinc-700 cursor-pointer text-[11px]">
+          <input
+            type="checkbox"
+            checked={showExcludedOnMap}
+            onChange={() => setShowExcludedOnMap((v) => !v)}
+            className="w-3 h-3 rounded accent-zinc-400 shrink-0"
+          />
+          <span
+            className="w-2.5 h-2.5 rounded-full shrink-0 border-[1.5px]"
+            style={{ background: "#d1d5db", borderColor: "#9ca3af", opacity: 0.6 }}
+          />
+          <span className="flex-1 min-w-0 text-zinc-500 dark:text-zinc-400 truncate">Excluded</span>
+          <span className="tabular-nums text-[10px] text-zinc-400">
+            {struckOutCount.toLocaleString()}
+          </span>
+        </label>
+      )}
       {/* What the GBIF points' colours mean, under the row that draws them —
           but only for a species with no assessment date. Where there is one,
           this lives beside Split view, with the toggle that switches between
@@ -6038,7 +6091,7 @@ export default function OccurrenceMapRow({
                     </div>
                   </div>
                 ) : (
-                  renderMapPanel(includedOccurrences, bbox, null)
+                  renderMapPanel(mappedOccurrences, bbox, null)
                 )}
                 {/* In-range/out-of-range breakdown vs. the currently-visible IUCN
                     range polygons — one table covering Total plus (when a split
