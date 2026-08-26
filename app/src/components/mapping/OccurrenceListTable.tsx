@@ -623,10 +623,10 @@ export default function OccurrenceListTable({
       // says why it shouldn't.
       {
         key: "included",
-        label: "Shown",
+        label: "Included",
         headerIconOnly: true,
         title:
-          "Whether this record counts. Unticking asks for a reason — drag down the column to hide a run of records (duplicates, usually) in one go.",
+          "Whether this record counts. Unchecking asks for a reason — drag down the column to exclude a run of records (duplicates, usually) in one go.",
         className: "whitespace-nowrap",
         headerExtra: (
           <button
@@ -639,8 +639,8 @@ export default function OccurrenceListTable({
             onDragStart={(e) => e.preventDefault()}
             title={
               showExcluded
-                ? "Take the hidden rows out of the table"
-                : "Show the hidden rows again (greyed out, in place)"
+                ? "Hide the excluded rows"
+                : "Show the excluded rows again (greyed out, in place)"
             }
             className={`ml-1 align-middle ${
               showExcluded
@@ -691,12 +691,12 @@ export default function OccurrenceListTable({
                 }}
                 title={
                   byFilter
-                    ? "Hidden by your filters"
+                    ? "Excluded by your filters"
                     : selected
-                      ? "Hides every selected record, under one reason"
+                      ? "Excludes every selected record, under one reason"
                       : byHand
                         ? `Excluded: ${byHand.justification} — click to put it back`
-                        : "Counted. Untick to hide it, with a reason."
+                        : "Counted. Uncheck to exclude it, with a reason."
                 }
                 className={`w-3 h-3 rounded accent-emerald-600 disabled:opacity-60 cursor-pointer ${
                   selected ? "ring-2 ring-blue-400" : ""
@@ -1389,7 +1389,7 @@ export default function OccurrenceListTable({
                 onMouseDown={(e) => {
                   if (e.shiftKey) e.preventDefault();
                 }}
-                title="Click to select \u2014 shift-click for a run, \u2318/Ctrl-click to pick rows out \u2014 then untick any one of them to hide the lot."
+                title="Click to select \u2014 shift-click for a run, \u2318/Ctrl-click to pick rows out \u2014 then untick any one of them to exclude the lot."
                 onMouseEnter={() => onHoverRow?.(f)}
                 onMouseLeave={() => onHoverRow?.(null)}
                 className={`border-b border-zinc-100 dark:border-zinc-800 ${
@@ -1441,7 +1441,7 @@ export default function OccurrenceListTable({
               <tr>
                 <td colSpan={visibleColumns.length} className="px-3 py-8 text-center text-zinc-400 text-sm">
                   {sorted.length > 0
-                    ? "Every record here is hidden — show them again from the Shown column."
+                    ? "Every record here is excluded — show them again from the Included column."
                     : "No occurrences match the current filters."}
                 </td>
               </tr>
@@ -1464,7 +1464,7 @@ export default function OccurrenceListTable({
               {selectedIds.length.toLocaleString()} selected
             </span>
             <span className="text-zinc-400">
-              untick any of them to hide them together
+              untick any of them to exclude them together
             </span>
             <button onClick={() => setSelection(new Set())} className="hover:underline">
               Clear

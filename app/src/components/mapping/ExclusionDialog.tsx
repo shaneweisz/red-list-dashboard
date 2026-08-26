@@ -59,8 +59,8 @@ export default function ExclusionDialog({
                 ? "Edit exclusion reason"
                 : `Edit reason for ${gbifIDs.length} records`
               : gbifIDs.length === 1
-                ? "Hide this record"
-                : `Hide ${gbifIDs.length} records`}
+                ? "Exclude this record"
+                : `Exclude ${gbifIDs.length} records`}
           </h2>
           {gbifIDs.length === 1 && (
             <p className="text-[11px] text-zinc-400 mt-0.5">
@@ -108,7 +108,7 @@ export default function ExclusionDialog({
                 setJustification(e.target.value);
                 setShowError(false);
               }}
-              placeholder="Why should this record be hidden?"
+              placeholder="Why should this record be excluded?"
               className="w-full px-2 py-1 rounded border border-zinc-300 dark:border-zinc-600 bg-white dark:bg-zinc-800 text-zinc-800 dark:text-zinc-100"
             />
           </label>
@@ -133,8 +133,8 @@ export default function ExclusionDialog({
             {existingJustification
               ? "Save reason"
               : gbifIDs.length === 1
-                ? "Hide"
-                : `Hide ${gbifIDs.length}`}
+                ? "Exclude"
+                : `Exclude ${gbifIDs.length}`}
           </button>
         </div>
       </div>

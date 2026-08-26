@@ -1636,9 +1636,20 @@ export default function OccurrenceMapRow({
     [showExcludedOnMap, filteredOccurrences, includedOccurrences]
   );
 
-  /** How many of the filtered records the assessor has struck out. */
+  /**
+   * How many of the records the map draws are struck out, and how many it
+   * draws at all.
+   *
+   * Both count only the records with a position. The legend is a key to what's
+   * on the map, and a record GBIF published without coordinates isn't on it —
+   * counting those made the legend claim twice as many points as the map had.
+   */
+  const mappedPositionedCount = useMemo(
+    () => mappedOccurrences.filter(hasPosition).length,
+    [mappedOccurrences]
+  );
   const struckOutCount = useMemo(
-    () => filteredOccurrences.filter((o) => exclusions[o.properties.gbifID]).length,
+    () => filteredOccurrences.filter((o) => hasPosition(o) && exclusions[o.properties.gbifID]).length,
     [filteredOccurrences, exclusions]
   );
 
@@ -2955,24 +2966,22 @@ export default function OccurrenceMapRow({
     return coLocatedByPosition.get(key) ?? [hoveredFeature];
   }, [hoveredFeature, hoveredPosition, coLocatedByPosition]);
 
+  /**
+   * Escape closes an open panel; nothing else does but its own close button.
+   *
+   * Clicking off it used to close it too, which made every click on the map —
+   * to measure, to ask what a protected area is, to reach the record you were
+   * comparing this one against — take the panel away with it. Reading a record
+   * and using the map are the same activity, so the panel stays until it's
+   * dismissed, or until another record replaces it.
+   */
   useEffect(() => {
     if (!tooltipPinned) return;
-    const onPointerDown = (e: MouseEvent) => {
-      // The photographs count as part of the panel even though they're drawn
-      // beside it: without this, pressing on one closed the panel, and the
-      // link was unmounted before its own click could open the image.
-      if ((e.target as HTMLElement).closest("[data-occurrence-tooltip],[data-occurrence-images]")) return;
-      closeTooltip();
-    };
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") closeTooltip();
     };
-    document.addEventListener("mousedown", onPointerDown);
     document.addEventListener("keydown", onKey);
-    return () => {
-      document.removeEventListener("mousedown", onPointerDown);
-      document.removeEventListener("keydown", onKey);
-    };
+    return () => document.removeEventListener("keydown", onKey);
   }, [tooltipPinned, closeTooltip]);
 
   // Reusable map panel renderer (used once in normal mode, twice in split view)
@@ -3607,9 +3616,12 @@ export default function OccurrenceMapRow({
                   latitude={pointFileHover.lat}
                   offset={10}
                   maxWidth="290px"
-                  closeButton={false}
+                  // Its own close button, now that clicking off a panel
+                  // leaves it alone: this one is opened by a click like the
+                  // record panel, and needs the same way out.
+                  closeButton
                   closeOnClick={false}
-                  onClose={() => setPointFileHover(null)}
+                  onClose={closeTooltip}
                   className="occurrence-popup"
                 >
                   <div className="text-[11px] text-zinc-700 dark:text-zinc-200 space-y-1">
@@ -4637,7 +4649,7 @@ export default function OccurrenceMapRow({
                   <svg className="w-3 h-3 shrink-0 text-zinc-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                     <path strokeLinecap="round" strokeLinejoin="round" d={excluded ? "M5 13l4 4L19 7" : "M6 18L18 6M6 6l12 12"} />
                   </svg>
-                  {excluded ? "Show this record" : "Hide this record"}
+                  {excluded ? "Put this record back" : "Exclude this record"}
                 </button>
                 {others.length > 0 && (
                   <button
@@ -5250,7 +5262,7 @@ export default function OccurrenceMapRow({
         />
         <span className="flex-1 min-w-0 text-zinc-700 dark:text-zinc-200">GBIF points</span>
         <span className="tabular-nums text-[10px] text-zinc-400">
-          {(mappedOccurrences.length - struckOutCount).toLocaleString()}
+          {(mappedPositionedCount - struckOutCount).toLocaleString()}
         </span>
       </label>
       {/* The colour key on a row of its own. Sharing the name's row with the
@@ -5285,7 +5297,7 @@ export default function OccurrenceMapRow({
             className="w-2.5 h-2.5 rounded-full shrink-0 border-[1.5px]"
             style={{ background: "#d1d5db", borderColor: "#9ca3af", opacity: 0.6 }}
           />
-          <span className="flex-1 min-w-0 text-zinc-500 dark:text-zinc-400 truncate">Hidden</span>
+          <span className="flex-1 min-w-0 text-zinc-500 dark:text-zinc-400 truncate">Excluded</span>
           <span className="tabular-nums text-[10px] text-zinc-400">
             {struckOutCount.toLocaleString()}
           </span>

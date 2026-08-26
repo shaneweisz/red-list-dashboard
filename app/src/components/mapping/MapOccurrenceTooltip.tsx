@@ -57,6 +57,15 @@ interface MapOccurrenceTooltipProps {
   actions?: React.ReactNode;
 }
 
+const DEFAULT_WIDTH = 220;
+const DEFAULT_FIELDS_HEIGHT = 220;
+const MIN_WIDTH = 180;
+const MAX_WIDTH = 560;
+const MIN_FIELDS_HEIGHT = 60;
+const MAX_FIELDS_HEIGHT = 640;
+
+const clamp = (value: number, low: number, high: number) => Math.max(low, Math.min(value, high));
+
 export default function MapOccurrenceTooltip(props: MapOccurrenceTooltipProps) {
   const { current: map } = useMap();
   const [pos, setPos] = useState<{ x: number; y: number } | null>(null);
@@ -84,6 +93,17 @@ export default function MapOccurrenceTooltip(props: MapOccurrenceTooltipProps) {
    * about a second, which is long enough that the flag read as unexplained.
    */
   const [markOpen, setMarkOpen] = useState(false);
+  /**
+   * The panel's size, which the reader can change by dragging its corner.
+   *
+   * A locality description can run to four lines in 220px and a record to
+   * seventeen fields, and how much of either is worth seeing at once is a
+   * judgement about the record in front of you, not something to fix here.
+   * The width is the panel's; the height is the field list's, since the
+   * controls and the actions around it are what they are.
+   */
+  const [size, setSize] = useState({ width: DEFAULT_WIDTH, fieldsHeight: DEFAULT_FIELDS_HEIGHT });
+  const resizeFrom = useRef<{ x: number; y: number; width: number; height: number; leftward: boolean } | null>(null);
   const observerRef = useRef<ResizeObserver | null>(null);
   const panelRef = useCallback((el: HTMLDivElement | null) => {
     observerRef.current?.disconnect();
@@ -119,7 +139,7 @@ export default function MapOccurrenceTooltip(props: MapOccurrenceTooltipProps) {
 
   const shownImages = (props.images ?? []).filter((i) => !brokenImages.includes(i.url));
 
-  const tooltipWidth = 220;
+  const tooltipWidth = size.width;
   // Beside the point rather than above it: the map is far wider than it is
   // tall, so horizontal room is what there is plenty of — and a tooltip above
   // the point covers the very area you're comparing it against. Flips to the
@@ -284,7 +304,7 @@ export default function MapOccurrenceTooltip(props: MapOccurrenceTooltipProps) {
       <div
         ref={panelRef}
         className="relative bg-white dark:bg-zinc-900 rounded-lg shadow-lg border border-zinc-200 dark:border-zinc-700"
-        style={{ maxWidth: 220 }}
+        style={{ maxWidth: size.width }}
       >
         {arrow}
         <div className="rounded-lg overflow-hidden">
@@ -363,7 +383,7 @@ export default function MapOccurrenceTooltip(props: MapOccurrenceTooltipProps) {
               split across three screens with no way to see two of them at
               once, and the field you wanted was never on the page you were
               looking at. */}
-          <div className="max-h-[220px] overflow-y-auto overscroll-contain">
+          <div className="overflow-y-auto overscroll-contain" style={{ maxHeight: size.fieldsHeight }}>
           <table className="w-full border-collapse">
             <tbody>
               {props.fields.map((field) => (
@@ -403,6 +423,53 @@ export default function MapOccurrenceTooltip(props: MapOccurrenceTooltipProps) {
           </div>
         )}
         </div>
+        {/* Drag the corner to resize. On the side the panel grows from, so
+            pulling away from the point always makes it bigger whichever side
+            of the point it opened on. */}
+        <span
+          onPointerDown={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            (e.target as HTMLElement).setPointerCapture(e.pointerId);
+            resizeFrom.current = {
+              x: e.clientX,
+              y: e.clientY,
+              width: size.width,
+              height: size.fieldsHeight,
+              leftward: showLeft,
+            };
+          }}
+          onPointerMove={(e) => {
+            const from = resizeFrom.current;
+            if (!from) return;
+            const dx = (e.clientX - from.x) * (from.leftward ? -1 : 1);
+            setSize({
+              width: clamp(from.width + dx, MIN_WIDTH, MAX_WIDTH),
+              fieldsHeight: clamp(from.height + (e.clientY - from.y), MIN_FIELDS_HEIGHT, MAX_FIELDS_HEIGHT),
+            });
+          }}
+          onPointerUp={() => { resizeFrom.current = null; }}
+          onPointerCancel={() => { resizeFrom.current = null; }}
+          onDoubleClick={() => setSize({ width: DEFAULT_WIDTH, fieldsHeight: DEFAULT_FIELDS_HEIGHT })}
+          title="Drag to resize — double-click to put it back"
+          className={`absolute bottom-0 h-3 w-3 text-zinc-400 dark:text-zinc-500 hover:text-zinc-600 dark:hover:text-zinc-300 ${
+            showLeft ? "left-0 cursor-sw-resize" : "right-0 cursor-se-resize"
+          }`}
+        >
+          <svg viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth={1.5} className="w-3 h-3">
+            {showLeft ? (
+              <>
+                <path d="M2 10h8" strokeLinecap="round" />
+                <path d="M2 10V6" strokeLinecap="round" />
+              </>
+            ) : (
+              <>
+                <path d="M2 10h8" strokeLinecap="round" />
+                <path d="M10 10V6" strokeLinecap="round" />
+              </>
+            )}
+          </svg>
+        </span>
       </div>
     </div>
     </>,
