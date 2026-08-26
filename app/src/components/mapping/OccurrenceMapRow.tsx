@@ -9,6 +9,7 @@ import type maplibregl from "maplibre-gl";
 import { taxonGroupCountsPreservedSpecimens } from "@/lib/gbif";
 import { InatObservation, getThumbUrl, InatPhotoWithPreview } from "@/components/InatPhotoCard";
 import { QualityFlag, QUALITY_FLAG_LABELS, QUALITY_FLAG_DESCRIPTIONS, QUALITY_FLAG_SOURCES } from "@/lib/mapping/coordinate-cleaning";
+import { fetchInstitutionName, knownInstitutionName } from "@/lib/mapping/grscicoll";
 import { CATEGORY_COLORS, normalizeCategory } from "@/config/taxa";
 import { FaInfoCircle } from "react-icons/fa";
 import booleanPointInPolygon from "@turf/boolean-point-in-polygon";
@@ -3054,6 +3055,26 @@ export default function OccurrenceMapRow({
    * and using the map are the same activity, so the panel stays until it's
    * dismissed, or until another record replaces it.
    */
+  /**
+   * Institution names from GrSciColl, for the records whose panel has been
+   * opened. Looked up one at a time, when a panel asks for one.
+   */
+  const [institutionNames, setInstitutionNames] = useState<Record<string, string>>({});
+  const shownRecord = hoveredGroup[Math.min(groupIndex, hoveredGroup.length - 1)] ?? hoveredFeature;
+  const shownInstitutionKey = shownRecord?.properties.institutionKey;
+  useEffect(() => {
+    if (!shownInstitutionKey || knownInstitutionName(shownInstitutionKey) !== undefined) return;
+    let live = true;
+    fetchInstitutionName(shownInstitutionKey).then((name) => {
+      // Stored by key rather than by record: one herbarium holds many of a
+      // species' sheets, and the panel for each of them wants the same name.
+      if (live && name) setInstitutionNames((prev) => ({ ...prev, [shownInstitutionKey]: name }));
+    });
+    return () => {
+      live = false;
+    };
+  }, [shownInstitutionKey]);
+
   useEffect(() => {
     if (!tooltipPinned) return;
     const onKey = (e: KeyboardEvent) => {
@@ -4669,10 +4690,17 @@ export default function OccurrenceMapRow({
       }
       if (p.basisOfRecord === "PRESERVED_SPECIMEN") {
         // Two fields, not one joined pair. A record can carry a collection
-        // without an institution code — GBIF resolves the holder from its
-        // GrSciColl keys instead — and joining them labelled the collection
-        // as the institution: Naturalis's sheets read "Institution: Botany".
-        add("Institution", p.institutionCode);
+        // without an institution code — GBIF names the holder through its
+        // GrSciColl key instead — and joining them labelled the collection as
+        // the institution: Naturalis's sheets read "Institution: Botany".
+        //
+        // The registry's name for the holder beats the code where we have it:
+        // "Naturalis Biodiversity Center" says who has the sheet, and "K"
+        // only says so to someone who already knows.
+        const holder = p.institutionKey
+          ? institutionNames[p.institutionKey] ?? knownInstitutionName(p.institutionKey) ?? undefined
+          : undefined;
+        add("Institution", holder ?? p.institutionCode);
         add("Collection", p.collectionCode);
       }
       add("Catalogue no.", p.catalogNumber);
@@ -4722,7 +4750,7 @@ export default function OccurrenceMapRow({
       }
       return { fields: rows, notes };
     },
-    [pointFileByGbifId]
+    [pointFileByGbifId, institutionNames]
   );
 
   /**

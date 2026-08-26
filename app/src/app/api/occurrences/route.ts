@@ -27,6 +27,9 @@ type GbifRecord = {
   year?: number;
   month?: number;
   institutionCode?: string;
+  /** GrSciColl's id for the holding institution, which often names a holder
+   *  the record itself gives no code for. */
+  institutionKey?: string;
   // Extra Darwin Core fields — only surfaced in the list (table) view, which
   // shows one row per record rather than one dot per record.
   locality?: string;
@@ -394,6 +397,7 @@ export async function GET(request: NextRequest) {
         year: r.year ?? null,
         month: r.month ?? null,
         institutionCode: r.institutionCode,
+        institutionKey: r.institutionKey,
         qualityFlags: qualityFlagsByKey.get(r.key) ?? [],
         // List-view-only fields. `locality` is often empty on aggregator records
         // (iNaturalist, for one, only ships verbatimLocality), so both are sent

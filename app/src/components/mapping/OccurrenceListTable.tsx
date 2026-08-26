@@ -29,6 +29,8 @@ export interface OccurrenceFeature {
     year?: number | null;
     month?: number | null;
     institutionCode?: string;
+    /** GrSciColl's id for the holding institution — see grscicoll.ts. */
+    institutionKey?: string;
     qualityFlags?: string[];
     locality?: string;
     verbatimLocality?: string;
