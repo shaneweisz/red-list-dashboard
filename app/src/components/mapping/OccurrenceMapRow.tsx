@@ -2148,8 +2148,9 @@ export default function OccurrenceMapRow({
       let strokeColor: string;
       let fillColor: string;
       if (struckOut) {
-        // Grey and faint, whatever the colour mode would have made it: the
-        // point is that it's still there and no longer counted.
+        // Hollow and grey, whatever the colour mode would have made it: the
+        // point is still there and no longer counted, and an empty ring reads
+        // as an absence in a way a paler filled dot doesn't.
         strokeColor = "#6b7280";
         fillColor = "#d1d5db";
       } else if (feature.properties.coordinateStatus === "issue") {
@@ -2185,8 +2186,9 @@ export default function OccurrenceMapRow({
           _fillColor: fillColor,
           _strokeColor: strokeColor,
           _radius: struckOut ? 4.5 : radius,
-          _strokeWidth: struckOut ? 2 : strokeWidth,
-          _opacity: struckOut ? 0.8 : 1,
+          _strokeWidth: struckOut ? 1.75 : strokeWidth,
+          _fillOpacity: struckOut ? 0 : 1,
+          _strokeOpacity: struckOut ? 0.85 : 1,
         },
         geometry: feature.geometry,
       };
@@ -3000,10 +3002,10 @@ export default function OccurrenceMapRow({
       paint: {
         "circle-radius": ["get", "_radius"] as unknown as number,
         "circle-color": ["get", "_fillColor"] as unknown as string,
-        "circle-opacity": ["get", "_opacity"] as unknown as number,
+        "circle-opacity": ["get", "_fillOpacity"] as unknown as number,
         "circle-stroke-color": ["get", "_strokeColor"] as unknown as string,
         "circle-stroke-width": ["get", "_strokeWidth"] as unknown as number,
-        "circle-stroke-opacity": ["get", "_opacity"] as unknown as number,
+        "circle-stroke-opacity": ["get", "_strokeOpacity"] as unknown as number,
       },
     };
 
@@ -3292,6 +3294,38 @@ export default function OccurrenceMapRow({
                   />
                 </Source>
               )}
+              {/* A small flag beside any record the cleaning tests or the
+                  native range have something to say about. What you want from
+                  a flag is to see which records are being questioned across a
+                  whole distribution at once, without opening fifty panels; the
+                  panel's own flag then tells you what was said about the one
+                  you opened. Excluded records don't get one: they're already
+                  drawn as empty rings, and a flag on a record you've set aside
+                  is telling you something you acted on. */}
+              {panelOccurrences.map((o) => {
+                const marks = exclusions[o.properties.gbifID] ? null : recordMarks(o);
+                if (!marks) return null;
+                const mine = georeferences[o.properties.gbifID];
+                const position = mine
+                  ? [mine.decimalLongitude, mine.decimalLatitude]
+                  : o.geometry?.coordinates;
+                if (!position) return null;
+                return (
+                  <MapLibreMarker
+                    key={`mark-${o.properties.gbifID}`}
+                    longitude={position[0]}
+                    latitude={position[1]}
+                    anchor="bottom-left"
+                    offset={[3, -3]}
+                  >
+                    <span title={marks} className="block text-amber-600 drop-shadow-sm cursor-help">
+                      <svg className="w-2.5 h-2.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={3}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M5 22V3m0 0h12l-2 4 2 4H5" />
+                      </svg>
+                    </span>
+                  </MapLibreMarker>
+                );
+              })}
               {/* The assessor's own georeferences — drawn above the GBIF points
                   in a colour used nowhere else, with the uncertainty radius to
                   scale. They are never merged into the GBIF layer or into any
@@ -5295,7 +5329,7 @@ export default function OccurrenceMapRow({
           />
           <span
             className="w-2.5 h-2.5 rounded-full shrink-0 border-[1.5px]"
-            style={{ background: "#d1d5db", borderColor: "#9ca3af", opacity: 0.6 }}
+            style={{ background: "transparent", borderColor: "#6b7280", opacity: 0.85 }}
           />
           <span className="flex-1 min-w-0 text-zinc-500 dark:text-zinc-400 truncate">Excluded</span>
           <span className="tabular-nums text-[10px] text-zinc-400">

@@ -66,6 +66,23 @@ const MAX_FIELDS_HEIGHT = 640;
 
 const clamp = (value: number, low: number, high: number) => Math.max(low, Math.min(value, high));
 
+/**
+ * The eight places the panel can be taken hold of, as a window has.
+ *
+ * `dirX`/`dirY` say which way that edge grows the panel, so each handle
+ * follows the pointer rather than mirroring it.
+ */
+const RESIZE_HANDLES = [
+  { key: "n", dirX: 0, dirY: -1, className: "top-0 left-2 right-2 h-1.5 cursor-ns-resize" },
+  { key: "s", dirX: 0, dirY: 1, className: "bottom-0 left-2 right-2 h-1.5 cursor-ns-resize" },
+  { key: "w", dirX: -1, dirY: 0, className: "left-0 top-2 bottom-2 w-1.5 cursor-ew-resize" },
+  { key: "e", dirX: 1, dirY: 0, className: "right-0 top-2 bottom-2 w-1.5 cursor-ew-resize" },
+  { key: "nw", dirX: -1, dirY: -1, className: "top-0 left-0 h-2.5 w-2.5 cursor-nwse-resize" },
+  { key: "ne", dirX: 1, dirY: -1, className: "top-0 right-0 h-2.5 w-2.5 cursor-nesw-resize" },
+  { key: "sw", dirX: -1, dirY: 1, className: "bottom-0 left-0 h-3 w-3 cursor-nesw-resize" },
+  { key: "se", dirX: 1, dirY: 1, className: "bottom-0 right-0 h-3 w-3 cursor-nwse-resize" },
+];
+
 export default function MapOccurrenceTooltip(props: MapOccurrenceTooltipProps) {
   const { current: map } = useMap();
   const [pos, setPos] = useState<{ x: number; y: number } | null>(null);
@@ -103,7 +120,14 @@ export default function MapOccurrenceTooltip(props: MapOccurrenceTooltipProps) {
    * controls and the actions around it are what they are.
    */
   const [size, setSize] = useState({ width: DEFAULT_WIDTH, fieldsHeight: DEFAULT_FIELDS_HEIGHT });
-  const resizeFrom = useRef<{ x: number; y: number; width: number; height: number; leftward: boolean } | null>(null);
+  const resizeFrom = useRef<{
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+    dirX: number;
+    dirY: number;
+  } | null>(null);
   const observerRef = useRef<ResizeObserver | null>(null);
   const panelRef = useCallback((el: HTMLDivElement | null) => {
     observerRef.current?.disconnect();
@@ -423,51 +447,57 @@ export default function MapOccurrenceTooltip(props: MapOccurrenceTooltipProps) {
           </div>
         )}
         </div>
-        {/* Drag the corner to resize. On the side the panel grows from, so
-            pulling away from the point always makes it bigger whichever side
-            of the point it opened on. */}
+        {/* Every edge and corner resizes, as a window does. Each pulls the
+            side it's on: dragging the right edge right widens, dragging the
+            top edge up heightens. The panel is centred on its point
+            vertically, so a vertical drag grows it by twice the distance —
+            half of which goes the other way — and the edge stays under the
+            pointer. Only the free bottom corner is drawn; the rest are
+            invisible strips, the way a window's edges are. */}
+        {RESIZE_HANDLES.map((handle) => (
+          <span
+            key={handle.key}
+            onPointerDown={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+              resizeFrom.current = {
+                x: e.clientX,
+                y: e.clientY,
+                width: size.width,
+                height: size.fieldsHeight,
+                dirX: handle.dirX,
+                dirY: handle.dirY,
+              };
+            }}
+            onPointerMove={(e) => {
+              const from = resizeFrom.current;
+              if (!from) return;
+              setSize({
+                width: clamp(from.width + from.dirX * (e.clientX - from.x), MIN_WIDTH, MAX_WIDTH),
+                fieldsHeight: clamp(
+                  from.height + from.dirY * (e.clientY - from.y) * 2,
+                  MIN_FIELDS_HEIGHT,
+                  MAX_FIELDS_HEIGHT
+                ),
+              });
+            }}
+            onPointerUp={() => { resizeFrom.current = null; }}
+            onPointerCancel={() => { resizeFrom.current = null; }}
+            onDoubleClick={() => setSize({ width: DEFAULT_WIDTH, fieldsHeight: DEFAULT_FIELDS_HEIGHT })}
+            title="Drag to resize — double-click to put it back"
+            data-occurrence-resize={handle.key}
+            className={`absolute ${handle.className}`}
+          />
+        ))}
         <span
-          onPointerDown={(e) => {
-            e.preventDefault();
-            e.stopPropagation();
-            (e.target as HTMLElement).setPointerCapture(e.pointerId);
-            resizeFrom.current = {
-              x: e.clientX,
-              y: e.clientY,
-              width: size.width,
-              height: size.fieldsHeight,
-              leftward: showLeft,
-            };
-          }}
-          onPointerMove={(e) => {
-            const from = resizeFrom.current;
-            if (!from) return;
-            const dx = (e.clientX - from.x) * (from.leftward ? -1 : 1);
-            setSize({
-              width: clamp(from.width + dx, MIN_WIDTH, MAX_WIDTH),
-              fieldsHeight: clamp(from.height + (e.clientY - from.y), MIN_FIELDS_HEIGHT, MAX_FIELDS_HEIGHT),
-            });
-          }}
-          onPointerUp={() => { resizeFrom.current = null; }}
-          onPointerCancel={() => { resizeFrom.current = null; }}
-          onDoubleClick={() => setSize({ width: DEFAULT_WIDTH, fieldsHeight: DEFAULT_FIELDS_HEIGHT })}
-          title="Drag to resize — double-click to put it back"
-          className={`absolute bottom-0 h-3 w-3 text-zinc-400 dark:text-zinc-500 hover:text-zinc-600 dark:hover:text-zinc-300 ${
-            showLeft ? "left-0 cursor-sw-resize" : "right-0 cursor-se-resize"
+          className={`pointer-events-none absolute bottom-0 h-3 w-3 text-zinc-400 dark:text-zinc-500 ${
+            showLeft ? "left-0" : "right-0"
           }`}
         >
           <svg viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth={1.5} className="w-3 h-3">
-            {showLeft ? (
-              <>
-                <path d="M2 10h8" strokeLinecap="round" />
-                <path d="M2 10V6" strokeLinecap="round" />
-              </>
-            ) : (
-              <>
-                <path d="M2 10h8" strokeLinecap="round" />
-                <path d="M10 10V6" strokeLinecap="round" />
-              </>
-            )}
+            <path d="M2 10h8" strokeLinecap="round" />
+            <path d={showLeft ? "M2 10V6" : "M10 10V6"} strokeLinecap="round" />
           </svg>
         </span>
       </div>
