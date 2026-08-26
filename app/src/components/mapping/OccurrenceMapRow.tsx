@@ -61,6 +61,7 @@ import {
   type IucnPoint,
   type MatchedRecord,
   type MatchVia,
+  type PointFileComparison,
   type PointFileImport,
 } from "@/lib/mapping/iucn-point-file";
 import { useAssessorEdits } from "@/hooks/mapping/useAssessorEdits";
@@ -1235,6 +1236,7 @@ export default function OccurrenceMapRow({
     setTooltipHeld(false);
     setHoveredFeature(null);
     setHoveredPanel(null);
+    setPointFileHover(null);
   }, [cancelHoverClear, unpinTooltip]);
 
   const clearHoverSoon = useCallback(() => {
@@ -2276,6 +2278,39 @@ export default function OccurrenceMapRow({
       return;
     }
     const features = e.features;
+    // A point from the imported file. Where it matched a record on the map,
+    // that record's panel opens — it carries the import folded into it, and
+    // says where the two disagree. Where it matched nothing, the row gets its
+    // own small popup: it has no line in the table to send you to.
+    const filePoint = features?.find((f) => String(f.layer?.id ?? "").startsWith("pointfile-circles-"));
+    if (filePoint) {
+      const row = Number(filePoint.properties?.row);
+      const comparison = pointFileComparisonRef.current?.rows.find((r) => r.point.row === row);
+      const merged = comparison?.matched
+        ? occurrencesByGbifIdRef.current.get(comparison.matched.gbifID)
+        : undefined;
+      const [lng, lat] = (filePoint.geometry as GeoJSON.Point).coordinates as [number, number];
+      if (merged) {
+        setPointFileHover(null);
+        cancelHoverClear();
+        setHoverSource("map");
+        // The imported point is where the panel hangs when the record has no
+        // position of its own, which is the usual case for a matched row: a
+        // coordinate GBIF never published is why the assessor georeferenced it
+        // into the file in the first place.
+        setHoverAnchor({ gbifID: merged.properties.gbifID, lng, lat });
+        setGroupIndex(0);
+        setHoveredFeature(merged);
+        setHoveredPanel(panelId);
+        pinTooltip();
+        return;
+      }
+      setHoveredFeature(null);
+      setHoveredPanel(null);
+      setPointFileHover({ row, lat, lng, panelId });
+      pinTooltip();
+      return;
+    }
     if (features && features.length > 0) {
       const gbifID = Number(features[0].properties?.gbifID);
       if (gbifID) {
@@ -2494,10 +2529,13 @@ export default function OccurrenceMapRow({
    * GBIF's published coordinate, and against the assessor's own georeference
    * for the same record.
    */
+  const pointFileComparisonRef = useRef<PointFileComparison | null>(null);
   const pointFileComparison = useMemo(
     () => (pointFile ? comparePointFile(pointFile.points, matchPointToRecord, georeferences) : null),
     [pointFile, matchPointToRecord, georeferences]
   );
+  // Read by the click handler, which is declared above this.
+  pointFileComparisonRef.current = pointFileComparison;
 
   /**
    * The point file as a map layer.
@@ -2591,6 +2629,9 @@ export default function OccurrenceMapRow({
     // gets its own small popup rather than being forced through the occurrence
     // tooltip. Checked first: where the two layers overlap, the file's point is
     // the one drawn on top and the one the cursor is visibly over.
+    //
+    // Opened by a click, like the record panel — hovering only tracks which
+    // record the pointer is over, for the table's sake.
     const filePoint = features?.find((f) => String(f.layer?.id ?? "").startsWith("pointfile-circles-"));
     if (filePoint) {
       const row = Number(filePoint.properties?.row);
@@ -2604,36 +2645,24 @@ export default function OccurrenceMapRow({
         : undefined;
       const [lng, lat] = (filePoint.geometry as GeoJSON.Point).coordinates as [number, number];
       if (merged) {
-        setPointFileHover(null);
         cancelHoverClear();
         setHoverSource("map");
         // The imported point is where the panel hangs when the record has no
         // position of its own — which is the usual case for a matched row,
         // since a coordinate GBIF never published is why the assessor
         // georeferenced it into the file. Anchored to the record's own
-        // coordinates the panel had nowhere to go, so hovering these points
-        // showed nothing at all.
+        // coordinates the panel had nowhere to go, so clicking these points
+        // would show nothing at all.
         setHoverAnchor({ gbifID: merged.properties.gbifID, lng, lat });
-        if (merged.properties.gbifID !== hoveredFeature?.properties.gbifID) {
-          setGroupIndex(0);
-          unpinTooltip();
-        }
+        if (merged.properties.gbifID !== hoveredFeature?.properties.gbifID) setGroupIndex(0);
         setHoveredFeature(merged);
         setHoveredPanel(panelId);
         return;
       }
-      // Nothing in the file matched a GBIF record here, so the row gets its
-      // own popup — and the record panel has to go. It draws over the map from
-      // a portal, so a panel left up from the record you crossed on the way
-      // covered the popup for the point you're actually on.
-      cancelHoverClear();
-      unpinTooltip();
       setHoveredFeature(null);
       setHoveredPanel(null);
-      setPointFileHover({ row, lat, lng, panelId });
       return;
     }
-    setPointFileHover(null);
     if (features && features.length > 0) {
       const props = features[0].properties;
       if (props) {
@@ -2644,10 +2673,7 @@ export default function OccurrenceMapRow({
         if (known) {
           cancelHoverClear();
           setHoverSource("map");
-              if (known.properties.gbifID !== hoveredFeature?.properties.gbifID) {
-            setGroupIndex(0);
-            unpinTooltip();
-          }
+              if (known.properties.gbifID !== hoveredFeature?.properties.gbifID) setGroupIndex(0);
           setHoveredFeature(known);
           setHoveredPanel(panelId);
           return;
@@ -2680,7 +2706,7 @@ export default function OccurrenceMapRow({
     } else if (!tooltipHeld) {
       clearHoverSoon();
     }
-  }, [isTouchDevice, occurrencesByGbifId, tooltipHeld, hoveredFeature, clearHoverSoon, cancelHoverClear, unpinTooltip, pointFileComparison]);
+  }, [isTouchDevice, occurrencesByGbifId, tooltipHeld, hoveredFeature, clearHoverSoon, cancelHoverClear, pointFileComparison]);
 
   const handleMapMouseLeave = useCallback(() => {
     setHoveringPoint(false);
@@ -3338,7 +3364,7 @@ export default function OccurrenceMapRow({
                   coordinates win over GBIF's where you've supplied both (you
                   only ever georeference a record GBIF got wrong or left
                   blank). */}
-              {hoveredFeature && hoveredPosition && !hoveredObs && hoverSource === "map" && hoveredPanel === panelId && (() => {
+              {tooltipPinned && hoveredFeature && hoveredPosition && !hoveredObs && hoverSource === "map" && hoveredPanel === panelId && (() => {
                 const [hLon, hLat] = hoveredPosition;
                 const shown = hoveredGroup[Math.min(groupIndex, hoveredGroup.length - 1)] ?? hoveredFeature;
                 const hInat = inatPhotosByGbifId.get(shown.properties.gbifID);
@@ -3391,7 +3417,6 @@ export default function OccurrenceMapRow({
                     // arrow had been — so paging to the second record put a
                     // close button under a pointer that was mid-page.
                     onClose={closeTooltip}
-                    pinned={tooltipPinned}
                   />
                 );
               })()}

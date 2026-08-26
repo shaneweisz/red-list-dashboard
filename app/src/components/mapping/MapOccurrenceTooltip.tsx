@@ -47,8 +47,6 @@ interface MapOccurrenceTooltipProps {
   page?: { index: number; total: number; onPrev: () => void; onNext: () => void };
   /** Dismisses a pinned tooltip. */
   onClose?: () => void;
-  /** True once the reader has paged through: the tooltip is now click-dismissed. */
-  pinned?: boolean;
   /** Keeps the tooltip up while the pointer is on it, so its controls are usable. */
   onPointerEnter?: () => void;
   onPointerLeave?: () => void;
@@ -304,11 +302,6 @@ export default function MapOccurrenceTooltip(props: MapOccurrenceTooltipProps) {
                   title={`Record ${props.page.index + 1} of ${props.page.total} at this point`}
                 >
                   {props.page.index + 1} of {props.page.total} records here
-                </span>
-              )}
-              {props.pinned && (
-                <span className="text-[9px] text-zinc-400 shrink-0" title="Click anywhere outside to close">
-                  pinned
                 </span>
               )}
               <div className="ml-auto flex items-center shrink-0">
