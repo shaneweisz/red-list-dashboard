@@ -1,6 +1,8 @@
 import { describe, it, expect } from "vitest";
 import {
   biggestDisagreements,
+  buildIucnPointFileCsv,
+  IUCN_POINT_FILE_COLUMNS,
   comparePointFile,
   decodeUploadedText,
   detectDelimiter,
@@ -356,5 +358,62 @@ describe("biggestDisagreements", () => {
   it("leaves out points the assessor hasn't georeferenced", () => {
     const c = comparePointFile([parseIucnPointFile(file(row()), "f.csv").points[0]], () => null, {});
     expect(biggestDisagreements(c)).toEqual([]);
+  });
+});
+
+describe("buildIucnPointFileCsv", () => {
+  const record = {
+    gbifID: 2013787280,
+    species: "Dioscorea biplicata",
+    latitude: 4.366667,
+    longitude: -75.750833,
+    year: 1995,
+    basisOfRecord: "PRESERVED_SPECIMEN",
+    catalogNumber: "409847",
+    recordedBy: "C. Vélez",
+  };
+
+  it("writes the IUCN columns, in the order the importer reads them", () => {
+    const csv = buildIucnPointFileCsv([record]);
+    const [header, row] = csv.trim().split("\n");
+    expect(header.split(",")).toEqual([...IUCN_POINT_FILE_COLUMNS]);
+    const cells = Object.fromEntries(
+      IUCN_POINT_FILE_COLUMNS.map((key, i) => [key, splitDelimited(row, ",")[i]])
+    );
+    expect(cells.sci_name).toBe("Dioscorea biplicata");
+    expect(cells.dec_lat).toBe("4.366667");
+    expect(cells.dec_long).toBe("-75.750833");
+    expect(cells.latitude).toBe(cells.dec_lat);
+    expect(cells.spatialref).toBe("WGS84");
+    expect(cells.event_year).toBe("1995");
+    expect(cells.source).toBe("www.gbif.org/occurrence/2013787280");
+    expect(cells.catalog_no).toBe("409847");
+  });
+
+  it("spells the basis of record the way the file does, not the way GBIF does", () => {
+    const csv = buildIucnPointFileCsv([record]);
+    expect(csv).toContain("PreservedSpecimen");
+    expect(csv).not.toContain("PRESERVED_SPECIMEN");
+  });
+
+  it("reads back as the points it was given", () => {
+    const csv = buildIucnPointFileCsv([record, { ...record, gbifID: 9, latitude: -1, longitude: 2 }]);
+    const parsed = parseIucnPointFile(csv, "export.csv");
+    expect(parsed.errors).toEqual([]);
+    expect(parsed.points.map((p) => [p.gbifID, p.latitude, p.longitude])).toEqual([
+      [2013787280, 4.366667, -75.750833],
+      [9, -1, 2],
+    ]);
+  });
+
+  it("quotes a field that carries a comma", () => {
+    const csv = buildIucnPointFileCsv([{ ...record, recordedBy: "Zak, V.; Jaramillo, J." }]);
+    expect(csv).toContain('"Zak, V.; Jaramillo, J."');
+    expect(parseIucnPointFile(csv, "e.csv").points[0].fields.recordedby).toBe("Zak, V.; Jaramillo, J.");
+  });
+
+  it("says which points a person georeferenced, since the file otherwise can't tell", () => {
+    const csv = buildIucnPointFileCsv([{ ...record, georeferenced: true }]);
+    expect(parseIucnPointFile(csv, "e.csv").points[0].fields.dist_comm).toMatch(/Georeferenced/);
   });
 });

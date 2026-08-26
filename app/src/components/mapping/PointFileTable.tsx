@@ -23,6 +23,8 @@ interface PointFileTableProps {
   fileName: string;
   /** Extra headers the file carried that aren't in the IUCN specification. */
   extraColumns?: string[];
+  /** Scales the table, so more of it fits without shrinking the controls. */
+  zoom?: number;
   fillHeight?: boolean;
 }
 
@@ -70,6 +72,7 @@ export default function PointFileTable({
   comparison,
   fileName,
   extraColumns = [],
+  zoom = 1,
   fillHeight,
 }: PointFileTableProps) {
   const [search, setSearch] = useState("");
@@ -100,10 +103,13 @@ export default function PointFileTable({
       }`}
     >
       <div className="flex-1 min-h-0 overflow-auto">
-        <table className="w-full border-collapse text-[11px]">
+        <table
+          className="w-full border-collapse text-[11px]"
+          style={zoom === 1 ? undefined : { zoom }}
+        >
           <thead className="sticky top-0 z-10 bg-zinc-50 dark:bg-zinc-800">
             <tr className="text-left text-[11px] font-medium text-zinc-500 dark:text-zinc-400">
-              <th className="px-2 py-1.5 whitespace-nowrap border-b border-zinc-200 dark:border-zinc-700" title="Row in the file as a spreadsheet counts them, header included">
+              <th className="px-2 py-1.5 whitespace-nowrap border-b border-zinc-200 dark:border-zinc-700" title="Which point in the file this is, counting from the first one — one less than the spreadsheet row, which counts the header">
                 Row
               </th>
               {LEAD_COLUMNS.map((key) => (
@@ -147,7 +153,7 @@ export default function PointFileTable({
                 key={r.point.row}
                 className="border-b border-zinc-100 dark:border-zinc-800 hover:bg-zinc-50 dark:hover:bg-zinc-800/60"
               >
-                <td className="px-2 py-1 tabular-nums text-zinc-400">{r.point.row}</td>
+                <td className="px-2 py-1 tabular-nums text-zinc-400">{r.point.row - 1}</td>
                 {LEAD_COLUMNS.map((key) => (
                   <td key={key} className="px-2 py-1 max-w-[16rem]">
                     <span className="block truncate" title={r.point.fields[key] || undefined}>
@@ -209,7 +215,7 @@ export default function PointFileTable({
           from {fileName}
         </span>
         <span className="tabular-nums text-zinc-400">
-          · {comparison.matched.toLocaleString()} tied to a loaded record
+          · {comparison.matched.toLocaleString()} tied to a loaded GBIF record
         </span>
         <input
           value={search}

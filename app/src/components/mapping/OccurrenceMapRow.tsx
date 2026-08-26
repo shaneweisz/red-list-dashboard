@@ -61,6 +61,7 @@ import {
   type IucnPoint,
   type MatchedRecord,
   type MatchVia,
+  buildIucnPointFileCsv,
   type PointFileComparison,
   type PointFileImport,
 } from "@/lib/mapping/iucn-point-file";
@@ -853,7 +854,7 @@ export default function OccurrenceMapRow({
    * them in the same table would have meant a row that means something
    * different in every column.
    */
-  const [listTab, setListTab] = useState<"gbif" | "file">("gbif");
+  const [listTab, setListTab] = useState<"gbif" | "excluded" | "file">("gbif");
   /**
    * The record whose menu is open, from clicking its point.
    *
@@ -996,8 +997,18 @@ export default function OccurrenceMapRow({
   // map hover, but must not yank itself around under the pointer for its own.
 
   // Which way the two panels sit. Dragging the divider resizes them; this flips
-  // the axis, for when the list reads better beside the map than beneath it.
-  const [panelLayout, setPanelLayout] = useState<"rows" | "columns">("rows");
+  // the axis. Side by side by default: a record has sixteen columns and a
+  // screen is wider than it is tall, so beneath the map the table showed four
+  // of them.
+  const [panelLayout, setPanelLayout] = useState<"rows" | "columns">("columns");
+  /**
+   * How much of the table's own size it's drawn at.
+   *
+   * Two thirds by default. The columns are what the table is for, and at full
+   * size beside the map it showed a third of them; the type is small but it is
+   * a reference table, read by scanning rather than by reading.
+   */
+  const [listZoom, setListZoom] = useState(0.67);
 
   // Fullscreen — map above, record list below, and nothing else on the page —
   // is a route of its own (/mapping/<key>), so it can be linked, shared,
@@ -3699,7 +3710,10 @@ export default function OccurrenceMapRow({
                     <div className="flex items-center gap-1.5 font-medium">
                       <span className="w-2 h-2 rounded-full shrink-0" style={{ background: POINT_FILE_COLOR }} />
                       Imported CSV record
-                      <span className="font-normal text-zinc-400">row {hoveredPointFileRow.point.row}</span>
+                      {/* Counting the points, not the spreadsheet's lines:
+                          the table beneath the map numbers them the same way,
+                          and a header is not a point. */}
+                      <span className="font-normal text-zinc-400">point {hoveredPointFileRow.point.row - 1}</span>
                     </div>
                     {pointSummary(hoveredPointFileRow.point).slice(0, 5).map((s) => (
                       <div key={s.label} className="flex gap-1.5">
@@ -4680,6 +4694,114 @@ export default function OccurrenceMapRow({
     },
     [pointFileByGbifId]
   );
+
+  /**
+   * The record lists under the map, and what each holds.
+   *
+   * Counted records, the ones set aside, and — when there is one — the
+   * imported file. Three lists because they are three different judgements
+   * about a record, not three filters on one table.
+   */
+  const countedOccurrences = useMemo(
+    () => occurrences.filter((o) => !exclusions[o.properties.gbifID]),
+    [occurrences, exclusions]
+  );
+  const excludedOccurrences = useMemo(
+    () => occurrences.filter((o) => exclusions[o.properties.gbifID]),
+    [occurrences, exclusions]
+  );
+  const listTabs = useMemo(() => {
+    const tabs: { key: "gbif" | "excluded" | "file"; label: string; count: number; title: string; dot?: string }[] = [
+      {
+        key: "gbif",
+        label: "GBIF records",
+        count: countedOccurrences.length,
+        title: "The records being counted",
+      },
+    ];
+    if (excludedOccurrences.length > 0) {
+      tabs.push({
+        key: "excluded",
+        label: "Excluded",
+        count: excludedOccurrences.length,
+        title: "Records you've set aside, with the reason you gave — and a way to put them back",
+      });
+    }
+    if (pointFile && pointFileComparison) {
+      tabs.push({
+        key: "file",
+        label: pointFile.fileName,
+        count: pointFile.points.length,
+        title: `The rows of ${pointFile.fileName}, as imported`,
+        dot: POINT_FILE_COLOR,
+      });
+    }
+    return tabs;
+  }, [countedOccurrences, excludedOccurrences, pointFile, pointFileComparison]);
+
+  // A tab that empties — the last excluded record put back, the file removed —
+  // takes its list with it, so the reader is left on the one that's still there.
+  useEffect(() => {
+    if (!listTabs.some((t) => t.key === listTab)) setListTab("gbif");
+  }, [listTabs, listTab]);
+
+  /** Clicking a row shows that record on the map, if it has anywhere to be. */
+  const showRecordOnMap = useCallback(
+    (feature: OccurrenceFeature) => {
+      cancelHoverClear();
+      setGroupIndex(0);
+      setHoverSource("map");
+      setHoveredFeature(feature);
+      setHoveredPanel("main");
+      pinTooltip();
+    },
+    [cancelHoverClear, pinTooltip]
+  );
+
+  /**
+   * The counted records with a position, as IUCN point rows.
+   *
+   * The assessor's own georeference wins over GBIF's coordinate, which is the
+   * point of having made it — and the row says so, since the file otherwise
+   * gives no sign of which points a person placed.
+   */
+  const exportablePoints = useMemo(
+    () =>
+      includedOccurrences.flatMap((o) => {
+        const p = o.properties;
+        const mine = georeferences[p.gbifID];
+        const position = mine
+          ? ([mine.decimalLongitude, mine.decimalLatitude] as [number, number])
+          : o.geometry?.coordinates;
+        if (!position) return [];
+        return [{
+          gbifID: p.gbifID,
+          species: p.species,
+          latitude: position[1],
+          longitude: position[0],
+          year: p.year,
+          eventDate: p.eventDate,
+          basisOfRecord: p.basisOfRecord,
+          catalogNumber: p.catalogNumber,
+          recordedBy: p.recordedBy,
+          recordNumber: (p as Record<string, unknown>).recordNumber as string | undefined,
+          georeferenced: !!mine,
+        }];
+      }),
+    [includedOccurrences, georeferences]
+  );
+
+  const saveAsPointFile = useCallback(() => {
+    if (exportablePoints.length === 0) return;
+    const csv = buildIucnPointFileCsv(exportablePoints, { yearCompiled: new Date().getFullYear() });
+    const name = (scientificName || "records").replace(/[^A-Za-z0-9]+/g, "_").toLowerCase();
+    const url = URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8" }));
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `${name}_IUCN_point_file.csv`;
+    link.click();
+    URL.revokeObjectURL(url);
+  }, [exportablePoints, scientificName]);
 
   const renderRecordActions = (gbifID: number) => {
     const record = occurrencesByGbifId.get(gbifID);
@@ -6461,44 +6583,77 @@ export default function OccurrenceMapRow({
             )}
             {fullscreen && (
               <div className="order-3 sm:order-none flex flex-col gap-2 min-w-0 flex-1 min-h-0">
-                {pointFile && pointFileComparison && (
-                  <div className="flex items-center gap-1 shrink-0 text-[11px]">
-                    {([
-                      ["gbif", "GBIF records", occurrences.length],
-                      ["file", pointFile.fileName, pointFile.points.length],
-                    ] as const).map(([key, label, count]) => (
+                <div className="flex items-center gap-1 shrink-0 text-[11px] border-b border-zinc-200 dark:border-zinc-700">
+                  {listTabs.map((tab) => (
+                    <button
+                      key={tab.key}
+                      onClick={() => setListTab(tab.key)}
+                      title={tab.title}
+                      className={`flex items-center gap-1.5 px-2 py-1 -mb-px border-b-2 max-w-[16rem] ${
+                        listTab === tab.key
+                          ? "border-blue-500 text-zinc-700 dark:text-zinc-200"
+                          : "border-transparent text-zinc-500 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200"
+                      }`}
+                    >
+                      {tab.dot && (
+                        <span className="w-2 h-2 rounded-full shrink-0" style={{ background: tab.dot }} />
+                      )}
+                      <span className="truncate">{tab.label}</span>
+                      <span className="tabular-nums text-[10px] text-zinc-400">{tab.count.toLocaleString()}</span>
+                    </button>
+                  ))}
+                  <div className="ml-auto flex items-center gap-1 pr-1">
+                    {/* The records as the spatial team wants them. Only the
+                        ones being counted, and only the ones with a position:
+                        a point file is points. */}
+                    <button
+                      onClick={saveAsPointFile}
+                      disabled={exportablePoints.length === 0}
+                      title={`Save the ${exportablePoints.length.toLocaleString()} counted records that have a position as an IUCN point file (CSV)`}
+                      className="flex items-center gap-1 px-1.5 py-0.5 rounded text-zinc-500 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-zinc-800 disabled:opacity-40 disabled:hover:bg-transparent"
+                    >
+                      <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M12 3v12m0 0l-4-4m4 4l4-4M4 17v2a2 2 0 002 2h12a2 2 0 002-2v-2" />
+                      </svg>
+                      Save as point file
+                    </button>
+                    <div className="flex items-center gap-0.5 pl-1 border-l border-zinc-200 dark:border-zinc-700">
                       <button
-                        key={key}
-                        onClick={() => setListTab(key)}
-                        title={key === "file" ? `The rows of ${pointFile.fileName}, as imported` : "Every record loaded from GBIF"}
-                        className={`flex items-center gap-1.5 px-2 py-1 rounded-t-md border-b-2 max-w-[16rem] ${
-                          listTab === key
-                            ? "border-blue-500 text-zinc-700 dark:text-zinc-200"
-                            : "border-transparent text-zinc-500 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200"
-                        }`}
+                        onClick={() => setListZoom((z) => Math.max(0.4, Math.round((z - 0.1) * 100) / 100))}
+                        title="Smaller — fit more of the table on the screen"
+                        className="px-1 py-0.5 rounded text-zinc-500 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-zinc-800"
                       >
-                        {key === "file" && (
-                          <span
-                            className="w-2 h-2 rounded-full shrink-0"
-                            style={{ background: POINT_FILE_COLOR }}
-                          />
-                        )}
-                        <span className="truncate">{label}</span>
-                        <span className="tabular-nums text-[10px] text-zinc-400">{count.toLocaleString()}</span>
+                        −
                       </button>
-                    ))}
+                      <button
+                        onClick={() => setListZoom(0.67)}
+                        title="Back to two thirds"
+                        className="tabular-nums text-[10px] text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300 w-8"
+                      >
+                        {Math.round(listZoom * 100)}%
+                      </button>
+                      <button
+                        onClick={() => setListZoom((z) => Math.min(1.5, Math.round((z + 0.1) * 100) / 100))}
+                        title="Bigger"
+                        className="px-1 py-0.5 rounded text-zinc-500 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-zinc-800"
+                      >
+                        +
+                      </button>
+                    </div>
                   </div>
-                )}
+                </div>
                 {pointFile && pointFileComparison && listTab === "file" ? (
                   <PointFileTable
                     comparison={pointFileComparison}
                     fileName={pointFile.fileName}
                     extraColumns={pointFile.extraColumns}
+                    zoom={listZoom}
                     fillHeight
                   />
                 ) : (
                 <OccurrenceListTable
-                  occurrences={occurrences}
+                  occurrences={listTab === "excluded" ? excludedOccurrences : countedOccurrences}
+                  variant={listTab === "excluded" ? "excluded" : "records"}
                   loading={loadingOccurrences}
                   isOutsideNativeRange={isOutsideNativeRangeForList}
                   georeferences={georeferences}
@@ -6506,13 +6661,14 @@ export default function OccurrenceMapRow({
                   onClearGeoreference={clearGeoreference}
                   hoveredGbifId={hoveredFeature?.properties.gbifID ?? null}
                   onHoverRow={handleHoverRow}
+                  onSelectRow={showRecordOnMap}
                   excludedIds={excludedIds}
                   exclusions={exclusions}
                   onExclude={setPendingExclusion}
-                  onExcludeAs={excludeAs}
                   onInclude={includeAgain}
                   panelLayout={panelLayout}
                   onTogglePanelLayout={() => setPanelLayout((v) => (v === "rows" ? "columns" : "rows"))}
+                  zoom={listZoom}
                   fillHeight
                 />
                 )}

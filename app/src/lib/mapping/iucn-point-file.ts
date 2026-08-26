@@ -475,3 +475,99 @@ export function biggestDisagreements(comparison: PointFileComparison, limit = 10
     .sort((a, b) => (b.fromMine ?? 0) - (a.fromMine ?? 0))
     .slice(0, limit);
 }
+
+// ---------------------------------------------------------------------------
+// Writing the file back out
+// ---------------------------------------------------------------------------
+
+/** What a record has to carry to become a point in the file. */
+export interface ExportableRecord {
+  gbifID: number;
+  species?: string;
+  latitude: number;
+  longitude: number;
+  year?: number | null;
+  eventDate?: string;
+  basisOfRecord?: string;
+  catalogNumber?: string;
+  recordedBy?: string;
+  recordNumber?: string;
+  /** True where the coordinate is the assessor's own rather than GBIF's. */
+  georeferenced?: boolean;
+}
+
+/**
+ * GBIF spells a basis of record in shouting snake case; the IUCN file spells it
+ * as one word. Anything unrecognised is passed through untouched rather than
+ * mangled — a value we don't know is still the assessor's to keep.
+ */
+function iucnBasisOfRecord(basis: string | undefined): string {
+  if (!basis) return "";
+  if (!/^[A-Z_]+$/.test(basis)) return basis;
+  return basis
+    .toLowerCase()
+    .split("_")
+    .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+    .join("");
+}
+
+/** One CSV field, quoted where it has to be. */
+function csvField(value: string): string {
+  return /[",\n\r]/.test(value) ? `"${value.replace(/"/g, '""')}"` : value;
+}
+
+/**
+ * The records as an IUCN point file, ready to be saved.
+ *
+ * The same twenty-four columns in the same order as the importer reads, so a
+ * file this writes can be handed straight to the spatial data team — or loaded
+ * back into this map. What the dashboard can't know it leaves blank rather
+ * than inventing: a citation, a distribution comment, whether a record is
+ * sensitive. `presence`, `origin` and `seasonal` are the codes for extant,
+ * native and resident, which is what an occurrence on a species' own map is
+ * unless someone says otherwise.
+ *
+ * A coordinate the assessor georeferenced themselves is written as the point,
+ * because that is the whole reason they did the work — and `dist_comm` says so,
+ * since the file otherwise gives no sign of which points GBIF located and which
+ * a person did.
+ */
+export function buildIucnPointFileCsv(
+  records: ExportableRecord[],
+  options: { compiler?: string; yearCompiled?: number } = {}
+): string {
+  const lines = [IUCN_POINT_FILE_COLUMNS.join(",")];
+  for (const r of records) {
+    const lat = r.latitude.toFixed(6);
+    const lon = r.longitude.toFixed(6);
+    const year = r.year ?? (r.eventDate ? Number(r.eventDate.slice(0, 4)) : null);
+    const values: Record<string, string> = {
+      sci_name: r.species ?? "",
+      presence: "1",
+      origin: "1",
+      seasonal: "1",
+      compiler: options.compiler ?? "",
+      yrcompiled: options.yearCompiled ? String(options.yearCompiled) : "",
+      citation: "",
+      dec_lat: lat,
+      dec_long: lon,
+      latitude: lat,
+      longitude: lon,
+      spatialref: "WGS84",
+      subspecies: "",
+      subpop: "",
+      data_sens: "0",
+      sens_comm: "",
+      event_year: year && Number.isFinite(year) ? String(year) : "",
+      source: `www.gbif.org/occurrence/${r.gbifID}`,
+      basisofrec: iucnBasisOfRecord(r.basisOfRecord),
+      catalog_no: r.catalogNumber ?? "",
+      recordedby: r.recordedBy ?? "",
+      recordno: r.recordNumber ?? "",
+      dist_comm: r.georeferenced ? "Georeferenced from the locality description" : "",
+      tax_comm: "",
+    };
+    lines.push(IUCN_POINT_FILE_COLUMNS.map((key) => csvField(values[key] ?? "")).join(","));
+  }
+  return lines.join("\n") + "\n";
+}

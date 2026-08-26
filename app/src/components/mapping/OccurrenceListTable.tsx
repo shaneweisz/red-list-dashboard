@@ -133,9 +133,12 @@ const EXTRA_COLUMNS: { key: string; label: string; title: string; numeric?: bool
   { key: "isInCluster", label: "In cluster", title: "isInCluster — GBIF thinks this duplicates another record" },
 ];
 
+/** Never hidden, and never offered in the column picker. */
+const ALWAYS_VISIBLE_COLUMNS = new Set(["putBack", "reason"]);
+
 /** Shown until someone changes it: the fields an assessor reads first. */
 const DEFAULT_VISIBLE_COLUMNS = [
-  "included", "date", "basisOfRecord", "locality", "stateProvince", "country", "coordinates",
+  "date", "basisOfRecord", "locality", "stateProvince", "country", "coordinates",
   "uncertainty", "elevation", "recordedBy", "identifiedBy", "dataset", "catalog",
   "establishmentMeans", "flags", "gbifID",
 ];
@@ -402,13 +405,22 @@ interface OccurrenceListTableProps {
   /** Records the filters have excluded. They stay in the table, greyed, rather
    *  than vanishing — a record you can't see is a record you can't judge. */
   excludedIds?: Set<number>;
+  /**
+   * Which list this is: the records themselves, or the ones set aside.
+   *
+   * The excluded ones are a tab of their own rather than greyed rows in the
+   * middle of this one — they've been judged, and what you want from them is
+   * the reason and a way back, not their place in the sort.
+   */
+  variant?: "records" | "excluded";
+  /** Picking a row opens that record's panel on the map. */
+  onSelectRow?: (feature: OccurrenceFeature) => void;
+  /** Scales the table, so more of it fits without shrinking the controls. */
+  zoom?: number;
   /** Records struck out by hand, with the reason given for each. */
   exclusions?: Record<number, { justification: string }>;
   /** Asks for a justification and excludes the given records. */
   onExclude?: (gbifIDs: number[]) => void;
-  /** Excludes records with a justification already known — dropping a
-   *  selection onto the record it duplicates writes its own reason. */
-  onExcludeAs?: (gbifIDs: number[], justification: string) => void;
   /** Puts hand-excluded records back, as one edit. */
   onInclude?: (gbifIDs: number[]) => void;
   /** Fill the height of the column the table is in. */
@@ -440,9 +452,11 @@ export default function OccurrenceListTable({
   hoveredGbifId,
   onHoverRow,
   excludedIds,
+  variant = "records",
+  onSelectRow,
+  zoom = 1,
   exclusions,
   onExclude,
-  onExcludeAs,
   onInclude,
   fillHeight = false,
   panelLayout,
@@ -496,23 +510,6 @@ export default function OccurrenceListTable({
   const rowRefs = useRef(new Map<number, HTMLTableRowElement>());
   const scrollRef = useRef<HTMLDivElement>(null);
   const [dragColumn, setDragColumn] = useState<string | null>(null);
-  /**
-   * Rows picked out for a bulk action, and the last one clicked so shift can
-   * extend from it.
-   *
-   * Explicit and persistent, rather than the drag-down-the-column gesture this
-   * replaces: exclusions come in runs, but a run you have to hold the mouse
-   * through can't be checked before you commit it, fought with text selection,
-   * and swallowed clicks meant for the controls inside the cell.
-   */
-  const [selection, setSelection] = useState<Set<number>>(new Set());
-  const lastClickedRow = useRef<number | null>(null);
-  /**
-   * Excluded rows are shown greyed by default — a record you can't see is a
-   * record you can't reconsider. But once you've worked through a few hundred
-   * and struck out the duplicates, what you want is the evidence that's left,
-   * so the Included header can hide them.
-   */
   const [showExcluded, setShowExcluded] = useState(true);
 
   const updatePrefs = (next: ColumnPrefs) => {
@@ -530,194 +527,58 @@ export default function OccurrenceListTable({
     clearColumnPrefs();
   };
 
-  /**
-   * The rows in the order they're currently displayed, kept in a ref.
-   *
-   * Shift-selecting a range needs that order, but the columns are defined
-   * before the sorted rows exist — and the columns are what render the
-   * checkbox. A ref breaks the cycle without making the sort a dependency of
-   * the column definitions.
-   */
-  const rowOrderRef = useRef<number[]>([]);
-
-  /**
-   * Adds a row to the selection — or, with shift, everything between it and the
-   * last one clicked, in the order the table is currently sorted in. Rows the
-   * filters removed are never selectable: there's no reason to give for a
-   * record that isn't being counted anyway.
-   */
-  /**
-   * What the selection currently holds, for the handlers the columns close
-   * over. Read through a ref so the column definitions don't have to be
-   * rebuilt — and the table re-rendered — on every click.
-   */
-  /**
-   * Records being dragged onto another, and the row they're over.
-   *
-   * Duplicates are the commonest reason to strike records out, and the
-   * duplicate-of relationship is between two specific records — so saying it
-   * by dragging one onto the other is both faster than typing a reason and
-   * more precise than the reason anyone would type.
-   */
-  const [draggingIds, setDraggingIds] = useState<number[] | null>(null);
-  const [dropTargetId, setDropTargetId] = useState<number | null>(null);
-
-  const selectionRef = useRef(selection);
-  selectionRef.current = selection;
-  const exclusionsRef = useRef(exclusions);
-  exclusionsRef.current = exclusions;
-
-  /**
-   * Strikes out everything selected, under one reason.
-   *
-   * Re-including needs no justification; excluding always does, so a selection
-   * that is entirely excluded already puts itself back instead.
-   */
-  // Held in refs so selecting a row doesn't rebuild every column definition.
-
-  const excludeSelection = useCallback(() => {
-    const ids = [...selectionRef.current];
-    if (ids.length === 0) return;
-    const toExclude = ids.filter((id) => !exclusionsRef.current?.[id]);
-    // One call, not one per record: each would rebuild the store from the same
-    // starting point and the last would win, restoring only one of them.
-    if (toExclude.length === 0) onInclude?.(ids);
-    else onExclude?.(toExclude);
-    setSelection(new Set());
-  }, [onExclude, onInclude]);
-
-  const selectRow = useCallback(
-    (gbifID: number, { extend }: { extend: boolean }) => {
-      // Read the anchor before moving it. A state updater runs during the next
-      // render, not here, so a ref read inside one sees whatever the ref holds
-      // by then — and setting it below would have made every shift-click
-      // anchor to the row it just clicked, selecting one row instead of a run.
-      const anchor = lastClickedRow.current;
-      lastClickedRow.current = gbifID;
-      setSelection((prev) => {
-        const next = new Set(prev);
-        if (extend && anchor != null) {
-          const order = rowOrderRef.current;
-          const from = order.indexOf(anchor);
-          const to = order.indexOf(gbifID);
-          if (from >= 0 && to >= 0) {
-            for (let i = Math.min(from, to); i <= Math.max(from, to); i++) {
-              if (!excludedIds?.has(order[i])) next.add(order[i]);
-            }
-            return next;
-          }
-        }
-        if (next.has(gbifID)) next.delete(gbifID);
-        else next.add(gbifID);
-        return next;
-      });
-    },
-    [excludedIds]
-  );
-
   const columns = useMemo<ColumnDef[]>(
     () => [
-      // Included first: it's the row's status, and it's what you scan down when
-      // deciding what a filter — or your own judgement — has done to the
-      // evidence. Checked by default, because a record counts until someone
-      // says why it shouldn't.
-      {
-        key: "included",
-        label: "Included",
-        headerIconOnly: true,
-        title:
-          "Whether this record counts. Unchecking asks for a reason — drag down the column to exclude a run of records (duplicates, usually) in one go.",
-        className: "whitespace-nowrap",
-        headerExtra: (
-          <button
-            onClick={(e) => {
-              e.stopPropagation();
-              setShowExcluded((v) => !v);
-            }}
-            onMouseDown={(e) => e.stopPropagation()}
-            draggable={false}
-            onDragStart={(e) => e.preventDefault()}
-            title={
-              showExcluded
-                ? "Hide the excluded rows"
-                : "Show the excluded rows again (greyed out, in place)"
-            }
-            className={`ml-1 align-middle ${
-              showExcluded
-                ? "text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300"
-                : "text-emerald-600 dark:text-emerald-400"
-            }`}
-          >
-            {showExcluded ? (
-              <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M2.5 12S6 5.5 12 5.5 21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12z" />
-                <circle cx="12" cy="12" r="2.75" />
-              </svg>
-            ) : (
-              <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M2.5 12S6 5.5 12 5.5c1.7 0 3.2.5 4.5 1.2M21.5 12s-1.3 2.4-3.7 4.2M4 20L20 4" />
-                <path strokeLinecap="round" strokeLinejoin="round" d="M9.9 14.1a3 3 0 014.2-4.2" />
-              </svg>
-            )}
-          </button>
-        ),
-        value: (p) => (excludedIds?.has(p.gbifID) || exclusions?.[p.gbifID] ? 0 : 1),
-        render: (p) => {
-          const byFilter = excludedIds?.has(p.gbifID) ?? false;
-          const byHand = exclusions?.[p.gbifID];
-          const selected = selection.has(p.gbifID);
-          return (
-            <span className="inline-flex items-center gap-1">
-              <input
-                type="checkbox"
-                checked={!byFilter && !byHand}
-                disabled={byFilter}
-                readOnly
-                // Shift extends a run and Cmd/Ctrl picks rows out one at a
-                // time — the selection conventions from every file list — and a
-                // plain click just includes or excludes this one.
-                // The checkbox of a selected row acts on the whole selection:
-                // having picked out the duplicates, unticking any one of them
-                // is the obvious way to say "not these".
-                onClick={(e) => {
-                  e.stopPropagation();
-                  if (byFilter) return;
-                  if (selected) {
-                    excludeSelection();
-                    return;
-                  }
-                  if (byHand) onInclude?.([p.gbifID]);
-                  else onExclude?.([p.gbifID]);
-                }}
-                title={
-                  byFilter
-                    ? "Excluded by your filters"
-                    : selected
-                      ? "Excludes every selected record, under one reason"
-                      : byHand
-                        ? `Excluded: ${byHand.justification} — click to put it back`
-                        : "Counted. Uncheck to exclude it, with a reason."
-                }
-                className={`w-3 h-3 rounded accent-emerald-600 disabled:opacity-60 cursor-pointer ${
-                  selected ? "ring-2 ring-blue-400" : ""
-                }`}
-              />
-              {byHand && (
+      // What the excluded list needs and the main one doesn't: why a record
+      // was set aside, and a way to change your mind. Nothing stands in this
+      // place on the main list — a record is counted unless it's in the other
+      // tab, and a column of ticked boxes said only that.
+      ...(variant === "excluded"
+        ? [
+            {
+              key: "putBack",
+              label: "",
+              title: "Put this record back among the ones being counted",
+              className: "whitespace-nowrap",
+              value: () => null,
+              render: (p: OccurrenceFeature["properties"]) => (
                 <button
                   onClick={(e) => {
                     e.stopPropagation();
-                    onExclude?.([p.gbifID]);
+                    onInclude?.([p.gbifID]);
                   }}
-                  className="truncate text-[10px] text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300 hover:underline"
-                  title={`${byHand.justification} — click to edit the reason`}
+                  title="Put this record back"
+                  className="px-1.5 py-0.5 rounded border border-zinc-200 dark:border-zinc-700 text-[10px] text-zinc-500 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200 hover:border-zinc-300 dark:hover:border-zinc-500"
                 >
-                  {byHand.justification}
+                  Put back
                 </button>
-              )}
-            </span>
-          );
-        },
-      },
+              ),
+            } as ColumnDef,
+            {
+              key: "reason",
+              label: "Reason",
+              title: "Why this record was excluded, as you gave it",
+              className: "min-w-[10rem] max-w-[18rem]",
+              value: (p: OccurrenceFeature["properties"]) => exclusions?.[p.gbifID]?.justification ?? null,
+              render: (p: OccurrenceFeature["properties"]) => {
+                const reason = exclusions?.[p.gbifID]?.justification;
+                if (!reason) return null;
+                return (
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onExclude?.([p.gbifID]);
+                    }}
+                    title={`${reason} — click to edit the reason`}
+                    className="block w-full truncate text-left hover:underline"
+                  >
+                    {reason}
+                  </button>
+                );
+              },
+            } as ColumnDef,
+          ]
+        : []),
       {
         key: "date",
         label: "Date",
@@ -1047,7 +908,7 @@ export default function OccurrenceListTable({
         ),
       },
     ],
-    [isOutsideNativeRange, georeferences, onSaveGeoreference, onClearGeoreference, editingCoords, editingRadius, excludedIds, exclusions, selection, onExclude, onInclude, showExcluded, excludeSelection]
+    [isOutsideNativeRange, georeferences, onSaveGeoreference, onClearGeoreference, editingCoords, editingRadius, exclusions, variant, onExclude, onInclude]
   );
 
   // The catalogue in the reader's own order, then the subset actually drawn.
@@ -1065,8 +926,11 @@ export default function OccurrenceListTable({
     () => new Set(columnPrefs ? columnPrefs.visible : DEFAULT_VISIBLE_COLUMNS),
     [columnPrefs]
   );
+  // The excluded list's own two columns are always drawn: they aren't fields
+  // of the record but the tab's reason for existing, and a saved layout from
+  // before they existed doesn't know to ask for them.
   const visibleColumns = useMemo(
-    () => orderedColumns.filter((c) => visibleKeys.has(c.key)),
+    () => orderedColumns.filter((c) => ALWAYS_VISIBLE_COLUMNS.has(c.key) || visibleKeys.has(c.key)),
     [orderedColumns, visibleKeys]
   );
 
@@ -1189,12 +1053,6 @@ export default function OccurrenceListTable({
 
   const matchSet = useMemo(() => new Set(matches), [matches]);
 
-  rowOrderRef.current = rows.map((f) => f.properties.gbifID);
-
-  const selectedIds = useMemo(
-    () => rows.map((f) => f.properties.gbifID).filter((id) => selection.has(id)),
-    [rows, selection]
-  );
   const currentMatch = matches.length > 0 ? matches[Math.min(matchIndex, matches.length - 1)] : null;
 
   /**
@@ -1253,7 +1111,10 @@ export default function OccurrenceListTable({
           fit under a map. Vertically it only scrolls when expanded, since a
           page is otherwise sized to be read whole. */}
       <div ref={scrollRef} className={`overflow-x-auto${fillHeight ? " flex-1 min-h-0 overflow-y-auto" : ""}`}>
-        <table className="min-w-full text-xs border-collapse">
+        {/* Zoomed rather than restyled: one number shrinks the type, the
+            padding and the column widths together, and leaves the controls
+            around it at a size that can still be clicked. */}
+        <table className="min-w-full text-xs border-collapse" style={zoom === 1 ? undefined : { zoom }}>
           <thead className="sticky top-0 z-10 bg-zinc-50 dark:bg-zinc-800">
             <tr>
               {visibleColumns.map((col) => {
@@ -1334,65 +1195,22 @@ export default function OccurrenceListTable({
                   if (el) rowRefs.current.set(id, el);
                   else rowRefs.current.delete(id);
                 }}
-                /**
-                 * Drag a record — or a whole selection — onto the record it
-                 * duplicates. The reason writes itself, and names the record
-                 * kept, which is more than anyone would type by hand.
-                 */
-                draggable={onExcludeAs != null && !excluded}
-                onDragStart={(e) => {
-                  const ids = selection.has(id) ? [...selection] : [id];
-                  setDraggingIds(ids);
-                  e.dataTransfer.effectAllowed = "move";
-                  // Firefox won't start a drag without data on the transfer.
-                  e.dataTransfer.setData("text/plain", String(id));
-                }}
-                onDragEnd={() => {
-                  setDraggingIds(null);
-                  setDropTargetId(null);
-                }}
-                onDragOver={(e) => {
-                  if (!draggingIds || draggingIds.includes(id)) return;
-                  e.preventDefault();
-                  e.dataTransfer.dropEffect = "move";
-                  setDropTargetId(id);
-                }}
-                onDragLeave={() => setDropTargetId((prev) => (prev === id ? null : prev))}
-                onDrop={(e) => {
-                  e.preventDefault();
-                  const ids = (draggingIds ?? []).filter((dragged) => dragged !== id);
-                  setDraggingIds(null);
-                  setDropTargetId(null);
-                  setSelection(new Set());
-                  if (ids.length === 0) return;
-                  onExcludeAs?.(ids, `Duplicate of GBIF record ${id}`);
-                }}
-                /**
-                 * Click anywhere to select; shift takes the run in between and
-                 * Cmd/Ctrl picks rows out one at a time. A plain click toggles
-                 * too, so a set can be built either way — with the modifiers
-                 * for anyone who reaches for them out of habit, and without for
-                 * anyone who doesn't.
-                 *
-                 * The record itself opens from the GBIF column, which is a
-                 * link. Spending a whole-row gesture on it cost the modifier
-                 * that selection actually wants.
-                 */
-                onClick={(e) => {
-                  if (excludedIds?.has(id)) return;
-                  selectRow(id, { extend: e.shiftKey });
-                }}
-                // Shift-clicking a row otherwise drags a native text selection
-                // across everything in between, which reads as a mess on top of
-                // the rows it just selected. Ordinary text selection is
-                // untouched — only the shift-extend is suppressed.
-                onMouseDown={(e) => {
-                  if (e.shiftKey) e.preventDefault();
-                }}
-                title="Click to select \u2014 shift-click for a run, \u2318/Ctrl-click to pick rows out \u2014 then untick any one of them to exclude the lot."
+                // Picking a row opens that record's panel on the map: the
+                // table says what a record is, the map says where — and the
+                // panel is where the actions live, including the way out to
+                // gbif.org. A record GBIF gave no coordinates has nowhere on
+                // the map to open, so its row does nothing.
+                onClick={() => onSelectRow?.(f)}
+                title={
+                  onSelectRow
+                    ? "Click to show this record on the map"
+                    : undefined
+                }
                 onMouseEnter={() => onHoverRow?.(f)}
                 onMouseLeave={() => onHoverRow?.(null)}
                 className={`border-b border-zinc-100 dark:border-zinc-800 ${
+                  onSelectRow ? "cursor-pointer" : ""
+                } ${
                   hoveredGbifId === id
                     ? "bg-blue-50 dark:bg-blue-950/40"
                     : currentMatch === id
@@ -1400,13 +1218,7 @@ export default function OccurrenceListTable({
                       : matchSet.has(id)
                         ? "bg-amber-50 dark:bg-amber-950/30"
                         : "hover:bg-zinc-50 dark:hover:bg-zinc-800/60"
-                } ${excluded ? "opacity-40" : ""} ${
-                  selection.has(id) ? "outline outline-1 -outline-offset-1 outline-blue-400" : ""
-                } ${draggingIds?.includes(id) ? "opacity-50" : ""} ${
-                  dropTargetId === id
-                    ? "outline outline-2 -outline-offset-2 outline-amber-500 bg-amber-50 dark:bg-amber-950/40"
-                    : ""
-                }`}
+                } ${excluded && variant === "records" ? "opacity-40" : ""}`}
               >
                 {visibleColumns.map((col) => {
                   const content = col.render ? col.render(f.properties, f) : col.value(f.properties, f);
@@ -1451,34 +1263,45 @@ export default function OccurrenceListTable({
       </div>
       {/* Footer: how many rows the filters left, and which columns are shown */}
       <div className="flex items-center gap-2 px-2 py-1.5 border-t border-zinc-100 dark:border-zinc-800 text-[11px] text-zinc-500 dark:text-zinc-400">
-        {/* A selection replaces the count while it exists: what you want to
-            know then is how many you're about to act on, and what the action
-            is. One reason covers the whole run — duplicates are the case this
-            exists for, and they share a reason by definition. */}
-        {/* The count and a way out of it. The action lives on the checkboxes
-            themselves — a button down here was too far from the rows it acted
-            on to be found. */}
-        {selectedIds.length > 0 ? (
-          <span className="flex items-center gap-2">
-            <span className="tabular-nums font-medium text-zinc-700 dark:text-zinc-200">
-              {selectedIds.length.toLocaleString()} selected
-            </span>
-            <span className="text-zinc-400">
-              untick any of them to exclude them together
-            </span>
-            <button onClick={() => setSelection(new Set())} className="hover:underline">
-              Clear
-            </button>
-          </span>
-        ) : (
         <span className="tabular-nums">
           {rows.length === 0 ? "0 records" : `${rows.length.toLocaleString()} records`}
-          {excludedCount > 0 && (
+          {variant === "records" && excludedCount > 0 && (
             <span className="text-zinc-400">
-              {" "}· {excludedCount.toLocaleString()} excluded{showExcluded ? "" : " (hidden)"}
+              {" "}· {excludedCount.toLocaleString()} removed by your filters
+              {showExcluded ? "" : " (hidden)"}
             </span>
           )}
         </span>
+        {/* The rows the filters took out are greyed in place by default — a
+            record you can't see is a record you can't reconsider — and this
+            takes them out of the table once you've stopped reconsidering.
+            It used to live in the header of a column that no longer exists. */}
+        {variant === "records" && excludedCount > 0 && (
+          <button
+            onClick={() => setShowExcluded((v) => !v)}
+            title={
+              showExcluded
+                ? "Hide the rows your filters removed"
+                : "Show the rows your filters removed (greyed out, in place)"
+            }
+            className={
+              showExcluded
+                ? "text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300"
+                : "text-emerald-600 dark:text-emerald-400"
+            }
+          >
+            {showExcluded ? (
+              <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M2.5 12S6 5.5 12 5.5 21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12z" />
+                <circle cx="12" cy="12" r="2.75" />
+              </svg>
+            ) : (
+              <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M2.5 12S6 5.5 12 5.5c1.7 0 3.2.5 4.5 1.2M21.5 12s-1.3 2.4-3.7 4.2M4 20L20 4" />
+                <path strokeLinecap="round" strokeLinejoin="round" d="M9.9 14.1a3 3 0 014.2-4.2" />
+              </svg>
+            )}
+          </button>
         )}
         <div className="flex items-center gap-1">
           <input
@@ -1575,7 +1398,7 @@ export default function OccurrenceListTable({
                 </button>
                 <span className="ml-auto">Drag a row to reorder</span>
               </div>
-              {orderedColumns.map((col) => {
+              {orderedColumns.filter((col) => !ALWAYS_VISIBLE_COLUMNS.has(col.key)).map((col) => {
                 const shown = visibleKeys.has(col.key);
                 return (
                   <div
