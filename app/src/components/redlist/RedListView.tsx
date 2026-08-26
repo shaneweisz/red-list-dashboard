@@ -952,7 +952,11 @@ function RevisionTooltipContent({ flag, name, category }: { flag: ColRevision; n
         {lump.after}
       </span>
     ) });
-  } else if (flag.reason != null) {
+  }
+  // NOT `else`: see revisionSentences. A species can be lumped AND carry a
+  // no-match reason, and its tooltip has to show every finding its own flag is
+  // filterable by, or a bar returns a row that never explains itself.
+  if (flag.reason != null && !(lump && flag.reason === "lumped")) {
     const s = noMatchSentence(flag, name);
     sentences.push({ code: flag.reason, node: (
       <span key="no-match">

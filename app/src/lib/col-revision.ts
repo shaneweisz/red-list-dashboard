@@ -137,18 +137,29 @@ export const REVISION_REASON_SHORT: Record<string, string> = {
   classified_elsewhere: "Reclassified",
 };
 
-/** One line of context for the short label, for the bar chart's own tooltip. */
+/**
+ * One line of context for the short label, for the bar chart's own tooltip.
+ *
+ * Every line is reported speech — "Catalogue of Life says", not "this species
+ * is". The card exists because two checklists disagree, and a bar that states
+ * CoL's position as the fact of the matter has quietly picked the winner. That
+ * is the reading the whole feature is trying not to invite, and a one-line
+ * hover is exactly where it slips in unnoticed.
+ *
+ * The two that don't say "says" are about what CoL contains rather than what it
+ * claims — an absent record isn't an assertion anyone has to be right about.
+ */
 export const REVISION_REASON_SUMMARY: Record<string, string> = {
-  split: "Catalogue of Life recognises species likely split out of this one",
-  lumped: "Catalogue of Life merges this with another assessed species",
-  synonym_of: "Catalogue of Life's checklist files this name under another species",
-  infraspecific: "Catalogue of Life ranks this below species — a subspecies, variety or form of another",
-  not_in_base: "in Catalogue of Life's extended release only, not its curated checklist",
-  provisional: "listed by Catalogue of Life only provisionally",
-  extinct_unconfirmed: "Catalogue of Life marks the name extinct; the assessment doesn't",
+  split: "Catalogue of Life says species have been split out of this one",
+  lumped: "Catalogue of Life says this is one species with another assessment",
+  synonym_of: "Catalogue of Life says it accepts a different name for this species",
+  infraspecific: "Catalogue of Life says this is a subspecies, variety or form of another species",
+  not_in_base: "Catalogue of Life has this in its extended release only, not its curated checklist",
+  provisional: "Catalogue of Life says it accepts this name only provisionally",
+  extinct_unconfirmed: "Catalogue of Life says the name is extinct; the assessment says otherwise",
   unmatched: "Catalogue of Life has no species record under this name",
-  missing_from_backbone: "its Catalogue of Life record no longer resolves",
-  classified_elsewhere: "Catalogue of Life files it under a different group",
+  missing_from_backbone: "Catalogue of Life's record for this no longer resolves",
+  classified_elsewhere: "Catalogue of Life says it belongs in a different group",
 };
 
 /**
@@ -522,7 +533,13 @@ export function revisionSentences(flag: ColRevision, subject: string): string[] 
   const out: string[] = [];
   const lump = flattenLump(lumpSentence(flag, subject));
   if (lump) out.push(lump);
-  else if (flag.reason != null) {
+  // NOT `else`: a lump and a no-match reason are independent findings, and 69
+  // species carry both (Fukomys damarensis is lumped with Cryptomys natalensis
+  // AND ranked a subspecies of Cryptomys hottentotus). Skipping the reason left
+  // a species selectable by a bar whose finding its own tooltip never showed.
+  // The only reason to skip is "lumped" WHEN the group sentence already said it;
+  // without a group (the SSC panel's data) that reason still needs its own line.
+  if (flag.reason != null && !(lump && flag.reason === "lumped")) {
     const { before, detail, after } = noMatchSentence(flag, subject);
     out.push(`${before}${detail ?? ""}${after}`);
   }

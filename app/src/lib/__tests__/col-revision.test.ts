@@ -361,6 +361,33 @@ describe("lumpSentence", () => {
 });
 
 describe("revisionSentences", () => {
+  it("shows a sentence for EVERY bar the flag is selectable by", () => {
+    // Reported from the dashboard: filtered to "Below species on CoL", the row
+    // for sis 111933779 opened a tooltip that only said "Lumped on CoL". A lump
+    // and a no-match reason are independent, 69 species carry both, and a bar
+    // must never return a row whose own tooltip withholds the finding.
+    const flag = {
+      reason: "infraspecific", detail: "Cryptomys hottentotus", rank: "subspecies",
+      lumpedWith: [{ name: "Cryptomys natalensis", category: "LC" }],
+      lumpedUnder: "Cryptomys natalensis",
+    };
+    const sentences = revisionSentences(flag, "Fukomys damarensis");
+    expect(sentences).toHaveLength(2);
+    expect(sentences.some((x) => x.includes("Cryptomys natalensis"))).toBe(true);
+    expect(sentences.some((x) => x.includes("as a subspecies of Cryptomys hottentotus"))).toBe(true);
+    // Every code revisionReasons offers must be answered by a sentence.
+    expect(revisionReasons(flag)).toEqual(["lumped", "infraspecific"]);
+  });
+
+  it("does not repeat the lump when the group sentence already said it", () => {
+    const withGroup = revisionSentences(
+      { reason: "lumped", lumpedUnder: "Leptoxis picta",
+        lumpedWith: [{ name: "Leptoxis picta", category: "EX" }] },
+      "Leptoxis foremani",
+    );
+    expect(withGroup).toHaveLength(1);
+  });
+
   it("returns one sentence per signal, no-match first", () => {
     expect(revisionSentences({ reason: "unmatched" }, "Bufo bufo")).toHaveLength(1);
     expect(revisionSentences({ splitInto: [{ name: "Bufo spinosus" }] }, "Bufo bufo")).toHaveLength(1);
