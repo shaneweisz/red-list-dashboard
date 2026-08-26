@@ -22,7 +22,7 @@ The dashboard answers questions like:
 ## Features
 
 ### Taxa summary and drill-down
-The landing table shows every taxonomic group with species counts, assessment coverage, outdated-assessment percentages, described-species totals from the Catalogue of Life, and GBIF occurrence totals. Click a row to drill into that group and down through the taxonomic tree. Includes a Red List vs GBIF focus-mode toggle and column visibility controls.
+The landing table shows every taxonomic group with species counts, assessment coverage, percentages of assessments needing updating, described-species totals from the Catalogue of Life, and GBIF occurrence totals. Click a row to drill into that group and down through the taxonomic tree. Includes a Red List vs GBIF focus-mode toggle and column visibility controls.
 
 ### Filter charts
 Clickable charts cross-filter the species table and each other:

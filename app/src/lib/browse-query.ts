@@ -211,7 +211,7 @@ export async function runBrowseQuery(input: BrowseInput): Promise<BrowseResult> 
   if (maxAssessmentYear != null) interpreted.push(`Assessed in or before ${maxAssessmentYear}`);
   if (minDescribedYear != null) interpreted.push(`Described in or after ${minDescribedYear}`);
   if (maxDescribedYear != null) interpreted.push(`Described in or before ${maxDescribedYear}`);
-  if (outdated) interpreted.push(outdated === "yes" ? "Outdated assessments (>10 yrs old)" : "Current assessments (≤10 yrs old)");
+  if (outdated) interpreted.push(outdated === "yes" ? "Assessments needing updating (>10 yrs old)" : "Current assessments (≤10 yrs old)");
 
   return {
     interpreted, unresolved, tooLarge, noSelector: false,

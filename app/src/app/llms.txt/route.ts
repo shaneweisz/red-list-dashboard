@@ -89,7 +89,7 @@ minDescribedYear / maxDescribedYear: year-described bounds (NE species)
 - ${base}/browse?taxa=corals&threats=climate-change
     Coral species threatened by climate change
 - ${base}/browse?taxa=mammals
-    All mammals — read stats.outdated_pct for % of outdated assessments
+    All mammals — read stats.outdated_pct for % of assessments needing updating
 - ${base}/browse?taxa=felidae&categories=threatened
     Threatened cats (arbitrary rank: a family name)
 - ${base}/browse?taxa=amphibians&region=Sub-Saharan+Africa&categories=threatened

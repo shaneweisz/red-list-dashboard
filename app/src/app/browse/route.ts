@@ -160,7 +160,7 @@ function resultsHtml(r: BrowseResult): string {
     summary = `<p class="summary"><strong>${r.total.toLocaleString()}</strong> species match — ${filterDesc}.${r.total > r.shown ? ` Showing the first ${r.shown}.` : ""}</p>`;
     if (breakdownStr) summary += `<p>By category: ${breakdownStr}</p>`;
     if (r.stats.assessed > 0 && r.stats.outdated_pct != null) {
-      summary += `<p>Assessments outdated (>10 yrs old): <strong>${r.stats.outdated.toLocaleString()}</strong> of ${r.stats.assessed.toLocaleString()} (<strong>${r.stats.outdated_pct}%</strong>).</p>`;
+      summary += `<p>Assessments needing updating (>10 yrs old): <strong>${r.stats.outdated.toLocaleString()}</strong> of ${r.stats.assessed.toLocaleString()} (<strong>${r.stats.outdated_pct}%</strong>).</p>`;
     }
   }
 
@@ -184,7 +184,7 @@ function resultsHtml(r: BrowseResult): string {
 
 const EXAMPLES: { url: string; desc: string }[] = [
   { url: `${BASE}?taxa=corals&threats=climate-change`, desc: "Coral species threatened by climate change" },
-  { url: `${BASE}?taxa=mammals`, desc: "All mammals — read stats.outdated_pct for % of outdated assessments" },
+  { url: `${BASE}?taxa=mammals`, desc: "All mammals — read stats.outdated_pct for % of assessments needing updating" },
   { url: `${BASE}?taxa=felidae&categories=threatened`, desc: "Threatened cats (arbitrary rank: a family name)" },
   { url: `${BASE}?taxa=amphibians&region=Sub-Saharan+Africa&categories=threatened`, desc: "Threatened amphibians in Sub-Saharan Africa (IUCN region)" },
   { url: `${BASE}?search=tiger`, desc: "Look up a species by name" },
@@ -224,7 +224,7 @@ ${unresolvedBlock(unresolved)}
 ${filterLines}
 <p><strong>region</strong> (IUCN): ${vocab.region.map((r) => `<code>${esc(r)}</code>`).join(", ")}.</p>
 <p>${paramLines}</p>
-<p>Every response leads with a total, a by-category breakdown, and an outdated count + %, so percentage questions are answered in one request.</p>
+<p>Every response leads with a total, a by-category breakdown, and a needs-updating count + % (<code>stats.outdated</code> / <code>stats.outdated_pct</code>), so percentage questions are answered in one request.</p>
 <h2>Examples</h2><ul>${examples}</ul>
 ${PAGE_FOOT}`;
 }
