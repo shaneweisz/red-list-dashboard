@@ -415,6 +415,10 @@ interface OccurrenceListTableProps {
   variant?: "records" | "excluded";
   /** Picking a row opens that record's panel on the map. */
   onSelectRow?: (feature: OccurrenceFeature) => void;
+  /** Right-clicking a row opens the record's menu where the pointer is. */
+  onRowContextMenu?: (feature: OccurrenceFeature, at: { x: number; y: number }) => void;
+  /** Drawn at the right of the footer — the save button, where there is one. */
+  footerExtra?: React.ReactNode;
   /** Scales the table, so more of it fits without shrinking the controls. */
   zoom?: number;
   /** Records struck out by hand, with the reason given for each. */
@@ -454,6 +458,8 @@ export default function OccurrenceListTable({
   excludedIds,
   variant = "records",
   onSelectRow,
+  onRowContextMenu,
+  footerExtra,
   zoom = 1,
   exclusions,
   onExclude,
@@ -536,27 +542,8 @@ export default function OccurrenceListTable({
       ...(variant === "excluded"
         ? [
             {
-              key: "putBack",
-              label: "",
-              title: "Put this record back among the ones being counted",
-              className: "whitespace-nowrap",
-              value: () => null,
-              render: (p: OccurrenceFeature["properties"]) => (
-                <button
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    onInclude?.([p.gbifID]);
-                  }}
-                  title="Put this record back"
-                  className="px-1.5 py-0.5 rounded border border-zinc-200 dark:border-zinc-700 text-[10px] text-zinc-500 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200 hover:border-zinc-300 dark:hover:border-zinc-500"
-                >
-                  Put back
-                </button>
-              ),
-            } as ColumnDef,
-            {
               key: "reason",
-              label: "Reason",
+              label: "Excluded reason",
               title: "Why this record was excluded, as you gave it",
               className: "min-w-[10rem] max-w-[18rem]",
               value: (p: OccurrenceFeature["properties"]) => exclusions?.[p.gbifID]?.justification ?? null,
@@ -576,6 +563,25 @@ export default function OccurrenceListTable({
                   </button>
                 );
               },
+            } as ColumnDef,
+            {
+              key: "putBack",
+              label: "",
+              title: "Put this record back among the ones being counted",
+              className: "whitespace-nowrap",
+              value: () => null,
+              render: (p: OccurrenceFeature["properties"]) => (
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onInclude?.([p.gbifID]);
+                  }}
+                  title="Put this record back"
+                  className="px-1.5 py-0.5 rounded border border-zinc-200 dark:border-zinc-700 text-[10px] text-zinc-500 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200 hover:border-zinc-300 dark:hover:border-zinc-500"
+                >
+                  Put back
+                </button>
+              ),
             } as ColumnDef,
           ]
         : []),
@@ -1201,9 +1207,14 @@ export default function OccurrenceListTable({
                 // gbif.org. A record GBIF gave no coordinates has nowhere on
                 // the map to open, so its row does nothing.
                 onClick={() => onSelectRow?.(f)}
+                onContextMenu={(e) => {
+                  if (!onRowContextMenu) return;
+                  e.preventDefault();
+                  onRowContextMenu(f, { x: e.clientX, y: e.clientY });
+                }}
                 title={
                   onSelectRow
-                    ? "Click to show this record on the map"
+                    ? "Click to show this record on the map — right-click for what you can do with it"
                     : undefined
                 }
                 onMouseEnter={() => onHoverRow?.(f)}
@@ -1350,6 +1361,7 @@ export default function OccurrenceListTable({
           )}
         </div>
         <div className="ml-auto flex items-center gap-1.5">
+          {footerExtra}
           {onTogglePanelLayout && (
             <button
               onClick={onTogglePanelLayout}

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef, useCallback, useMemo } from "react";
+import { createPortal } from "react-dom";
 import dynamic from "next/dynamic";
 import Link from "next/link";
 import type { MapRef, ViewStateChangeEvent, MapLayerMouseEvent } from "react-map-gl/maplibre";
@@ -1283,6 +1284,7 @@ export default function OccurrenceMapRow({
     }
   }, []);
   const closeTooltip = useCallback(() => {
+    setRowMenu(null);
     cancelHoverClear();
     unpinTooltip();
     setTooltipHeld(false);
@@ -2830,6 +2832,10 @@ export default function OccurrenceMapRow({
    */
   const handleHoverRow = useCallback(
     (feature: OccurrenceFeature | null) => {
+      // A panel you opened is yours until you close it. Hovering the list used
+      // to unpin it, so picking a row and then moving towards the panel it
+      // opened took the panel away before you got there.
+      if (tooltipPinnedRef.current) return;
       if (!feature) {
         clearHoverSoon();
         return;
@@ -3709,7 +3715,7 @@ export default function OccurrenceMapRow({
                   <div className="text-[11px] text-zinc-700 dark:text-zinc-200 space-y-1">
                     <div className="flex items-center gap-1.5 font-medium">
                       <span className="w-2 h-2 rounded-full shrink-0" style={{ background: POINT_FILE_COLOR }} />
-                      Imported CSV record
+                      Imported record
                       {/* Counting the points, not the spreadsheet's lines:
                           the table beneath the map numbers them the same way,
                           and a header is not a point. */}
@@ -4668,7 +4674,7 @@ export default function OccurrenceMapRow({
         const drift = imported.fromGbif;
         if (drift != null && drift >= 100) {
           notes.push({
-            label: "CSV position",
+            label: "Imported position",
             value: `${drift >= 1000 ? `${(drift / 1000).toFixed(1)} km` : `${Math.round(drift)} m`} from GBIF's`,
             flag: true,
           });
@@ -4683,7 +4689,7 @@ export default function OccurrenceMapRow({
           const a = String(csv ?? "").trim();
           const b = String(gbif ?? "").trim();
           if (!a || same(a, b)) return;
-          notes.push({ label: `CSV ${label}`, value: b ? `${a} — GBIF: ${b}` : a, flag: !!b });
+          notes.push({ label: `Imported ${label}`, value: b ? `${a} — GBIF: ${b}` : a, flag: !!b });
         };
         differs("year", point.fields.event_year, p.year);
         differs("catalogue no.", point.fields.catalog_no, p.catalogNumber);
@@ -4722,7 +4728,7 @@ export default function OccurrenceMapRow({
     if (excludedOccurrences.length > 0) {
       tabs.push({
         key: "excluded",
-        label: "Excluded",
+        label: "Excluded GBIF records",
         count: excludedOccurrences.length,
         title: "Records you've set aside, with the reason you gave — and a way to put them back",
       });
@@ -4730,7 +4736,7 @@ export default function OccurrenceMapRow({
     if (pointFile && pointFileComparison) {
       tabs.push({
         key: "file",
-        label: pointFile.fileName,
+        label: "Imported records",
         count: pointFile.points.length,
         title: `The rows of ${pointFile.fileName}, as imported`,
         dot: POINT_FILE_COLOR,
@@ -4744,6 +4750,33 @@ export default function OccurrenceMapRow({
   useEffect(() => {
     if (!listTabs.some((t) => t.key === listTab)) setListTab("gbif");
   }, [listTabs, listTab]);
+
+  /**
+   * The record menu opened by right-clicking a row, at the pointer.
+   *
+   * The same buttons the map panel carries: a row and a point are the same
+   * record, and what you can do with one you can do with the other. The left
+   * click is spoken for — it shows the record on the map — so this takes the
+   * right, where a menu is expected anyway.
+   */
+  const [rowMenu, setRowMenu] = useState<{ gbifID: number; x: number; y: number } | null>(null);
+
+  useEffect(() => {
+    if (!rowMenu) return;
+    const dismiss = (e: MouseEvent) => {
+      if ((e.target as HTMLElement).closest("[data-row-menu]")) return;
+      setRowMenu(null);
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setRowMenu(null);
+    };
+    document.addEventListener("mousedown", dismiss);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("mousedown", dismiss);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [rowMenu]);
 
   /** Clicking a row shows that record on the map, if it has anywhere to be. */
   const showRecordOnMap = useCallback(
@@ -5400,10 +5433,9 @@ export default function OccurrenceMapRow({
   );
 
   const renderRecordLayers = (label: string | null) => (
-    // Wider than it was: the GBIF row now carries a count and, for a species
-    // with no assessment date, the colour ramp as well, and at w-44 the name
-    // wrapped to two lines.
-    <div className="flex flex-col bg-white dark:bg-zinc-800 rounded-lg shadow-md border border-zinc-200 dark:border-zinc-700 py-1 w-52">
+    // Wide enough for the GBIF row to carry its name, its colour ramp and its
+    // count on one line, which is what that row is: one layer, described.
+    <div className="flex flex-col bg-white dark:bg-zinc-800 rounded-lg shadow-md border border-zinc-200 dark:border-zinc-700 py-1 w-64">
       <div className="px-2 pb-0.5 text-[9px] uppercase tracking-wide text-zinc-400 dark:text-zinc-500">
         Records
       </div>
@@ -5439,7 +5471,7 @@ export default function OccurrenceMapRow({
             title={pointFile.fileName}
             className="flex-1 min-w-0 text-zinc-700 dark:text-zinc-200 truncate"
           >
-            Imported CSV
+            Imported records
           </span>
           <span className="tabular-nums text-[10px] text-zinc-400">
             {pointFile.points.length.toLocaleString()}
@@ -5453,28 +5485,28 @@ export default function OccurrenceMapRow({
           onChange={() => setShowGbif((v) => !v)}
           className="w-3 h-3 rounded accent-blue-500 shrink-0"
         />
-        <span className="flex-1 min-w-0 text-zinc-700 dark:text-zinc-200">GBIF points</span>
-        <span className="tabular-nums text-[10px] text-zinc-400">
+        <span className="shrink-0 text-zinc-700 dark:text-zinc-200">GBIF points</span>
+        {/* The colour key on the same row as the name it belongs to, which is
+            what the panel was widened for. */}
+        {showGbif && !label && !assessmentYear && colorByDate && (
+          <span className="flex items-center gap-0.5 min-w-0 text-[9px] tabular-nums text-zinc-400">
+            <span
+              className="w-2 h-2 rounded-full shrink-0"
+              style={{ background: dateToColor(minDateNum).fill, border: `1.5px solid ${dateToColor(minDateNum).stroke}` }}
+            />
+            {minDateLabel}
+            <span>→</span>
+            <span
+              className="w-2 h-2 rounded-full shrink-0"
+              style={{ background: dateToColor(maxDateNum).fill, border: `1.5px solid ${dateToColor(maxDateNum).stroke}` }}
+            />
+            {maxDateLabel}
+          </span>
+        )}
+        <span className="ml-auto tabular-nums text-[10px] text-zinc-400">
           {(mappedPositionedCount - struckOutCount).toLocaleString()}
         </span>
       </label>
-      {/* The colour key on a row of its own. Sharing the name's row with the
-          count left no width for either, and the name wrapped. */}
-      {showGbif && !label && !assessmentYear && colorByDate && (
-        <div className="flex items-center gap-1 px-2 pb-0.5 pl-6 text-[10px] tabular-nums text-zinc-400">
-          <span
-            className="w-2.5 h-2.5 rounded-full shrink-0"
-            style={{ background: dateToColor(minDateNum).fill, border: `1.5px solid ${dateToColor(minDateNum).stroke}` }}
-          />
-          {minDateLabel}
-          <span>→</span>
-          <span
-            className="w-2.5 h-2.5 rounded-full shrink-0"
-            style={{ background: dateToColor(maxDateNum).fill, border: `1.5px solid ${dateToColor(maxDateNum).stroke}` }}
-          />
-          {maxDateLabel}
-        </div>
-      )}
         {/* Struck-out records get their own row rather than being folded into
           the one above: the count that matters is what's still counted, and
           the greyed points need a key of their own to be read as deliberate. */}
@@ -6602,44 +6634,28 @@ export default function OccurrenceMapRow({
                       <span className="tabular-nums text-[10px] text-zinc-400">{tab.count.toLocaleString()}</span>
                     </button>
                   ))}
-                  <div className="ml-auto flex items-center gap-1 pr-1">
-                    {/* The records as the spatial team wants them. Only the
-                        ones being counted, and only the ones with a position:
-                        a point file is points. */}
+                  <div className="ml-auto flex items-center gap-0.5 pr-1">
                     <button
-                      onClick={saveAsPointFile}
-                      disabled={exportablePoints.length === 0}
-                      title={`Save the ${exportablePoints.length.toLocaleString()} counted records that have a position as an IUCN point file (CSV)`}
-                      className="flex items-center gap-1 px-1.5 py-0.5 rounded text-zinc-500 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-zinc-800 disabled:opacity-40 disabled:hover:bg-transparent"
+                      onClick={() => setListZoom((z) => Math.max(0.4, Math.round((z - 0.1) * 100) / 100))}
+                      title="Smaller — fit more of the table on the screen"
+                      className="px-1 py-0.5 rounded text-zinc-500 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-zinc-800"
                     >
-                      <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M12 3v12m0 0l-4-4m4 4l4-4M4 17v2a2 2 0 002 2h12a2 2 0 002-2v-2" />
-                      </svg>
-                      Save as point file
+                      −
                     </button>
-                    <div className="flex items-center gap-0.5 pl-1 border-l border-zinc-200 dark:border-zinc-700">
-                      <button
-                        onClick={() => setListZoom((z) => Math.max(0.4, Math.round((z - 0.1) * 100) / 100))}
-                        title="Smaller — fit more of the table on the screen"
-                        className="px-1 py-0.5 rounded text-zinc-500 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-zinc-800"
-                      >
-                        −
-                      </button>
-                      <button
-                        onClick={() => setListZoom(0.67)}
-                        title="Back to two thirds"
-                        className="tabular-nums text-[10px] text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300 w-8"
-                      >
-                        {Math.round(listZoom * 100)}%
-                      </button>
-                      <button
-                        onClick={() => setListZoom((z) => Math.min(1.5, Math.round((z + 0.1) * 100) / 100))}
-                        title="Bigger"
-                        className="px-1 py-0.5 rounded text-zinc-500 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-zinc-800"
-                      >
-                        +
-                      </button>
-                    </div>
+                    <button
+                      onClick={() => setListZoom(0.67)}
+                      title="Back to two thirds"
+                      className="tabular-nums text-[10px] text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300 w-8"
+                    >
+                      {Math.round(listZoom * 100)}%
+                    </button>
+                    <button
+                      onClick={() => setListZoom((z) => Math.min(1.5, Math.round((z + 0.1) * 100) / 100))}
+                      title="Bigger"
+                      className="px-1 py-0.5 rounded text-zinc-500 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-zinc-800"
+                    >
+                      +
+                    </button>
                   </div>
                 </div>
                 {pointFile && pointFileComparison && listTab === "file" ? (
@@ -6662,6 +6678,25 @@ export default function OccurrenceMapRow({
                   hoveredGbifId={hoveredFeature?.properties.gbifID ?? null}
                   onHoverRow={handleHoverRow}
                   onSelectRow={showRecordOnMap}
+                  onRowContextMenu={(feature, at) =>
+                    setRowMenu({ gbifID: feature.properties.gbifID, x: at.x, y: at.y })
+                  }
+                  footerExtra={
+                    // Only the counted records make a point file, so only that
+                    // list offers to save one.
+                    listTab === "gbif" ? (
+                      <button
+                        onClick={saveAsPointFile}
+                        disabled={exportablePoints.length === 0}
+                        title={`Save the ${exportablePoints.length.toLocaleString()} counted records that have a position as an IUCN point file (CSV)`}
+                        className="p-1 rounded border border-zinc-300 dark:border-zinc-600 text-zinc-500 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800 disabled:opacity-40 disabled:hover:bg-transparent transition-colors"
+                      >
+                        <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M12 3v12m0 0l-4-4m4 4l4-4M4 17v2a2 2 0 002 2h12a2 2 0 002-2v-2" />
+                        </svg>
+                      </button>
+                    ) : undefined
+                  }
                   excludedIds={excludedIds}
                   exclusions={exclusions}
                   onExclude={setPendingExclusion}
@@ -6673,6 +6708,24 @@ export default function OccurrenceMapRow({
                 />
                 )}
               </div>
+            )}
+            {/* The record menu for a right-clicked row, drawn at the pointer.
+                Kept out of the table so it can carry the same buttons the map
+                panel does, which are built here. */}
+            {rowMenu && createPortal(
+              <div
+                data-row-menu
+                style={{
+                  position: "fixed",
+                  left: Math.min(rowMenu.x, window.innerWidth - 220),
+                  top: Math.min(rowMenu.y, window.innerHeight - 140),
+                  zIndex: 10002,
+                }}
+                className="w-52 rounded-lg bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 shadow-lg p-1 space-y-0.5 text-[11px] text-zinc-700 dark:text-zinc-200"
+              >
+                {renderRecordActions(rowMenu.gbifID)}
+              </div>,
+              document.body
             )}
           </div>
         </div>
