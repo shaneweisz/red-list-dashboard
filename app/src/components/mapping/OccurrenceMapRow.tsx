@@ -3357,11 +3357,11 @@ export default function OccurrenceMapRow({
                   a flag is to see which records are being questioned across a
                   whole distribution at once, without opening fifty panels; the
                   panel's own flag then tells you what was said about the one
-                  you opened. Excluded records don't get one: they're already
-                  drawn as empty rings, and a flag on a record you've set aside
-                  is telling you something you acted on. */}
+                  you opened. Excluded records carry one too — why a record is
+                  questionable is worth seeing whether or not you've set it
+                  aside, and it is often the answer to why you did. */}
               {panelOccurrences.map((o) => {
-                const marks = exclusions[o.properties.gbifID] ? null : recordMarks(o);
+                const marks = recordMarks(o);
                 if (!marks) return null;
                 const mine = georeferences[o.properties.gbifID];
                 const position = mine
