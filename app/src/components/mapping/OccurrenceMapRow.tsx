@@ -1213,6 +1213,7 @@ export default function OccurrenceMapRow({
    * mouseleave that same click provokes.
    */
   const [tooltipPinned, setTooltipPinned] = useState(false);
+  const occurrencesByGbifIdRef = useRef<Map<number, OccurrenceFeature>>(new Map());
   const tooltipPinnedRef = useRef(false);
   const pinTooltip = useCallback(() => {
     tooltipPinnedRef.current = true;
@@ -2278,7 +2279,7 @@ export default function OccurrenceMapRow({
     if (features && features.length > 0) {
       const gbifID = Number(features[0].properties?.gbifID);
       if (gbifID) {
-        const known = occurrencesByGbifId.get(gbifID);
+        const known = occurrencesByGbifIdRef.current.get(gbifID);
         if (known) {
           cancelHoverClear();
           setHoverSource("map");
@@ -2363,10 +2364,19 @@ export default function OccurrenceMapRow({
         });
       })
       .catch(() => undefined);
-    // occurrencesByGbifId is declared below and read at click time, not at
-    // render time; naming it here would be a use-before-declaration.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [measure, showProtectedAreas, showEcoregions, ecoregions, showHabitat]);
+  }, [
+    measure,
+    showProtectedAreas,
+    showEcoregions,
+    ecoregions,
+    showHabitat,
+    // Left out until now, which is why clicking a record never pinned its
+    // panel: the handler was memoised on the first render, and the callbacks
+    // it had closed over were the first render's. The records themselves come
+    // from a ref for the same reason — the map of them is built below this.
+    cancelHoverClear,
+    pinTooltip,
+  ]);
 
   /**
    * Right-click asks what this spot is: its coordinates, the ground elevation,
@@ -2435,6 +2445,9 @@ export default function OccurrenceMapRow({
     () => new Map(occurrences.map((o) => [o.properties.gbifID, o])),
     [occurrences]
   );
+  // Read by the click handler, which is declared above this and so can't take
+  // the map itself as a dependency.
+  occurrencesByGbifIdRef.current = occurrencesByGbifId;
 
   /** Loaded records by catalogue number, for tying a point file row to one. */
   const occurrencesByCatalogNo = useMemo(() => {
@@ -2569,6 +2582,11 @@ export default function OccurrenceMapRow({
     // Set from the same hit test that drives the tooltip, so the cursor and
     // the panel can never disagree about whether there's a record here.
     setHoveringPoint(!!features && features.length > 0);
+    // A pinned panel is one you asked for. Hovering doesn't take it away and
+    // doesn't swap it for the next record the pointer crosses — it goes when
+    // you close it, or when you click somewhere else, which pins whatever you
+    // clicked on instead.
+    if (tooltipPinnedRef.current) return;
     // A point file row isn't a GBIF record and has no entry in the table, so it
     // gets its own small popup rather than being forced through the occurrence
     // tooltip. Checked first: where the two layers overlap, the file's point is
@@ -4518,22 +4536,21 @@ export default function OccurrenceMapRow({
        *
        * Two tooltips for one specimen — GBIF's and the assessment's — made you
        * hold both in your head and diff them by eye, which is the whole task.
-       * Only what differs is listed: agreement is the expected case and saying
-       * so on every row buries the one line that matters.
+       * Only what differs is listed, and nothing is said at all where the two
+       * agree: agreement is the expected case, and a row announcing it on
+       * every matched record buries the one line that matters.
        */
       const imported = pointFileByGbifId.get(p.gbifID);
       if (imported) {
         const point = imported.point;
         const drift = imported.fromGbif;
-        notes.push({
-          label: "Imported CSV",
-          value:
-            drift == null
-              ? `row ${point.row}`
-              : drift < 100
-                ? `row ${point.row} · same position`
-                : `row ${point.row} · ${drift >= 1000 ? `${(drift / 1000).toFixed(1)} km` : `${Math.round(drift)} m`} from GBIF's`,
-        });
+        if (drift != null && drift >= 100) {
+          notes.push({
+            label: "CSV position",
+            value: `${drift >= 1000 ? `${(drift / 1000).toFixed(1)} km` : `${Math.round(drift)} m`} from GBIF's`,
+            flag: true,
+          });
+        }
         // Only a real disagreement is worth a row. The two sides spell the
         // same value differently — "PreservedSpecimen" against GBIF's
         // "PRESERVED_SPECIMEN", "J. Smith" against "J Smith" — so they're
