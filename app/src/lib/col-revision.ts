@@ -38,7 +38,7 @@ export const REVISION_REASONS = [
   "lumped",
   "synonym_of",
   "infraspecific",
-  "no_link",
+  "unmatched",
   "missing_from_backbone",
   "classified_elsewhere",
 ] as const;
@@ -122,7 +122,7 @@ export const REVISION_REASON_SHORT: Record<string, string> = {
   // (accurate, but nobody says it). The "on CoL" suffix is earned for the same
   // reason Split and Lumped earn it: a rank is something both parties assign, so
   // without an agent the label leaves open who did the demoting.
-  infraspecific: "Subspecies on CoL",
+  infraspecific: "Below species on CoL",
   // CoL's own two products, named as CoL names them. "Not in checklist" invited
   // the reading that CoL has nothing at all, when the record is in XR.
   not_in_base: "In XR, not Base",
@@ -130,7 +130,7 @@ export const REVISION_REASON_SHORT: Record<string, string> = {
   provisional: "Provisionally accepted",
   // "Unmatched" left open what it failed to match. This is also what the SSC
   // group view has always called it ("No 1:1 CoL Match").
-  no_link: "No CoL match",
+  unmatched: "No CoL match",
   // Diagnosed but not dashboard bars (UNFLAGGED_REASONS); the SSC panel uses them.
   extinct_unconfirmed: "Extinct flag",
   missing_from_backbone: "Dangling link",
@@ -142,11 +142,11 @@ export const REVISION_REASON_SUMMARY: Record<string, string> = {
   split: "Catalogue of Life recognises species likely split out of this one",
   lumped: "Catalogue of Life merges this with another assessed species",
   synonym_of: "Catalogue of Life's checklist files this name under another species",
-  infraspecific: "Catalogue of Life now ranks this as a subspecies",
+  infraspecific: "Catalogue of Life ranks this below species — a subspecies, variety or form of another",
   not_in_base: "in Catalogue of Life's extended release only, not its curated checklist",
   provisional: "listed by Catalogue of Life only provisionally",
   extinct_unconfirmed: "Catalogue of Life marks the name extinct; the assessment doesn't",
-  no_link: "not matched to a Catalogue of Life name yet",
+  unmatched: "Catalogue of Life has no species record under this name",
   missing_from_backbone: "its Catalogue of Life record no longer resolves",
   classified_elsewhere: "Catalogue of Life files it under a different group",
 };
@@ -172,6 +172,9 @@ export interface ColRevision {
   reason?: string;
   /** The species it's lumped with / demoted under ("lumped"/"infraspecific"). */
   detail?: string;
+  /** CoL's rank for it when that is below species ("infraspecific" only), so the
+   *  wording can name it exactly rather than calling every one a subspecies. */
+  rank?: string;
   /** That species' own SIS id, when it's itself IUCN-assessed. */
   detailId?: number;
   /** The CoL id to deep-link to: the record that disagrees with the assessment,
@@ -358,10 +361,15 @@ export function noMatchSentence(flag: ColRevision, subject: string | null): NoMa
       return subject
         ? { before: `This assessment is published under ${subject}, but according to ${COL} the accepted name for this species is `, detail: flag.detail, after: "." }
         : { before: "Filed as a synonym of ", detail: flag.detail, after: "" };
-    case "infraspecific":
+    case "infraspecific": {
+      // Say the rank CoL actually gives it. 124 of these are varieties and one is
+      // a form; telling a botanist their variety is a subspecies is simply wrong,
+      // and wrong in a way that costs the whole feature credibility.
+      const rank = flag.rank && flag.rank !== "subspecies" ? flag.rank : "subspecies";
       return subject
-        ? { before: `${COL} ranks ${s}as a subspecies of `, detail: flag.detail, after: ", so this assessment covers what it treats as part of another species." }
-        : { before: "Now a subspecies of ", detail: flag.detail, after: "" };
+        ? { before: `${COL} ranks ${s}as a ${rank} of `, detail: flag.detail, after: ", so this assessment covers what it treats as part of another species." }
+        : { before: `Now a ${rank} of `, detail: flag.detail, after: "" };
+    }
     // Deliberately NOT "hasn't added it yet": that implies a backlog the
     // checklist is working through, and for most of these it isn't true. Only
     // ~10% were described since 2015 and 39% are pre-1950, and 80% sit in a genus
@@ -394,10 +402,10 @@ export function noMatchSentence(flag: ColRevision, subject: string | null): NoMa
       return subject
         ? { before: `${COL} marks ${s}extinct and this assessment doesn't, so one of them is wrong about whether it survives.`, after: "" }
         : { before: `${COL}'s record is flagged extinct; this assessment's category contradicts it`, after: "" };
-    case "no_link":
+    case "unmatched":
       return subject
-        ? { before: `No ${COL} name matches ${subject}, so there is nothing there to check this assessment against.`, after: "" }
-        : { before: `Not yet matched to a ${COL} name`, after: "" };
+        ? { before: `No ${COL} species matches ${subject}, so there is nothing there to check this assessment against.`, after: "" }
+        : { before: `No ${COL} species matches this name`, after: "" };
     case "missing_from_backbone":
       return subject
         ? { before: `${s}links to a ${COL} record that no longer resolves, so the match needs redoing.`, after: "" }
@@ -533,7 +541,7 @@ export function noMatchExplanation(flag: ColRevision, subject: string | null = n
  * Where the ⚑ sends you: the CoL record this flag is about — the one that
  * disagrees with the assessment, or the species' own record for a split-only
  * flag. Falls back to a CoL name search when there's no col_id at all, which is
- * the "no_link" case (there is no record to link to — that IS the finding).
+ * the "unmatched" case (there is no record to link to — that IS the finding).
  */
 /** A CoL record's public page. */
 export function colUrl(colId: string): string {

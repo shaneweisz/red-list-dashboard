@@ -64,7 +64,7 @@ export interface ColRevisionsFile {
    *  lw = the OTHER IUCN assessments sharing this species' CoL record
    *  [name, its own synonym record, IUCN category], ln = CoL's accepted name for
    *  that shared record. */
-  species: Record<string, { r?: string; d?: string; i?: number; dc?: string; c?: string; n?: string;
+  species: Record<string, { r?: string; d?: string; i?: number; dc?: string; c?: string; n?: string; k?: string;
     s?: [string, string, string, string][]; lw?: [string, string, string][]; ln?: string }>;
 }
 
@@ -127,6 +127,7 @@ export async function run(): Promise<void> {
       ...(d.detail != null ? { d: d.detail } : {}),
       ...(d.detailId != null ? { i: d.detailId } : {}),
       ...(d.detailColId != null ? { dc: d.detailColId } : {}),
+      ...(d.rank != null ? { k: d.rank } : {}),
       ...(d.colId != null ? { c: d.colId } : {}),
       // CoL's accepted name is only worth shipping when it says something the
       // other fields don't — otherwise it's the same string twice per entry.

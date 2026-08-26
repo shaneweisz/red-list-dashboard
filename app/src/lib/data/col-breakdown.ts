@@ -19,7 +19,7 @@
 import type { DuckDBConnection } from "@duckdb/node-api";
 import { filterToSql, type NodeFilter } from "@/lib/taxonomy-sql";
 
-export type NoMatchReason = "no_link" | "missing_from_backbone" | "infraspecific" | "provisional" | "lumped" | "not_in_base" | "extinct_unconfirmed" | "classified_elsewhere" | "synonym_of";
+export type NoMatchReason = "unmatched" | "missing_from_backbone" | "infraspecific" | "provisional" | "lumped" | "not_in_base" | "extinct_unconfirmed" | "classified_elsewhere" | "synonym_of";
 export interface NoMatchDetail {
   id: number;
   name: string;
@@ -29,8 +29,12 @@ export interface NoMatchDetail {
   /** That species' own assessed id, so the frontend can link to it too ("lumped"/"infraspecific", only when the parent is itself IUCN-assessed). */
   detailId?: number;
   /** The CoL id this assessment links to, so the UI can deep-link to the CoL
-   *  record that disagrees with it. Absent only for "no_link" (there isn't one). */
+   *  record that disagrees with it. Absent when nothing matched at all. */
   colId?: string;
+  /** CoL's rank for the record, when it sits below species ("infraspecific"
+   *  only). Carried so the wording can say which — 124 of these are varieties
+   *  and one is a form, and calling those a subspecies is simply wrong. */
+  rank?: string;
   /** The CoL record for `detail`, so the UI can link that name to CoL too. */
   detailColId?: string;
   /** CoL's OWN accepted name for that col_id, when the species/ universe has it.
@@ -62,9 +66,15 @@ export interface BreakdownEntry {
 
 // Classifies one "no match" diagnosis row (see computeBreakdownEntry's diagRows
 // query) into a human-explainable reason, cheapest/most-specific check first:
-//  - no_link: never matched to any CoL name at all.
-//  - infraspecific: its linked col_id IS in the current backbone, but at subspecies/
-//    variety/form rank, not species rank — CoL currently treats it as part of
+//  - unmatched: CoL has no species-level record for this name — either nothing
+//    matched at all, or what matched sits at genus rank or above, which is not
+//    a species record however real it is (Amazona violacea matches the GENUS
+//    Amazona; reporting that as a demotion would read "a subspecies of
+//    Psittacidae"). Named for species_link's own match_method rather than for
+//    the absent row, and distinct from the family of reasons that all mean "no
+//    1:1 match" — this is the one where CoL has nothing to point at.
+//  - infraspecific: its linked col_id IS in the current backbone, but at a rank
+//    below species (subspecies, variety, form), not species rank — CoL currently treats it as part of
 //    another species rather than its own (e.g. Arctocephalus townsendi is currently
 //    "Arctocephalus philippii townsendi" in CoL). `detail`/`detailId` name the
 //    parent it's classified under, linked if that parent is itself IUCN-assessed.
@@ -92,6 +102,12 @@ export interface BreakdownEntry {
 //  - classified_elsewhere: none of the above — the linked col_id is real, in_base,
 //    and extant, but CoL's own class/order/family for it doesn't match this name
 //    (a CoL-side reclassification, e.g. the pre-fix Ziphiidae/Hyperoodontidae case).
+/** Ranks that are genuinely below species — the only ones a demotion can mean.
+ *  ColDP's infraspecific set; anything else is not a demotion. */
+const INFRASPECIFIC_RANKS = new Set([
+  "subspecies", "variety", "subvariety", "form", "subform", "convariety", "cultivar",
+]);
+
 export function classifyNoMatch(row: Record<string, unknown>): NoMatchDetail {
   const id = Number(row.id);
   const name = String(row.name);
@@ -118,18 +134,28 @@ export function classifyNoMatch(row: Record<string, unknown>): NoMatchDetail {
     // otherwise be reported as "no CoL name at all", which is plainly wrong to
     // anyone who looks the name up (e.g. Idaea josephinae -> C7CM2).
     if (provColId) return { id, name, reason: "provisional", colId: provColId };
-    return { id, name, reason: "no_link" };
+    return { id, name, reason: "unmatched" };
   }
   // Every remaining reason has a col_id to point at, and — where species/ knows
   // the name — CoL's own accepted spelling of it.
   const ref = { colId: linkedColId, ...(linkedName ? { colName: linkedName } : {}) };
   if (!linkedName) {
     if (bkRank === "species") return { id, name, reason: "provisional", ...ref };
-    if (bkRank) {
+    // Only ranks genuinely BELOW species are a demotion. Anything at or above it
+    // (3 species match a genus record) has no species-level CoL record at all,
+    // which is what `unmatched` says — reporting it as infraspecific produced
+    // "ranks this as a subspecies of Psittacidae", the parent being a family.
+    if (bkRank && INFRASPECIFIC_RANKS.has(bkRank)) {
+      const rank = { rank: bkRank };
       if (parentAssessedName) {
-        return { id, name, reason: "infraspecific", detail: parentAssessedName, detailId: parentAssessedId != null ? Number(parentAssessedId) : undefined, ...(parentColId ? { detailColId: parentColId } : {}), ...ref };
+        return { id, name, reason: "infraspecific", detail: parentAssessedName, detailId: parentAssessedId != null ? Number(parentAssessedId) : undefined, ...(parentColId ? { detailColId: parentColId } : {}), ...rank, ...ref };
       }
-      if (parentName) return { id, name, reason: "infraspecific", detail: parentName, ...(parentColId ? { detailColId: parentColId } : {}), ...ref };
+      if (parentName) return { id, name, reason: "infraspecific", detail: parentName, ...(parentColId ? { detailColId: parentColId } : {}), ...rank, ...ref };
+      // Below species but no parent resolved: we know it is a demotion and can't
+      // say of what, so fall through rather than guess.
+    } else if (bkRank) {
+      // At or above species rank, so there is no species record to point at.
+      return { id, name, reason: "unmatched", ...ref };
     }
     return { id, name, reason: "missing_from_backbone", ...ref };
   }

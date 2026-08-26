@@ -30,9 +30,9 @@ const baseRow = {
 };
 
 describe("classifyNoMatch", () => {
-  it("no_link: never matched to any CoL name at all", () => {
+  it("unmatched: never matched to any CoL name at all", () => {
     const result = classifyNoMatch({ ...baseRow, linked_col_id: null });
-    expect(result).toEqual({ id: 1, name: "Testus example", reason: "no_link" });
+    expect(result).toEqual({ id: 1, name: "Testus example", reason: "unmatched" });
   });
 
   it("provisional: linked col_id is species-rank in the backbone, but only provisionally accepted", () => {
@@ -49,7 +49,7 @@ describe("classifyNoMatch", () => {
     });
     expect(result).toEqual({
       id: 1, name: "Testus example", reason: "infraspecific",
-      detail: "Arctocephalus philippii", detailId: 42, colId: "ABC123",
+      detail: "Arctocephalus philippii", detailId: 42, rank: "subspecies", colId: "ABC123",
     });
   });
 
@@ -60,7 +60,7 @@ describe("classifyNoMatch", () => {
     });
     expect(result).toEqual({
       id: 1, name: "Testus example", reason: "infraspecific",
-      detail: "Some unassessed parent", colId: "ABC123",
+      detail: "Some unassessed parent", rank: "subspecies", colId: "ABC123",
     });
   });
 
@@ -69,6 +69,16 @@ describe("classifyNoMatch", () => {
       ...baseRow, linked_col_id: "ABC123", linked_name: null, bk_rank: null,
     });
     expect(result.reason).toBe("missing_from_backbone");
+  });
+
+  it("unmatched: the linked record is a GENUS, so there is no species record to point at", () => {
+    // Amazona violacea matches the genus Amazona, whose parent is the family.
+    // Reported as infraspecific it read "a subspecies of Psittacidae".
+    const result = classifyNoMatch({
+      ...baseRow, linked_col_id: "TC4", linked_name: null, bk_rank: "genus",
+      parent_assessed_name: null, parent_name: "Psittacidae",
+    });
+    expect(result).toEqual({ id: 1, name: "Testus example", reason: "unmatched", colId: "TC4" });
   });
 
   it("missing_from_backbone: backbone row exists (non-species rank) but neither parent field resolved — falls through rather than guessing", () => {
@@ -130,7 +140,7 @@ describe("classifyNoMatch", () => {
 
   it("coerces numeric-looking id/name fields (DuckDB row objects aren't guaranteed JS number/string types)", () => {
     const result = classifyNoMatch({ ...baseRow, id: "7", name: 42 as unknown as string });
-    expect(result).toEqual({ id: 7, name: "42", reason: "no_link" });
+    expect(result).toEqual({ id: 7, name: "42", reason: "unmatched" });
   });
 });
 
@@ -197,8 +207,8 @@ describe("classifyNoMatch — checklist coverage", () => {
     expect(result.colId).toBe("C7CM2");
   });
 
-  it("no_link: still reported when CoL really has nothing under the name", () => {
-    expect(classifyNoMatch({ ...baseRow, linked_col_id: null, prov_col_id: null }).reason).toBe("no_link");
+  it("unmatched: still reported when CoL really has nothing under the name", () => {
+    expect(classifyNoMatch({ ...baseRow, linked_col_id: null, prov_col_id: null }).reason).toBe("unmatched");
   });
 
   it("infraspecific: carries the parent's CoL record so that name can be linked too", () => {

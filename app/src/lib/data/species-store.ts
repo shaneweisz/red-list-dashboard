@@ -214,10 +214,10 @@ export function getColRevisions(): Map<number, ColRevision> {
   if (colRevisionsCache) return colRevisionsCache;
   const out = new Map<number, ColRevision>();
   if (fs.existsSync(COL_REVISIONS_PATH)) {
-    // Short-keyed on disk (r/d/i/dc/c/n/s/lw/ln, absent fields omitted) — one entry per
+    // Short-keyed on disk (r/d/i/dc/k/c/n/s/lw/ln, absent fields omitted) — one entry per
     // flagged species, so the shipped file stays small. See build-col-revisions.
     const file = JSON.parse(fs.readFileSync(COL_REVISIONS_PATH, "utf-8")) as {
-      species: Record<string, { r?: string; d?: string; i?: number; dc?: string; c?: string; n?: string;
+      species: Record<string, { r?: string; d?: string; i?: number; dc?: string; c?: string; n?: string; k?: string;
         s?: [string, string, string, string][]; lw?: [string, string, string][]; ln?: string }>;
     };
     for (const [id, e] of Object.entries(file.species ?? {})) {
@@ -226,6 +226,7 @@ export function getColRevisions(): Map<number, ColRevision> {
         ...(e.d != null ? { detail: e.d } : {}),
         ...(e.i != null ? { detailId: e.i } : {}),
         ...(e.dc != null ? { detailColId: e.dc } : {}),
+        ...(e.k != null ? { rank: e.k } : {}),
         ...(e.c != null ? { colId: e.c } : {}),
         ...(e.n != null ? { colName: e.n } : {}),
         // [name, col_id, previous name, previous col_id] on disk; an empty

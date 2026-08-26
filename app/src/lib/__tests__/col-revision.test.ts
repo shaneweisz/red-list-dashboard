@@ -50,8 +50,8 @@ describe("revision vocabulary", () => {
   });
 
   it("keeps short labels short enough for a chart axis", () => {
-    // The axis is 168px at 11px type — about 19 characters before it wraps to a
-    // second line. The cap here is 28, not 19: synonym_of deliberately spends a
+    // The axis is 180px at 11px type — about 21 characters before it wraps to a
+    // second line. The cap here is 28, not 21: synonym_of deliberately spends a
     // second line on "CoL's accepted name differs", because dropping "accepted"
     // to fit would make the label trivially true (every species has other names
     // in CoL). The cap exists to stop labels growing without anyone deciding to,
@@ -62,9 +62,9 @@ describe("revision vocabulary", () => {
   });
 
   it("keeps every BAR but the one deliberate exception on a single line", () => {
-    // Only the dashboard's bars sit on the 130px axis. UNFLAGGED_REASONS are
+    // Only the dashboard's bars sit on the 180px axis. UNFLAGGED_REASONS are
     // rendered by the SSC panel in a table cell, which has room.
-    const twoLine = REVISION_REASONS.filter((r) => REVISION_REASON_SHORT[r].length > 18);
+    const twoLine = REVISION_REASONS.filter((r) => REVISION_REASON_SHORT[r].length > 21);
     expect(twoLine).toEqual(["synonym_of"]);
   });
 });
@@ -110,7 +110,7 @@ describe("isFlagged / revisionReasons", () => {
     // key entirely, but a hand-written or future-encoded entry might not.
     expect(isFlagged({ splitInto: [] })).toBe(false);
     expect(isFlagged({ colId: "ABC" })).toBe(false);
-    expect(isFlagged({ reason: "no_link" })).toBe(true);
+    expect(isFlagged({ reason: "unmatched" })).toBe(true);
     expect(isFlagged({ splitInto: [{ name: "Aepyceros petersi" }] })).toBe(true);
   });
 });
@@ -143,9 +143,9 @@ describe("matchesRevisionFilter", () => {
   });
 
   it("ORs multiple selected reasons", () => {
-    const sel = new Set(["lumped", "no_link"]);
+    const sel = new Set(["lumped", "unmatched"]);
     expect(matchesRevisionFilter(lumped, null, sel)).toBe(true);
-    expect(matchesRevisionFilter({ reason: "no_link" }, null, sel)).toBe(true);
+    expect(matchesRevisionFilter({ reason: "unmatched" }, null, sel)).toBe(true);
     expect(matchesRevisionFilter({ reason: "provisional" }, null, sel)).toBe(false);
   });
 
@@ -182,8 +182,8 @@ describe("noMatchSentence", () => {
   });
 
   it("reads as a complete sentence for reasons with no second species", () => {
-    expect(noMatchExplanation({ reason: "no_link" }, "Bufo bufo"))
-      .toBe("No Catalogue of Life name matches Bufo bufo, so there is nothing there to check this assessment against.");
+    expect(noMatchExplanation({ reason: "unmatched" }, "Bufo bufo"))
+      .toBe("No Catalogue of Life species matches Bufo bufo, so there is nothing there to check this assessment against.");
   });
 
   it("explains more than it labels — the standalone sentence says more than the table one", () => {
@@ -362,7 +362,7 @@ describe("lumpSentence", () => {
 
 describe("revisionSentences", () => {
   it("returns one sentence per signal, no-match first", () => {
-    expect(revisionSentences({ reason: "no_link" }, "Bufo bufo")).toHaveLength(1);
+    expect(revisionSentences({ reason: "unmatched" }, "Bufo bufo")).toHaveLength(1);
     expect(revisionSentences({ splitInto: [{ name: "Bufo spinosus" }] }, "Bufo bufo")).toHaveLength(1);
     const both = revisionSentences(
       { reason: "lumped", detail: "Leptoxis picta", splitInto: [{ name: "Leptoxis coosaensis" }] },
@@ -398,7 +398,7 @@ describe("colTaxonUrl", () => {
   });
 
   it("falls back to a name search for the one reason with no CoL record", () => {
-    expect(colTaxonUrl({ reason: "no_link" }, "Achatinella lila"))
+    expect(colTaxonUrl({ reason: "unmatched" }, "Achatinella lila"))
       .toBe("https://www.catalogueoflife.org/data/search?q=Achatinella%20lila");
   });
 });
@@ -415,7 +415,7 @@ describe("RevisionTally", () => {
 
   it("partitions species into flagged and clean, with nothing lost", () => {
     const flags = [
-      { reason: "no_link" },
+      { reason: "unmatched" },
       { splitInto: [{ name: "A" }] },
       { lumpedWith: [{ name: "B" }] },
       null,
@@ -428,12 +428,12 @@ describe("RevisionTally", () => {
 
   it("counts a species in every bar it belongs to, over-totalling by exactly multiSignal", () => {
     const t = tally([
-      { reason: "no_link" },
+      { reason: "unmatched" },
       { lumpedWith: [{ name: "B" }] },
       { lumpedWith: [{ name: "B" }], splitInto: [{ name: "C" }] }, // two signals
       { reason: "not_in_base", splitInto: [{ name: "D" }] },       // two signals
     ]);
-    expect(t.counts).toEqual({ no_link: 1, lumped: 2, split: 2, not_in_base: 1 });
+    expect(t.counts).toEqual({ unmatched: 1, lumped: 2, split: 2, not_in_base: 1 });
     expect(t.multiSignal).toBe(2);
     expect(barTotal(t)).toBe(t.flagged + t.multiSignal);
   });
@@ -441,7 +441,7 @@ describe("RevisionTally", () => {
   it("makes each bar's count equal what selecting that reason returns", () => {
     // The invariant a strict partition would have broken.
     const flags = [
-      { reason: "no_link" },
+      { reason: "unmatched" },
       { lumpedWith: [{ name: "B" }] },
       { lumpedWith: [{ name: "B" }], splitInto: [{ name: "C" }] },
       null,

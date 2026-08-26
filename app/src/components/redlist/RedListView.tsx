@@ -929,10 +929,15 @@ function RevisionTooltipContent({ flag, name, category }: { flag: ColRevision; n
   // The three signals are independent, so each renders on its own terms — a
   // lumped species no longer carries a `reason` at all (see revisionReasons),
   // which is why the lump list can't hang off one.
-  const sentences: React.ReactNode[] = [];
+  //
+  // Each carries the code it came from so the block can be headed with the same
+  // label the chart uses. Without it the tooltip states a finding without saying
+  // which finding, and a reader who filtered by a bar has no way to tell which
+  // sentence is the one they clicked.
+  const sentences: { code: string; node: React.ReactNode }[] = [];
   const lump = lumpSentence(flag, name, category);
   if (lump) {
-    sentences.push(
+    sentences.push({ code: "lumped", node: (
       <span key="lump">
         {lump.before}
         {lump.members.map((m, i) => (
@@ -945,28 +950,33 @@ function RevisionTooltipContent({ flag, name, category }: { flag: ColRevision; n
         {lump.mid}
         {lump.under && <>{", "}{colLink(lump.under.name, lump.under.colId)}</>}
         {lump.after}
-      </span>,
-    );
+      </span>
+    ) });
   } else if (flag.reason != null) {
     const s = noMatchSentence(flag, name);
-    sentences.push(
+    sentences.push({ code: flag.reason, node: (
       <span key="no-match">
         {linkSubject(s.before)}
         {s.detail != null && colLink(s.detail, flag.detailColId)}
         {s.after}
-      </span>,
-    );
+      </span>
+    ) });
   }
   const split = splitSummary(flag, name);
-  if (split) sentences.push(renderList("split", split));
+  if (split) sentences.push({ code: "split", node: renderList("split", split) });
 
   return (
     <>
       {/* One block per signal: a species can be both lumped and split, and the
           two are separate findings rather than one running sentence. */}
-      <div className="space-y-2">
-        {sentences.map((node, i) => (
-          <div key={i}>{node}</div>
+      <div className="space-y-2.5">
+        {sentences.map(({ code, node }, i) => (
+          <div key={i}>
+            <div className="text-[10px] font-semibold uppercase tracking-wide text-amber-300/80">
+              {REVISION_REASON_SHORT[code] ?? code}
+            </div>
+            <div className="mt-0.5">{node}</div>
+          </div>
         ))}
       </div>
       <p className="mt-2 text-[11px] italic leading-snug text-zinc-400">{REVISION_CAVEAT}</p>
@@ -3730,7 +3740,7 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
                   if (reasons.length) rangeSelectColReasons(reasons, event);
                 }}
                 barColor="#d97706"
-                yAxisWidth={168}
+                yAxisWidth={180}
                 rightMargin={60}
                 labelFormatter={(short: string) => {
                   const reason = shortToReason.get(short);
