@@ -147,6 +147,7 @@ const AohMapLayer = dynamic(
 );
 // The list (table) view of the same occurrences — only pulled in when the user
 // actually switches to it.
+const PointFileTable = dynamic(() => import("./PointFileTable"), { ssr: false });
 const OccurrenceListTable = dynamic(
   () => import("./OccurrenceListTable"),
   { ssr: false }
@@ -674,6 +675,36 @@ export function isOutsideNativeRange(
   return !nativeCountries.some((c) => c.toUpperCase() === upper);
 }
 
+/**
+ * The flag beside a flagged point, with its reasons on hover.
+ *
+ * Its own bubble rather than a `title`: over the map a native tooltip never
+ * arrived at all — the cursor changed to say there was something to read and
+ * then nothing was ever shown — and where it does arrive it is a second late.
+ */
+function FlagMark({ marks }: { marks: string }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <span
+      onMouseEnter={() => setOpen(true)}
+      onMouseLeave={() => setOpen(false)}
+      className="relative block text-amber-600 drop-shadow-sm cursor-help"
+    >
+      <svg className="w-2.5 h-2.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={3}>
+        <path strokeLinecap="round" strokeLinejoin="round" d="M5 22V3m0 0h12l-2 4 2 4H5" />
+      </svg>
+      {open && (
+        <span
+          data-occurrence-mark
+          className="absolute left-3 bottom-3 z-[1000] block w-max max-w-[220px] rounded-md bg-zinc-900/95 dark:bg-zinc-700 px-1.5 py-1 text-[10px] leading-snug text-white shadow-lg"
+        >
+          {marks}
+        </span>
+      )}
+    </span>
+  );
+}
+
 export default function OccurrenceMapRow({
   speciesKey,
   countryCode,
@@ -813,6 +844,16 @@ export default function OccurrenceMapRow({
   const [basemapOpen, setBasemapOpen] = useState(false);
   /** Whether the map's tools menu — EOO/AOO and measuring — is showing. */
   const [toolsOpen, setToolsOpen] = useState(false);
+  /**
+   * Which list is under the map: GBIF's records, or the imported file's rows.
+   *
+   * Two tables rather than one. The file's rows aren't GBIF records — they
+   * have their own columns, several of them are tied to no GBIF record at all,
+   * and the ones that are already say so in that record's panel — so putting
+   * them in the same table would have meant a row that means something
+   * different in every column.
+   */
+  const [listTab, setListTab] = useState<"gbif" | "file">("gbif");
   /**
    * The record whose menu is open, from clicking its point.
    *
@@ -3318,11 +3359,7 @@ export default function OccurrenceMapRow({
                     anchor="bottom-left"
                     offset={[3, -3]}
                   >
-                    <span title={marks} className="block text-amber-600 drop-shadow-sm cursor-help">
-                      <svg className="w-2.5 h-2.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={3}>
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M5 22V3m0 0h12l-2 4 2 4H5" />
-                      </svg>
-                    </span>
+                    <FlagMark marks={marks} />
                   </MapLibreMarker>
                 );
               })}
@@ -6424,6 +6461,42 @@ export default function OccurrenceMapRow({
             )}
             {fullscreen && (
               <div className="order-3 sm:order-none flex flex-col gap-2 min-w-0 flex-1 min-h-0">
+                {pointFile && pointFileComparison && (
+                  <div className="flex items-center gap-1 shrink-0 text-[11px]">
+                    {([
+                      ["gbif", "GBIF records", occurrences.length],
+                      ["file", pointFile.fileName, pointFile.points.length],
+                    ] as const).map(([key, label, count]) => (
+                      <button
+                        key={key}
+                        onClick={() => setListTab(key)}
+                        title={key === "file" ? `The rows of ${pointFile.fileName}, as imported` : "Every record loaded from GBIF"}
+                        className={`flex items-center gap-1.5 px-2 py-1 rounded-t-md border-b-2 max-w-[16rem] ${
+                          listTab === key
+                            ? "border-blue-500 text-zinc-700 dark:text-zinc-200"
+                            : "border-transparent text-zinc-500 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200"
+                        }`}
+                      >
+                        {key === "file" && (
+                          <span
+                            className="w-2 h-2 rounded-full shrink-0"
+                            style={{ background: POINT_FILE_COLOR }}
+                          />
+                        )}
+                        <span className="truncate">{label}</span>
+                        <span className="tabular-nums text-[10px] text-zinc-400">{count.toLocaleString()}</span>
+                      </button>
+                    ))}
+                  </div>
+                )}
+                {pointFile && pointFileComparison && listTab === "file" ? (
+                  <PointFileTable
+                    comparison={pointFileComparison}
+                    fileName={pointFile.fileName}
+                    extraColumns={pointFile.extraColumns}
+                    fillHeight
+                  />
+                ) : (
                 <OccurrenceListTable
                   occurrences={occurrences}
                   loading={loadingOccurrences}
@@ -6442,6 +6515,7 @@ export default function OccurrenceMapRow({
                   onTogglePanelLayout={() => setPanelLayout((v) => (v === "rows" ? "columns" : "rows"))}
                   fillHeight
                 />
+                )}
               </div>
             )}
           </div>
