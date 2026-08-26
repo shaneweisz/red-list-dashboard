@@ -4787,8 +4787,26 @@ export default function OccurrenceMapRow({
       setHoveredFeature(feature);
       setHoveredPanel("main");
       pinTooltip();
+      // A record off the edge of the current view gets the view widened to
+      // reach it, rather than the panel opening for a point that isn't there.
+      // Widened rather than moved: what you were looking at is what you're
+      // comparing this record against, so it stays on screen — and the zoom
+      // only ever goes out, never in.
+      const map = mapRef.current?.getMap();
+      const mine = georeferences[feature.properties.gbifID];
+      const position = mine
+        ? ([mine.decimalLongitude, mine.decimalLatitude] as [number, number])
+        : feature.geometry?.coordinates;
+      if (!map || !position) return;
+      const bounds = map.getBounds();
+      if (bounds.contains(position)) return;
+      map.fitBounds(bounds.extend(position), {
+        padding: 60,
+        maxZoom: map.getZoom(),
+        duration: 700,
+      });
     },
-    [cancelHoverClear, pinTooltip]
+    [cancelHoverClear, pinTooltip, georeferences]
   );
 
   /**
@@ -4836,7 +4854,7 @@ export default function OccurrenceMapRow({
     URL.revokeObjectURL(url);
   }, [exportablePoints, scientificName]);
 
-  const renderRecordActions = (gbifID: number) => {
+  const renderRecordActions = (gbifID: number, opts: { showOnMap?: boolean } = {}) => {
     const record = occurrencesByGbifId.get(gbifID);
     const excluded = !!exclusions[gbifID];
     // Keyed off the record's own coordinates rather than the clicked feature's:
@@ -4852,6 +4870,28 @@ export default function OccurrenceMapRow({
     const close = () => closeTooltip();
     return (
       <>
+        {/* Only from a row's menu: on the map panel you are already looking
+            at the point this would take you to. */}
+        {opts.showOnMap && record && (
+          <button
+            onClick={() => {
+              setRowMenu(null);
+              showRecordOnMap(record);
+            }}
+            title={
+              position
+                ? "Open this record's panel on the map, widening the view to reach it if it's off the edge"
+                : "GBIF gave this record no coordinates, so there is nowhere on the map to show it"
+            }
+            disabled={!position}
+            className="flex w-full items-center gap-1.5 px-1 py-1 rounded hover:bg-zinc-100 dark:hover:bg-zinc-800 disabled:opacity-40 disabled:hover:bg-transparent"
+          >
+            <svg className="w-3 h-3 shrink-0 text-zinc-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M9 20l-5.5 2V6L9 4m0 16l6-2m-6 2V4m6 14l5.5 2V4L15 6m0 12V6m0 0L9 4" />
+            </svg>
+            Show on map
+          </button>
+        )}
                 <button
                   onClick={() => {
                     window.open(`https://www.gbif.org/occurrence/${gbifID}`, "_blank", "noopener,noreferrer");
@@ -6677,7 +6717,6 @@ export default function OccurrenceMapRow({
                   onClearGeoreference={clearGeoreference}
                   hoveredGbifId={hoveredFeature?.properties.gbifID ?? null}
                   onHoverRow={handleHoverRow}
-                  onSelectRow={showRecordOnMap}
                   onRowContextMenu={(feature, at) =>
                     setRowMenu({ gbifID: feature.properties.gbifID, x: at.x, y: at.y })
                   }
@@ -6723,7 +6762,7 @@ export default function OccurrenceMapRow({
                 }}
                 className="w-52 rounded-lg bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 shadow-lg p-1 space-y-0.5 text-[11px] text-zinc-700 dark:text-zinc-200"
               >
-                {renderRecordActions(rowMenu.gbifID)}
+                {renderRecordActions(rowMenu.gbifID, { showOnMap: true })}
               </div>,
               document.body
             )}

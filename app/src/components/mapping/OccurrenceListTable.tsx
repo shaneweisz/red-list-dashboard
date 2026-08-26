@@ -413,8 +413,6 @@ interface OccurrenceListTableProps {
    * the reason and a way back, not their place in the sort.
    */
   variant?: "records" | "excluded";
-  /** Picking a row opens that record's panel on the map. */
-  onSelectRow?: (feature: OccurrenceFeature) => void;
   /** Right-clicking a row opens the record's menu where the pointer is. */
   onRowContextMenu?: (feature: OccurrenceFeature, at: { x: number; y: number }) => void;
   /** Drawn at the right of the footer — the save button, where there is one. */
@@ -457,7 +455,6 @@ export default function OccurrenceListTable({
   onHoverRow,
   excludedIds,
   variant = "records",
-  onSelectRow,
   onRowContextMenu,
   footerExtra,
   zoom = 1,
@@ -1201,27 +1198,20 @@ export default function OccurrenceListTable({
                   if (el) rowRefs.current.set(id, el);
                   else rowRefs.current.delete(id);
                 }}
-                // Picking a row opens that record's panel on the map: the
-                // table says what a record is, the map says where — and the
-                // panel is where the actions live, including the way out to
-                // gbif.org. A record GBIF gave no coordinates has nowhere on
-                // the map to open, so its row does nothing.
-                onClick={() => onSelectRow?.(f)}
+                // What you can do with a record lives on the right button:
+                // show it on the map, open it on gbif.org, set it aside. A
+                // left click on a row does nothing — it used to select, and
+                // then to open the map panel, and both were a gesture spent
+                // on something a menu says better.
                 onContextMenu={(e) => {
                   if (!onRowContextMenu) return;
                   e.preventDefault();
                   onRowContextMenu(f, { x: e.clientX, y: e.clientY });
                 }}
-                title={
-                  onSelectRow
-                    ? "Click to show this record on the map — right-click for what you can do with it"
-                    : undefined
-                }
+                title={onRowContextMenu ? "Right-click for what you can do with this record" : undefined}
                 onMouseEnter={() => onHoverRow?.(f)}
                 onMouseLeave={() => onHoverRow?.(null)}
                 className={`border-b border-zinc-100 dark:border-zinc-800 ${
-                  onSelectRow ? "cursor-pointer" : ""
-                } ${
                   hoveredGbifId === id
                     ? "bg-blue-50 dark:bg-blue-950/40"
                     : currentMatch === id
