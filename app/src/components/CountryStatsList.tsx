@@ -302,7 +302,7 @@ export default function CountryStatsList({
               />
               {showOutdatedMode && (
                 <SortHeader
-                  label="# Outdated"
+                  label="# Needs Updating"
                   active={sortKey === "outdated"}
                   dir={sortDir}
                   widthClass="w-[22%]"
@@ -318,7 +318,7 @@ export default function CountryStatsList({
               )}
               {showOutdatedMode && (
                 <SortHeader
-                  label="% Outdated"
+                  label="% Needs Updating"
                   active={sortKey === "percentOutdated"}
                   dir={sortDir}
                   widthClass="w-[22%]"
