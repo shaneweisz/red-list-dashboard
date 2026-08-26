@@ -449,7 +449,7 @@ export function splitSummary(flag: ColRevision, subject: string): SplitSummary |
   // what "the other species" / "the others" is doing at the end of the lead.
   const total = names.length + 1;
   return {
-    lead: `${COL} suggests ${subject} has been split into ${total} separate species`
+    lead: `${COL} suggests ${subject} is split into ${total} separate species`
       + `, so this assessment may cover populations now assigned to `
       + (names.length === 1 ? "the other species:" : "the others:"),
     entries: names,

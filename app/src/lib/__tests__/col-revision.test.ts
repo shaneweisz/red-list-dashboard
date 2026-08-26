@@ -239,7 +239,7 @@ describe("splitSummary", () => {
 
   it("leads with what the split means for the assessment", () => {
     expect(splitSummary(vallonia, "Vallonia costata")!.lead).toBe(
-      "Catalogue of Life suggests Vallonia costata has been split into 4 separate species," +
+      "Catalogue of Life suggests Vallonia costata is split into 4 separate species," +
       " so this assessment may cover populations now assigned to the others:"
     );
   });
@@ -408,7 +408,7 @@ describe("revisionSentences", () => {
       " as a single species, Leptoxis picta."
     );
     expect(both[1]).toContain("Leptoxis coosaensis");
-    expect(both[1]).toContain("has been split into");
+    expect(both[1]).toContain("is split into");
   });
 
   it("returns nothing for a flag carrying neither signal", () => {

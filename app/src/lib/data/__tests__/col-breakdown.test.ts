@@ -149,10 +149,12 @@ describe("classifyNoMatch", () => {
 describe("classifyNoMatch — checklist coverage", () => {
   it("synonym_of: the checklist DOES hold the name, as a synonym — not 'not in the checklist yet'", () => {
     // Sorbus minima: its matched col_id is XR-only, but the curated checklist
-    // covers the name as a synonym of Hedlundia minima (a genus transfer).
+    // covers the name as a synonym of Hedlundia minima (a genus transfer). The
+    // evidence is the BACKBONE holding this name as a synonym — a claim a reader
+    // can check on the page we link to.
     const result = classifyNoMatch({
       ...baseRow, linked_col_id: "VJSZQ", linked_name: "Sorbus minima", linked_in_base: false,
-      covered_name: "Hedlundia minima", covered_col_id: "3JZCX",
+      syn_name: "Hedlundia minima", syn_col_id: "3JZCX",
     });
     expect(result.reason).toBe("synonym_of");
     expect(result.detail).toBe("Hedlundia minima");
@@ -173,12 +175,20 @@ describe("classifyNoMatch — checklist coverage", () => {
     expect(result.colId).toBe("CVW5J");
   });
 
-  it("synonym_of: the covered-link route wins when both are available", () => {
+  it("synonym_of: an IUCN-side synonym is NOT evidence about how CoL treats this name", () => {
+    // Stenocranius raddei, reported from the dashboard. CoL ACCEPTS the name
+    // (T6LK3); it is merely XR-only. The old covered-link route reported "CoL
+    // accepts Microtus gregalis for this species", because IUCN's own synonyms
+    // Arvicola raddei / Lasiopodomys raddei are filed under Microtus gregalis in
+    // CoL. Opening the linked page showed no such synonym. That route produced
+    // 272 of 426 synonym_of flags and is gone: without backbone evidence about
+    // THIS name, the honest answer is not_in_base.
     const result = classifyNoMatch({
-      ...baseRow, linked_col_id: "XRONLY", linked_name: "X", linked_in_base: false,
-      covered_name: "From link", covered_col_id: "LINK1", syn_name: "From backbone", syn_col_id: "BB1",
+      ...baseRow, linked_col_id: "T6LK3", linked_name: "Stenocranius raddei", linked_in_base: false,
+      covered_name: "Microtus gregalis", covered_col_id: "73K4G",
     });
-    expect(result.detail).toBe("From link");
+    expect(result.reason).toBe("not_in_base");
+    expect(result.detail).toBeUndefined();
   });
 
   it("not_in_base: still reported when the checklist genuinely doesn't cover the name", () => {

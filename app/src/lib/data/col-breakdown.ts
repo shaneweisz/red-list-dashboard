@@ -118,8 +118,6 @@ export function classifyNoMatch(row: Record<string, unknown>): NoMatchDetail {
   const winnerName = row.winner_name as string | null;
   const winnerId = row.winner_id as number | null;
   const bkRank = row.bk_rank as string | null;
-  const coveredName = row.covered_name as string | null;
-  const coveredColId = row.covered_col_id as string | null;
   const parentColId = row.parent_col_id as string | null;
   const provColId = row.prov_col_id as string | null;
   const synName = row.syn_name as string | null;
@@ -161,13 +159,25 @@ export function classifyNoMatch(row: Record<string, unknown>): NoMatchDetail {
   }
   if (winnerName) return { id, name, reason: "lumped", detail: winnerName, detailId: winnerId != null ? Number(winnerId) : undefined, detailColId: linkedColId, ...ref };
   if (!linkedInBase) {
-    // Two routes to the same finding. The link table's own 'iucn_synonym_covered'
-    // row is the cheap one, but build-matching doesn't always write it — the 2024
-    // Accipiter break-up (Accipiter cooperii -> Astur cooperii, and 84 more) is
-    // invisible to it — so fall back to asking the backbone directly whether this
-    // name is a synonym of a species the curated checklist accepts.
-    const synonymName = coveredName ?? synName;
-    const synonymColId = coveredColId ?? synColId;
+    // ONE route, deliberately: the backbone must hold THIS NAME as a synonym of a
+    // species the curated checklist accepts. That is a claim a reader can check on
+    // the CoL page we link to, which is the whole value of the flag.
+    //
+    // The link table's 'iucn_synonym_covered' row used to be accepted as evidence
+    // too, and it is not evidence of this. It is written when one of IUCN's OWN
+    // recorded synonyms resolves somewhere in CoL — which says nothing about how
+    // CoL treats the assessed name. Stenocranius raddei was reported as "CoL
+    // accepts Microtus gregalis for this species": CoL in fact accepts
+    // Stenocranius raddei (T6LK3), and the Microtus link came from IUCN's own
+    // synonyms Arvicola raddei / Lasiopodomys raddei, which CoL files under
+    // Microtus gregalis. Anyone opening the linked page found no such synonym.
+    //
+    // That route produced 272 of 426 synonym_of flags, and in 270 of them CoL
+    // accepted the assessed name all along — so there was no disagreement to
+    // report at all. They fall through to not_in_base, which is what is actually
+    // true of them: CoL has the name, in its extended release only.
+    const synonymName = synName;
+    const synonymColId = synColId;
     // A "synonym of" the SAME name is not a rename — it is CoL holding more than
     // one record for one name. Metacanthus concolor (White, 1878) has three:
     // two accepted under different parents and a synonym pointing at one of
@@ -354,23 +364,6 @@ export async function computeNoMatchDetails(
       FROM matched_assessed ma
       JOIN read_parquet('${linkPath}') l ON l.id = ma.id AND l.src = 'redlist' AND l.col_id IS NOT NULL AND l.match_method != 'iucn_synonym_covered'
     ),
-    covered_links AS (
-      -- IUCN's own name as the curated checklist knows it: an
-      -- 'iucn_synonym_covered' row is written when the checklist holds this name
-      -- as a SYNONYM of an accepted species, which is the opposite of "not in the
-      -- checklist yet" — see classifyNoMatch's synonym_of.
-      SELECT id, min(col_id) AS col_id, min(name) AS name FROM (
-      SELECT cl.id AS id, cl.col_id AS col_id, cs.scientific_name AS name
-      FROM (
-        SELECT ma.id AS id, l.col_id AS col_id
-        FROM matched_assessed ma
-        JOIN read_parquet('${linkPath}') l ON l.id = ma.id AND l.src = 'redlist'
-          AND l.col_id IS NOT NULL AND l.match_method = 'iucn_synonym_covered'
-      ) cl
-      JOIN read_parquet('${speciesGlob}', hive_partitioning=true) cs
-        ON cs.col_id = cl.col_id AND cs.in_base
-      ) GROUP BY id
-    ),
     candidate_links AS (
       SELECT id, name, col_id,
              row_number() OVER (
@@ -410,8 +403,7 @@ export async function computeNoMatchDetails(
       ma.id AS id, ma.scientific_name AS name,
       pl.col_id AS linked_col_id,
       sp.scientific_name AS linked_name, sp.in_base AS linked_in_base, sp.extinct AS linked_extinct,
-      w.winner_name AS winner_name, w.winner_id AS winner_id,
-      cov.name AS covered_name, cov.col_id AS covered_col_id
+      w.winner_name AS winner_name, w.winner_id AS winner_id
       ${hasBackbone ? `,
       pbn.col_id AS prov_col_id,
       sib.name AS syn_name, sib.col_id AS syn_col_id,
@@ -424,7 +416,6 @@ export async function computeNoMatchDetails(
     LEFT JOIN read_parquet('${speciesGlob}', hive_partitioning=true) sp ON sp.col_id = pl.col_id
     LEFT JOIN winners w ON w.col_id = pl.col_id
     LEFT JOIN candidate_links cl ON cl.id = ma.id AND cl.rn = 1
-    LEFT JOIN covered_links cov ON cov.id = ma.id
     ${hasBackbone ? `
     -- Only needed to explain species/-misses (sp.scientific_name IS NULL) more
     -- precisely than a blanket "missing from backbone" — see classifyNoMatch's

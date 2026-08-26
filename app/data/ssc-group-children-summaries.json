@@ -4037,10 +4037,8 @@
             {
               "id": 45076,
               "name": "Gerbilliscus gambiana",
-              "reason": "synonym_of",
-              "detail": "Gerbilliscus kempii",
-              "detailColId": "7V4V8",
-              "colId": "7V4V8",
+              "reason": "not_in_base",
+              "colId": "PFBYD",
               "colName": "Gerbilliscus gambiana"
             },
             {
@@ -4402,10 +4400,8 @@
             {
               "id": 47781395,
               "name": "Scarturus toussi",
-              "reason": "synonym_of",
-              "detail": "Allactaga toussi",
-              "detailColId": "BSW6",
-              "colId": "BSW6",
+              "reason": "not_in_base",
+              "colId": "SVTF4",
               "colName": "Scarturus toussi"
             },
             {
@@ -4566,10 +4562,8 @@
             {
               "id": 92332716,
               "name": "Sicista trizona",
-              "reason": "synonym_of",
-              "detail": "Sicista subtilis",
-              "detailColId": "4X72C",
-              "colId": "4X72C",
+              "reason": "not_in_base",
+              "colId": "DNBBG",
               "colName": "Sicista trizona"
             },
             {
@@ -4806,9 +4800,9 @@
               "id": 114981285,
               "name": "Graomys chacoensis",
               "reason": "synonym_of",
-              "detail": "Graomys centralis",
-              "detailColId": "3H8JL",
-              "colId": "3H8JL",
+              "detail": "Graomys griseoflavus",
+              "detailColId": "3H8JP",
+              "colId": "3H8JP",
               "colName": "Graomys chacoensis"
             },
             {
@@ -4861,10 +4855,8 @@
             {
               "id": 221679655,
               "name": "Stenocranius raddei",
-              "reason": "synonym_of",
-              "detail": "Microtus gregalis",
-              "detailColId": "73K4G",
-              "colId": "73K4G",
+              "reason": "not_in_base",
+              "colId": "T6LK3",
               "colName": "Stenocranius raddei"
             },
             {
@@ -4900,10 +4892,8 @@
             {
               "id": 221725561,
               "name": "Alexandromys middendorffii",
-              "reason": "synonym_of",
-              "detail": "Microtus middendorffi",
-              "detailColId": "7VV7F",
-              "colId": "7VV7F",
+              "reason": "not_in_base",
+              "colId": "L9P3N",
               "colName": "Alexandromys middendorffii"
             },
             {
@@ -6029,28 +6019,22 @@
             {
               "id": 172738,
               "name": "Mesomycterus mandady",
-              "reason": "synonym_of",
-              "detail": "Brachyseps mandady",
-              "detailColId": "8H64W",
-              "colId": "8H64W",
+              "reason": "not_in_base",
+              "colId": "V9F8R",
               "colName": "Mesomycterus mandady"
             },
             {
               "id": 172753,
               "name": "Mesomycterus spilostichus",
-              "reason": "synonym_of",
-              "detail": "Brachyseps spilostichus",
-              "detailColId": "8H6VR",
-              "colId": "8H6VR",
+              "reason": "not_in_base",
+              "colId": "V9F8S",
               "colName": "Mesomycterus spilostichus"
             },
             {
               "id": 172881,
               "name": "Mesomycterus anosyensis",
-              "reason": "synonym_of",
-              "detail": "Brachyseps anosyensis",
-              "detailColId": "8GPF2",
-              "colId": "8GPF2",
+              "reason": "not_in_base",
+              "colId": "V9F8T",
               "colName": "Mesomycterus anosyensis"
             },
             {
@@ -6063,37 +6047,29 @@
             {
               "id": 178285,
               "name": "Mesomycterus punctatus",
-              "reason": "synonym_of",
-              "detail": "Brachyseps punctatus",
-              "detailColId": "8GPF5",
-              "colId": "8GPF5",
+              "reason": "not_in_base",
+              "colId": "V9F8W",
               "colName": "Mesomycterus punctatus"
             },
             {
               "id": 178468,
               "name": "Mesomycterus frontoparietalis",
-              "reason": "synonym_of",
-              "detail": "Brachyseps frontoparietalis",
-              "detailColId": "8GPF3",
-              "colId": "8GPF3",
+              "reason": "not_in_base",
+              "colId": "V9F8X",
               "colName": "Mesomycterus frontoparietalis"
             },
             {
               "id": 194116,
               "name": "Eutropis nagarjunensis",
-              "reason": "synonym_of",
-              "detail": "Eutropis nagarjuni",
-              "detailColId": "6HKDB",
-              "colId": "6HKDB",
+              "reason": "not_in_base",
+              "colId": "P9QLR",
               "colName": "Eutropis nagarjunensis"
             },
             {
               "id": 194835,
               "name": "Eutropis dissimilis",
-              "reason": "synonym_of",
-              "detail": "Eutropis trivittata",
-              "detailColId": "6HKD4",
-              "colId": "6HKD4",
+              "reason": "not_in_base",
+              "colId": "6HKC6",
               "colName": "Eutropis dissimilis"
             },
             {
@@ -6126,10 +6102,8 @@
             {
               "id": 42485185,
               "name": "Sphenomorphus aruensis",
-              "reason": "synonym_of",
-              "detail": "Sphenomorphus jobiensis",
-              "detailColId": "4YVTJ",
-              "colId": "4YVTJ",
+              "reason": "not_in_base",
+              "colId": "SZLGD",
               "colName": "Sphenomorphus aruensis"
             },
             {
@@ -7208,19 +7182,15 @@
             {
               "id": 47755236,
               "name": "Cyrtodactylus medogensis",
-              "reason": "synonym_of",
-              "detail": "Cyrtopodion medogense",
-              "detailColId": "33NCN",
-              "colId": "33NCN",
+              "reason": "not_in_base",
+              "colId": "NC34G",
               "colName": "Cyrtodactylus medogensis"
             },
             {
               "id": 54506205,
               "name": "Cyrtodactylus markuscombaii",
-              "reason": "synonym_of",
-              "detail": "Cyrtodactylus martinstolli",
-              "detailColId": "33LY6",
-              "colId": "33LY6",
+              "reason": "not_in_base",
+              "colId": "33LXY",
               "colName": "Cyrtodactylus markuscombaii"
             },
             {
@@ -7301,10 +7271,8 @@
             {
               "id": 107654054,
               "name": "Tenuidactylus microlepis",
-              "reason": "synonym_of",
-              "detail": "Tenuidactylus longipes",
-              "detailColId": "55B9Y",
-              "colId": "55B9Y",
+              "reason": "not_in_base",
+              "colId": "THTDV",
               "colName": "Tenuidactylus microlepis"
             }
           ],
@@ -8203,10 +8171,8 @@
             {
               "id": 191986,
               "name": "Fowlea melanozostus",
-              "reason": "synonym_of",
-              "detail": "Fowlea melanzosta",
-              "detailColId": "8H685",
-              "colId": "8H685",
+              "reason": "not_in_base",
+              "colId": "PB9ZK",
               "colName": "Fowlea melanozostus"
             },
             {
@@ -8222,10 +8188,8 @@
             {
               "id": 192177,
               "name": "Lycodon meridionalis",
-              "reason": "synonym_of",
-              "detail": "Lycodon meridionale",
-              "detailColId": "3WL3D",
-              "colId": "3WL3D",
+              "reason": "not_in_base",
+              "colId": "899DS",
               "colName": "Lycodon meridionalis"
             },
             {
@@ -8335,10 +8299,8 @@
             {
               "id": 17451105,
               "name": "Ctenophorus aurita",
-              "reason": "synonym_of",
-              "detail": "Cryptagama aurita",
-              "detailColId": "ZTJL",
-              "colId": "ZTJL",
+              "reason": "not_in_base",
+              "colId": "V9F8P",
               "colName": "Ctenophorus aurita"
             },
             {
@@ -9381,10 +9343,8 @@
             {
               "id": 197258874,
               "name": "Arctoraja sexoculata",
-              "reason": "synonym_of",
-              "detail": "Bathyraja sexoculata",
-              "detailColId": "D52SL",
-              "colId": "D52SL",
+              "reason": "not_in_base",
+              "colId": "LSH6R",
               "colName": "Arctoraja sexoculata"
             },
             {
@@ -10064,100 +10024,78 @@
             {
               "id": 44678,
               "name": "Mycteroperca andersoni",
-              "reason": "synonym_of",
-              "detail": "Epinephelus andersoni",
-              "detailColId": "6G5M2",
-              "colId": "6G5M2",
+              "reason": "not_in_base",
+              "colId": "V2Q5Z",
               "colName": "Mycteroperca andersoni"
             },
             {
               "id": 132745,
               "name": "Mycteroperca morrhua",
-              "reason": "synonym_of",
-              "detail": "Epinephelus morrhua",
-              "detailColId": "6FTPX",
-              "colId": "6FTPX",
+              "reason": "not_in_base",
+              "colId": "R38LN",
               "colName": "Mycteroperca morrhua"
             },
             {
               "id": 132755,
               "name": "Mycteroperca radiatus",
-              "reason": "synonym_of",
-              "detail": "Epinephelus radiatus",
-              "detailColId": "6G63K",
-              "colId": "6G63K",
+              "reason": "not_in_base",
+              "colId": "R38NH",
               "colName": "Mycteroperca radiatus"
             },
             {
               "id": 132765,
               "name": "Mycteroperca goreensis",
-              "reason": "synonym_of",
-              "detail": "Epinephelus goreensis",
-              "detailColId": "6FTNN",
-              "colId": "6FTNN",
+              "reason": "not_in_base",
+              "colId": "V2QJ3",
               "colName": "Mycteroperca goreensis"
             },
             {
               "id": 132790,
               "name": "Hyporthodus dermopterus",
-              "reason": "synonym_of",
-              "detail": "Triso dermopterus",
-              "detailColId": "592SL",
-              "colId": "592SL",
+              "reason": "not_in_base",
+              "colId": "PN87M",
               "colName": "Hyporthodus dermopterus"
             },
             {
               "id": 132796,
               "name": "Mycteroperca caninus",
-              "reason": "synonym_of",
-              "detail": "Epinephelus caninus",
-              "detailColId": "6G5LM",
-              "colId": "6G5LM",
+              "reason": "not_in_base",
+              "colId": "V2Q24",
               "colName": "Mycteroperca caninus"
             },
             {
               "id": 132797,
               "name": "Mycteroperca posteli",
-              "reason": "synonym_of",
-              "detail": "Epinephelus posteli",
-              "detailColId": "6G5RG",
-              "colId": "6G5RG",
+              "reason": "not_in_base",
+              "colId": "V2QF6",
               "colName": "Mycteroperca posteli"
             },
             {
               "id": 132798,
               "name": "Mycteroperca heniochus",
-              "reason": "synonym_of",
-              "detail": "Epinephelus heniochus",
-              "detailColId": "6G5PJ",
-              "colId": "6G5PJ",
+              "reason": "not_in_base",
+              "colId": "R38JV",
               "colName": "Mycteroperca heniochus"
             },
             {
               "id": 132802,
               "name": "Mycteroperca poecilonotus",
-              "reason": "synonym_of",
-              "detail": "Epinephelus poecilonotus",
-              "detailColId": "6FTRH",
-              "colId": "6FTRH",
+              "reason": "not_in_base",
+              "colId": "R38N4",
               "colName": "Mycteroperca poecilonotus"
             },
             {
               "id": 132816,
               "name": "Plectropomus powelli",
-              "reason": "synonym_of",
-              "detail": "Saloptia powelli",
-              "detailColId": "79F7J",
-              "colId": "79F7J",
+              "reason": "not_in_base",
+              "colId": "RJJFY",
               "colName": "Plectropomus powelli"
             },
             {
               "id": 132824,
               "name": "Mycteroperca epistictus",
-              "reason": "synonym_of",
-              "detail": "Epinephelus epistictus",
-              "detailColId": "6G5MJ",
-              "colId": "6G5MJ",
+              "reason": "not_in_base",
+              "colId": "R38HN",
               "colName": "Mycteroperca epistictus"
             },
             {
@@ -11530,19 +11468,15 @@
             {
               "id": 60481,
               "name": "Julidochromis brichardi",
-              "reason": "synonym_of",
-              "detail": "Chalinochromis brichardi",
-              "detailColId": "69Q4K",
-              "colId": "69Q4K",
+              "reason": "not_in_base",
+              "colId": "Q4HTJ",
               "colName": "Julidochromis brichardi"
             },
             {
               "id": 60492,
               "name": "Jabarichromis pfefferi",
-              "reason": "synonym_of",
-              "detail": "Gnathochromis pfefferi",
-              "detailColId": "3GLKT",
-              "colId": "3GLKT",
+              "reason": "not_in_base",
+              "colId": "PXKGY",
               "colName": "Jabarichromis pfefferi"
             },
             {
@@ -11608,10 +11542,8 @@
             {
               "id": 61086,
               "name": "Hemitaeniochromis spilopterus",
-              "reason": "synonym_of",
-              "detail": "Protomelas spilopterus",
-              "detailColId": "4N5Z9",
-              "colId": "4N5Z9",
+              "reason": "not_in_base",
+              "colId": "PKDN7",
               "colName": "Hemitaeniochromis spilopterus"
             },
             {
@@ -11820,10 +11752,8 @@
             {
               "id": 166113,
               "name": "Labigastromyzon changtingensis",
-              "reason": "synonym_of",
-              "detail": "Pseudogastromyzon changtingensis",
-              "detailColId": "4NX2M",
-              "colId": "4NX2M",
+              "reason": "not_in_base",
+              "colId": "V9FB3",
               "colName": "Labigastromyzon changtingensis"
             },
             {
@@ -11859,10 +11789,8 @@
             {
               "id": 166636,
               "name": "Garra rupicola",
-              "reason": "synonym_of",
-              "detail": "Garra rupecula",
-              "detailColId": "3FBMF",
-              "colId": "3FBMF",
+              "reason": "not_in_base",
+              "colId": "NZTWH",
               "colName": "Garra rupicola"
             },
             {
@@ -12023,55 +11951,43 @@
             {
               "id": 180814,
               "name": "Aperioptus gracilentus",
-              "reason": "synonym_of",
-              "detail": "Acanthopsoides gracilentus",
-              "detailColId": "8ZLR",
-              "colId": "8ZLR",
+              "reason": "not_in_base",
+              "colId": "LBKP9",
               "colName": "Aperioptus gracilentus"
             },
             {
               "id": 180945,
               "name": "Aperioptus hapalias",
-              "reason": "synonym_of",
-              "detail": "Acanthopsoides hapalias",
-              "detailColId": "64G8Y",
-              "colId": "64G8Y",
+              "reason": "not_in_base",
+              "colId": "LBKPP",
               "colName": "Aperioptus hapalias"
             },
             {
               "id": 180994,
               "name": "Parambassis ranga",
-              "reason": "synonym_of",
-              "detail": "Chanda notata",
-              "detailColId": "V9TKB",
-              "colId": "V9TKB",
+              "reason": "not_in_base",
+              "colId": "4D2MY",
               "colName": "Parambassis ranga"
             },
             {
               "id": 180998,
               "name": "Aperioptus molobrion",
-              "reason": "synonym_of",
-              "detail": "Acanthopsoides molobrion",
-              "detailColId": "8ZLW",
-              "colId": "8ZLW",
+              "reason": "not_in_base",
+              "colId": "LBKPX",
               "colName": "Aperioptus molobrion"
             },
             {
               "id": 181101,
               "name": "Aperioptus gracilis",
-              "reason": "synonym_of",
-              "detail": "Acanthopsoides gracilis",
-              "detailColId": "8ZLT",
-              "colId": "8ZLT",
+              "reason": "not_in_base",
+              "colId": "LBKPG",
               "colName": "Aperioptus gracilis"
             },
             {
               "id": 181191,
               "name": "Aperioptus delphax",
-              "reason": "synonym_of",
-              "detail": "Acanthopsoides delphax",
-              "detailColId": "8ZLQ",
-              "colId": "8ZLQ",
+              "reason": "not_in_base",
+              "colId": "LBKP8",
               "colName": "Aperioptus delphax"
             },
             {
@@ -12212,10 +12128,8 @@
             {
               "id": 183673,
               "name": "Tigrigobius inornatus",
-              "reason": "synonym_of",
-              "detail": "Tigrigobius digueti",
-              "detailColId": "56W3Z",
-              "colId": "56W3Z",
+              "reason": "not_in_base",
+              "colId": "T66HR",
               "colName": "Tigrigobius inornatus"
             },
             {
@@ -12251,10 +12165,8 @@
             {
               "id": 186716,
               "name": "Bryconamericus leptorhynchus",
-              "reason": "synonym_of",
-              "detail": "Hypobrycon leptorhynchus",
-              "detailColId": "6MPTR",
-              "colId": "6MPTR",
+              "reason": "not_in_base",
+              "colId": "M9JK4",
               "colName": "Bryconamericus leptorhynchus"
             },
             {
@@ -12501,19 +12413,15 @@
             {
               "id": 47951784,
               "name": "Julidochromis popelini",
-              "reason": "synonym_of",
-              "detail": "Chalinochromis popelini",
-              "detailColId": "5Y24L",
-              "colId": "5Y24L",
+              "reason": "not_in_base",
+              "colId": "V9FCB",
               "colName": "Julidochromis popelini"
             },
             {
               "id": 47956725,
               "name": "Neolamprologus laparogramma",
-              "reason": "synonym_of",
-              "detail": "Lamprologus laparogramma",
-              "detailColId": "3S4PX",
-              "colId": "3S4PX",
+              "reason": "not_in_base",
+              "colId": "V9FCG",
               "colName": "Neolamprologus laparogramma"
             },
             {
@@ -12636,10 +12544,8 @@
             {
               "id": 64871138,
               "name": "Julidochromis cyanophleps",
-              "reason": "synonym_of",
-              "detail": "Chalinochromis cyanophleps",
-              "detailColId": "5XPSL",
-              "colId": "5XPSL",
+              "reason": "not_in_base",
+              "colId": "V9FCC",
               "colName": "Julidochromis cyanophleps"
             },
             {
@@ -12765,10 +12671,8 @@
             {
               "id": 91601530,
               "name": "Aperioptus robertsi",
-              "reason": "synonym_of",
-              "detail": "Acanthopsoides robertsi",
-              "detailColId": "8ZLY",
-              "colId": "8ZLY",
+              "reason": "not_in_base",
+              "colId": "LBKPZ",
               "colName": "Aperioptus robertsi"
             },
             {
@@ -12956,10 +12860,8 @@
             {
               "id": 120728128,
               "name": "Taeniolethrinops macrorhynchus",
-              "reason": "synonym_of",
-              "detail": "Taeniolethrinops praeorbitalis",
-              "detailColId": "7BGJL",
-              "colId": "7BGJL",
+              "reason": "not_in_base",
+              "colId": "T6MSK",
               "colName": "Taeniolethrinops macrorhynchus"
             },
             {
@@ -13254,10 +13156,8 @@
             {
               "id": 135930045,
               "name": "Bryconamericus maromba",
-              "reason": "synonym_of",
-              "detail": "Hypobrycon maromba",
-              "detailColId": "3NT7V",
-              "colId": "3NT7V",
+              "reason": "not_in_base",
+              "colId": "M9JLB",
               "colName": "Bryconamericus maromba"
             },
             {
@@ -14794,10 +14694,8 @@
             {
               "id": 261552034,
               "name": "Trichosomus trachinoides",
-              "reason": "synonym_of",
-              "detail": "Vespicula trachinoides",
-              "detailColId": "7G36Z",
-              "colId": "7G36Z",
+              "reason": "not_in_base",
+              "colId": "FBBCF",
               "colName": "Trichosomus trachinoides"
             },
             {
@@ -14809,10 +14707,8 @@
             {
               "id": 272007642,
               "name": "Cyathopharynx foae",
-              "reason": "synonym_of",
-              "detail": "Cyathopharynx furcifer",
-              "detailColId": "32QWP",
-              "colId": "32QWP",
+              "reason": "not_in_base",
+              "colId": "V9FCF",
               "colName": "Cyathopharynx foae"
             },
             {
@@ -14828,10 +14724,8 @@
             {
               "id": 272385500,
               "name": "Xenotilapia singularis",
-              "reason": "synonym_of",
-              "detail": "Xenotilapia ochrogenys",
-              "detailColId": "5CBTX",
-              "colId": "5CBTX",
+              "reason": "not_in_base",
+              "colId": "V9FC9",
               "colName": "Xenotilapia singularis"
             },
             {
@@ -16805,10 +16699,8 @@
             {
               "id": 162639259,
               "name": "Serradinga bowkeri",
-              "reason": "synonym_of",
-              "detail": "Dingana bowkeri",
-              "detailColId": "368N4",
-              "colId": "368N4",
+              "reason": "not_in_base",
+              "colId": "SRBTP",
               "colName": "Serradinga bowkeri"
             },
             {
@@ -17331,10 +17223,8 @@
             {
               "id": 62080,
               "name": "Trimenia malagrida",
-              "reason": "synonym_of",
-              "detail": "Argyrocupha malagrida",
-              "detailColId": "GJQF",
-              "colId": "GJQF",
+              "reason": "not_in_base",
+              "colId": "TNCSJ",
               "colName": "Trimenia malagrida"
             },
             {
@@ -18054,19 +17944,15 @@
             {
               "id": 161337239,
               "name": "Chrysoritis blencathrae",
-              "reason": "synonym_of",
-              "detail": "Poecilmitis blencathra",
-              "detailColId": "4KT3S",
-              "colId": "4KT3S",
+              "reason": "not_in_base",
+              "colId": "MTJJZ",
               "colName": "Chrysoritis blencathrae"
             },
             {
               "id": 161337645,
               "name": "Axiocerses croesus",
-              "reason": "synonym_of",
-              "detail": "Axiocerses harpax",
-              "detailColId": "K46L",
-              "colId": "K46L",
+              "reason": "not_in_base",
+              "colId": "LVP6D",
               "colName": "Axiocerses croesus"
             },
             {
@@ -18079,10 +17965,8 @@
             {
               "id": 161338146,
               "name": "Chrysoritis violescens",
-              "reason": "synonym_of",
-              "detail": "Poecilmitis violascens",
-              "detailColId": "4KT4Q",
-              "colId": "4KT4Q",
+              "reason": "not_in_base",
+              "colId": "MTJYY",
               "colName": "Chrysoritis violescens"
             },
             {
@@ -18128,10 +18012,8 @@
             {
               "id": 162638779,
               "name": "Chrysoritis zeuxo",
-              "reason": "synonym_of",
-              "detail": "Phasis zeuxo",
-              "detailColId": "4FWPS",
-              "colId": "4FWPS",
+              "reason": "not_in_base",
+              "colId": "MTJZH",
               "colName": "Chrysoritis zeuxo"
             },
             {
@@ -18186,10 +18068,8 @@
             {
               "id": 162641612,
               "name": "Trimenia macmasteri",
-              "reason": "synonym_of",
-              "detail": "Phasis macmasteri",
-              "detailColId": "4FWPK",
-              "colId": "4FWPK",
+              "reason": "not_in_base",
+              "colId": "TNCS4",
               "colName": "Trimenia macmasteri"
             },
             {
@@ -18622,10 +18502,8 @@
             {
               "id": 15039573,
               "name": "Galvagniella albanica",
-              "reason": "synonym_of",
-              "detail": "Miramella albanica",
-              "detailColId": "43LQJ",
-              "colId": "43LQJ",
+              "reason": "not_in_base",
+              "colId": "NXJ4X",
               "colName": "Galvagniella albanica"
             },
             {
@@ -19051,10 +18929,8 @@
             {
               "id": 148872355,
               "name": "Ameles andreae",
-              "reason": "synonym_of",
-              "detail": "Pseudoyersinia andreae",
-              "detailColId": "VF53Y",
-              "colId": "VF53Y",
+              "reason": "not_in_base",
+              "colId": "L8XZR",
               "colName": "Ameles andreae"
             },
             {
@@ -23202,10 +23078,8 @@
             {
               "id": 134543,
               "name": "Tehuana poglayenorum",
-              "reason": "synonym_of",
-              "detail": "Tehuana diabolis",
-              "detailColId": "554MH",
-              "colId": "554MH",
+              "reason": "not_in_base",
+              "colId": "TF42X",
               "colName": "Tehuana poglayenorum"
             },
             {
@@ -28762,28 +28636,22 @@
             {
               "id": 103108835,
               "name": "Diplotrema montana",
-              "reason": "synonym_of",
-              "detail": "Eodrilus montanus",
-              "detailColId": "NKR9W",
-              "colId": "NKR9W",
+              "reason": "not_in_base",
+              "colId": "NN5MB",
               "colName": "Diplotrema montana"
             },
             {
               "id": 103108885,
               "name": "Diplotrema pallida",
-              "reason": "synonym_of",
-              "detail": "Eodrilus pallidus",
-              "detailColId": "NKRBH",
-              "colId": "NKRBH",
+              "reason": "not_in_base",
+              "colId": "NN5NH",
               "colName": "Diplotrema pallida"
             },
             {
               "id": 103109658,
               "name": "Diplotrema rossi",
-              "reason": "synonym_of",
-              "detail": "Eodrilus rossi",
-              "detailColId": "NKRCL",
-              "colId": "NKRCL",
+              "reason": "not_in_base",
+              "colId": "NN5RY",
               "colName": "Diplotrema rossi"
             },
             {
@@ -28803,19 +28671,15 @@
             {
               "id": 103120360,
               "name": "Neodrilus campestris",
-              "reason": "synonym_of",
-              "detail": "Acanthodrilus monocystis",
-              "detailColId": "8H886",
-              "colId": "8H886",
+              "reason": "not_in_base",
+              "colId": "R62XH",
               "colName": "Neodrilus campestris"
             },
             {
               "id": 103131793,
               "name": "Octochaetus levis",
-              "reason": "synonym_of",
-              "detail": "Aporrectodea caliginosa",
-              "detailColId": "LL8P3",
-              "colId": "LL8P3",
+              "reason": "not_in_base",
+              "colId": "QXFYX",
               "colName": "Octochaetus levis"
             },
             {
@@ -28828,19 +28692,15 @@
             {
               "id": 103132762,
               "name": "Graliophilus parvus",
-              "reason": "synonym_of",
-              "detail": "Eodrilus parvus",
-              "detailColId": "9GPFJ",
-              "colId": "9GPFJ",
+              "reason": "not_in_base",
+              "colId": "PG3ST",
               "colName": "Graliophilus parvus"
             },
             {
               "id": 103132775,
               "name": "Graliophilus stewartensis",
-              "reason": "synonym_of",
-              "detail": "Plutellus stewartensis",
-              "detailColId": "RRVKS",
-              "colId": "RRVKS",
+              "reason": "not_in_base",
+              "colId": "PG3TJ",
               "colName": "Graliophilus stewartensis"
             },
             {
@@ -28919,10 +28779,8 @@
             {
               "id": 103186149,
               "name": "Anisochaeta novaezealandiae",
-              "reason": "synonym_of",
-              "detail": "Megascolex novaezealandiae",
-              "detailColId": "8LVFK",
-              "colId": "8LVFK",
+              "reason": "not_in_base",
+              "colId": "LC7X8",
               "colName": "Anisochaeta novaezealandiae"
             },
             {
@@ -28956,10 +28814,8 @@
             {
               "id": 103191225,
               "name": "Pontodrilus lacustris",
-              "reason": "synonym_of",
-              "detail": "Plutellus lacustris",
-              "detailColId": "RRV8D",
-              "colId": "RRV8D",
+              "reason": "not_in_base",
+              "colId": "RWR2F",
               "colName": "Pontodrilus lacustris"
             },
             {
@@ -29000,10 +28856,8 @@
             {
               "id": 118817515,
               "name": "Amynthas phaselus",
-              "reason": "synonym_of",
-              "detail": "Amynthas kamitai",
-              "detailColId": "LHXK6",
-              "colId": "LHXK6",
+              "reason": "not_in_base",
+              "colId": "LHYD5",
               "colName": "Amynthas phaselus"
             },
             {
@@ -29023,10 +28877,8 @@
             {
               "id": 118829286,
               "name": "Duplodicodrilus acinctus",
-              "reason": "synonym_of",
-              "detail": "Amynthas pyeongchangensis",
-              "detailColId": "LHYL5",
-              "colId": "LHYL5",
+              "reason": "not_in_base",
+              "colId": "NS6RQ",
               "colName": "Duplodicodrilus acinctus"
             },
             {
@@ -30053,10 +29905,8 @@
             {
               "id": 5935,
               "name": "Cucujus cinnaberinus",
-              "reason": "synonym_of",
-              "detail": "Pediacus depressus",
-              "detailColId": "6TX2H",
-              "colId": "6TX2H",
+              "reason": "not_in_base",
+              "colId": "N682V",
               "colName": "Cucujus cinnaberinus"
             },
             {
@@ -30511,8 +30361,8 @@
               "name": "Tritoma bipustulata",
               "reason": "synonym_of",
               "detail": "Mycetophagus quadripustulatus",
-              "detailColId": "4YP83",
-              "colId": "4YP83",
+              "detailColId": "QY46R",
+              "colId": "QY46R",
               "colName": "Tritoma bipustulata"
             },
             {
@@ -30637,10 +30487,8 @@
             {
               "id": 157730,
               "name": "Grynocharis oblonga",
-              "reason": "synonym_of",
-              "detail": "Platyrhinus resinosus",
-              "detailColId": "4JXWQ",
-              "colId": "4JXWQ",
+              "reason": "not_in_base",
+              "colId": "NWD9N",
               "colName": "Grynocharis oblonga"
             },
             {
@@ -32891,10 +32739,8 @@
             {
               "id": 164002413,
               "name": "Omiodes anastreptoides",
-              "reason": "synonym_of",
-              "detail": "Omiodes anastreptoidis",
-              "detailColId": "6SLNS",
-              "colId": "6SLNS",
+              "reason": "not_in_base",
+              "colId": "RC9CD",
               "colName": "Omiodes anastreptoides"
             },
             {
@@ -33462,10 +33308,8 @@
             {
               "id": 229888133,
               "name": "Jansenia semisetgerosa",
-              "reason": "synonym_of",
-              "detail": "Jansenia semisetigerosa",
-              "detailColId": "3QLFW",
-              "colId": "3QLFW",
+              "reason": "not_in_base",
+              "colId": "V9FJN",
               "colName": "Jansenia semisetgerosa"
             },
             {
@@ -33476,10 +33320,8 @@
             {
               "id": 229888916,
               "name": "Jansenia chloriodista",
-              "reason": "synonym_of",
-              "detail": "Jansenia choriodista",
-              "detailColId": "3QLF4",
-              "colId": "3QLF4",
+              "reason": "not_in_base",
+              "colId": "V9FJP",
               "colName": "Jansenia chloriodista"
             },
             {
@@ -34024,10 +33866,8 @@
             {
               "id": 259879353,
               "name": "Oxicesta chamoenices",
-              "reason": "synonym_of",
-              "detail": "Oxicesta nervosa",
-              "detailColId": "4BBWV",
-              "colId": "4BBWV",
+              "reason": "not_in_base",
+              "colId": "M94NN",
               "colName": "Acronicta chamoenices"
             },
             {
@@ -36039,10 +35879,8 @@
             {
               "id": 151703,
               "name": "Echinopsis haematacantha",
-              "reason": "synonym_of",
-              "detail": "Echinopsis haematantha",
-              "detailColId": "6DV9X",
-              "colId": "6DV9X",
+              "reason": "not_in_base",
+              "colId": "NC9RG",
               "colName": "Echinopsis haematacantha"
             },
             {
@@ -41850,19 +41688,15 @@
             {
               "id": 31065,
               "name": "Xylosma mandjeliana",
-              "reason": "synonym_of",
-              "detail": "Lasiochlamys mandjeliana",
-              "detailColId": "3SDDF",
-              "colId": "3SDDF",
+              "reason": "not_in_base",
+              "colId": "TQCY4",
               "colName": "Xylosma mandjeliana"
             },
             {
               "id": 31067,
               "name": "Xylosma pseudocoriacea",
-              "reason": "synonym_of",
-              "detail": "Lasiochlamys pseudocoriacea",
-              "detailColId": "3SDDJ",
-              "colId": "3SDDJ",
+              "reason": "not_in_base",
+              "colId": "TQD3S",
               "colName": "Xylosma pseudocoriacea"
             },
             {
@@ -42860,10 +42694,8 @@
             {
               "id": 33606,
               "name": "Mezoneuron kavaiense",
-              "reason": "synonym_of",
-              "detail": "Mezoneuron kauaiense",
-              "detailColId": "42L7X",
-              "colId": "42L7X",
+              "reason": "not_in_base",
+              "colId": "R3RL5",
               "colName": "Mezoneuron kavaiense"
             },
             {
@@ -44972,28 +44804,22 @@
             {
               "id": 44961,
               "name": "Leucas flagellifolia",
-              "reason": "synonym_of",
-              "detail": "Leucas flagellifera",
-              "detailColId": "723WP",
-              "colId": "723WP",
+              "reason": "not_in_base",
+              "colId": "PVXCW",
               "colName": "Leucas flagellifolia"
             },
             {
               "id": 44966,
               "name": "Leucas spiculifera",
-              "reason": "synonym_of",
-              "detail": "Leucas spiculifolia",
-              "detailColId": "6PRXS",
-              "colId": "6PRXS",
+              "reason": "not_in_base",
+              "colId": "PVYP3",
               "colName": "Leucas spiculifera"
             },
             {
               "id": 44968,
               "name": "Micromeria remota",
-              "reason": "synonym_of",
-              "detail": "Micromeria imbricata",
-              "detailColId": "42YY8",
-              "colId": "42YY8",
+              "reason": "not_in_base",
+              "colId": "QLFBS",
               "colName": "Micromeria remota"
             },
             {
@@ -45734,8 +45560,8 @@
               "name": "Sorbus aria",
               "reason": "synonym_of",
               "detail": "Aria edulis",
-              "detailColId": "4YBQS",
-              "colId": "4YBQS",
+              "detailColId": "5VR7S",
+              "colId": "5VR7S",
               "colName": "Sorbus aria"
             },
             {
@@ -46258,10 +46084,8 @@
             {
               "id": 158236,
               "name": "Bulbostylis boeckleriana",
-              "reason": "synonym_of",
-              "detail": "Bulbostylis boeckeleriana",
-              "detailColId": "68S5B",
-              "colId": "68S5B",
+              "reason": "not_in_base",
+              "colId": "MFHXH",
               "colName": "Bulbostylis boeckleriana"
             },
             {
@@ -46646,10 +46470,8 @@
             {
               "id": 164081,
               "name": "Sonchus macrocarpus",
-              "reason": "synonym_of",
-              "detail": "Sonchus gigas",
-              "detailColId": "4Y999",
-              "colId": "4Y999",
+              "reason": "not_in_base",
+              "colId": "VLFCY",
               "colName": "Sonchus macrocarpus"
             },
             {
@@ -47220,10 +47042,8 @@
             {
               "id": 177339,
               "name": "Bolbitis presiliana",
-              "reason": "synonym_of",
-              "detail": "Bolbitis repanda",
-              "detailColId": "5WMRM",
-              "colId": "5WMRM",
+              "reason": "not_in_base",
+              "colId": "M7NLM",
               "colName": "Bolbitis presiliana"
             },
             {
@@ -48317,10 +48137,8 @@
             {
               "id": 13144558,
               "name": "Allium makmelianum",
-              "reason": "synonym_of",
-              "detail": "Allium machmelianum",
-              "detailColId": "669F8",
-              "colId": "669F8",
+              "reason": "not_in_base",
+              "colId": "LC759",
               "colName": "Allium makmelianum"
             },
             {
@@ -48659,10 +48477,8 @@
             {
               "id": 20666581,
               "name": "Allium semenowii",
-              "reason": "synonym_of",
-              "detail": "Allium semenovii",
-              "detailColId": "6697L",
-              "colId": "6697L",
+              "reason": "not_in_base",
+              "colId": "LCGQM",
               "colName": "Allium semenowii"
             },
             {
@@ -48798,10 +48614,8 @@
             {
               "id": 47608265,
               "name": "Leobordea prolifera",
-              "reason": "synonym_of",
-              "detail": "Lotononis prolifera",
-              "detailColId": "9D97N",
-              "colId": "9D97N",
+              "reason": "not_in_base",
+              "colId": "Q3G8N",
               "colName": "Leobordea prolifera"
             },
             {
@@ -48853,19 +48667,15 @@
             {
               "id": 50458195,
               "name": "Prunus harvardii",
-              "reason": "synonym_of",
-              "detail": "Prunus havardii",
-              "detailColId": "4N8VD",
-              "colId": "4N8VD",
+              "reason": "not_in_base",
+              "colId": "S5MHX",
               "colName": "Prunus harvardii"
             },
             {
               "id": 50623147,
               "name": "Prunus jaquemontii",
-              "reason": "synonym_of",
-              "detail": "Prunus jacquemontii",
-              "detailColId": "4N8WR",
-              "colId": "4N8WR",
+              "reason": "not_in_base",
+              "colId": "S5QZM",
               "colName": "Prunus jaquemontii"
             },
             {
@@ -49284,10 +49094,8 @@
             {
               "id": 64134490,
               "name": "Malus angustifolia",
-              "reason": "synonym_of",
-              "detail": "Pyrus syriaca",
-              "detailColId": "4QXJ4",
-              "colId": "4QXJ4",
+              "reason": "not_in_base",
+              "colId": "VM7FC",
               "colName": "Malus angustifolia"
             },
             {
@@ -49878,10 +49686,8 @@
             {
               "id": 83723493,
               "name": "Cistus psilosepalus",
-              "reason": "synonym_of",
-              "detail": "Cistus inflatus",
-              "detailColId": "VLMC",
-              "colId": "VLMC",
+              "reason": "not_in_base",
+              "colId": "VL8BC",
               "colName": "Cistus psilosepalus"
             },
             {
@@ -50745,9 +50551,9 @@
               "id": 113230044,
               "name": "Serruria adscendens",
               "reason": "synonym_of",
-              "detail": "Serruria ascendens",
-              "detailColId": "9KSCC",
-              "colId": "9KSCC",
+              "detail": "Leucadendron salignum",
+              "detailColId": "6Q4KX",
+              "colId": "6Q4KX",
               "colName": "Serruria adscendens"
             },
             {
@@ -51711,10 +51517,8 @@
             {
               "id": 126774357,
               "name": "Citharexylum ligustrinum",
-              "reason": "synonym_of",
-              "detail": "Citharexylum ligustrifolium",
-              "detailColId": "VM2V",
-              "colId": "VM2V",
+              "reason": "not_in_base",
+              "colId": "MHZVH",
               "colName": "Citharexylum ligustrinum"
             },
             {
@@ -52112,10 +51916,8 @@
             {
               "id": 136092223,
               "name": "Cosmibuena valerioi",
-              "reason": "synonym_of",
-              "detail": "Cosmibuena valerii",
-              "detailColId": "8WSXJ",
-              "colId": "8WSXJ",
+              "reason": "not_in_base",
+              "colId": "YTQ7",
               "colName": "Cosmibuena valerioi"
             },
             {
@@ -52170,10 +51972,8 @@
             {
               "id": 136145476,
               "name": "Cephalanthus tetrandra",
-              "reason": "synonym_of",
-              "detail": "Cephalanthus tetrandrus",
-              "detailColId": "9L6KL",
-              "colId": "9L6KL",
+              "reason": "not_in_base",
+              "colId": "69J7G",
               "colName": "Cephalanthus tetrandra"
             },
             {
@@ -52441,10 +52241,8 @@
             {
               "id": 137805599,
               "name": "Bembicia uniflora",
-              "reason": "synonym_of",
-              "detail": "Bembiciopsis uniflora",
-              "detailColId": "5WGD4",
-              "colId": "5WGD4",
+              "reason": "not_in_base",
+              "colId": "LTDYH",
               "colName": "Bembicia uniflora"
             },
             {
@@ -52460,10 +52258,8 @@
             {
               "id": 138186668,
               "name": "Linochilus eriophoruus",
-              "reason": "synonym_of",
-              "detail": "Linochilus eriophorus",
-              "detailColId": "3V3GC",
-              "colId": "3V3GC",
+              "reason": "not_in_base",
+              "colId": "QCV27",
               "colName": "Linochilus eriophoruus"
             },
             {
@@ -53776,10 +53572,8 @@
             {
               "id": 148322115,
               "name": "Cedrela monroana",
-              "reason": "synonym_of",
-              "detail": "Cedrela monroensis",
-              "detailColId": "5XGTT",
-              "colId": "5XGTT",
+              "reason": "not_in_base",
+              "colId": "V2QFX",
               "colName": "Cedrela monroana"
             },
             {
@@ -53999,10 +53793,8 @@
             {
               "id": 149470208,
               "name": "Forestiera isabeliae",
-              "reason": "synonym_of",
-              "detail": "Forestiera isabelae",
-              "detailColId": "6JGWR",
-              "colId": "6JGWR",
+              "reason": "not_in_base",
+              "colId": "9LFDP",
               "colName": "Forestiera isabeliae"
             },
             {
@@ -54224,10 +54016,8 @@
             {
               "id": 152001004,
               "name": "Ouratea valerii",
-              "reason": "synonym_of",
-              "detail": "Ouratea valerioi",
-              "detailColId": "4B9CG",
-              "colId": "4B9CG",
+              "reason": "not_in_base",
+              "colId": "R6272",
               "colName": "Ouratea valerii"
             },
             {
@@ -55413,10 +55203,8 @@
             {
               "id": 162382541,
               "name": "Malouetia cuatrecasasatis",
-              "reason": "synonym_of",
-              "detail": "Malouetia cuatrecasatis",
-              "detailColId": "6R4VL",
-              "colId": "6R4VL",
+              "reason": "not_in_base",
+              "colId": "V8SBL",
               "colName": "Malouetia cuatrecasasatis"
             },
             {
@@ -56878,10 +56666,8 @@
             {
               "id": 189610799,
               "name": "Moldenhawera luschnathiana",
-              "reason": "synonym_of",
-              "detail": "Moldenhawera lushnathiana",
-              "detailColId": "73MF6",
-              "colId": "73MF6",
+              "reason": "not_in_base",
+              "colId": "R4MJK",
               "colName": "Moldenhawera luschnathiana"
             },
             {
@@ -57095,10 +56881,8 @@
             {
               "id": 193165913,
               "name": "Wunderlichia crulsiana",
-              "reason": "synonym_of",
-              "detail": "Wunderlichia bahiensis",
-              "detailColId": "5C422",
-              "colId": "5C422",
+              "reason": "not_in_base",
+              "colId": "TYHNQ",
               "colName": "Wunderlichia crulsiana"
             },
             {
@@ -57798,10 +57582,8 @@
             {
               "id": 199825074,
               "name": "Dalbergia martinii",
-              "reason": "synonym_of",
-              "detail": "Dalbergia martini",
-              "detailColId": "33Z5M",
-              "colId": "33Z5M",
+              "reason": "not_in_base",
+              "colId": "VLRBD",
               "colName": "Dalbergia martinii"
             },
             {
@@ -58131,10 +57913,8 @@
             {
               "id": 205649132,
               "name": "Litsea plateaefolia",
-              "reason": "synonym_of",
-              "detail": "Litsea plateifolia",
-              "detailColId": "9KFSQ",
-              "colId": "9KFSQ",
+              "reason": "not_in_base",
+              "colId": "3VNCB",
               "colName": "Litsea plateaefolia"
             },
             {
@@ -59107,10 +58887,8 @@
             {
               "id": 226183793,
               "name": "Miconia brigittei",
-              "reason": "synonym_of",
-              "detail": "Miconia brigitteae",
-              "detailColId": "73GMP",
-              "colId": "73GMP",
+              "reason": "not_in_base",
+              "colId": "R4KRX",
               "colName": "Miconia brigittei"
             },
             {
@@ -59654,10 +59432,8 @@
             {
               "id": 236691168,
               "name": "Thelypteris raiateana",
-              "reason": "synonym_of",
-              "detail": "Coryphopteris raiateana",
-              "detailColId": "YSPS",
-              "colId": "YSPS",
+              "reason": "not_in_base",
+              "colId": "TD7Y4",
               "colName": "Thelypteris raiateana"
             },
             {
@@ -82042,10 +81818,8 @@
             {
               "id": 226992343,
               "name": "Cantharellus cucullatus",
-              "reason": "synonym_of",
-              "detail": "Campanella junghuhnii",
-              "detailColId": "68WQF",
-              "colId": "68WQF",
+              "reason": "not_in_base",
+              "colId": "M6JLF",
               "colName": "Cantharellus cucullatus"
             },
             {
@@ -82396,10 +82170,8 @@
             {
               "id": 269705065,
               "name": "Cantharellus candicans",
-              "reason": "synonym_of",
-              "detail": "Hydnomerulius pinastri",
-              "detailColId": "9XWPR",
-              "colId": "9XWPR",
+              "reason": "not_in_base",
+              "colId": "V8SDH",
               "colName": "Cantharellus candicans"
             },
             {
@@ -82434,9 +82206,9 @@
               "id": 269705763,
               "name": "Cantharellus violaceus",
               "reason": "synonym_of",
-              "detail": "Trichaptum fuscoviolaceum",
-              "detailColId": "587WT",
-              "colId": "587WT",
+              "detail": "Cantharellus violicolor",
+              "detailColId": "QMTJ",
+              "colId": "QMTJ",
               "colName": "Cantharellus violaceus"
             },
             {
