@@ -243,7 +243,7 @@ export default function MapOccurrenceTooltip(props: MapOccurrenceTooltipProps) {
    * The column takes the far side of the panel where there's room for it, and
    * the near side where there isn't, so it never lands off the map.
    */
-  const IMAGE_WIDTH = 150;
+  const IMAGE_WIDTH = 110;
   const outerLeft = showLeft ? panelLeft - IMAGE_WIDTH - 6 : panelLeft + tooltipWidth + 6;
   const innerLeft = showLeft ? panelLeft + tooltipWidth + 6 : panelLeft - IMAGE_WIDTH - 6;
   const fits = (x: number) => x >= containerRect.left + 4 && x + IMAGE_WIDTH <= containerRect.right - 4;
@@ -300,7 +300,7 @@ export default function MapOccurrenceTooltip(props: MapOccurrenceTooltipProps) {
               src={image.url}
               alt={image.title ?? "Specimen photograph"}
               loading="lazy"
-              className="w-full max-h-[11rem] object-contain"
+              className="w-full max-h-[8rem] object-contain"
               onError={() => {
                 // A publisher's dead image link shouldn't leave a
                 // broken-image glyph sitting beside the panel — but it has to

@@ -2358,6 +2358,10 @@ export default function OccurrenceMapRow({
         : undefined;
       const [lng, lat] = (filePoint.geometry as GeoJSON.Point).coordinates as [number, number];
       if (merged) {
+        if (tooltipPinned && hoveredFeature?.properties.gbifID === merged.properties.gbifID) {
+          closeTooltip();
+          return;
+        }
         setPointFileHover(null);
         cancelHoverClear();
         setHoverSource("map");
@@ -2372,6 +2376,10 @@ export default function OccurrenceMapRow({
         pinTooltip();
         return;
       }
+      if (pointFileHover?.row === row) {
+        closeTooltip();
+        return;
+      }
       setHoveredFeature(null);
       setHoveredPanel(null);
       setPointFileHover({ row, lat, lng, panelId });
@@ -2381,6 +2389,13 @@ export default function OccurrenceMapRow({
     if (features && features.length > 0) {
       const gbifID = Number(features[0].properties?.gbifID);
       if (gbifID) {
+        // The same point again closes what it opened. A click is the gesture
+        // that opens a record, so it should be the one that puts it away —
+        // the close button is for when the panel has drifted from its point.
+        if (tooltipPinned && hoveredFeature?.properties.gbifID === gbifID) {
+          closeTooltip();
+          return;
+        }
         const known = occurrencesByGbifIdRef.current.get(gbifID);
         if (known) {
           cancelHoverClear();
@@ -2478,6 +2493,10 @@ export default function OccurrenceMapRow({
     // from a ref for the same reason — the map of them is built below this.
     cancelHoverClear,
     pinTooltip,
+    closeTooltip,
+    tooltipPinned,
+    hoveredFeature,
+    pointFileHover,
   ]);
 
   /**
@@ -4649,7 +4668,12 @@ export default function OccurrenceMapRow({
         add("Note", mine.georeferenceRemarks);
       }
       if (p.basisOfRecord === "PRESERVED_SPECIMEN") {
-        add("Institution", [p.institutionCode, p.collectionCode].filter(Boolean).join(" · "));
+        // Two fields, not one joined pair. A record can carry a collection
+        // without an institution code — GBIF resolves the holder from its
+        // GrSciColl keys instead — and joining them labelled the collection
+        // as the institution: Naturalis's sheets read "Institution: Botany".
+        add("Institution", p.institutionCode);
+        add("Collection", p.collectionCode);
       }
       add("Catalogue no.", p.catalogNumber);
       add("Recorded by", p.recordedBy ?? inat?.observer);
