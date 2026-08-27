@@ -390,9 +390,15 @@ export function saveExclusions(speciesKey: string, records: Record<number, Exclu
   }
 }
 
-/** Reasons that come up again and again, offered as one-click options. */
+/**
+ * Reasons that come up again and again, offered as one-click options.
+ *
+ * Duplication isn't among them, though it is the commonest reason of all:
+ * saying it by dragging the record onto the one it duplicates writes a reason
+ * that names the record kept, and a button offering the vague version of that
+ * would only produce exclusions nobody can trace back.
+ */
 export const EXCLUSION_REASONS = [
-  "Duplicate of another record",
   "Transcription error in the coordinates",
   "Cultivated or captive, not a wild occurrence",
   "Locality too vague to place",
