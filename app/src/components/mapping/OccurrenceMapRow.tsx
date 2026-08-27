@@ -2368,6 +2368,13 @@ export default function OccurrenceMapRow({
   );
 
   const handleMapClick = useCallback((e: MapLayerMouseEvent, panelId: string) => {
+    // A marker's own click is not the map's. MapLibre listens on the whole map
+    // container, so a click on an imported point's diamond — or on anything
+    // else drawn as a marker — reaches this handler too, still carrying
+    // whatever GBIF circle happens to lie under it. That made clicking a
+    // diamond sitting on a record open the record's panel and then close it
+    // again in the same click, so nothing appeared to happen.
+    if ((e.originalEvent?.target as HTMLElement | null)?.closest(".maplibregl-marker")) return;
     // Measuring owns the left click while it's on. Two points, never more —
     // and a third click doesn't move the far end, it becomes the new near one.
     // Walking a coastline or a valley is a chain of hops, and pinning the
