@@ -43,6 +43,8 @@ interface MapOccurrenceTooltipProps {
    * itself on hover — worth seeing at a glance, not worth six rows.
    */
   mark?: string | null;
+  /** Set where the record is a type specimen — "Isotype", "Holotype". */
+  typeStatus?: string | null;
   /** Position within the records sharing this point, when more than one does. */
   page?: { index: number; total: number; onPrev: () => void; onNext: () => void };
   /** Dismisses a pinned tooltip. */
@@ -109,18 +111,9 @@ export default function MapOccurrenceTooltip(props: MapOccurrenceTooltipProps) {
    * Its own bubble rather than a `title`: the browser holds a title back for
    * about a second, which is long enough that the flag read as unexplained.
    */
-  const [markOpen, setMarkOpen] = useState(false);
-  /**
-   * Whether the reader has put this record's photograph away.
-   *
-   * It comes back the moment the panel shows a different record — including
-   * on the way back to this one — so dismissing a photograph is never a
-   * decision you can't undo. Which photograph is showing is kept beside it and
-   * compared during render, which is how React says to reset state when a
-   * prop changes: an effect for it would render once with the stale answer.
-   */
-  const [imagesClosed, setImagesClosed] = useState(false);
-  const [shownImageKey, setShownImageKey] = useState<string | null>(null);
+  const [markOpen, setMarkOpen] = useState<string | null>(null);
+  /** Whether the photograph icon is being pointed at. */
+  const [imageOpen, setImageOpen] = useState(false);
   /**
    * The panel's size, which the reader can change by dragging its corner.
    *
@@ -173,11 +166,6 @@ export default function MapOccurrenceTooltip(props: MapOccurrenceTooltipProps) {
   const fixedY = containerRect.top + pos.y;
 
   const shownImages = (props.images ?? []).filter((i) => !brokenImages.includes(i.url));
-  const imageKey = shownImages.map((i) => i.url).join("|");
-  if (shownImageKey !== imageKey) {
-    setShownImageKey(imageKey);
-    if (imagesClosed) setImagesClosed(false);
-  }
 
   const tooltipWidth = size.width;
   // Beside the point rather than above it: the map is far wider than it is
@@ -232,18 +220,14 @@ export default function MapOccurrenceTooltip(props: MapOccurrenceTooltipProps) {
   );
 
   /**
-   * The photographs, in a column of their own beside the panel.
+   * Where a photograph opens when you point at its icon.
    *
-   * Big enough to see what the specimen is from the start — they used to be
-   * 64px thumbnails that opened on hover, which meant the one thing on the
-   * record you can actually look at was the one thing you had to go and find —
-   * and small enough not to be the loudest thing on the map. Clicking one
-   * opens the publisher's full image, which is where you go to read a label.
-   *
-   * The column takes the far side of the panel where there's room for it, and
-   * the near side where there isn't, so it never lands off the map.
+   * Beside the panel, on the side with room for it — the same place the
+   * photographs used to sit permanently. They don't any more: a herbarium
+   * sheet is worth seeing and worth putting away, and an icon in the header
+   * beside the flag says one is there without spending the map on it.
    */
-  const IMAGE_WIDTH = 110;
+  const IMAGE_WIDTH = 220;
   const outerLeft = showLeft ? panelLeft - IMAGE_WIDTH - 6 : panelLeft + tooltipWidth + 6;
   const innerLeft = showLeft ? panelLeft + tooltipWidth + 6 : panelLeft - IMAGE_WIDTH - 6;
   const fits = (x: number) => x >= containerRect.left + 4 && x + IMAGE_WIDTH <= containerRect.right - 4;
@@ -254,7 +238,7 @@ export default function MapOccurrenceTooltip(props: MapOccurrenceTooltipProps) {
 
   return createPortal(
     <>
-    {shownImages.length > 0 && !imagesClosed && (
+    {shownImages.length > 0 && imageOpen && (
       <div
         style={{
           position: "fixed",
@@ -263,63 +247,34 @@ export default function MapOccurrenceTooltip(props: MapOccurrenceTooltipProps) {
           transform: "translateY(-50%)",
           width: IMAGE_WIDTH,
           maxHeight: "min(70vh, 420px)",
-          zIndex: 10000,
-          pointerEvents: "auto",
+          zIndex: 10002,
+          pointerEvents: "none",
         }}
-        onMouseEnter={props.onPointerEnter}
-        onMouseLeave={props.onPointerLeave}
         data-occurrence-images
-        className="flex flex-col gap-1 overflow-y-auto"
+        className="flex flex-col gap-1 overflow-hidden"
       >
-        {/* Dismissed for the record you're reading, and back for the next one
-            — this one included, if you come back to it. A specimen photograph
-            is the point of some records and in the way of others. */}
-        <button
-          onClick={() => setImagesClosed(true)}
-          title="Hide the photograph"
-          className="self-end -mb-0.5 p-0.5 rounded-full bg-white/90 dark:bg-zinc-900/90 border border-zinc-200 dark:border-zinc-700 text-zinc-500 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200 shadow"
-        >
-          <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-            <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-          </svg>
-        </button>
-        {shownImages.map((image) => (
-          <a
+        {shownImages.slice(0, 2).map((image) => (
+          <span
             key={image.url}
-            href={image.url}
-            target="_blank"
-            rel="noopener noreferrer"
-            // Credit belongs with the picture: GBIF media carries the
-            // publisher's own rights statement and it travels with it.
-            title={[image.title, image.creator, image.rightsHolder, image.license]
-              .filter(Boolean)
-              .join(" · ")}
             className="block rounded-lg overflow-hidden bg-white dark:bg-zinc-900 shadow-xl border border-zinc-200 dark:border-zinc-700"
           >
             <img
               src={image.url}
               alt={image.title ?? "Specimen photograph"}
-              loading="lazy"
-              className="w-full max-h-[8rem] object-contain"
+              className="w-full max-h-[15rem] object-contain"
               onError={() => {
-                // A publisher's dead image link shouldn't leave a
-                // broken-image glyph sitting beside the panel — but it has to
-                // go by not being rendered, not by being pulled out of the DOM
-                // behind React's back.
                 setBrokenImages((prev) => (prev.includes(image.url) ? prev : [...prev, image.url]));
               }}
             />
-            {image.creator && (
-              <span className="block px-1.5 py-1 text-[10px] text-zinc-500 dark:text-zinc-400 truncate">
-                © {image.creator}
-                {image.license ? ` · ${image.license.replace(/^https?:\/\//, "")}` : ""}
-              </span>
-            )}
-          </a>
+            <span className="block px-1.5 py-1 text-[10px] text-zinc-500 dark:text-zinc-400 truncate">
+              {image.creator ? `© ${image.creator} · ` : ""}
+              Click to open the full image
+            </span>
+          </span>
         ))}
       </div>
     )}
-    {props.mark && markOpen && (
+    {markOpen && (
       <div
         style={{
           position: "fixed",
@@ -332,7 +287,7 @@ export default function MapOccurrenceTooltip(props: MapOccurrenceTooltipProps) {
         data-occurrence-mark
         className="rounded-md bg-zinc-900/95 dark:bg-zinc-700 px-1.5 py-1 text-[10px] leading-snug text-white shadow-lg"
       >
-        {props.mark}
+        {markOpen}
       </div>
     )}
     <div
@@ -368,7 +323,11 @@ export default function MapOccurrenceTooltip(props: MapOccurrenceTooltipProps) {
               the buttons along, so at "10 of 120 records here" the row grew
               past the panel and the close button was clipped off its edge by
               the panel's own overflow-hidden. */}
-          {((props.page && props.page.total > 1) || props.onClose || props.mark) && (
+          {((props.page && props.page.total > 1) ||
+            props.onClose ||
+            props.mark ||
+            props.typeStatus ||
+            shownImages.length > 0) && (
             <div className="flex items-center gap-1 pb-1 mb-1 border-b border-zinc-100 dark:border-zinc-800 text-[10px] text-zinc-500 dark:text-zinc-400">
               {props.page && props.page.total > 1 && (
                 <span
@@ -384,8 +343,8 @@ export default function MapOccurrenceTooltip(props: MapOccurrenceTooltipProps) {
                     and went as you paged through the records at a point moved
                     the buttons beside it out from under the pointer. */}
                 <span
-                  onMouseEnter={() => props.mark && setMarkOpen(true)}
-                  onMouseLeave={() => setMarkOpen(false)}
+                  onMouseEnter={() => props.mark && setMarkOpen(props.mark)}
+                  onMouseLeave={() => setMarkOpen(null)}
                   className={`p-0.5 ${
                     props.mark ? "text-amber-600 dark:text-amber-500 cursor-help" : "invisible"
                   }`}
@@ -394,6 +353,45 @@ export default function MapOccurrenceTooltip(props: MapOccurrenceTooltipProps) {
                     <path strokeLinecap="round" strokeLinejoin="round" d="M5 21V4m0 0h11l-1.5 3.5L16 11H5" />
                   </svg>
                 </span>
+                {props.typeStatus && (
+                  <span
+                    onMouseEnter={() =>
+                      setMarkOpen(
+                        `${props.typeStatus!.charAt(0).toUpperCase()}${props
+                          .typeStatus!.slice(1)
+                          .toLowerCase()
+                          .replace(/_/g, " ")} — a type specimen`
+                      )
+                    }
+                    onMouseLeave={() => setMarkOpen(null)}
+                    className="p-0.5 text-amber-500 cursor-help"
+                  >
+                    <svg className="w-3 h-3" viewBox="0 0 24 24" fill="currentColor">
+                      <path d="M12 3.5l2.6 5.3 5.9.9-4.3 4.1 1 5.8-5.2-2.7-5.2 2.7 1-5.8L3.5 9.7l5.9-.9z" />
+                    </svg>
+                  </span>
+                )}
+                {/* The photograph, as a mark you can point at and click
+                    through, rather than a column of pictures beside the panel
+                    that was the loudest thing on the map whether you wanted it
+                    or not. */}
+                {shownImages.length > 0 && (
+                  <a
+                    href={shownImages[0].url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    onMouseEnter={() => setImageOpen(true)}
+                    onMouseLeave={() => setImageOpen(false)}
+                    onClick={() => setImageOpen(false)}
+                    className="p-0.5 text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200"
+                  >
+                    <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
+                      <rect x="3" y="5" width="18" height="14" rx="2" />
+                      <circle cx="8.5" cy="10" r="1.5" />
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M4 17l5-5 4 4 3-2 4 4" />
+                    </svg>
+                  </a>
+                )}
                 {props.page && props.page.total > 1 && (
                   <>
                     <button

@@ -3488,6 +3488,7 @@ export default function OccurrenceMapRow({
                     fields={fields}
                     notes={notes}
                     mark={recordMarks(shown)}
+                    typeStatus={shown.properties.typeStatus}
                     images={shown.properties.images}
                     page={
                       hoveredGroup.length > 1
