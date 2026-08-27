@@ -389,13 +389,32 @@ export async function computeNoMatchDetails(
     ),
     -- The backbone's own synonym -> accepted-in-Base edge, for the names
     -- 'iucn_synonym_covered' misses. Same semi-join shape as prov_by_name.
-    syn_in_base AS (
+    -- Synonymies CoL's CURRENT RELEASE holds, not the extended release's.
+    --
+    -- This used to require only that the ACCEPTED PARENT was in Base, letting an
+    -- XR-only synonym record carry the claim. That is how Hylomyscus anselli was
+    -- reported as "CoL's accepted name is Hylomyscus kerbispeterhansi": the
+    -- evidence was VB6RW, an XR-only record, while the release contains no
+    -- Hylomyscus anselli at all. 64 of 148 such flags could not be checked by a
+    -- reader on the page they linked to.
+    --
+    -- Both sides now come from the release: in_checklist on the synonym, and
+    -- checklist_parent_id for the accepted target (the release's own edge — the
+    -- XR's parent can differ, and the claim is about the release).
+    --
+    -- Known gap: 66 assessed names are release synonyms whose record the XR
+    -- lacks entirely, so they have no backbone row to carry the flag. They go
+    -- unflagged rather than misflagged, which is the right direction to fail.
+    syn_in_checklist AS (
       SELECT lname, any_value(col_id) AS col_id, any_value(name) AS name FROM (
         SELECT lower(syn.scientific_name) AS lname, acc.col_id AS col_id, acc.scientific_name AS name
         FROM read_parquet('${ctx.backbonePath}') syn
-        JOIN read_parquet('${speciesGlob}', hive_partitioning=true) acc
-          ON acc.col_id = syn.parent_id AND acc.in_base
-        WHERE syn.status = 'synonym'
+        JOIN read_parquet('${ctx.backbonePath}') acc
+          ON acc.col_id = syn.checklist_parent_id AND acc.in_checklist
+        -- checklist_parent_id is set only for usages the release itself files as
+        -- a synonym, so it already implies in_checklist; testing both would read
+        -- as two guarantees where there is one.
+        WHERE syn.checklist_parent_id IS NOT NULL
           AND lower(syn.scientific_name) IN (SELECT lower(scientific_name) FROM matched_assessed)
       ) GROUP BY lname
     )` : ""}
@@ -424,7 +443,7 @@ export async function computeNoMatchDetails(
     LEFT JOIN read_parquet('${ctx.backbonePath}') bkparent ON bkparent.col_id = bk.parent_id
     LEFT JOIN col_to_assessed ca ON ca.col_id = bk.parent_id
     LEFT JOIN prov_by_name pbn ON pl.col_id IS NULL AND pbn.lname = lower(ma.scientific_name)
-    LEFT JOIN syn_in_base sib ON sib.lname = lower(ma.scientific_name)` : ""}
+    LEFT JOIN syn_in_checklist sib ON sib.lname = lower(ma.scientific_name)` : ""}
     WHERE cl.id IS NULL
     -- Deterministic order — this JOIN chain has no natural order, and without one
     -- DuckDB's parallel scan returns diagRows (and so noMatchIds/noMatchDetails)

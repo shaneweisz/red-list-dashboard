@@ -13,7 +13,11 @@
  * col_id the curated checklist DEMOTES (to synonym/infraspecific). Curated silence
  * never deletes coverage (so groups XR has but the checklist lacks — e.g. macroalgae,
  * whose AlgaeBase GSD isn't in the curated assembly — are preserved); only curated
- * contradiction does. col_ids are shared across both datasets, so the join is exact.
+ * contradiction does. col_ids are shared across both datasets, so the join is exact
+ * WHERE BOTH CARRY THE USAGE — but the release is NOT a subset of the XR: 94,728 of
+ * its 5.4M usages have no XR row (measured, COL26.6 XR vs 3LR). Harmless for
+ * demotion, which only ever removes; it does mean anything keyed off an XR row
+ * cannot see those usages (see build-backbone's in_checklist).
  *
  * We only need col:ID/status/rank/scientificName, which the smaller SIMPLE archive
  * (~166MB vs ~1.8GB extended) also carries — but ChecklistBank only serves a GET

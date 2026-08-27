@@ -82,7 +82,6 @@ const REF_ROWS: string[][] = [
   ["R5", "", "Antiqua Fl. 1: 1. 1600."],
 ];
 // Curated-checklist demotion set (injected, no network): "10" = Felis splitta.
-const DEMOTED_COL_IDS = ["10"];
 
 // Minimal ColDP VernacularName. Exercises: (1) preferred=true wins over other
 // candidates regardless of length ("Cats" is shorter than "Felids" but Felidae's
@@ -116,7 +115,17 @@ beforeAll(async () => {
   fs.writeFileSync(referenceTsv, [REF_COLS.join("\t"), ...REF_ROWS.map((r) => r.join("\t"))].join("\n") + "\n");
   const vernacularTsv = path.join(tmp, "VernacularName.tsv");
   fs.writeFileSync(vernacularTsv, [VERN_COLS.join("\t"), ...VERN_ROWS.map((r) => r.join("\t"))].join("\n") + "\n");
-  await run({ tsv, referenceTsv, vernacularTsv, outDir: tmp, baseSourceIds: BASE_SOURCE_IDS, demotedColIds: DEMOTED_COL_IDS });
+  // A stand-in for CoL's CURRENT RELEASE, which build-backbone reads to stamp
+  // in_checklist / checklist_parent_id. It deliberately does NOT contain col_id
+  // "2": the XR carries that usage and the release does not, which is the
+  // Hylomyscus anselli shape a claim must never be sourced from.
+  const checklistTsv = path.join(tmp, "ChecklistNameUsage.tsv");
+  fs.writeFileSync(checklistTsv, [
+    ["col:ID", "col:parentID", "col:status", "col:rank", "col:scientificName"].join("\t"),
+    ["1", "G1", "accepted", "species", "Panthera leo"].join("\t"),
+    ["10", "1", "synonym", "species", "Felis splitta"].join("\t"),
+  ].join("\n") + "\n");
+  await run({ tsv, referenceTsv, vernacularTsv, outDir: tmp, baseSourceIds: BASE_SOURCE_IDS, demotionsTsv: checklistTsv });
   speciesGlob = path.join(tmp, "species", "**", "*.parquet");
   backbone = path.join(tmp, "backbone.parquet");
   vernacularNames = JSON.parse(fs.readFileSync(path.join(tmp, "vernacular-names.json"), "utf-8"));
@@ -165,6 +174,21 @@ describe("build-backbone species universe", () => {
     expect(byName.get("Smilodon fatalis")).toBe(true);   // col:extinct='true'  (flagged fossil)
     expect(byName.get("Felis incognita")).toBeNull();    // col:extinct=''      (unflagged)
     expect(byName.get("Cimexomys testus")).toBeNull();   // unflagged fossil
+  });
+
+  it("tags in_checklist from CoL's current release, not the extended release", async () => {
+    const rows = await query(`SELECT col_id, in_checklist, checklist_parent_id
+                              FROM read_parquet('${backbone}') WHERE col_id IN ('1','2','10')`);
+    const by = new Map(rows.map((r: Record<string, unknown>) => [String(r.col_id), r]));
+    // In the release, accepted.
+    expect(by.get("1")?.in_checklist).toBe(true);
+    expect(by.get("1")?.checklist_parent_id).toBeNull();
+    // XR carries it, the release does not — so nothing may be claimed from it.
+    expect(by.get("2")?.in_checklist).toBe(false);
+    // The release files it as a synonym: carry the RELEASE's accepted parent,
+    // which is what a rename claim has to be sourced from.
+    expect(by.get("10")?.in_checklist).toBe(true);
+    expect(by.get("10")?.checklist_parent_id).toBe("1");
   });
 
   it("tags in_base from col:sourceID against the Base GSD allowlist", async () => {
