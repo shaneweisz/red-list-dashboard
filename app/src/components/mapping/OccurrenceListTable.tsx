@@ -136,7 +136,7 @@ const EXTRA_COLUMNS: { key: string; label: string; title: string; numeric?: bool
 ];
 
 /** Never hidden, and never offered in the column picker. */
-const ALWAYS_VISIBLE_COLUMNS = new Set(["putBack", "reason", "duplicates"]);
+const ALWAYS_VISIBLE_COLUMNS = new Set(["rowNumber", "putBack", "reason", "duplicates", "marks"]);
 
 /** Shown until someone changes it: the fields an assessor reads first. */
 const DEFAULT_VISIBLE_COLUMNS = [
@@ -235,6 +235,22 @@ function elevationOf(p: OccurrenceFeature["properties"]): number | null {
   return null;
 }
 
+/**
+ * Everything this dashboard has to say against a record: GBIF's own geospatial
+ * issues, the coordinate-cleaning checks it trips, and whether it falls outside
+ * the native range. One list, so the flag in the margin and the Flags column
+ * can never disagree about whether a record is questioned.
+ */
+function flagsOf(
+  p: OccurrenceFeature["properties"],
+  isOutsideNativeRange: (countryCode: string | null | undefined) => boolean
+): string[] {
+  const flags = (p.gbifIssues ?? []).map((i) => `GBIF: ${formatGbifIssue(i)}`);
+  flags.push(...(p.qualityFlags ?? []).map((f) => QUALITY_FLAG_LABELS[f as QualityFlag] ?? f));
+  if (isOutsideNativeRange(p.countryCode)) flags.push("Outside native range");
+  return flags;
+}
+
 /** institutionCode / collectionCode / catalogNumber, compacted into one cell. */
 function catalogOf(p: OccurrenceFeature["properties"]): string {
   return [p.institutionCode, p.collectionCode, p.catalogNumber].filter(Boolean).join(" · ");
@@ -251,8 +267,14 @@ interface ColumnDef {
   className?: string;
   align?: "left" | "right";
   value: (p: OccurrenceFeature["properties"], f: OccurrenceFeature) => SortValue;
-  /** Cell contents, when they aren't just the sort value rendered as text. */
-  render?: (p: OccurrenceFeature["properties"], f: OccurrenceFeature) => React.ReactNode;
+  /** Cell contents, when they aren't just the sort value rendered as text.
+   *  `index` is the row's place in the table as drawn, for the one column
+   *  whose content is that place rather than anything about the record. */
+  render?: (
+    p: OccurrenceFeature["properties"],
+    f: OccurrenceFeature,
+    index: number
+  ) => React.ReactNode;
   /** A control drawn in the header beside the label — the Included column's
    *  show/hide toggle. Its own clicks are kept off the sort handler. */
   headerExtra?: React.ReactNode;
@@ -632,6 +654,23 @@ export default function OccurrenceListTable({
 
   const columns = useMemo<ColumnDef[]>(
     () => [
+      // Where you are in the list. Not a field of the record — a record has no
+      // number — but the thing you say out loud to someone reading over your
+      // shoulder, and the thing you count down to find your place again.
+      {
+        key: "rowNumber",
+        label: "#",
+        title: "The row's place in the list as it's currently sorted",
+        className: "whitespace-nowrap tabular-nums w-8",
+        align: "right" as const,
+        value: () => null,
+        render: (p: OccurrenceFeature["properties"], f: OccurrenceFeature, index: number) =>
+          duplicateOf(exclusions?.[p.gbifID]?.justification) != null ? (
+            <span />
+          ) : (
+            <span className="text-zinc-400 dark:text-zinc-500">{index + 1}</span>
+          ),
+      } as ColumnDef,
       // The unfold control for a record other records duplicate, and the mark
       // on a duplicate shown beneath its primary. Drawn only when there are
       // duplicates to show, so an ordinary table isn't carrying an empty
@@ -693,6 +732,27 @@ export default function OccurrenceListTable({
             } as ColumnDef,
           ]
         : []),
+      // The same flag the map flies beside a questioned point, so a record
+      // that is being questioned says so in both places — and says why on
+      // hover, rather than spending a column on the reasons.
+      {
+        key: "marks",
+        label: "",
+        title: "Coordinate-cleaning checks this record trips, and whether it falls outside the species' native range",
+        className: "whitespace-nowrap w-5",
+        value: (p: OccurrenceFeature["properties"]) => flagsOf(p, isOutsideNativeRange).length,
+        render: (p: OccurrenceFeature["properties"]) => {
+          const flags = flagsOf(p, isOutsideNativeRange);
+          if (flags.length === 0) return <span />;
+          return (
+            <span title={flags.join(" · ")} className="block text-amber-600 dark:text-amber-500 cursor-help">
+              <svg className="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M5 22V3m0 0h12l-2 4 2 4H5" />
+              </svg>
+            </span>
+          );
+        },
+      } as ColumnDef,
       // What the excluded list needs and the main one doesn't: why a record
       // was set aside, and a way to change your mind. Nothing stands in this
       // place on the main list — a record is counted unless it's in the other
@@ -1014,9 +1074,7 @@ export default function OccurrenceListTable({
           (p.gbifIssues?.length ?? 0) +
           (isOutsideNativeRange(p.countryCode) ? 1 : 0),
         render: (p) => {
-          const flags = (p.gbifIssues ?? []).map((i) => `GBIF: ${formatGbifIssue(i)}`);
-          flags.push(...(p.qualityFlags ?? []).map((f) => QUALITY_FLAG_LABELS[f as QualityFlag] ?? f));
-          if (isOutsideNativeRange(p.countryCode)) flags.push("Outside native range");
+          const flags = flagsOf(p, isOutsideNativeRange);
           if (flags.length === 0) return null;
           const text = flags.join(", ");
           return (
@@ -1384,7 +1442,7 @@ export default function OccurrenceListTable({
             </tr>
           </thead>
           <tbody>
-            {displayRows.map((f) => {
+            {displayRows.map((f, rowIndex) => {
               const id = f.properties.gbifID;
               const excluded = isExcluded(f);
               const isDuplicate = duplicateOf(exclusions?.[id]?.justification) != null;
@@ -1455,7 +1513,9 @@ export default function OccurrenceListTable({
                 }`}
               >
                 {visibleColumns.map((col) => {
-                  const content = col.render ? col.render(f.properties, f) : col.value(f.properties, f);
+                  const content = col.render
+                    ? col.render(f.properties, f, rowIndex)
+                    : col.value(f.properties, f);
                   return (
                     <td
                       key={col.key}

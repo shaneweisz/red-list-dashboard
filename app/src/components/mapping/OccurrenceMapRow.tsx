@@ -1873,28 +1873,6 @@ export default function OccurrenceMapRow({
   );
 
   /**
-   * Excludes records with the reason already known — what dropping a selection
-   * onto the record it duplicates produces. No dialog: the reason names the
-   * record being kept, which is more specific than anything the assessor would
-   * type, and it stays editable from the row afterwards.
-   */
-  const excludeAs = useCallback(
-    (gbifIDs: number[], justification: string) => {
-      const next = { ...exclusions };
-      for (const gbifID of gbifIDs) {
-        next[gbifID] = {
-          gbifID,
-          justification,
-          excludedAt: new Date().toISOString(),
-          excludedBy: accountEmail || undefined,
-        };
-      }
-      commitEdits({ exclusions: next }, `mark ${gbifIDs.length} as duplicate${gbifIDs.length === 1 ? "" : "s"}`);
-    },
-    [exclusions, commitEdits, accountEmail]
-  );
-
-  /**
    * Takes a list, not one id. Called once per record, each call would build its
    * replacement from the same render-time `exclusions` and the last would win —
    * so putting five records back restored one and left four struck out.
@@ -4851,38 +4829,49 @@ export default function OccurrenceMapRow({
     return map;
   }, [occurrences, exclusions]);
 
-  const markDuplicates = useCallback(
-    (gbifIDs: number[], primaryGbifID: number) => {
-      excludeAs(gbifIDs, duplicateOfReason(primaryGbifID));
-    },
-    [excludeAs]
-  );
-
   /**
-   * Hands the primacy of a group of duplicates to one of its members.
+   * Keeps one record of a group and sets the others aside as duplicates of it.
    *
-   * The record chosen comes back into the count, the one it displaces joins
-   * the duplicates, and the rest are re-pointed at it — the sheet you decided
-   * was the best of them becomes the one the group is named for. One edit, so
-   * one undo puts the whole arrangement back.
+   * The one gesture behind all three ways of saying it: dragging a row onto
+   * another, "keep this one of N" on a point with records stacked under it,
+   * and handing primacy to a record that was itself a duplicate. Each is the
+   * same statement — this is the sheet, those are copies of it.
+   *
+   * Whatever the record kept was before, it is counted afterwards. Without
+   * that, using "keep this one" on a record that was itself a duplicate left
+   * every record in the group excluded and the whole locality vanished from
+   * the list. And where it was a duplicate, the group it belonged to comes
+   * with it: its siblings are re-pointed at it rather than left pointing at a
+   * record that is now a duplicate itself.
    */
-  const makePrimaryRecord = useCallback(
-    (gbifID: number) => {
-      const oldPrimary = duplicateOf(exclusions[gbifID]?.justification);
-      if (oldPrimary == null) return;
-      const reason = duplicateOfReason(gbifID);
-      const next = { ...exclusions };
-      delete next[gbifID];
-      const stamp = { excludedAt: new Date().toISOString(), excludedBy: accountEmail || undefined };
-      for (const o of occurrences) {
-        const id = o.properties.gbifID;
-        if (id === gbifID) continue;
-        const isSibling = duplicateOf(exclusions[id]?.justification) === oldPrimary;
-        if (isSibling || id === oldPrimary) next[id] = { gbifID: id, justification: reason, ...stamp };
+  const keepRecord = useCallback(
+    (primaryGbifID: number, alsoDuplicates: number[] = []) => {
+      const oldPrimary = duplicateOf(exclusions[primaryGbifID]?.justification);
+      const reason = duplicateOfReason(primaryGbifID);
+      const setAside = new Set(alsoDuplicates);
+      if (oldPrimary != null) {
+        setAside.add(oldPrimary);
+        for (const o of occurrences) {
+          const id = o.properties.gbifID;
+          if (duplicateOf(exclusions[id]?.justification) === oldPrimary) setAside.add(id);
+        }
       }
-      commitEdits({ exclusions: next }, `make GBIF ${gbifID} the record kept`);
+      setAside.delete(primaryGbifID);
+      const next = { ...exclusions };
+      delete next[primaryGbifID];
+      const stamp = { excludedAt: new Date().toISOString(), excludedBy: accountEmail || undefined };
+      for (const id of setAside) next[id] = { gbifID: id, justification: reason, ...stamp };
+      commitEdits(
+        { exclusions: next },
+        `keep GBIF ${primaryGbifID}, set ${setAside.size} aside as duplicate${setAside.size === 1 ? "" : "s"}`
+      );
     },
     [exclusions, occurrences, accountEmail, commitEdits]
+  );
+
+  const markDuplicates = useCallback(
+    (gbifIDs: number[], primaryGbifID: number) => keepRecord(primaryGbifID, gbifIDs),
+    [keepRecord]
   );
 
   /**
@@ -5027,7 +5016,7 @@ export default function OccurrenceMapRow({
                   <button
                     onClick={() => {
                       setRowMenu(null);
-                      makePrimaryRecord(gbifID);
+                      keepRecord(gbifID);
                     }}
                     title="Count this record instead, and set the others in its group aside as duplicates of it"
                     className="flex w-full items-start gap-1.5 px-1 py-1 rounded text-left hover:bg-zinc-100 dark:hover:bg-zinc-800"
@@ -5083,7 +5072,7 @@ export default function OccurrenceMapRow({
                 {others.length > 0 && (
                   <button
                     onClick={() => {
-                      markDuplicates(others.map((o) => o.properties.gbifID), gbifID);
+                      keepRecord(gbifID, others.map((o) => o.properties.gbifID));
                       close();
                     }}
                     title="Everything else at this exact position is struck out as a duplicate of this one, with the reason recorded and undoable"
