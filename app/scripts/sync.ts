@@ -306,8 +306,18 @@ async function main() {
       // print "corals lost 45% of their occurrences", exit 0, upload, and open a
       // PR whose body said only "review the diff". The workflow puts this file
       // into that PR body.
-      const { regressions } = await checkSyncRegressions();
-      const summary = regressions.length === 0
+      const { regressions, drifts } = await checkSyncRegressions();
+      const driftLines = drifts.length === 0 ? [] : [
+        "",
+        "Systematic drift (each group moved the same way, below the per-group threshold):",
+        "",
+        ...drifts.map(
+          (d) =>
+            `- ${d.metric}: ${d.before.toLocaleString()} → ${d.after.toLocaleString()} ` +
+            `(${(d.pctChange * 100).toFixed(2)}%, down in ${d.groupsDown} groups, up in ${d.groupsUp})`
+        ),
+      ];
+      const summary = (regressions.length === 0
         ? "No material per-group regressions against the live sync."
         : [
             `${regressions.length} material regression(s) against the live sync:`,
@@ -317,7 +327,7 @@ async function main() {
                 `- ${r.taxonGroup} — ${r.metric}: ${r.before.toLocaleString()} → ` +
                 `${r.after.toLocaleString()} (${(r.pctChange * 100).toFixed(1)}%)`
             ),
-          ].join("\n");
+          ].join("\n")) + driftLines.join("\n");
       fs.writeFileSync(path.join(DATA_DIR, "..", "sync-regressions.md"), summary + "\n");
     } catch (err) {
       regressionCheckError = err instanceof Error ? err : new Error(String(err));

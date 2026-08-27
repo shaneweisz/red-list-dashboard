@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { compareStats, type GroupStats } from "../check-sync-regressions";
+import { compareStats, type GroupStats, detectSystematicDrift } from "../check-sync-regressions";
 
 const g = (
   taxonGroup: string,
@@ -7,6 +7,7 @@ const g = (
   occurrences: number,
   unassessed = 0,
   unassessedNamed = 0,
+  colDescribed = 0,
 ): GroupStats => ({
   taxonGroup,
   species: withKey,
@@ -14,6 +15,7 @@ const g = (
   occurrences,
   unassessed,
   unassessedNamed,
+  colDescribed,
 });
 
 describe("compareStats", () => {
@@ -82,5 +84,69 @@ describe("the unassessed half", () => {
     );
     const names = deltas.find((d) => d.metric === "common names");
     expect(names?.pctChange).toBe(-1);
+  });
+});
+
+describe("detectSystematicDrift", () => {
+  const group = (taxonGroup: string, unassessed: number): GroupStats => ({
+    taxonGroup, species: 100, withKey: 100, occurrences: 100_000, unassessed, unassessedNamed: unassessed, colDescribed: 200_000,
+  });
+
+  it("catches every group moving the same way, far below the per-group threshold", () => {
+    // The case that slipped through: two releases of curated-checklist
+    // reconciliation moved browsable species down in 22 groups and up in none,
+    // a total of 0.11% — a hundredth of MATERIAL_CHANGE, so compareStats was
+    // silent, and a human noticed the numbers instead.
+    const before = Array.from({ length: 22 }, (_, i) => group(`g${i}`, 100_000));
+    const after = Array.from({ length: 22 }, (_, i) => group(`g${i}`, 99_890));
+    expect(compareStats(before, after)).toEqual([]);          // magnitude test: silent
+    const drift = detectSystematicDrift(before, after);
+    const browsable = drift.find((d) => d.metric === "browsable species")!;
+    expect(browsable.groupsDown).toBe(22);
+    expect(browsable.groupsUp).toBe(0);
+    expect(browsable.pctChange).toBeCloseTo(-0.0011, 5);
+  });
+
+  it("stays quiet when groups disagree, which is what noise looks like", () => {
+    const before = Array.from({ length: 22 }, (_, i) => group(`g${i}`, 100_000));
+    const after = before.map((g, i) => group(g.taxonGroup, i % 2 ? 100_120 : 99_880));
+    expect(detectSystematicDrift(before, after).some((d) => d.metric === "browsable species")).toBe(false);
+  });
+
+  it("stays quiet on too few groups to read a direction from", () => {
+    const before = Array.from({ length: 4 }, (_, i) => group(`g${i}`, 100_000));
+    const after = Array.from({ length: 4 }, (_, i) => group(`g${i}`, 99_890));
+    expect(detectSystematicDrift(before, after)).toEqual([]);
+  });
+
+  it("stays quiet when nothing really moved, so rounding can't raise an alarm", () => {
+    const before = Array.from({ length: 22 }, (_, i) => group(`g${i}`, 1_000_000));
+    const after = Array.from({ length: 22 }, (_, i) => group(`g${i}`, 999_999));
+    expect(detectSystematicDrift(before, after).some((d) => d.metric === "browsable species")).toBe(false);
+  });
+});
+
+describe("CoL described species", () => {
+  it("catches a described denominator collapsing, which no GBIF metric sees", () => {
+    // Every other metric here comes from the GBIF-derived parquets. col_described
+    // comes from the CoL universe, so a group losing its described count was
+    // invisible to all of them — and it is the denominator under every
+    // "% assessed" figure on the dashboard.
+    const before = [g("plants", 100, 100_000, 0, 0, 356_867)];
+    const after = [g("plants", 100, 100_000, 0, 0, 200_000)];
+    const d = compareStats(before, after).find((x) => x.metric === "CoL described species");
+    expect(d).toBeDefined();
+    expect(d!.pctChange).toBeLessThan(-0.4);
+  });
+
+  it("reports a one-directional described drift too small for the magnitude test", () => {
+    // The real case: -0.11% across 22 groups, none up.
+    const before = Array.from({ length: 22 }, (_, i) => g(`g${i}`, 100, 100_000, 0, 0, 100_000));
+    const after = Array.from({ length: 22 }, (_, i) => g(`g${i}`, 100, 100_000, 0, 0, 99_890));
+    expect(compareStats(before, after)).toEqual([]);
+    const drift = detectSystematicDrift(before, after).find((x) => x.metric === "CoL described species");
+    expect(drift).toBeDefined();
+    expect(drift!.groupsDown).toBe(22);
+    expect(drift!.groupsUp).toBe(0);
   });
 });
