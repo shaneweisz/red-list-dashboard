@@ -7,6 +7,16 @@ import { EXCLUSION_REASONS } from "@/lib/mapping/georeferences";
 interface ExclusionDialogProps {
   /** The records being struck out — one, or a set selected together. */
   gbifIDs: number[];
+  /**
+   * The record itself, as the map panel shows it, when there is only one.
+   *
+   * The reason for excluding a record is in the record: the duplicate
+   * catalogue number, the locality in the wrong country, the date that
+   * predates the collector. Asking for that reason with the record out of
+   * sight meant remembering it while typing it.
+   */
+  fields?: { label: string; value: string }[];
+  notes?: { label: string; value: string; flag?: boolean }[];
   /** Pre-filled when re-opening an exclusion to edit its reason. */
   existingJustification?: string;
   onConfirm: (justification: string) => void;
@@ -23,6 +33,8 @@ interface ExclusionDialogProps {
  */
 export default function ExclusionDialog({
   gbifIDs,
+  fields,
+  notes,
   existingJustification,
   onConfirm,
   onCancel,
@@ -77,6 +89,39 @@ export default function ExclusionDialog({
           )}
         </div>
 
+        {fields && fields.length > 0 && (
+          <div className="max-h-[220px] overflow-y-auto overscroll-contain px-4 py-2 border-b border-zinc-100 dark:border-zinc-800">
+            <table className="w-full border-collapse text-[11px]">
+              <tbody>
+                {fields.map((field) => (
+                  <tr key={field.label} className="align-top">
+                    <td className="py-[1px] pr-2 whitespace-nowrap text-zinc-400 dark:text-zinc-500">
+                      {field.label}
+                    </td>
+                    <td className="py-[1px] break-words text-zinc-700 dark:text-zinc-200">{field.value}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            {notes && notes.length > 0 && (
+              <div className="pt-1 mt-1 border-t border-zinc-100 dark:border-zinc-800 space-y-0.5 text-[11px]">
+                {notes.map((note) => (
+                  <div
+                    key={note.label}
+                    className={`flex gap-1.5 ${
+                      note.flag ? "text-amber-700 dark:text-amber-400" : "text-zinc-600 dark:text-zinc-300"
+                    }`}
+                  >
+                    <span className={note.flag ? "text-amber-600 dark:text-amber-500" : "text-zinc-400 dark:text-zinc-500"}>
+                      {note.label}
+                    </span>
+                    <span className="break-words">{note.value}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
         <div className="px-4 py-3 space-y-2">
           <div className="flex flex-wrap gap-1">
             {EXCLUSION_REASONS.map((reason) => (

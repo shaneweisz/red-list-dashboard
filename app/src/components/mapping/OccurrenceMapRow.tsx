@@ -5840,6 +5840,13 @@ export default function OccurrenceMapRow({
       {pendingExclusion && (
         <ExclusionDialog
           gbifIDs={pendingExclusion}
+          {...(pendingExclusion.length === 1 && occurrencesByGbifId.get(pendingExclusion[0])
+            ? recordFields(
+                occurrencesByGbifId.get(pendingExclusion[0])!,
+                georeferences[pendingExclusion[0]],
+                inatPhotosByGbifId.get(pendingExclusion[0])
+              )
+            : {})}
           existingJustification={
             pendingExclusion.length === 1 ? exclusions[pendingExclusion[0]]?.justification : undefined
           }
