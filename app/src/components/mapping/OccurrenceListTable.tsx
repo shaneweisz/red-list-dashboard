@@ -749,6 +749,21 @@ export default function OccurrenceListTable({
   }, []);
   /** The record whose date is being typed. */
   const [editingDate, setEditingDate] = useState<number | null>(null);
+  /**
+   * The reason being read or rewritten, and where its icon is.
+   *
+   * A georeference and a hand-written date are both interpretations, and the
+   * reasoning is the part of them worth keeping — but it is not what you scan
+   * a table for. It lives behind an ⓘ beside the value: hovering reads it,
+   * clicking rewrites it, and the column stays one line either way.
+   */
+  const [noteEditor, setNoteEditor] = useState<{
+    feature: OccurrenceFeature;
+    kind: "georeference" | "date";
+    text: string;
+    x: number;
+    y: number;
+  } | null>(null);
   const [draggingId, setDraggingId] = useState<number | null>(null);
   const [dropTargetId, setDropTargetId] = useState<number | null>(null);
   const holdRef = useRef<{ id: number; x: number; y: number; timer: number } | null>(null);
@@ -856,6 +871,72 @@ export default function OccurrenceListTable({
         className="block truncate"
       >
         {text}
+      </span>
+    ),
+    [showNote, hideNoteSoon]
+  );
+
+  /**
+   * Keeps what's in the note box, against the value it belongs to.
+   *
+   * A georeference is re-saved at its own coordinates, a date at its own date:
+   * the note is a field of the thing, and there is no separate store to write
+   * it to — which also means one undo covers the whole edit.
+   */
+  const saveNote = useCallback(() => {
+    // Read the editor and close it, then save. Doing the saving inside a state
+    // updater meant asking a parent to change while this component was mid-
+    // update, and React was within its rights to drop it — which it did: the
+    // reason you typed came back as the one you had replaced.
+    if (!noteEditor) return;
+    setNoteEditor(null);
+    const note = noteEditor.text.trim();
+    const p = noteEditor.feature.properties;
+    if (noteEditor.kind === "georeference") {
+      const mine = georeferences?.[p.gbifID];
+      if (mine && note !== (mine.georeferenceRemarks ?? "")) {
+        onSaveGeoreference?.(noteEditor.feature, {
+          lat: mine.decimalLatitude,
+          lon: mine.decimalLongitude,
+          uncertainty: mine.coordinateUncertaintyInMeters,
+          note,
+        });
+      }
+    } else {
+      const mine = dates?.[p.gbifID];
+      if (mine && note !== (mine.remarks ?? "")) onSaveDate?.(noteEditor.feature, mine.eventDate, note);
+    }
+  }, [noteEditor, georeferences, dates, onSaveGeoreference, onSaveDate]);
+
+  /** The ⓘ that carries a reason: hover to read it, click to rewrite it. */
+  const noteIcon = useCallback(
+    (feature: OccurrenceFeature, kind: "georeference" | "date", text: string | undefined) => (
+      <span
+        onMouseEnter={(e) => {
+          const box = e.currentTarget.getBoundingClientRect();
+          showNote({
+            text: text || "No reason given — click to add one",
+            x: box.left,
+            y: box.bottom + 4,
+          });
+        }}
+        onMouseLeave={hideNoteSoon}
+        onClick={(e) => {
+          e.stopPropagation();
+          const box = e.currentTarget.getBoundingClientRect();
+          setHoverNote(null);
+          setNoteEditor({ feature, kind, text: text ?? "", x: box.left, y: box.bottom + 4 });
+        }}
+        title=""
+        className={`ml-1 inline-flex align-middle cursor-pointer ${
+          text ? "text-violet-500" : "text-zinc-300 dark:text-zinc-600 hover:text-violet-500"
+        }`}
+      >
+        <svg className="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
+          <circle cx="12" cy="12" r="9" />
+          <path strokeLinecap="round" d="M12 11v5" />
+          <circle cx="12" cy="7.75" r="0.6" fill="currentColor" stroke="none" />
+        </svg>
       </span>
     ),
     [showNote, hideNoteSoon]
@@ -1096,19 +1177,16 @@ export default function OccurrenceListTable({
           };
           if (mine) {
             return (
-              <button
-                onClick={startEditing}
-                title={[
-                  `Your date${published ? ` — GBIF published ${published}` : ""}`,
-                  mine.remarks,
-                  "Click to retype it.",
-                ]
-                  .filter(Boolean)
-                  .join(" — ")}
-                className="block text-left text-violet-600 dark:text-violet-400 hover:underline"
-              >
-                ◆ {mine.eventDate}
-              </button>
+              <span className="flex items-center whitespace-nowrap">
+                <button
+                  onClick={startEditing}
+                  title={`Your date${published ? ` — GBIF published ${published}` : ""}. Click to retype it.`}
+                  className="text-violet-600 dark:text-violet-400 hover:underline"
+                >
+                  ◆ {mine.eventDate}
+                </button>
+                {noteIcon(f, "date", mine.remarks)}
+              </span>
             );
           }
           if (published) {
@@ -1173,26 +1251,17 @@ export default function OccurrenceListTable({
             setEditingCoords(p.gbifID);
           };
           if (mine) {
-            // Your note sits with your coordinates, and clicking either opens
-            // the cell for typing — the reasoning is part of the georeference,
-            // not a footnote to it.
             return (
-              <button
-                onClick={startEditing}
-                title={`Your georeference: ${mine.decimalLatitude}, ${mine.decimalLongitude} ± ${mine.coordinateUncertaintyInMeters} m${
-                  mine.georeferenceRemarks ? ` — ${mine.georeferenceRemarks}` : ""
-                }. Click to retype it, or drag the point on the map.`}
-                className="block text-left text-violet-600 dark:text-violet-400 hover:underline"
-              >
-                <span className="block truncate">
+              <span className="flex items-center whitespace-nowrap">
+                <button
+                  onClick={startEditing}
+                  title={`Your georeference: ${mine.decimalLatitude}, ${mine.decimalLongitude} ± ${mine.coordinateUncertaintyInMeters} m. Click to retype it, or drag the point on the map.`}
+                  className="text-violet-600 dark:text-violet-400 hover:underline"
+                >
                   ◆ {mine.decimalLatitude.toFixed(4)}, {mine.decimalLongitude.toFixed(4)}
-                </span>
-                {mine.georeferenceRemarks && (
-                  <span className="block truncate text-[10px] text-zinc-400">
-                    {mine.georeferenceRemarks}
-                  </span>
-                )}
-              </button>
+                </button>
+                {noteIcon(f, "georeference", mine.georeferenceRemarks)}
+              </span>
             );
           }
           if (!f.geometry) {
@@ -1456,7 +1525,7 @@ export default function OccurrenceListTable({
         ),
       },
     ],
-    [isOutsideNativeRange, georeferences, onSaveGeoreference, onClearGeoreference, editingCoords, editingRadius, exclusions, variant, onExclude, onInclude, duplicates, unfolded, dates, onSaveDate, onClearDate, editingDate, full, showNote, hideNoteSoon]
+    [isOutsideNativeRange, georeferences, onSaveGeoreference, onClearGeoreference, editingCoords, editingRadius, exclusions, variant, onExclude, onInclude, duplicates, unfolded, dates, onSaveDate, onClearDate, editingDate, full, showNote, hideNoteSoon, noteIcon]
   );
 
   // The catalogue in the reader's own order, then the subset actually drawn.
@@ -1874,6 +1943,49 @@ export default function OccurrenceListTable({
           </tbody>
         </table>
       </div>
+      {/* The reason, in the same place the hover bubble reads it from, with a
+          box round it. Enter keeps it, Escape leaves it alone, and clicking
+          away keeps it too — a reason you typed and clicked off is a reason
+          you meant. */}
+      {noteEditor && createPortal(
+        <div
+          style={{
+            position: "fixed",
+            left: Math.min(noteEditor.x, window.innerWidth - 300),
+            top: Math.min(noteEditor.y, window.innerHeight - 120),
+            width: 280,
+            zIndex: 10003,
+          }}
+          onClick={(e) => e.stopPropagation()}
+          className="rounded-lg bg-white dark:bg-zinc-900 border border-violet-300 dark:border-violet-700 shadow-xl p-1.5"
+        >
+          <span className="block pb-1 text-[10px] text-zinc-400">
+            {noteEditor.kind === "georeference"
+              ? "How you read the locality, in your words"
+              : "Where this date comes from, in your words"}
+          </span>
+          <textarea
+            autoFocus
+            rows={3}
+            value={noteEditor.text}
+            onChange={(e) => setNoteEditor({ ...noteEditor, text: e.target.value })}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && !e.shiftKey) {
+                e.preventDefault();
+                saveNote();
+              }
+              if (e.key === "Escape") {
+                e.preventDefault();
+                setNoteEditor(null);
+              }
+            }}
+            onBlur={saveNote}
+            placeholder="why"
+            className="w-full rounded border border-zinc-300 dark:border-zinc-600 bg-white dark:bg-zinc-900 px-1 py-0.5 text-[11px] text-zinc-700 dark:text-zinc-200"
+          />
+        </div>,
+        document.body
+      )}
       {hoverNote && createPortal(
         <div
           style={{
