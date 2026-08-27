@@ -147,8 +147,8 @@ const ALWAYS_VISIBLE_COLUMNS = new Set(["rowNumber", "putBack", "reason", "dupli
 
 /** Shown until someone changes it: the fields an assessor reads first. */
 const DEFAULT_VISIBLE_COLUMNS = [
-  "date", "coordinates", "basisOfRecord", "locality", "stateProvince", "country",
-  "uncertainty", "elevation", "recordedBy", "identifiedBy", "dataset", "catalog",
+  "date", "coordinates", "recordedBy", "locality", "stateProvince", "country",
+  "uncertainty", "elevation", "identifiedBy", "basisOfRecord", "dataset", "catalog",
   "establishmentMeans", "gbifID",
 ];
 
@@ -1198,11 +1198,13 @@ export default function OccurrenceListTable({
         },
       },
       {
-        key: "basisOfRecord",
-        label: "Basis of record",
-        title: "basisOfRecord — what kind of evidence the record is based on",
-        className: "whitespace-nowrap",
-        value: (p) => formatBasis(p.basisOfRecord) || null,
+        key: "recordedBy",
+        label: "Recorded by",
+        title: "recordedBy — the observer or collector",
+        className: "max-w-[12rem]",
+        value: (p) => p.recordedBy || null,
+        render: (p) =>
+          p.recordedBy ? <span className="block truncate" title={p.recordedBy}>{p.recordedBy}</span> : null,
       },
       {
         key: "locality",
@@ -1294,15 +1296,6 @@ export default function OccurrenceListTable({
         },
       },
       {
-        key: "recordedBy",
-        label: "Recorded by",
-        title: "recordedBy — the observer or collector",
-        className: "max-w-[12rem]",
-        value: (p) => p.recordedBy || null,
-        render: (p) =>
-          p.recordedBy ? <span className="block truncate" title={p.recordedBy}>{p.recordedBy}</span> : null,
-      },
-      {
         key: "identifiedBy",
         label: "Identified by",
         title: "identifiedBy — who determined the species",
@@ -1310,6 +1303,13 @@ export default function OccurrenceListTable({
         value: (p) => p.identifiedBy || null,
         render: (p) =>
           p.identifiedBy ? <span className="block truncate" title={p.identifiedBy}>{p.identifiedBy}</span> : null,
+      },
+      {
+        key: "basisOfRecord",
+        label: "Basis of record",
+        title: "basisOfRecord — what kind of evidence the record is based on",
+        className: "whitespace-nowrap",
+        value: (p) => formatBasis(p.basisOfRecord) || null,
       },
       {
         key: "dataset",
