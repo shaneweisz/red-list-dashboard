@@ -405,6 +405,9 @@ export const EXCLUSION_REASONS = [
   "Null-island coordinates (0, 0)",
   "Cultivated or captive, not a wild occurrence",
   "Locality too vague to place",
+  // Wider than a vague locality: nothing about the record — no date, no
+  // collector, no determiner — is enough to stand an assessment on.
+  "Not enough information about the record",
   "Misidentified",
   "Outside the species' known range",
 ] as const;
