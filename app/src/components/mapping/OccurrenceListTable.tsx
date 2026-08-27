@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { QUALITY_FLAG_LABELS, type QualityFlag } from "@/lib/mapping/coordinate-cleaning";
 import { formatGbifIssue } from "@/lib/gbif";
-import { duplicateOf, type Georeference } from "@/lib/mapping/georeferences";
+import { duplicateOf, resolvePrimary, type Georeference } from "@/lib/mapping/georeferences";
 
 /**
  * A single GBIF occurrence, as returned by /api/occurrences. Shared with
@@ -140,7 +140,7 @@ const ALWAYS_VISIBLE_COLUMNS = new Set(["rowNumber", "putBack", "reason", "dupli
 
 /** Shown until someone changes it: the fields an assessor reads first. */
 const DEFAULT_VISIBLE_COLUMNS = [
-  "date", "basisOfRecord", "locality", "stateProvince", "country", "coordinates",
+  "date", "coordinates", "basisOfRecord", "locality", "stateProvince", "country",
   "uncertainty", "elevation", "recordedBy", "identifiedBy", "dataset", "catalog",
   "establishmentMeans", "flags", "gbifID",
 ];
@@ -635,8 +635,8 @@ export default function OccurrenceListTable({
       setDraggingId(null);
       setDropTargetId(null);
       if (dragged == null || target == null || target === dragged) return;
-      // A duplicate of a duplicate belongs to the same record kept.
-      const primary = duplicateOf(exclusions?.[target]?.justification) ?? target;
+      // Dropping onto a duplicate hands the record to the group's own head.
+      const primary = resolvePrimary(target, exclusions ?? {});
       if (primary !== dragged) onMarkDuplicate?.([dragged], primary);
     };
     const onKey = (e: KeyboardEvent) => {
@@ -873,42 +873,6 @@ export default function OccurrenceListTable({
         value: (p) => formatDate(p) || null,
       },
       {
-        key: "basisOfRecord",
-        label: "Basis of record",
-        title: "basisOfRecord — what kind of evidence the record is based on",
-        className: "whitespace-nowrap",
-        value: (p) => formatBasis(p.basisOfRecord) || null,
-      },
-      {
-        key: "locality",
-        label: "Locality",
-        title: "locality, falling back to verbatimLocality",
-        className: "min-w-[12rem] max-w-[18rem]",
-        value: (p) => localityOf(p) || null,
-        render: (p) => {
-          const loc = localityOf(p);
-          return loc ? <span className="block truncate" title={loc}>{loc}</span> : null;
-        },
-      },
-      {
-        key: "stateProvince",
-        label: "State/Province",
-        title: "stateProvince",
-        className: "max-w-[10rem]",
-        value: (p) => p.stateProvince || null,
-        render: (p) =>
-          p.stateProvince ? <span className="block truncate" title={p.stateProvince}>{p.stateProvince}</span> : null,
-      },
-      {
-        key: "country",
-        label: "Country",
-        title: "country / countryCode",
-        className: "max-w-[10rem]",
-        value: (p) => p.country || null,
-        render: (p) =>
-          p.country ? <span className="block truncate" title={p.country}>{p.country}</span> : null,
-      },
-      {
         key: "coordinates",
         label: "Coordinates",
         title: "decimalLatitude, decimalLongitude — blank when GBIF has no coordinates for the record",
@@ -996,6 +960,42 @@ export default function OccurrenceListTable({
             text
           );
         },
+      },
+      {
+        key: "basisOfRecord",
+        label: "Basis of record",
+        title: "basisOfRecord — what kind of evidence the record is based on",
+        className: "whitespace-nowrap",
+        value: (p) => formatBasis(p.basisOfRecord) || null,
+      },
+      {
+        key: "locality",
+        label: "Locality",
+        title: "locality, falling back to verbatimLocality",
+        className: "min-w-[12rem] max-w-[18rem]",
+        value: (p) => localityOf(p) || null,
+        render: (p) => {
+          const loc = localityOf(p);
+          return loc ? <span className="block truncate" title={loc}>{loc}</span> : null;
+        },
+      },
+      {
+        key: "stateProvince",
+        label: "State/Province",
+        title: "stateProvince",
+        className: "max-w-[10rem]",
+        value: (p) => p.stateProvince || null,
+        render: (p) =>
+          p.stateProvince ? <span className="block truncate" title={p.stateProvince}>{p.stateProvince}</span> : null,
+      },
+      {
+        key: "country",
+        label: "Country",
+        title: "country / countryCode",
+        className: "max-w-[10rem]",
+        value: (p) => p.country || null,
+        render: (p) =>
+          p.country ? <span className="block truncate" title={p.country}>{p.country}</span> : null,
       },
       {
         key: "uncertainty",
@@ -1544,13 +1544,6 @@ export default function OccurrenceListTable({
                   if ((e.target as HTMLElement).closest("button, a, input, select, textarea")) return;
                   beginHold(id, e.clientX, e.clientY);
                 }}
-                title={
-                  onMarkDuplicate
-                    ? "Right-click for what you can do with this record — or drag it onto the record it duplicates"
-                    : onRowContextMenu
-                      ? "Right-click for what you can do with this record"
-                      : undefined
-                }
                 onMouseEnter={() => onHoverRow?.(f)}
                 onMouseLeave={() => onHoverRow?.(null)}
                 className={`border-b border-zinc-100 dark:border-zinc-800 ${

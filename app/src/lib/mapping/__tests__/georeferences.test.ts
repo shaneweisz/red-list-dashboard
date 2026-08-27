@@ -5,6 +5,7 @@ import {
   uncertaintyCircle,
   duplicateOf,
   duplicateOfReason,
+  resolvePrimary,
 } from "../georeferences";
 
 describe("validateGeoreference", () => {
@@ -106,5 +107,26 @@ describe("duplicate exclusions", () => {
     expect(duplicateOf("Cultivated")).toBeNull();
     expect(duplicateOf(undefined)).toBeNull();
     expect(duplicateOf("")).toBeNull();
+  });
+});
+
+describe("resolvePrimary", () => {
+  const asDuplicate = (of: number) => ({ justification: duplicateOfReason(of) });
+
+  it("gives back a record that isn't a duplicate of anything", () => {
+    expect(resolvePrimary(1, {})).toBe(1);
+    expect(resolvePrimary(1, { 1: { justification: "Cultivated" } })).toBe(1);
+  });
+
+  it("follows a chain to the record actually being kept", () => {
+    const exclusions = { 1: asDuplicate(2), 2: asDuplicate(3) };
+    expect(resolvePrimary(1, exclusions)).toBe(3);
+    expect(resolvePrimary(2, exclusions)).toBe(3);
+    expect(resolvePrimary(3, exclusions)).toBe(3);
+  });
+
+  it("stops on a cycle rather than spinning", () => {
+    const exclusions = { 1: asDuplicate(2), 2: asDuplicate(1) };
+    expect([1, 2]).toContain(resolvePrimary(1, exclusions));
   });
 });

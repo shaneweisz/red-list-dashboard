@@ -248,6 +248,33 @@ export function duplicateOf(justification: string | undefined | null): number | 
   return match ? Number(match[1]) : null;
 }
 
+/**
+ * The record at the head of a duplicate group.
+ *
+ * Duplicates come in one flat group per specimen, never a chain: if A was set
+ * aside for B and B is then set aside for C, all three are one group and C is
+ * the record kept. Saying "duplicate of a duplicate" would be saying that one
+ * of the copies is more of a copy than the others, which is not a distinction
+ * anyone is making. Chains are flattened when they're written, and resolved
+ * here as well, so a group written by an older build reads flat too.
+ *
+ * Returns the id given when it is not a duplicate of anything. A cycle — which
+ * nothing should be able to write — stops rather than spinning.
+ */
+export function resolvePrimary(
+  gbifID: number,
+  exclusions: Record<number, { justification: string }>
+): number {
+  const seen = new Set<number>([gbifID]);
+  let current = gbifID;
+  for (;;) {
+    const next = duplicateOf(exclusions[current]?.justification);
+    if (next == null || seen.has(next)) return current;
+    seen.add(next);
+    current = next;
+  }
+}
+
 const EXCLUSIONS_PREFIX = "redlist-exclusions";
 
 function exclusionsKey(speciesKey: string): string {

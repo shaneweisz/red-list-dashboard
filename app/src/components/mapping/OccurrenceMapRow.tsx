@@ -10,7 +10,7 @@ import { taxonGroupCountsPreservedSpecimens } from "@/lib/gbif";
 import { InatObservation, getThumbUrl, InatPhotoWithPreview } from "@/components/InatPhotoCard";
 import { QualityFlag, QUALITY_FLAG_LABELS, QUALITY_FLAG_DESCRIPTIONS, QUALITY_FLAG_SOURCES } from "@/lib/mapping/coordinate-cleaning";
 import { fetchInstitutionName, knownInstitutionName } from "@/lib/mapping/grscicoll";
-import { duplicateOf, duplicateOfReason } from "@/lib/mapping/georeferences";
+import { duplicateOf, duplicateOfReason, resolvePrimary } from "@/lib/mapping/georeferences";
 import { CATEGORY_COLORS, normalizeCategory } from "@/config/taxa";
 import { FaInfoCircle } from "react-icons/fa";
 import booleanPointInPolygon from "@turf/boolean-point-in-polygon";
@@ -4794,8 +4794,12 @@ export default function OccurrenceMapRow({
   const duplicatesByPrimary = useMemo(() => {
     const map = new Map<number, OccurrenceFeature[]>();
     for (const o of occurrences) {
-      const primary = duplicateOf(exclusions[o.properties.gbifID]?.justification);
-      if (primary == null || primary === o.properties.gbifID) continue;
+      if (duplicateOf(exclusions[o.properties.gbifID]?.justification) == null) continue;
+      // The head of the group, not the record this one was written against:
+      // a group set aside before this build could be a chain, and it is one
+      // group of copies either way.
+      const primary = resolvePrimary(o.properties.gbifID, exclusions);
+      if (primary === o.properties.gbifID) continue;
       const kept = map.get(primary);
       if (kept) kept.push(o);
       else map.set(primary, [o]);
@@ -4820,16 +4824,33 @@ export default function OccurrenceMapRow({
    */
   const keepRecord = useCallback(
     (primaryGbifID: number, alsoDuplicates: number[] = []) => {
-      const oldPrimary = duplicateOf(exclusions[primaryGbifID]?.justification);
-      const reason = duplicateOfReason(primaryGbifID);
+      const oldPrimary = resolvePrimary(primaryGbifID, exclusions);
       const setAside = new Set(alsoDuplicates);
-      if (oldPrimary != null) {
+      if (oldPrimary !== primaryGbifID) {
         setAside.add(oldPrimary);
         for (const o of occurrences) {
           const id = o.properties.gbifID;
-          if (duplicateOf(exclusions[id]?.justification) === oldPrimary) setAside.add(id);
+          if (resolvePrimary(id, exclusions) === oldPrimary) setAside.add(id);
         }
       }
+      // Everything already set aside for a record that is now itself being set
+      // aside comes with it, pointed at the record kept rather than at a copy
+      // of it: one specimen, one group, however many times you change your mind
+      // about which sheet of it to keep. Repeated until nothing more joins,
+      // since a group can have been built up a record at a time.
+      for (let grew = true; grew; ) {
+        grew = false;
+        for (const o of occurrences) {
+          const id = o.properties.gbifID;
+          if (id === primaryGbifID || setAside.has(id)) continue;
+          const parent = duplicateOf(exclusions[id]?.justification);
+          if (parent != null && setAside.has(parent)) {
+            setAside.add(id);
+            grew = true;
+          }
+        }
+      }
+      const reason = duplicateOfReason(primaryGbifID);
       setAside.delete(primaryGbifID);
       const next = { ...exclusions };
       delete next[primaryGbifID];
