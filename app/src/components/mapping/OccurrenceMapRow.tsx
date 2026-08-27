@@ -3547,7 +3547,7 @@ export default function OccurrenceMapRow({
                     // meant hovering told you about a record and gave you no
                     // way to act on it. Clicking only pins the panel, so the
                     // buttons stay put while you reach for them.
-                    actions={renderRecordActions(shown.properties.gbifID)}
+                    actions={renderRecordActions(shown.properties.gbifID, { showInTable: true })}
                     // Always there, pinned or not. It used to appear only
                     // once the panel was pinned, and since these controls are
                     // right-aligned, it arrived exactly where the next-record
@@ -4830,6 +4830,24 @@ export default function OccurrenceMapRow({
     };
   }, [rowMenu]);
 
+  /**
+   * A record the table should scroll to and pick out.
+   *
+   * Cleared before it's set so that asking twice takes you back to it: the
+   * table only scrolls when the id it's given changes.
+   */
+  const [focusRecord, setFocusRecord] = useState<number | null>(null);
+  const showRecordInTable = useCallback(
+    (gbifID: number) => {
+      // On whichever list holds it. A record you've set aside is in the other
+      // tab, and sending the table to a row that isn't in it does nothing.
+      setListTab(exclusions[gbifID] ? "excluded" : "gbif");
+      setFocusRecord(null);
+      window.setTimeout(() => setFocusRecord(gbifID), 0);
+    },
+    [exclusions]
+  );
+
   /** Clicking a row shows that record on the map, if it has anywhere to be. */
   const showRecordOnMap = useCallback(
     (feature: OccurrenceFeature) => {
@@ -4906,7 +4924,10 @@ export default function OccurrenceMapRow({
     URL.revokeObjectURL(url);
   }, [exportablePoints, scientificName]);
 
-  const renderRecordActions = (gbifID: number, opts: { showOnMap?: boolean } = {}) => {
+  const renderRecordActions = (
+    gbifID: number,
+    opts: { showOnMap?: boolean; showInTable?: boolean } = {}
+  ) => {
     const record = occurrencesByGbifId.get(gbifID);
     const excluded = !!exclusions[gbifID];
     // Keyed off the record's own coordinates rather than the clicked feature's:
@@ -4944,6 +4965,23 @@ export default function OccurrenceMapRow({
             Show on map
           </button>
         )}
+                {/* The mirror of the row menu's "Show on map": the panel says
+                    where a record is, the table says everything else about it.
+                    Not offered from a row's own menu, where you are already on
+                    the row it would scroll to. */}
+                {opts.showInTable && fullscreen && (
+                  <button
+                    onClick={() => showRecordInTable(gbifID)}
+                    title="Scroll the table to this record and pick it out"
+                    className="flex w-full items-center gap-1.5 px-1 py-1 rounded hover:bg-zinc-100 dark:hover:bg-zinc-800"
+                  >
+                    <svg className="w-3 h-3 shrink-0 text-zinc-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                      <rect x="3" y="4" width="18" height="16" rx="1.5" />
+                      <path strokeLinecap="round" d="M3 9h18M9 9v11" />
+                    </svg>
+                    Show in table
+                  </button>
+                )}
                 <button
                   onClick={() => {
                     window.open(`https://www.gbif.org/occurrence/${gbifID}`, "_blank", "noopener,noreferrer");
@@ -6769,6 +6807,7 @@ export default function OccurrenceMapRow({
                   onClearGeoreference={clearGeoreference}
                   hoveredGbifId={hoveredFeature?.properties.gbifID ?? null}
                   onHoverRow={handleHoverRow}
+                  focusGbifId={focusRecord}
                   onRowContextMenu={(feature, at) =>
                     setRowMenu({ gbifID: feature.properties.gbifID, x: at.x, y: at.y })
                   }

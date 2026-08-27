@@ -415,6 +415,12 @@ interface OccurrenceListTableProps {
    * the reason and a way back, not their place in the sort.
    */
   variant?: "records" | "excluded";
+  /**
+   * A record to scroll to and pick out — the panel on the map asking the
+   * table to go to the record it's showing. Cleared and re-set by the caller,
+   * so asking for the same record twice takes you back to it.
+   */
+  focusGbifId?: number | null;
   /** Right-clicking a row opens the record's menu where the pointer is. */
   onRowContextMenu?: (feature: OccurrenceFeature, at: { x: number; y: number }) => void;
   /** Drawn at the right of the footer — the save button, where there is one. */
@@ -457,6 +463,7 @@ export default function OccurrenceListTable({
   onHoverRow,
   excludedIds,
   variant = "records",
+  focusGbifId,
   onRowContextMenu,
   footerExtra,
   zoom = 1,
@@ -1077,6 +1084,13 @@ export default function OccurrenceListTable({
   };
 
 
+  // After the row has been laid out, or there is nothing to scroll to yet.
+  useEffect(() => {
+    if (focusGbifId == null) return;
+    const frame = requestAnimationFrame(() => scrollRowToTop(focusGbifId));
+    return () => cancelAnimationFrame(frame);
+  }, [focusGbifId]);
+
   const stepMatch = (delta: number) => {
     if (matches.length === 0) return;
     const next = (matchIndex + delta + matches.length) % matches.length;
@@ -1214,7 +1228,9 @@ export default function OccurrenceListTable({
                 onMouseEnter={() => onHoverRow?.(f)}
                 onMouseLeave={() => onHoverRow?.(null)}
                 className={`border-b border-zinc-100 dark:border-zinc-800 ${
-                  hoveredGbifId === id
+                  focusGbifId === id
+                    ? "bg-blue-50 dark:bg-blue-950/40 ring-1 ring-inset ring-blue-400"
+                    : hoveredGbifId === id
                     ? "bg-blue-50 dark:bg-blue-950/40"
                     : currentMatch === id
                       ? "bg-amber-100 dark:bg-amber-900/40"
