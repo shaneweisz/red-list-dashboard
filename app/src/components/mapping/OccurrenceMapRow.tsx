@@ -10,7 +10,8 @@ import { taxonGroupCountsPreservedSpecimens } from "@/lib/gbif";
 import { InatObservation, getThumbUrl, InatPhotoWithPreview } from "@/components/InatPhotoCard";
 import { QualityFlag, QUALITY_FLAG_LABELS, QUALITY_FLAG_DESCRIPTIONS, QUALITY_FLAG_SOURCES } from "@/lib/mapping/coordinate-cleaning";
 import { fetchInstitutionName, knownInstitutionName } from "@/lib/mapping/grscicoll";
-import { duplicateOf, duplicateOfReason, resolvePrimary } from "@/lib/mapping/georeferences";
+import { duplicateOf } from "@/lib/mapping/georeferences";
+import { duplicatesByPrimary as groupDuplicates, keepRecord as keepRecordIn } from "@/lib/mapping/duplicates";
 import { CATEGORY_COLORS, normalizeCategory } from "@/config/taxa";
 import { FaInfoCircle } from "react-icons/fa";
 import booleanPointInPolygon from "@turf/boolean-point-in-polygon";
@@ -4810,21 +4811,10 @@ export default function OccurrenceMapRow({
    * excluded record whose reason names the one kept, so there is nothing to
    * keep in step and nothing to migrate.
    */
-  const duplicatesByPrimary = useMemo(() => {
-    const map = new Map<number, OccurrenceFeature[]>();
-    for (const o of occurrences) {
-      if (duplicateOf(exclusions[o.properties.gbifID]?.justification) == null) continue;
-      // The head of the group, not the record this one was written against:
-      // a group set aside before this build could be a chain, and it is one
-      // group of copies either way.
-      const primary = resolvePrimary(o.properties.gbifID, exclusions);
-      if (primary === o.properties.gbifID) continue;
-      const kept = map.get(primary);
-      if (kept) kept.push(o);
-      else map.set(primary, [o]);
-    }
-    return map;
-  }, [occurrences, exclusions]);
+  const duplicatesByPrimary = useMemo(
+    () => groupDuplicates(occurrences, (o) => o.properties.gbifID, exclusions),
+    [occurrences, exclusions]
+  );
 
   /**
    * Keeps one record of a group and sets the others aside as duplicates of it.
@@ -4843,41 +4833,19 @@ export default function OccurrenceMapRow({
    */
   const keepRecord = useCallback(
     (primaryGbifID: number, alsoDuplicates: number[] = []) => {
-      const oldPrimary = resolvePrimary(primaryGbifID, exclusions);
-      const setAside = new Set(alsoDuplicates);
-      if (oldPrimary !== primaryGbifID) {
-        setAside.add(oldPrimary);
-        for (const o of occurrences) {
-          const id = o.properties.gbifID;
-          if (resolvePrimary(id, exclusions) === oldPrimary) setAside.add(id);
-        }
-      }
-      // Everything already set aside for a record that is now itself being set
-      // aside comes with it, pointed at the record kept rather than at a copy
-      // of it: one specimen, one group, however many times you change your mind
-      // about which sheet of it to keep. Repeated until nothing more joins,
-      // since a group can have been built up a record at a time.
-      for (let grew = true; grew; ) {
-        grew = false;
-        for (const o of occurrences) {
-          const id = o.properties.gbifID;
-          if (id === primaryGbifID || setAside.has(id)) continue;
-          const parent = duplicateOf(exclusions[id]?.justification);
-          if (parent != null && setAside.has(parent)) {
-            setAside.add(id);
-            grew = true;
-          }
-        }
-      }
-      const reason = duplicateOfReason(primaryGbifID);
-      setAside.delete(primaryGbifID);
-      const next = { ...exclusions };
-      delete next[primaryGbifID];
-      const stamp = { excludedAt: new Date().toISOString(), excludedBy: accountEmail || undefined };
-      for (const id of setAside) next[id] = { gbifID: id, justification: reason, ...stamp };
+      const next = keepRecordIn({
+        exclusions,
+        gbifIDs: occurrences.map((o) => o.properties.gbifID),
+        primaryGbifID,
+        alsoDuplicates,
+        stamp: { excludedAt: new Date().toISOString(), excludedBy: accountEmail || undefined },
+      });
+      const setAside = Object.values(next).filter(
+        (e) => duplicateOf(e.justification) === primaryGbifID
+      ).length;
       commitEdits(
         { exclusions: next },
-        `keep GBIF ${primaryGbifID}, set ${setAside.size} aside as duplicate${setAside.size === 1 ? "" : "s"}`
+        `keep GBIF ${primaryGbifID}, set ${setAside} aside as duplicate${setAside === 1 ? "" : "s"}`
       );
     },
     [exclusions, occurrences, accountEmail, commitEdits]
