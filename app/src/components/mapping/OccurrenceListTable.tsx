@@ -1079,11 +1079,17 @@ export default function OccurrenceListTable({
   // Unknown ids in stored prefs are ignored and new columns fall in at the end,
   // so a saved layout survives this table gaining fields.
   const orderedColumns = useMemo(() => {
-    if (!columnPrefs) return columns;
-    const byKey = new Map(columns.map((c) => [c.key, c]));
+    // The unfold chevron and the excluded list's own columns lead, whatever
+    // the reader's saved order says. They're not fields of the record but
+    // handles on the row, and a saved layout from before they existed would
+    // otherwise leave them at the far right, past sixteen columns of fields.
+    const pinned = columns.filter((c) => ALWAYS_VISIBLE_COLUMNS.has(c.key));
+    const rest = columns.filter((c) => !ALWAYS_VISIBLE_COLUMNS.has(c.key));
+    if (!columnPrefs) return [...pinned, ...rest];
+    const byKey = new Map(rest.map((c) => [c.key, c]));
     const ordered = columnPrefs.order.map((key) => byKey.get(key)).filter((c): c is ColumnDef => !!c);
     const seen = new Set(ordered.map((c) => c.key));
-    return [...ordered, ...columns.filter((c) => !seen.has(c.key))];
+    return [...pinned, ...ordered, ...rest.filter((c) => !seen.has(c.key))];
   }, [columns, columnPrefs]);
 
   const visibleKeys = useMemo(
