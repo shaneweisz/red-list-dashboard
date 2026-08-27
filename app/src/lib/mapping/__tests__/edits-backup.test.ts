@@ -73,10 +73,17 @@ describe("the saved-work file", () => {
   });
 
   it("counts an imported point file among the work", () => {
+    const point = { row: 2, latitude: 0, longitude: 0, gbifID: null, fields: {} };
     const withFile = {
       ...backup(),
-      pointFile: { fileName: "f.csv", importedAt: "", points: [{}, {}], errors: [], extraColumns: [] },
-    } as ReturnType<typeof backup>;
+      pointFile: {
+        fileName: "f.csv",
+        importedAt: "",
+        points: [point, { ...point, row: 3 }],
+        errors: [],
+        extraColumns: [],
+      },
+    };
     expect(summariseBackup(withFile)).toContain("2 imported points");
   });
 
