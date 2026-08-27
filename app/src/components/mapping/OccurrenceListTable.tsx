@@ -47,6 +47,9 @@ export interface OccurrenceFeature {
     identifiedBy?: string;
     collectionCode?: string;
     catalogNumber?: string;
+    /** recordNumber — the collector's own number, which is what a label and a
+     *  field notebook agree on before any institution has catalogued it. */
+    recordNumber?: string;
     establishmentMeans?: string;
     verbatimElevation?: string;
     /** The publisher's own record id — outlives a GBIF re-key. */
@@ -99,7 +102,6 @@ const EXTRA_COLUMNS: { key: string; label: string; title: string; numeric?: bool
   { key: "pathway", label: "Pathway", title: "pathway — how it got there, for introductions" },
   { key: "typeStatus", label: "Type status", title: "typeStatus — holotype, paratype, …" },
   { key: "preparations", label: "Preparations", title: "preparations — how the specimen is preserved" },
-  { key: "recordNumber", label: "Record number", title: "recordNumber — the collector's own number" },
   { key: "fieldNumber", label: "Field number", title: "fieldNumber" },
   { key: "occurrenceRemarks", label: "Occurrence remarks", title: "occurrenceRemarks" },
   { key: "occurrenceID", label: "Occurrence ID", title: "occurrenceID — the publisher's own identifier" },
@@ -147,7 +149,7 @@ const ALWAYS_VISIBLE_COLUMNS = new Set(["rowNumber", "putBack", "reason", "dupli
 
 /** Shown until someone changes it: the fields an assessor reads first. */
 const DEFAULT_VISIBLE_COLUMNS = [
-  "date", "coordinates", "recordedBy", "locality", "stateProvince", "country",
+  "date", "coordinates", "recordedBy", "recordNumber", "locality", "stateProvince", "country",
   "uncertainty", "elevation", "identifiedBy", "basisOfRecord", "dataset", "catalog",
   "establishmentMeans", "gbifID",
 ];
@@ -1185,20 +1187,45 @@ export default function OccurrenceListTable({
         key: "recordedBy",
         label: "Recorded by",
         title: "recordedBy — the observer or collector",
-        className: "max-w-[12rem]",
+        // Narrow, and scrolled rather than truncated. A collecting team runs
+        // to four names and a locality to a paragraph; at a width that fits
+        // them the record's own fields are pushed off the screen, and at a
+        // width that doesn't, an ellipsis hides the half you needed. Scroll
+        // the cell and the whole string is there, in place.
+        className: "max-w-[8rem]",
         value: (p) => p.recordedBy || null,
         render: (p) =>
-          p.recordedBy ? <span className="block truncate" title={p.recordedBy}>{p.recordedBy}</span> : null,
+          p.recordedBy ? (
+            <span className="block overflow-x-auto whitespace-nowrap" title={p.recordedBy}>
+              {p.recordedBy}
+            </span>
+          ) : null,
+      },
+      // Beside the collector, because it is the collector's own number: the two
+      // together — "Zak 4412" — are how a specimen is cited, and how the same
+      // gathering is recognised across the herbaria that split it up.
+      {
+        key: "recordNumber",
+        label: "Record no.",
+        title: "recordNumber — the collector's own number for this gathering",
+        className: "whitespace-nowrap max-w-[8rem]",
+        value: (p) => p.recordNumber || null,
+        render: (p) =>
+          p.recordNumber ? <span className="block truncate" title={p.recordNumber}>{p.recordNumber}</span> : null,
       },
       {
         key: "locality",
         label: "Locality",
         title: "locality, falling back to verbatimLocality",
-        className: "min-w-[12rem] max-w-[18rem]",
+        className: "max-w-[12rem]",
         value: (p) => localityOf(p) || null,
         render: (p) => {
           const loc = localityOf(p);
-          return loc ? <span className="block truncate" title={loc}>{loc}</span> : null;
+          return loc ? (
+            <span className="block overflow-x-auto whitespace-nowrap" title={loc}>
+              {loc}
+            </span>
+          ) : null;
         },
       },
       {
