@@ -4749,6 +4749,10 @@ export default function OccurrenceMapRow({
     if (!listTabs.some((t) => t.key === listTab)) setListTab("gbif");
   }, [listTabs, listTab]);
 
+  useEffect(() => {
+    setConfirmPutAllBack(false);
+  }, [listTab]);
+
   /**
    * The record menu opened by right-clicking a row, at the pointer.
    *
@@ -4840,6 +4844,14 @@ export default function OccurrenceMapRow({
     (gbifIDs: number[], primaryGbifID: number) => keepRecord(primaryGbifID, gbifIDs),
     [keepRecord]
   );
+
+  /** Whether the "put all back" dialog is up. */
+  const [confirmPutAllBack, setConfirmPutAllBack] = useState(false);
+  const putAllBack = useCallback(() => {
+    const count = Object.keys(exclusions).length;
+    if (count === 0) return;
+    commitEdits({ exclusions: {} }, `put all ${count} record${count === 1 ? "" : "s"} back`);
+  }, [exclusions, commitEdits]);
 
   /**
    * A record the table should scroll to and pick out.
@@ -6856,6 +6868,17 @@ export default function OccurrenceMapRow({
                           <path strokeLinecap="round" strokeLinejoin="round" d="M12 3v12m0 0l-4-4m4 4l4-4M4 17v2a2 2 0 002 2h12a2 2 0 002-2v-2" />
                         </svg>
                       </button>
+                    ) : listTab === "excluded" ? (
+                      <button
+                        onClick={() => setConfirmPutAllBack(true)}
+                        title="Count every excluded record again, forgetting the reasons given"
+                        className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded border border-zinc-300 dark:border-zinc-600 text-[10px] text-zinc-500 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors"
+                      >
+                        <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M4 4v6h6M4 10a8 8 0 1 1 2 5.3" />
+                        </svg>
+                        Put all back
+                      </button>
                     ) : undefined
                   }
                   excludedIds={excludedIds}
@@ -6869,6 +6892,56 @@ export default function OccurrenceMapRow({
                 />
                 )}
               </div>
+            )}
+            {/* Asked in a dialog rather than in the footer, because this undoes
+                every judgement on the list at once and one of them may have
+                taken a paragraph of reasoning to arrive at. Undo brings them
+                back, but only for as long as this session lasts. */}
+            {confirmPutAllBack && createPortal(
+              <div
+                className="fixed inset-0 z-[10001] flex items-center justify-center p-4 bg-black/40"
+                onClick={() => setConfirmPutAllBack(false)}
+              >
+                <div
+                  className="w-full max-w-md rounded-lg bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 shadow-xl"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  <div className="px-4 py-3 border-b border-zinc-200 dark:border-zinc-700">
+                    <h2 className="text-sm font-medium text-zinc-900 dark:text-zinc-100">
+                      Put all {excludedOccurrences.length.toLocaleString()} record
+                      {excludedOccurrences.length === 1 ? "" : "s"} back?
+                    </h2>
+                  </div>
+                  <div className="px-4 py-3 text-xs text-zinc-600 dark:text-zinc-300 space-y-1.5">
+                    <p>
+                      Every record you&apos;ve set aside is counted again, and the reasons you gave
+                      go with them — including the ones that record which of a stack of duplicates
+                      you kept.
+                    </p>
+                    <p className="text-zinc-400">
+                      Undo will bring them back for as long as this tab stays open.
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-2 px-4 py-3 border-t border-zinc-200 dark:border-zinc-700">
+                    <button
+                      onClick={() => setConfirmPutAllBack(false)}
+                      className="ml-auto px-3 py-1 rounded border border-zinc-300 dark:border-zinc-600 text-xs text-zinc-600 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800 transition-colors"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      onClick={() => {
+                        setConfirmPutAllBack(false);
+                        putAllBack();
+                      }}
+                      className="px-3 py-1 rounded bg-zinc-800 dark:bg-zinc-200 hover:bg-zinc-900 dark:hover:bg-white text-xs text-white dark:text-zinc-900 font-medium transition-colors"
+                    >
+                      Put all back
+                    </button>
+                  </div>
+                </div>
+              </div>,
+              document.body
             )}
             {/* The record menu for a right-clicked row, drawn at the pointer.
                 Kept out of the table so it can carry the same buttons the map
