@@ -1181,16 +1181,19 @@ export default function OccurrenceListTable({
           }
           const [lon, lat] = f.geometry.coordinates;
           const text = `${lat.toFixed(4)}, ${lon.toFixed(4)}`;
-          // Flagged coordinates are shown, not hidden — seeing that a record sits
-          // at (0.0000, 0.0000) is the point — and they're the other case worth
-          // correcting by hand.
+          // Flagged coordinates are shown, not hidden — seeing that a record
+          // sits at (0.0000, 0.0000) is the point — and typed over where you
+          // can do better. Drawn as GBIF's own, because they are: violet is
+          // for the coordinates you supplied, and marking a published position
+          // as though you had put it there said the opposite of the truth.
+          // The flag in the margin is what says it's questionable.
           return editable ? (
             <button
               onClick={startEditing}
               title="GBIF flags these coordinates. Click here and type your own."
-              className="text-violet-600 dark:text-violet-400 hover:underline decoration-dotted"
+              className="block text-left hover:underline decoration-dotted"
             >
-              {text} +
+              {text}
             </button>
           ) : (
             text
