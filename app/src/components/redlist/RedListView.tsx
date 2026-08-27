@@ -2442,8 +2442,8 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
 
   // True per-country totals — taxon/subgroup selection only, no other filters —
   // so the Country map tooltip can show "142 of 3,847 total" instead of just
-  // "142" when a filter (e.g. Outdated, a category) narrows the country's
-  // species count. Without this, e.g. "% Outdated: 100%" while the Outdated
+  // "142" when a filter (e.g. Needs Updating, a category) narrows the country's
+  // species count. Without this, e.g. "% Needs Updating: 100%" while the Needs Updating
   // toggle is on reads as a fact about the country instead of a tautology.
   const countryStatsForMapTotal = useMemo(() => {
     const counts: Record<string, number> = {};
@@ -4605,7 +4605,7 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
                       aria-pressed={isOutdatedSelected}
                       title={`Filter to species last assessed before ${outdatedCutoffDate(dataAsOf).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })}`}
                     >
-                      Outdated
+                      Needs Updating
                     </button>
                   )}
                   {/* Pagination controls (year view only, and only when multiple pages) */}
@@ -5550,7 +5550,7 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
             {(() => {
               const ef = exactFilters;
               const chips: { key: keyof typeof ef; label: string }[] = [];
-              if (ef.outdated) chips.push({ key: "outdated", label: ef.outdated === "yes" ? "Outdated (>10 yrs)" : "Current (≤10 yrs)" });
+              if (ef.outdated) chips.push({ key: "outdated", label: ef.outdated === "yes" ? "Needs updating (>10 yrs)" : "Current (≤10 yrs)" });
               if (ef.minObs != null) chips.push({ key: "minObs", label: `≥ ${ef.minObs.toLocaleString()} obs` });
               if (ef.maxObs != null) chips.push({ key: "maxObs", label: `≤ ${ef.maxObs.toLocaleString()} obs` });
               if (ef.minAssessmentYear != null) chips.push({ key: "minAssessmentYear", label: `Assessed ≥ ${ef.minAssessmentYear}` });

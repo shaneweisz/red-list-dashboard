@@ -145,11 +145,11 @@ interface WorldMapProps {
   footer?: React.ReactNode;
   // Whether to show the Species/GBIF color mode toggle (only accurate for top-level taxa)
   showGbifToggle?: boolean;
-  // Whether the "% Outdated" color mode is meaningful (false for unassessed/NE species views,
+  // Whether the "% Needs Updating" color mode is meaningful (false for unassessed/NE species views,
   // where every species has no assessment date rather than an outdated one)
   showOutdatedMode?: boolean;
   // Whether to show the color-mode <select> at all (species/outdated/GBIF) — false
-  // for new-assessments/NE views, where it's not just missing its "% Outdated"
+  // for new-assessments/NE views, where it's not just missing its "% Needs Updating"
   // option but pointless outright: color-coding a map of species that are all,
   // definitionally, unassessed conveys nothing. Independent of showGbifToggle/
   // showOutdatedMode (which only control which OPTIONS appear once shown).
@@ -511,7 +511,7 @@ function WorldMap({ selectedCountries, onCountrySelect, selectedTaxon, precomput
               className="text-[10px] bg-zinc-100 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-md px-1.5 py-0.5 text-zinc-700 dark:text-zinc-300 focus:outline-none focus:ring-1 focus:ring-blue-500"
             >
               <option value="species">{speciesLabel}</option>
-              {showOutdatedMode && <option value="outdated">% Outdated</option>}
+              {showOutdatedMode && <option value="outdated">% Needs Updating</option>}
               {showGbifToggle && <option value="occurrences"># GBIF Obs</option>}
             </select>
           )}
@@ -602,13 +602,13 @@ function WorldMap({ selectedCountries, onCountrySelect, selectedTaxon, precomput
               {showOutdatedMode && hoveredSpeciesStats && hoveredSpeciesStats.species > 0 && (
                 <>
                   <div className="flex justify-between gap-4 text-xs">
-                    <span className="text-zinc-500"># Outdated</span>
+                    <span className="text-zinc-500"># Needs Updating</span>
                     <span className="font-medium text-zinc-700 dark:text-zinc-300 tabular-nums">
                       {formatNumber(hoveredSpeciesStats.outdated || 0)}
                     </span>
                   </div>
                   <div className="flex justify-between gap-4 text-xs">
-                    <span className="text-zinc-500">% Outdated</span>
+                    <span className="text-zinc-500">% Needs Updating</span>
                     <span className="font-medium text-zinc-700 dark:text-zinc-300 tabular-nums">
                       {(((hoveredSpeciesStats.outdated || 0) / hoveredSpeciesStats.species) * 100).toFixed(1)}%
                     </span>

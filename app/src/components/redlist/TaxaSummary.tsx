@@ -175,7 +175,7 @@ const getAssessedBarColor = (percent: number) =>
 const getOutdatedBarColor = (percent: number) =>
   percent < 20 ? "#22c55e" : percent <= 50 ? "#f97316" : "#ef4444";
 
-// Info icon for the "# Outdated" header. This column's counts come from the
+// Info icon for the "# Needs Updating" header. This column's counts come from the
 // static data/taxa-summary.json build artifact (see README § Data Sync
 // Pipeline), computed as of the last data sync — not live, unlike the rest
 // of the dashboard — so the tooltip states that sync date directly rather
@@ -219,7 +219,7 @@ const flexTdClasses = `${cellPad} ${colDivider} whitespace-nowrap w-0`;
 const flexThClasses = `${cellPad} ${colDivider} text-left text-sm font-bold text-zinc-600 dark:text-zinc-300 whitespace-nowrap w-0`;
 // Bar-column headers (Assessed / Outdated / Unassessed / Not Evaluated) are allowed
 // to wrap: their cells already carry a bar min-width, so a long single-line header
-// (e.g. "# Outdated (>10 yrs old)") would otherwise force the column wider than
+// (e.g. "# Needs Updating (>10 yrs old)") would otherwise force the column wider than
 // it needs to be and push the table into horizontal overflow.
 const centeredThClasses = `${cellPad} ${colDivider} text-center text-sm font-bold text-zinc-600 dark:text-zinc-300 w-0`;
 // "# Described Species" is the widest single-line header after the taxon name
@@ -245,7 +245,7 @@ const COLUMN_LABELS: Record<ColumnId, string> = {
   described: "# Described Species",
   colDescribed: "# Described Species (CoL)",
   assessed: "# Red List Assessed",
-  outdated: "# Outdated (>10 yrs old)",
+  outdated: "# Needs Updating (>10 yrs old)",
   breakdown: "Conservation Status Breakdown",
   gbifUnassessed: "# Unassessed, 1+ GBIF Obs",
   colNe: "# Not Evaluated",
@@ -2590,14 +2590,14 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
                 (inline-flex forces it to stay unwrapped) — shortened here,
                 same info still available via the plain-mode header. */}
             {countryStyleColumns ? (
-              "# Outdated"
+              "# Needs Updating"
             ) : (
-              <span className="inline-flex items-center gap-1"># Outdated (&gt;10 yrs old) <OutdatedInfoIcon /></span>
+              <span className="inline-flex items-center gap-1"># Needs Updating (&gt;10 yrs old) <OutdatedInfoIcon /></span>
             )}
           </th>
         )}
         {countryStyleColumns && (
-          <th className={numericThNoDividerClasses}>% Outdated</th>
+          <th className={numericThNoDividerClasses}>% Needs Updating</th>
         )}
         {isVisible("gbifUnassessed") && (
           <th className={centeredThClasses}># Unassessed, 1+ GBIF Obs</th>

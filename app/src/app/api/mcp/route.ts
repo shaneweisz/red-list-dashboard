@@ -68,7 +68,7 @@ const handler = createMcpHandler(
       {
         title: "Browse a taxon",
         description:
-          "List/aggregate IUCN Red List species under a taxon, with GBIF + Catalogue of Life data. `taxa` works at ANY rank: a curated group (birds, corals), a sub-group (sharks-rays, flatworms), or a scientific class/order/family name (felidae, odonata). Returns total + by-category breakdown + an `outdated`/`stats` block (use it for percentage questions like '% of mammals outdated') + a capped species list. Combine optional filters (AND across filters; OR within a list).",
+          "List/aggregate IUCN Red List species under a taxon, with GBIF + Catalogue of Life data. `taxa` works at ANY rank: a curated group (birds, corals), a sub-group (sharks-rays, flatworms), or a scientific class/order/family name (felidae, odonata). Returns total + by-category breakdown + an `outdated`/`stats` block (use it for percentage questions like '% of mammals needing updating') + a capped species list. Combine optional filters (AND across filters; OR within a list).",
         inputSchema: { taxa: z.string().describe("A taxonomic group, sub-group, or scientific name (any rank)."), ...FILTERS },
       },
       async (args) => {
