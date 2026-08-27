@@ -136,6 +136,7 @@ export default function FilterBarChart({
   } : null;
   const insetPx = CHART_TOP_MARGIN + CHART_BOTTOM_MARGIN;
 
+
   // Wrap in a div with a single click handler so the whole row is a hit target
   // (bar, y-axis label, count label, empty space) — not just the visible bar,
   // which is hard to click when counts are small.
@@ -192,7 +193,20 @@ export default function FilterBarChart({
               backgroundColor: "#18181b",
               border: "1px solid #3f3f46",
               borderRadius: "8px",
+              // Recharts lays the label out on ONE line, so a chart whose
+              // labelFormatter returns a sentence gets a tooltip wider than the
+              // card it sits in — 635px inside a 506px card for the CoL
+              // differences chart, covering every bar and clipping its own text.
+              // Hovering to find out what a bar is then hides which bar you are
+              // about to click. Wrapping costs a few lines of height and gives
+              // the width back. Short labels never reach the cap.
+              maxWidth: 280,
+              whiteSpace: "normal",
             }}
+            // Belt and braces with the width cap: the box must never swallow a
+            // click aimed at the bar underneath it.
+            wrapperStyle={{ pointerEvents: "none" }}
+
             itemStyle={{ color: "#fff" }}
             labelStyle={{ color: "#a1a1aa" }}
           />

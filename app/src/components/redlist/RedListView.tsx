@@ -3746,10 +3746,15 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
                 barColor="#d97706"
                 yAxisWidth={180}
                 rightMargin={60}
-                labelFormatter={(short: string) => {
-                  const reason = shortToReason.get(short);
-                  return reason ? `${short} — ${REVISION_REASON_SUMMARY[reason] ?? ""}` : short;
-                }}
+                // Just the label. It used to append the reason's one-line
+                // summary, which made the hover box 635px wide inside a 506px
+                // card — covering every bar, so you could not see which one you
+                // were about to click, and clipping its own text off the edge.
+                // The summary was there when the labels were cryptic ("Renamed",
+                // "In XR, not Base"); they now say what they mean, and the
+                // sentence lives in the ⚑ tooltip on each row where there is room
+                // for it.
+                labelFormatter={(short: string) => short}
               />
             </div>
             {/* Why the bars total more than the ⚑ count. Split, lumped and the
