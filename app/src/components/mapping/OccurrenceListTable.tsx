@@ -722,6 +722,31 @@ export default function OccurrenceListTable({
    * for about a second: long enough that the mark reads as unexplained.
    */
   const [hoverNote, setHoverNote] = useState<{ text: string; x: number; y: number } | null>(null);
+  /**
+   * The bubble outlives the pointer leaving the cell, long enough to reach it.
+   *
+   * What's in it is a locality description or a collecting team — the things
+   * you copy into a georeferencing note or a search box — so it has to be
+   * possible to put the cursor in it. That means surviving the four pixels
+   * between the cell and the bubble, and staying while the pointer is inside.
+   */
+  const noteTimer = useRef<number | null>(null);
+  const showNote = useCallback((note: { text: string; x: number; y: number }) => {
+    if (noteTimer.current != null) window.clearTimeout(noteTimer.current);
+    noteTimer.current = null;
+    setHoverNote(note);
+  }, []);
+  const hideNoteSoon = useCallback(() => {
+    if (noteTimer.current != null) window.clearTimeout(noteTimer.current);
+    noteTimer.current = window.setTimeout(() => {
+      noteTimer.current = null;
+      setHoverNote(null);
+    }, 180);
+  }, []);
+  const keepNote = useCallback(() => {
+    if (noteTimer.current != null) window.clearTimeout(noteTimer.current);
+    noteTimer.current = null;
+  }, []);
   /** The record whose date is being typed. */
   const [editingDate, setEditingDate] = useState<number | null>(null);
   const [draggingId, setDraggingId] = useState<number | null>(null);
@@ -825,15 +850,15 @@ export default function OccurrenceListTable({
           const el = e.currentTarget;
           if (el.scrollWidth <= el.clientWidth) return;
           const box = el.getBoundingClientRect();
-          setHoverNote({ text, x: box.left, y: box.bottom + 4 });
+          showNote({ text, x: box.left, y: box.bottom + 4 });
         }}
-        onMouseLeave={() => setHoverNote(null)}
+        onMouseLeave={hideNoteSoon}
         className="block truncate"
       >
         {text}
       </span>
     ),
-    []
+    [showNote, hideNoteSoon]
   );
 
   const columns = useMemo<ColumnDef[]>(
@@ -939,9 +964,9 @@ export default function OccurrenceListTable({
           const note = (text: string) => ({
             onMouseEnter: (e: React.MouseEvent<HTMLElement>) => {
               const box = e.currentTarget.getBoundingClientRect();
-              setHoverNote({ text, x: box.right + 8, y: box.top - 2 });
+              showNote({ text, x: box.right + 8, y: box.top - 2 });
             },
-            onMouseLeave: () => setHoverNote(null),
+            onMouseLeave: hideNoteSoon,
           });
           return (
             <span className="flex items-center gap-0.5">
@@ -1431,7 +1456,7 @@ export default function OccurrenceListTable({
         ),
       },
     ],
-    [isOutsideNativeRange, georeferences, onSaveGeoreference, onClearGeoreference, editingCoords, editingRadius, exclusions, variant, onExclude, onInclude, duplicates, unfolded, dates, onSaveDate, onClearDate, editingDate, full]
+    [isOutsideNativeRange, georeferences, onSaveGeoreference, onClearGeoreference, editingCoords, editingRadius, exclusions, variant, onExclude, onInclude, duplicates, unfolded, dates, onSaveDate, onClearDate, editingDate, full, showNote, hideNoteSoon]
   );
 
   // The catalogue in the reader's own order, then the subset actually drawn.
@@ -1857,10 +1882,11 @@ export default function OccurrenceListTable({
             top: Math.max(4, hoverNote.y),
             maxWidth: 320,
             zIndex: 10002,
-            pointerEvents: "none",
           }}
+          onMouseEnter={keepNote}
+          onMouseLeave={hideNoteSoon}
           data-hover-note
-          className="rounded-md bg-zinc-900/95 dark:bg-zinc-700 px-1.5 py-1 text-[10px] leading-snug text-white shadow-lg"
+          className="rounded-md bg-zinc-900/95 dark:bg-zinc-700 px-1.5 py-1 text-[10px] leading-snug text-white shadow-lg select-text cursor-text"
         >
           {hoverNote.text}
         </div>,
