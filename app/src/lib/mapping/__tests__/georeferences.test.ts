@@ -3,6 +3,8 @@ import {
   validateGeoreference,
   parseCoordinatePair,
   uncertaintyCircle,
+  duplicateOf,
+  duplicateOfReason,
 } from "../georeferences";
 
 describe("validateGeoreference", () => {
@@ -86,5 +88,23 @@ describe("uncertaintyCircle", () => {
     const ring = uncertaintyCircle(0, 0, 111_320).coordinates[0];
     const lats = ring.map(([, lat]) => lat);
     expect(Math.max(...lats) - Math.min(...lats)).toBeCloseTo(2, 1);
+  });
+});
+
+describe("duplicate exclusions", () => {
+  it("names the record kept, and reads it back", () => {
+    expect(duplicateOfReason(2013787280)).toBe("Duplicate of GBIF 2013787280");
+    expect(duplicateOf(duplicateOfReason(2013787280))).toBe(2013787280);
+  });
+
+  it("still reads the wording the first drag gesture wrote", () => {
+    expect(duplicateOf("Duplicate of GBIF record 12345")).toBe(12345);
+  });
+
+  it("is not fooled by a reason that merely mentions duplication", () => {
+    expect(duplicateOf("Looks like a duplicate of something")).toBeNull();
+    expect(duplicateOf("Cultivated")).toBeNull();
+    expect(duplicateOf(undefined)).toBeNull();
+    expect(duplicateOf("")).toBeNull();
   });
 });

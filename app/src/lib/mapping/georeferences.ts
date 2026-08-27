@@ -227,6 +227,27 @@ export interface Exclusion {
   excludedBy?: string;
 }
 
+/**
+ * One record set aside as a duplicate of another.
+ *
+ * A duplicate is an exclusion whose reason names the record kept, rather than
+ * a store of its own: it is excluded, it needs a reason, and the reason is
+ * exactly "this one instead". Anything that reads exclusions — the map, the
+ * counts, the point file — treats it correctly without knowing about
+ * duplicates at all.
+ */
+export function duplicateOfReason(primaryGbifID: number): string {
+  return `Duplicate of GBIF ${primaryGbifID}`;
+}
+
+/** The record this one was set aside in favour of, if that's why it was. */
+export function duplicateOf(justification: string | undefined | null): number | null {
+  // "record" was in the wording the first drag gesture wrote, and those
+  // exclusions are in people's browsers.
+  const match = /^Duplicate of GBIF (?:record )?(\d+)\b/.exec((justification ?? "").trim());
+  return match ? Number(match[1]) : null;
+}
+
 const EXCLUSIONS_PREFIX = "redlist-exclusions";
 
 function exclusionsKey(speciesKey: string): string {

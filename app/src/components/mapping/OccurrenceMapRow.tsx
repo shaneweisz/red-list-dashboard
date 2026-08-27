@@ -10,6 +10,7 @@ import { taxonGroupCountsPreservedSpecimens } from "@/lib/gbif";
 import { InatObservation, getThumbUrl, InatPhotoWithPreview } from "@/components/InatPhotoCard";
 import { QualityFlag, QUALITY_FLAG_LABELS, QUALITY_FLAG_DESCRIPTIONS, QUALITY_FLAG_SOURCES } from "@/lib/mapping/coordinate-cleaning";
 import { fetchInstitutionName, knownInstitutionName } from "@/lib/mapping/grscicoll";
+import { duplicateOf, duplicateOfReason } from "@/lib/mapping/georeferences";
 import { CATEGORY_COLORS, normalizeCategory } from "@/config/taxa";
 import { FaInfoCircle } from "react-icons/fa";
 import booleanPointInPolygon from "@turf/boolean-point-in-polygon";
@@ -4831,6 +4832,60 @@ export default function OccurrenceMapRow({
   }, [rowMenu]);
 
   /**
+   * The records set aside as duplicates, by the record each was kept in
+   * favour of.
+   *
+   * Read back out of the exclusions rather than stored: a duplicate is an
+   * excluded record whose reason names the one kept, so there is nothing to
+   * keep in step and nothing to migrate.
+   */
+  const duplicatesByPrimary = useMemo(() => {
+    const map = new Map<number, OccurrenceFeature[]>();
+    for (const o of occurrences) {
+      const primary = duplicateOf(exclusions[o.properties.gbifID]?.justification);
+      if (primary == null || primary === o.properties.gbifID) continue;
+      const kept = map.get(primary);
+      if (kept) kept.push(o);
+      else map.set(primary, [o]);
+    }
+    return map;
+  }, [occurrences, exclusions]);
+
+  const markDuplicates = useCallback(
+    (gbifIDs: number[], primaryGbifID: number) => {
+      excludeAs(gbifIDs, duplicateOfReason(primaryGbifID));
+    },
+    [excludeAs]
+  );
+
+  /**
+   * Hands the primacy of a group of duplicates to one of its members.
+   *
+   * The record chosen comes back into the count, the one it displaces joins
+   * the duplicates, and the rest are re-pointed at it — the sheet you decided
+   * was the best of them becomes the one the group is named for. One edit, so
+   * one undo puts the whole arrangement back.
+   */
+  const makePrimaryRecord = useCallback(
+    (gbifID: number) => {
+      const oldPrimary = duplicateOf(exclusions[gbifID]?.justification);
+      if (oldPrimary == null) return;
+      const reason = duplicateOfReason(gbifID);
+      const next = { ...exclusions };
+      delete next[gbifID];
+      const stamp = { excludedAt: new Date().toISOString(), excludedBy: accountEmail || undefined };
+      for (const o of occurrences) {
+        const id = o.properties.gbifID;
+        if (id === gbifID) continue;
+        const isSibling = duplicateOf(exclusions[id]?.justification) === oldPrimary;
+        if (isSibling || id === oldPrimary) next[id] = { gbifID: id, justification: reason, ...stamp };
+      }
+      commitEdits({ exclusions: next }, `make GBIF ${gbifID} the record kept`);
+    },
+    [exclusions, occurrences, accountEmail, commitEdits]
+  );
+
+  /**
    * A record the table should scroll to and pick out.
    *
    * Cleared before it's set so that asking twice takes you back to it: the
@@ -4965,6 +5020,24 @@ export default function OccurrenceMapRow({
             Show on map
           </button>
         )}
+                {/* Only on a record that is already a duplicate of another:
+                    this is how the group changes its mind about which sheet is
+                    the one to keep. */}
+                {duplicateOf(exclusions[gbifID]?.justification) != null && (
+                  <button
+                    onClick={() => {
+                      setRowMenu(null);
+                      makePrimaryRecord(gbifID);
+                    }}
+                    title="Count this record instead, and set the others in its group aside as duplicates of it"
+                    className="flex w-full items-start gap-1.5 px-1 py-1 rounded text-left hover:bg-zinc-100 dark:hover:bg-zinc-800"
+                  >
+                    <svg className="w-3 h-3 mt-0.5 shrink-0 text-zinc-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M12 3l2.4 5.3 5.6.6-4.2 3.9 1.2 5.7L12 15.6 6.99 18.5l1.2-5.7L4 8.9l5.6-.6z" />
+                    </svg>
+                    Make this the record kept
+                  </button>
+                )}
                 {/* The mirror of the row menu's "Show on map": the panel says
                     where a record is, the table says everything else about it.
                     Not offered from a row's own menu, where you are already on
@@ -5010,10 +5083,7 @@ export default function OccurrenceMapRow({
                 {others.length > 0 && (
                   <button
                     onClick={() => {
-                      excludeAs(
-                        others.map((o) => o.properties.gbifID),
-                        `Duplicate of GBIF ${gbifID}`
-                      );
+                      markDuplicates(others.map((o) => o.properties.gbifID), gbifID);
                       close();
                     }}
                     title="Everything else at this exact position is struck out as a duplicate of this one, with the reason recorded and undoable"
@@ -6808,6 +6878,8 @@ export default function OccurrenceMapRow({
                   hoveredGbifId={hoveredFeature?.properties.gbifID ?? null}
                   onHoverRow={handleHoverRow}
                   focusGbifId={focusRecord}
+                  duplicates={listTab === "gbif" ? duplicatesByPrimary : undefined}
+                  onMarkDuplicate={listTab === "gbif" ? markDuplicates : undefined}
                   onRowContextMenu={(feature, at) =>
                     setRowMenu({ gbifID: feature.properties.gbifID, x: at.x, y: at.y })
                   }

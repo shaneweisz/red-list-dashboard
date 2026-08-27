@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { QUALITY_FLAG_LABELS, type QualityFlag } from "@/lib/mapping/coordinate-cleaning";
 import { formatGbifIssue } from "@/lib/gbif";
-import type { Georeference } from "@/lib/mapping/georeferences";
+import { duplicateOf, type Georeference } from "@/lib/mapping/georeferences";
 
 /**
  * A single GBIF occurrence, as returned by /api/occurrences. Shared with
@@ -136,7 +136,7 @@ const EXTRA_COLUMNS: { key: string; label: string; title: string; numeric?: bool
 ];
 
 /** Never hidden, and never offered in the column picker. */
-const ALWAYS_VISIBLE_COLUMNS = new Set(["putBack", "reason"]);
+const ALWAYS_VISIBLE_COLUMNS = new Set(["putBack", "reason", "duplicates"]);
 
 /** Shown until someone changes it: the fields an assessor reads first. */
 const DEFAULT_VISIBLE_COLUMNS = [
@@ -421,6 +421,13 @@ interface OccurrenceListTableProps {
    * so asking for the same record twice takes you back to it.
    */
   focusGbifId?: number | null;
+  /**
+   * The records set aside as duplicates, by the record each was kept in
+   * favour of. Their primaries can unfold to show them in place.
+   */
+  duplicates?: Map<number, OccurrenceFeature[]>;
+  /** Dropping one row on another says the first duplicates the second. */
+  onMarkDuplicate?: (gbifIDs: number[], primaryGbifID: number) => void;
   /** Right-clicking a row opens the record's menu where the pointer is. */
   onRowContextMenu?: (feature: OccurrenceFeature, at: { x: number; y: number }) => void;
   /** Drawn at the right of the footer — the save button, where there is one. */
@@ -464,6 +471,8 @@ export default function OccurrenceListTable({
   excludedIds,
   variant = "records",
   focusGbifId,
+  duplicates,
+  onMarkDuplicate,
   onRowContextMenu,
   footerExtra,
   zoom = 1,
@@ -523,6 +532,88 @@ export default function OccurrenceListTable({
   const scrollRef = useRef<HTMLDivElement>(null);
   const [dragColumn, setDragColumn] = useState<string | null>(null);
   const [showExcluded, setShowExcluded] = useState(true);
+  /** Primaries whose duplicates are showing beneath them. */
+  const [unfolded, setUnfolded] = useState<Set<number>>(new Set());
+  /**
+   * The row being dragged, and the row it is over.
+   *
+   * Duplicates are the commonest reason to set a record aside, and the
+   * duplicate-of relationship is between two specific records — so saying it
+   * by dragging one onto the other is both quicker than typing a reason and
+   * more precise than the reason anyone would type.
+   */
+  const [draggingId, setDraggingId] = useState<number | null>(null);
+  const [dropTargetId, setDropTargetId] = useState<number | null>(null);
+  const holdRef = useRef<{ id: number; x: number; y: number; timer: number } | null>(null);
+  const dropRef = useRef<number | null>(null);
+  dropRef.current = dropTargetId;
+
+  /** How long the button is held, and how far it may stray, before it's a drag. */
+  const HOLD_MS = 350;
+  const HOLD_SLOP = 6;
+
+  const cancelHold = useCallback(() => {
+    if (holdRef.current) window.clearTimeout(holdRef.current.timer);
+    holdRef.current = null;
+  }, []);
+
+  const beginHold = useCallback(
+    (id: number, x: number, y: number) => {
+      cancelHold();
+      const timer = window.setTimeout(() => {
+        holdRef.current = null;
+        setDraggingId(id);
+      }, HOLD_MS);
+      holdRef.current = { id, x, y, timer };
+    },
+    [cancelHold]
+  );
+
+  // The drag itself, once a hold has become one: the row under the pointer is
+  // the drop target, and letting go on it says the dragged record duplicates
+  // it. Done on the document so the pointer can leave the row it started on.
+  useEffect(() => {
+    const onMove = (e: MouseEvent) => {
+      const hold = holdRef.current;
+      if (hold) {
+        // Moving before the hold is up is someone selecting text.
+        if (Math.abs(e.clientX - hold.x) > HOLD_SLOP || Math.abs(e.clientY - hold.y) > HOLD_SLOP) cancelHold();
+        return;
+      }
+      if (draggingId == null) return;
+      e.preventDefault();
+      const over = (document.elementFromPoint(e.clientX, e.clientY) as HTMLElement | null)?.closest<HTMLElement>(
+        "tr[data-gbif-id]"
+      );
+      const id = over ? Number(over.dataset.gbifId) : null;
+      setDropTargetId(id != null && id !== draggingId ? id : null);
+    };
+    const onUp = () => {
+      cancelHold();
+      const dragged = draggingId;
+      const target = dropRef.current;
+      setDraggingId(null);
+      setDropTargetId(null);
+      if (dragged == null || target == null || target === dragged) return;
+      // A duplicate of a duplicate belongs to the same record kept.
+      const primary = duplicateOf(exclusions?.[target]?.justification) ?? target;
+      if (primary !== dragged) onMarkDuplicate?.([dragged], primary);
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== "Escape") return;
+      cancelHold();
+      setDraggingId(null);
+      setDropTargetId(null);
+    };
+    document.addEventListener("mousemove", onMove);
+    document.addEventListener("mouseup", onUp);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("mousemove", onMove);
+      document.removeEventListener("mouseup", onUp);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [draggingId, cancelHold, exclusions, onMarkDuplicate]);
 
   const updatePrefs = (next: ColumnPrefs) => {
     setColumnPrefs(next);
@@ -541,6 +632,67 @@ export default function OccurrenceListTable({
 
   const columns = useMemo<ColumnDef[]>(
     () => [
+      // The unfold control for a record other records duplicate, and the mark
+      // on a duplicate shown beneath its primary. Drawn only when there are
+      // duplicates to show, so an ordinary table isn't carrying an empty
+      // column for a relationship nothing in it has.
+      ...(duplicates && duplicates.size > 0
+        ? [
+            {
+              key: "duplicates",
+              label: "",
+              title: "Records set aside as duplicates of this one",
+              className: "whitespace-nowrap w-8",
+              value: (p: OccurrenceFeature["properties"]) => duplicates.get(p.gbifID)?.length ?? 0,
+              render: (p: OccurrenceFeature["properties"]) => {
+                const kept = duplicates.get(p.gbifID);
+                if (!kept?.length) {
+                  // An empty string rather than nothing: this column is a
+                  // relationship, and the dash that stands for a missing field
+                  // down every other column would read as one here.
+                  return duplicateOf(exclusions?.[p.gbifID]?.justification) != null ? (
+                    <span className="pl-2 text-zinc-400 dark:text-zinc-500" title="A duplicate of the record above">
+                      ↳
+                    </span>
+                  ) : (
+                    <span />
+                  );
+                }
+                const open = unfolded.has(p.gbifID);
+                return (
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setUnfolded((prev) => {
+                        const next = new Set(prev);
+                        if (next.has(p.gbifID)) next.delete(p.gbifID);
+                        else next.add(p.gbifID);
+                        return next;
+                      });
+                    }}
+                    title={
+                      open
+                        ? "Fold the duplicates away"
+                        : `Show the ${kept.length} record${kept.length === 1 ? "" : "s"} set aside as duplicates of this one`
+                    }
+                    className="inline-flex items-center gap-0.5 text-[10px] text-zinc-500 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200"
+                  >
+                    <svg
+                      className={`w-3 h-3 transition-transform ${open ? "rotate-90" : ""}`}
+                      fill="none"
+                      viewBox="0 0 24 24"
+                      stroke="currentColor"
+                      strokeWidth={2}
+                    >
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+                    </svg>
+                    <span className="tabular-nums">{kept.length}</span>
+                  </button>
+                );
+              },
+            } as ColumnDef,
+          ]
+        : []),
       // What the excluded list needs and the main one doesn't: why a record
       // was set aside, and a way to change your mind. Nothing stands in this
       // place on the main list — a record is counted unless it's in the other
@@ -920,7 +1072,7 @@ export default function OccurrenceListTable({
         ),
       },
     ],
-    [isOutsideNativeRange, georeferences, onSaveGeoreference, onClearGeoreference, editingCoords, editingRadius, exclusions, variant, onExclude, onInclude]
+    [isOutsideNativeRange, georeferences, onSaveGeoreference, onClearGeoreference, editingCoords, editingRadius, exclusions, variant, onExclude, onInclude, duplicates, unfolded]
   );
 
   // The catalogue in the reader's own order, then the subset actually drawn.
@@ -1065,6 +1217,22 @@ export default function OccurrenceListTable({
 
   const matchSet = useMemo(() => new Set(matches), [matches]);
 
+  /**
+   * The rows as drawn: each one, and — where its duplicates are unfolded —
+   * those beneath it. The duplicates are excluded records, so they are in no
+   * list of their own here; they are borrowed from the other tab to be read
+   * against the record they were set aside for.
+   */
+  const displayRows = useMemo(() => {
+    if (!duplicates || duplicates.size === 0) return rows;
+    const out: OccurrenceFeature[] = [];
+    for (const f of rows) {
+      out.push(f);
+      if (unfolded.has(f.properties.gbifID)) out.push(...(duplicates.get(f.properties.gbifID) ?? []));
+    }
+    return out;
+  }, [rows, duplicates, unfolded]);
+
   const currentMatch = matches.length > 0 ? matches[Math.min(matchIndex, matches.length - 1)] : null;
 
   /**
@@ -1129,7 +1297,13 @@ export default function OccurrenceListTable({
       {/* Always scrolls horizontally — there are more Darwin Core fields than
           fit under a map. Vertically it only scrolls when expanded, since a
           page is otherwise sized to be read whole. */}
-      <div ref={scrollRef} className={`overflow-x-auto${fillHeight ? " flex-1 min-h-0 overflow-y-auto" : ""}`}>
+      <div
+        ref={scrollRef}
+        className={`overflow-x-auto${fillHeight ? " flex-1 min-h-0 overflow-y-auto" : ""}`}
+        // Only while a row is actually being dragged: the rest of the time
+        // these rows are there to be read, and read means selected and copied.
+        style={draggingId != null ? { userSelect: "none", cursor: "grabbing" } : undefined}
+      >
         {/* Zoomed rather than restyled: one number shrinks the type, the
             padding and the column widths together, and leaves the controls
             around it at a size that can still be clicked. */}
@@ -1204,9 +1378,10 @@ export default function OccurrenceListTable({
             </tr>
           </thead>
           <tbody>
-            {rows.map((f) => {
+            {displayRows.map((f) => {
               const id = f.properties.gbifID;
               const excluded = isExcluded(f);
+              const isDuplicate = duplicateOf(exclusions?.[id]?.justification) != null;
               return (
               <tr
                 key={id}
@@ -1224,7 +1399,33 @@ export default function OccurrenceListTable({
                   e.preventDefault();
                   onRowContextMenu(f, { x: e.clientX, y: e.clientY });
                 }}
-                title={onRowContextMenu ? "Right-click for what you can do with this record" : undefined}
+                /**
+                 * Press, hold, then drag a record onto the one it duplicates.
+                 * The reason writes itself and names the record kept, which is
+                 * more than anyone would type by hand — and dropping onto a
+                 * duplicate hands the record to that duplicate's own primary,
+                 * since a duplicate of a duplicate is a duplicate of the same
+                 * record.
+                 *
+                 * Held rather than dragged outright, and by hand rather than
+                 * with the browser's own drag and drop: a draggable row can't
+                 * have its text selected, and these rows are read as much as
+                 * they're rearranged. Moving before the hold is up is taken as
+                 * the start of a selection and abandons the drag.
+                 */
+                data-gbif-id={id}
+                onMouseDown={(e) => {
+                  if (!onMarkDuplicate || e.button !== 0) return;
+                  if ((e.target as HTMLElement).closest("button, a, input, select, textarea")) return;
+                  beginHold(id, e.clientX, e.clientY);
+                }}
+                title={
+                  onMarkDuplicate
+                    ? "Right-click for what you can do with this record — or drag it onto the record it duplicates"
+                    : onRowContextMenu
+                      ? "Right-click for what you can do with this record"
+                      : undefined
+                }
                 onMouseEnter={() => onHoverRow?.(f)}
                 onMouseLeave={() => onHoverRow?.(null)}
                 className={`border-b border-zinc-100 dark:border-zinc-800 ${
@@ -1237,7 +1438,15 @@ export default function OccurrenceListTable({
                       : matchSet.has(id)
                         ? "bg-amber-50 dark:bg-amber-950/30"
                         : "hover:bg-zinc-50 dark:hover:bg-zinc-800/60"
-                } ${excluded && variant === "records" ? "opacity-40" : ""}`}
+                } ${excluded && variant === "records" && !isDuplicate ? "opacity-40" : ""} ${
+                  isDuplicate && variant === "records"
+                    ? "bg-zinc-50/80 dark:bg-zinc-800/40 text-zinc-500 dark:text-zinc-400"
+                    : ""
+                } ${draggingId === id ? "opacity-50" : ""} ${
+                  dropTargetId === id
+                    ? "outline outline-2 -outline-offset-2 outline-amber-500 bg-amber-50 dark:bg-amber-950/40"
+                    : ""
+                }`}
               >
                 {visibleColumns.map((col) => {
                   const content = col.render ? col.render(f.properties, f) : col.value(f.properties, f);
