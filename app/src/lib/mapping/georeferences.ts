@@ -400,6 +400,9 @@ export function saveExclusions(speciesKey: string, records: Record<number, Exclu
  */
 export const EXCLUSION_REASONS = [
   "Transcription error in the coordinates",
+  // The commonest of those errors, and the one with a name: a record left at
+  // (0, 0) is a record whose coordinates were never filled in.
+  "Null-island coordinates (0, 0)",
   "Cultivated or captive, not a wild occurrence",
   "Locality too vague to place",
   "Misidentified",
