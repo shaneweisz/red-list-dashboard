@@ -3345,8 +3345,11 @@ export default function OccurrenceMapRow({
                   panel's own flag then tells you what was said about the one
                   you opened. Excluded records carry one too — why a record is
                   questionable is worth seeing whether or not you've set it
-                  aside, and it is often the answer to why you did. */}
-              {panelOccurrences.map((o) => {
+                  aside, and it is often the answer to why you did.
+
+                  Drawn only while the records themselves are: a flag beside a
+                  point that isn't there is a mark on nothing. */}
+              {showGbif && panelOccurrences.map((o) => {
                 const marks = recordMarks(o);
                 if (!marks) return null;
                 const mine = georeferences[o.properties.gbifID];
@@ -5048,7 +5051,11 @@ export default function OccurrenceMapRow({
                   </svg>
                   {excluded ? "Put this record back" : "Exclude this record"}
                 </button>
-                {others.length > 0 && (
+                {/* Not offered on a record that is already a duplicate: its
+                    menu has "Make this the record kept", which says the same
+                    thing about the group it belongs to, and two ways to say it
+                    on one menu only invited the question of how they differed. */}
+                {others.length > 0 && duplicateOf(exclusions[gbifID]?.justification) == null && (
                   <button
                     onClick={() => {
                       keepRecord(gbifID, others.map((o) => o.properties.gbifID));

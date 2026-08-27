@@ -136,7 +136,7 @@ const EXTRA_COLUMNS: { key: string; label: string; title: string; numeric?: bool
 ];
 
 /** Never hidden, and never offered in the column picker. */
-const ALWAYS_VISIBLE_COLUMNS = new Set(["rowNumber", "putBack", "reason", "duplicates", "marks"]);
+const ALWAYS_VISIBLE_COLUMNS = new Set(["rowNumber", "putBack", "reason", "duplicates", "marks", "media"]);
 
 /** Shown until someone changes it: the fields an assessor reads first. */
 const DEFAULT_VISIBLE_COLUMNS = [
@@ -564,6 +564,24 @@ export default function OccurrenceListTable({
    * by dragging one onto the other is both quicker than typing a reason and
    * more precise than the reason anyone would type.
    */
+  /**
+   * The photograph under the pointer, and where to put it.
+   *
+   * Drawn from a portal at the icon's own position: a preview big enough to
+   * be worth showing is bigger than the row it belongs to, and a cell can't
+   * overflow a scrolling table.
+   */
+  const [mediaPreview, setMediaPreview] = useState<{
+    image: NonNullable<OccurrenceFeature["properties"]["images"]>[number];
+    x: number;
+    y: number;
+  } | null>(null);
+  /**
+   * A line of hover text and where to put it — the flag's reasons, at the
+   * flag. Its own bubble rather than a `title`, which the browser holds back
+   * for about a second: long enough that the mark reads as unexplained.
+   */
+  const [hoverNote, setHoverNote] = useState<{ text: string; x: number; y: number } | null>(null);
   const [draggingId, setDraggingId] = useState<number | null>(null);
   const [dropTargetId, setDropTargetId] = useState<number | null>(null);
   const holdRef = useRef<{ id: number; x: number; y: number; timer: number } | null>(null);
@@ -745,11 +763,54 @@ export default function OccurrenceListTable({
           const flags = flagsOf(p, isOutsideNativeRange);
           if (flags.length === 0) return <span />;
           return (
-            <span title={flags.join(" · ")} className="block text-amber-600 dark:text-amber-500 cursor-help">
+            <span
+              onMouseEnter={(e) => {
+                const box = (e.currentTarget as HTMLElement).getBoundingClientRect();
+                setHoverNote({ text: flags.join(" · "), x: box.right + 8, y: box.top - 2 });
+              }}
+              onMouseLeave={() => setHoverNote(null)}
+              className="block text-amber-600 dark:text-amber-500 cursor-help"
+            >
               <svg className="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M5 22V3m0 0h12l-2 4 2 4H5" />
               </svg>
             </span>
+          );
+        },
+      } as ColumnDef,
+      // Whether the publisher attached a photograph — the specimen itself,
+      // for a herbarium sheet. Shown as a mark rather than a column of
+      // thumbnails: what you want down a list of two hundred rows is which of
+      // them you can look at, and then to look at that one.
+      {
+        key: "media",
+        label: "",
+        title: "Photographs the publisher attached to the record",
+        className: "whitespace-nowrap w-5",
+        value: (p: OccurrenceFeature["properties"]) => p.images?.length ?? 0,
+        render: (p: OccurrenceFeature["properties"]) => {
+          const images = p.images ?? [];
+          if (images.length === 0) return <span />;
+          const image = images[0];
+          return (
+            <a
+              href={image.url}
+              target="_blank"
+              rel="noopener noreferrer"
+              onClick={(e) => e.stopPropagation()}
+              onMouseEnter={(e) => {
+                const box = (e.currentTarget as HTMLElement).getBoundingClientRect();
+                setMediaPreview({ image, x: box.right + 8, y: box.top });
+              }}
+              onMouseLeave={() => setMediaPreview(null)}
+              className="block text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300"
+            >
+              <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
+                <rect x="3" y="5" width="18" height="14" rx="2" />
+                <circle cx="8.5" cy="10" r="1.5" />
+                <path strokeLinecap="round" strokeLinejoin="round" d="M4 17l5-5 4 4 3-2 4 4" />
+              </svg>
+            </a>
           );
         },
       } as ColumnDef,
@@ -1555,6 +1616,43 @@ export default function OccurrenceListTable({
           </tbody>
         </table>
       </div>
+      {hoverNote && createPortal(
+        <div
+          style={{
+            position: "fixed",
+            left: Math.min(hoverNote.x, window.innerWidth - 260),
+            top: Math.max(4, hoverNote.y),
+            maxWidth: 240,
+            zIndex: 10002,
+            pointerEvents: "none",
+          }}
+          data-hover-note
+          className="rounded-md bg-zinc-900/95 dark:bg-zinc-700 px-1.5 py-1 text-[10px] leading-snug text-white shadow-lg"
+        >
+          {hoverNote.text}
+        </div>,
+        document.body
+      )}
+      {mediaPreview && createPortal(
+        <div
+          style={{
+            position: "fixed",
+            left: Math.min(mediaPreview.x, window.innerWidth - 240),
+            top: Math.max(8, Math.min(mediaPreview.y - 60, window.innerHeight - 260)),
+            width: 220,
+            zIndex: 10002,
+            pointerEvents: "none",
+          }}
+          className="rounded-lg overflow-hidden bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 shadow-xl"
+        >
+          <img src={mediaPreview.image.url} alt="" className="w-full max-h-[15rem] object-contain" />
+          <span className="block px-1.5 py-1 text-[10px] text-zinc-500 dark:text-zinc-400 truncate">
+            {mediaPreview.image.creator ? `© ${mediaPreview.image.creator} · ` : ""}
+            Click to open the full image
+          </span>
+        </div>,
+        document.body
+      )}
       {/* Footer: how many rows the filters left, and which columns are shown */}
       <div className="flex items-center gap-2 px-2 py-1.5 border-t border-zinc-100 dark:border-zinc-800 text-[11px] text-zinc-500 dark:text-zinc-400">
         <span className="tabular-nums">
