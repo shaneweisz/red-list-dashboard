@@ -11,6 +11,13 @@ import { InatObservation, getThumbUrl, InatPhotoWithPreview } from "@/components
 import { QualityFlag, QUALITY_FLAG_LABELS, QUALITY_FLAG_DESCRIPTIONS, QUALITY_FLAG_SOURCES } from "@/lib/mapping/coordinate-cleaning";
 import { fetchInstitutionName, knownInstitutionName } from "@/lib/mapping/grscicoll";
 import { duplicateOf } from "@/lib/mapping/georeferences";
+import {
+  backupFileName,
+  buildEditsBackup,
+  readEditsBackup,
+  summariseBackup,
+  type EditsBackup,
+} from "@/lib/mapping/edits-backup";
 import { duplicatesByPrimary as groupDuplicates, keepRecord as keepRecordIn } from "@/lib/mapping/duplicates";
 import { CATEGORY_COLORS, normalizeCategory } from "@/config/taxa";
 import { FaInfoCircle } from "react-icons/fa";
@@ -4856,6 +4863,87 @@ export default function OccurrenceMapRow({
     [keepRecord]
   );
 
+  /**
+   * Saving the work to a file, and reading one back.
+   *
+   * The edits live in this browser and nowhere else, which is the right
+   * default for one person's interpretation and a bad single point of failure:
+   * clearing site data takes a fortnight of georeferencing with it and no undo
+   * reaches across a reload. This is the way out — one file, written by hand,
+   * read back by hand.
+   */
+  const saveWork = useCallback(() => {
+    const savedAt = new Date().toISOString();
+    const backup = buildEditsBackup({
+      speciesKey,
+      scientificName,
+      savedAt,
+      georeferences,
+      exclusions,
+      dates: assessorDates,
+      pointFile,
+    });
+    const url = URL.createObjectURL(
+      new Blob([JSON.stringify(backup, null, 2)], { type: "application/json" })
+    );
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = backupFileName(scientificName, savedAt);
+    link.click();
+    URL.revokeObjectURL(url);
+    setLastSavedAt(savedAt);
+  }, [speciesKey, scientificName, georeferences, exclusions, assessorDates, pointFile]);
+
+  const [lastSavedAt, setLastSavedAt] = useState<string | null>(null);
+  /** How many records the assessor has touched — nothing to save if none. */
+  const editCount = useMemo(
+    () =>
+      new Set([
+        ...Object.keys(georeferences),
+        ...Object.keys(exclusions),
+        ...Object.keys(assessorDates),
+      ]).size,
+    [georeferences, exclusions, assessorDates]
+  );
+  const [pendingRestore, setPendingRestore] = useState<EditsBackup | null>(null);
+  const restoreInputRef = useRef<HTMLInputElement | null>(null);
+
+  const readRestoreFile = useCallback(
+    async (file: File) => {
+      const result = readEditsBackup(await file.text(), speciesKey);
+      if ("error" in result) {
+        setGeorefMessage({ kind: "error", text: result.error });
+        return;
+      }
+      setPendingRestore(result.backup);
+    },
+    [speciesKey]
+  );
+
+  /**
+   * Puts a file back, as one undoable edit.
+   *
+   * Restoring is itself an edit — if the file turns out to be the wrong one,
+   * or older than you thought, undo takes you back to what was here. The point
+   * file is set separately, since it is a file you loaded rather than an
+   * interpretation you made.
+   */
+  const applyRestore = useCallback(
+    (backup: EditsBackup) => {
+      commitEdits(
+        {
+          georeferences: backup.georeferences,
+          exclusions: backup.exclusions,
+          dates: backup.dates,
+        },
+        `restore the work saved ${backup.savedAt.slice(0, 10)}`
+      );
+      if (backup.pointFile) importPointFile(backup.pointFile);
+      setPendingRestore(null);
+    },
+    [commitEdits, importPointFile]
+  );
+
   /** Whether the "put all back" dialog is up. */
   const [confirmPutAllBack, setConfirmPutAllBack] = useState(false);
   const putAllBack = useCallback(() => {
@@ -6595,6 +6683,52 @@ export default function OccurrenceMapRow({
                           </button>
                         )}
                       </div>
+                      {/* Saving the work, and putting a saved file back. Beside
+                          the undo history rather than hidden in a menu: the
+                          edits live in this browser only, and the button that
+                          gets them out of it should be the one you can see. */}
+                      <div className="inline-flex rounded border border-zinc-300 dark:border-zinc-600 overflow-hidden">
+                        <button
+                          onClick={saveWork}
+                          disabled={editCount === 0}
+                          title={
+                            editCount === 0
+                              ? "Nothing to save yet — georeference, date or set aside a record first"
+                              : `Save your work for this species to a file — ${editCount} record${
+                                  editCount === 1 ? "" : "s"
+                                } edited${lastSavedAt ? `, last saved ${lastSavedAt.slice(11, 16)}` : ", never saved"}`
+                          }
+                          aria-label="Save your work to a file"
+                          className={`px-1.5 py-1 hover:bg-zinc-50 dark:hover:bg-zinc-800 disabled:opacity-30 disabled:cursor-not-allowed ${
+                            editCount > 0 && !lastSavedAt ? "text-amber-600 dark:text-amber-500" : "text-zinc-600 dark:text-zinc-300"
+                          }`}
+                        >
+                          <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M12 3v12m0 0l-4-4m4 4l4-4M4 17v2a2 2 0 002 2h12a2 2 0 002-2v-2" />
+                          </svg>
+                        </button>
+                        <button
+                          onClick={() => restoreInputRef.current?.click()}
+                          title="Put back the work from a file you saved earlier"
+                          aria-label="Restore your work from a file"
+                          className="px-1.5 py-1 text-zinc-600 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800 border-l border-zinc-200 dark:border-zinc-700"
+                        >
+                          <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M12 21V9m0 0l-4 4m4-4l4 4M4 7V5a2 2 0 012-2h12a2 2 0 012 2v2" />
+                          </svg>
+                        </button>
+                        <input
+                          ref={restoreInputRef}
+                          type="file"
+                          accept="application/json,.json"
+                          className="hidden"
+                          onChange={(e) => {
+                            const file = e.target.files?.[0];
+                            e.target.value = "";
+                            if (file) readRestoreFile(file);
+                          }}
+                        />
+                      </div>
                       <button
                         onClick={() => setPointFileOpen(true)}
                         title={
@@ -6996,6 +7130,53 @@ export default function OccurrenceMapRow({
                 />
                 )}
               </div>
+            )}
+            {/* A restore replaces what's here, so it says what it holds and what
+                it would replace before it does. Undoable either way — but a
+                dialog is cheaper than finding the undo button afterwards. */}
+            {pendingRestore && createPortal(
+              <div
+                className="fixed inset-0 z-[10001] flex items-center justify-center p-4 bg-black/40"
+                onClick={() => setPendingRestore(null)}
+              >
+                <div
+                  className="w-full max-w-md rounded-lg bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 shadow-xl"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  <div className="px-4 py-3 border-b border-zinc-200 dark:border-zinc-700">
+                    <h2 className="text-sm font-medium text-zinc-900 dark:text-zinc-100">
+                      Put back the work saved on {pendingRestore.savedAt.slice(0, 10)}?
+                    </h2>
+                  </div>
+                  <div className="px-4 py-3 text-xs text-zinc-600 dark:text-zinc-300 space-y-1.5">
+                    <p>
+                      The file holds {summariseBackup(pendingRestore)}.
+                    </p>
+                    <p>
+                      {editCount === 0
+                        ? "There is nothing here to replace."
+                        : `It replaces what this browser holds for ${scientificName ?? "this species"} — ${editCount} record${
+                            editCount === 1 ? "" : "s"
+                          } edited. Undo puts that back.`}
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-2 px-4 py-3 border-t border-zinc-200 dark:border-zinc-700">
+                    <button
+                      onClick={() => setPendingRestore(null)}
+                      className="ml-auto px-3 py-1 rounded border border-zinc-300 dark:border-zinc-600 text-xs text-zinc-600 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800 transition-colors"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      onClick={() => applyRestore(pendingRestore)}
+                      className="px-3 py-1 rounded bg-zinc-800 dark:bg-zinc-200 hover:bg-zinc-900 dark:hover:bg-white text-xs text-white dark:text-zinc-900 font-medium transition-colors"
+                    >
+                      Restore
+                    </button>
+                  </div>
+                </div>
+              </div>,
+              document.body
             )}
             {/* Asked in a dialog rather than in the footer, because this undoes
                 every judgement on the list at once and one of them may have
