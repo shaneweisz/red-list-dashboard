@@ -5015,6 +5015,28 @@ export default function OccurrenceMapRow({
     const key = position ? `${position[0].toFixed(4)},${position[1].toFixed(4)}` : null;
     const stacked = (key && coLocatedByPosition.get(key)) || [];
     const others = stacked.filter((o) => o.properties.gbifID !== gbifID);
+    /**
+     * The other records carrying this collector's number.
+     *
+     * The same gathering split between herbaria is the commonest duplicate
+     * there is, and the sheets rarely agree on anything else: the institutions
+     * differ by definition, the collector's name is written five ways, and
+     * only some of them were ever georeferenced. The number on the label is
+     * what they do agree on.
+     *
+     * Records already set aside for a reason of their own are left out — that
+     * reason is someone's judgement, and this shouldn't overwrite it.
+     */
+    const recordNo = normaliseCatalogNumber(record?.properties.recordNumber);
+    const sameNumber = recordNo
+      ? occurrences.filter((o) => {
+          const id = o.properties.gbifID;
+          if (id === gbifID) return false;
+          if (normaliseCatalogNumber(o.properties.recordNumber) !== recordNo) return false;
+          const reason = exclusions[id]?.justification;
+          return !reason || duplicateOf(reason) != null;
+        })
+      : [];
     const close = () => closeTooltip();
     return (
       <>
@@ -5117,7 +5139,23 @@ export default function OccurrenceMapRow({
                       <rect x="9" y="9" width="12" height="12" rx="2" />
                       <path strokeLinecap="round" strokeLinejoin="round" d="M5 15V5a2 2 0 012-2h10" />
                     </svg>
-                    Keep this one of {stacked.length}, mark the remainder as duplicates
+                    Keep this one of {stacked.length} at this point, mark the rest as duplicates
+                  </button>
+                )}
+                {sameNumber.length > 0 && duplicateOf(exclusions[gbifID]?.justification) == null && (
+                  <button
+                    onClick={() => {
+                      keepRecord(gbifID, sameNumber.map((o) => o.properties.gbifID));
+                      close();
+                    }}
+                    title={`Every other loaded record carrying record no. ${record?.properties.recordNumber} is struck out as a duplicate of this one, with the reason recorded and undoable`}
+                    className="flex w-full items-start gap-1.5 px-1 py-1 rounded text-left hover:bg-zinc-100 dark:hover:bg-zinc-800"
+                  >
+                    <svg className="w-3 h-3 mt-0.5 shrink-0 text-zinc-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M4 7h16M4 12h16M4 17h10" />
+                    </svg>
+                    Keep this one of {sameNumber.length + 1} with record no.{" "}
+                    {record?.properties.recordNumber}, mark the rest as duplicates
                   </button>
                 )}
       </>
