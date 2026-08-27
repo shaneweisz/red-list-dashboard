@@ -92,24 +92,21 @@ describe("UNFLAGGED_REASONS", () => {
     // holds each exactly once, GBIF's index is built on that same extended
     // release, and 10.6M occurrence records already reach the dashboard through
     // those links. Flagging them denies a match we are actively using.
-    for (const reason of ["not_in_base", "provisional"]) {
+    for (const reason of ["not_in_base", "provisional", "synonym_of"]) {
       expect(UNFLAGGED_REASONS as readonly string[], reason).toContain(reason);
       expect(REVISION_REASONS as readonly string[], reason).not.toContain(reason);
       expect(REVISION_BARS.some((b) => b.reasons.includes(reason)), reason).toBe(false);
     }
   });
 
-  it("limits the catch-all bar to genuine arity failures", () => {
-    // "No 1:1 CoL match" has to be literally true of everything under it: zero
-    // candidates (unmatched) or two that disagree (synonym_of). A reason where
-    // CoL holds exactly one record does not belong, however hedged that record.
-    const catchAll = REVISION_BARS.find((b) => b.key === "no_1to1")!;
-    expect([...catchAll.reasons].sort()).toEqual(
-      ["classified_elsewhere", "missing_from_backbone", "synonym_of", "unmatched"],
-    );
-    // synonym_of is flagged, but a bar of its own would have to be labelled
-    // "CoL's accepted name differs" — a claim 87 of its 88 members don't support.
-    expect(REVISION_BARS.some((b) => b.key === "synonym_of")).toBe(false);
+  it("leaves only the one reason that fails on arity", () => {
+    // "No CoL match" must be literally true of everything under it: CoL holds no
+    // record of the name at any status, in any release. Zero candidates. A reason
+    // where CoL holds exactly one record does not belong there, however that one
+    // record is filed — which is what put not_in_base, provisional and
+    // synonym_of back out of the card.
+    const bar = REVISION_BARS.find((b) => b.label === "No CoL match")!;
+    expect(bar.reasons).toEqual(["unmatched"]);
   });
 
   it("still gives it wording, since the SSC group view reports it", () => {

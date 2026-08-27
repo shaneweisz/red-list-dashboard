@@ -10,7 +10,7 @@
  *     split out of this one. Its CoL match is usually clean; the revision is
  *     that CoL has carved new species off it.
  *
- * They are near-disjoint in practice (89 of ~8.7k flagged species carry both),
+ * They are near-disjoint in practice (72 of ~8.7k flagged species carry both),
  * but they ARE independent, so the filter chart's bars do not partition the
  * flagged set — a species with both counts toward two bars, the same way the
  * Criteria and Habitat charts already work.
@@ -38,52 +38,52 @@ export const REVISION_REASONS = [
   "lumped",
   "infraspecific",
   "unmatched",
-  "synonym_of",
   "missing_from_backbone",
   "classified_elsewhere",
 ] as const;
 
 /**
- * The bars the chart draws. A bar is not always one reason.
+ * The bars the chart draws, in axis order.
  *
- * "No 1:1 CoL match" is the one bar covering several, and it means exactly what
- * it says: we cannot pin this assessment to ONE Catalogue of Life species.
- * Either there are no candidates (`unmatched` — CoL holds no record of the name
- * at any status in any release) or there are two that disagree (`synonym_of` —
- * CoL's extended release accepts the name while its curated checklist files it
- * as a synonym of a different accepted species: Acanthoptila nipalensis ->
- * Turdoides nipalensis). Zero or two, never one.
+ * Every bar is currently exactly one reason, and the indirection still earns
+ * its place: REVISION_REASON_SHORT has to label the reasons the card does NOT
+ * draw as well, because the SSC group panel renders those. Six bars, nine
+ * labelled reasons — genuinely different sets. It also means a bar covering
+ * several reasons is a data change here rather than a rewrite in RedListView.
  *
- * That is a caveat on OUR columns rather than a verdict on the assessment, which
- * is why the bar survives when the individual findings under it would not stand
- * alone. It needs no CoL vocabulary and implies nothing about who is right.
+ * There was such a bar, briefly: "No 1:1 CoL match", covering not_in_base,
+ * provisional and synonym_of. Its claim was that the assessment corresponded to
+ * no single accepted CoL species, so our CoL columns for it could not be
+ * trusted. The claim is false of all three, for one reason:
  *
- * synonym_of is flagged but gets no bar OF ITS OWN, and the label such a bar
- * would need is the reason. "CoL's accepted name differs" claims more than the
- * data supports: 87 of its 88 members are CoL's two releases disagreeing with
- * each other, not CoL settling on a different name. And there is often no single
- * accepted name to report — CoL marks 135,881 usages "ambiguous synonym", and
- * holds one name as BOTH accepted and synonym for 4,623 assessed species. Two
- * checklists can differ permanently on a species concept without either being
- * wrong (CoL recognises two Dasycercus; the 2023 revision and IUCN recognise
- * six). Under the catch-all it makes the weaker claim that is true: we cannot
- * pick one.
+ *   CoL holds each of them exactly ONCE, and we already use that record.
  *
- * What the bar deliberately does NOT cover is the pair whose record CoL holds
- * exactly once, just not in its curated checklist — see UNFLAGGED_REASONS.
+ * GBIF's occurrence index is built on CoL's extended release, so an XR-only
+ * col_id is as usable as a curated one. 920 not_in_base, 327 provisional and 75
+ * synonym_of species carry live GBIF occurrence counts — 11.2M records reaching
+ * the dashboard through links the bar was simultaneously calling "no match".
  *
- * The bar is the catch-all; the TOOLTIP stays specific, because every one of
- * these reasons still has its own sentence.
+ * synonym_of was the last to go and looked the most like a real failure: the
+ * matched record is XR-only while the CURATED release files that name as a
+ * synonym of a different accepted species, which reads as two candidates. It is
+ * not. Synonymy means one taxon under two names, so the extended release
+ * resolves the assessment to exactly one species and the curated release
+ * resolves it to exactly one species. There is no reading on which it maps to
+ * zero or to two. All 117 of its matched link rows are ACCEPTED in XR.
+ *
+ * What is left is the only case that fails on arity: CoL holds no record of the
+ * name at any status, in any release. Zero candidates.
  */
 export const REVISION_BARS: readonly { key: string; label: string; reasons: readonly string[] }[] = [
   { key: SPLIT_REASON, label: "Split on CoL", reasons: [SPLIT_REASON] },
   { key: "lumped", label: "Lumped on CoL", reasons: ["lumped"] },
-  {
-    key: "no_1to1",
-    label: "No 1:1 CoL match",
-    reasons: ["unmatched", "synonym_of", "missing_from_backbone", "classified_elsewhere"],
-  },
+  { key: "unmatched", label: "No CoL match", reasons: ["unmatched"] },
   { key: "infraspecific", label: "Below species on CoL", reasons: ["infraspecific"] },
+  // Zero in every sync so far; the chart drops empty bars, so they cost nothing
+  // until they fire. A reason with no bar would be diagnosed and then silently
+  // dropped from the card, which is what the one-bar-per-reason test prevents.
+  { key: "missing_from_backbone", label: "Dangling link", reasons: ["missing_from_backbone"] },
+  { key: "classified_elsewhere", label: "Reclassified", reasons: ["classified_elsewhere"] },
 ];
 
 /** The bar a reason is drawn under, for labelling a tooltip block with the same
@@ -108,26 +108,35 @@ export function barForReason(reason: string): { key: string; label: string } | n
  *    extinct, including the common and abundant C. arquatrix and C. elphinstonii.
  *    That is one contaminated upstream block, not a signal.
  *
- * "not_in_base" (2,113) and "provisional" (494) are the other two, and they are
- * one case: CoL holds the record exactly once, at species rank, under a col_id
- * we already use. It is simply not in CoL's CURATED checklist, or is in it with
- * a hedged status.
+ * "not_in_base" (2,113), "provisional" (494) and "synonym_of" (88) are the other
+ * three, and they are ONE case: CoL holds the record exactly once, at species
+ * rank, under a col_id we already use. What varies is only how CoL's two release
+ * products file it — absent from the curated checklist, in it with a hedged
+ * status, or in it as a synonym of another accepted species.
  *
- * Both shipped as bars, were dropped, then briefly came back under the "No 1:1
- * CoL match" bar. The return was the mistake, and what makes it one is the
+ * All three shipped as bars, were dropped, then briefly came back under a "No
+ * 1:1 CoL match" bar. The return was the mistake, and what makes it one is the
  * plainest fact in this file: GBIF's occurrence index is BUILT on CoL's extended
  * release, so an XR-only col_id is exactly as usable as a curated one — and we
- * use it. 920 of the not_in_base species and 327 of the provisional ones carry
- * live GBIF occurrence counts on the dashboard, 10.6 million records pulled
- * through links the bar was simultaneously calling "no match".
+ * use it. 920 not_in_base, 327 provisional and 75 synonym_of species carry live
+ * GBIF occurrence counts on the dashboard: 11.2 million records pulled through
+ * links the bar was simultaneously calling "no match".
  *
- * So the bar's claim is false of them. Their match IS 1:1. What differs is which
- * CoL product carries it and how confident CoL's editors are — CoL's editorial
+ * So the bar's claim was false of them. Their match IS 1:1. What differs is
+ * which CoL product carries it and how CoL files it there — CoL's editorial
  * state, not the arity of our mapping, and nothing a Red List assessor can act
  * on. They also cost the reader CoL's product vocabulary: "XR", "Base" and
  * "provisionally accepted" name CoL's releases and internal statuses, which an
  * assessor has no reason to know, and at 2,113 not_in_base was large enough to
  * crowd the signals that do carry an action.
+ *
+ * synonym_of held out longest because it reads as two candidates: we match an
+ * XR-only record while the curated release files that name as a synonym of a
+ * DIFFERENT accepted species. But synonymy means one taxon under two names, so
+ * each release resolves the assessment to exactly one species — never zero,
+ * never two. All 117 of its matched link rows are accepted in XR. It is also
+ * the case an earlier commit had already rejected on its own merits: a synonym
+ * leaves the taxon, and so the assessment, alone.
  *
  * A measurement that looks decisive and is not, recorded so nobody redoes it:
  * 433 of the 494 provisional records ARE in the curated checklist, against 29 of
@@ -155,7 +164,7 @@ export function barForReason(reason: string): { key: string; label: string } | n
  * EX/EW`. 103 assessed species are excluded that way — a real undercount that
  * predates this feature and wants its own fix.
  */
-export const UNFLAGGED_REASONS = ["extinct_unconfirmed", "not_in_base", "provisional"] as const;
+export const UNFLAGGED_REASONS = ["extinct_unconfirmed", "not_in_base", "provisional", "synonym_of"] as const;
 
 export type RevisionReasonCode = (typeof REVISION_REASONS)[number];
 
