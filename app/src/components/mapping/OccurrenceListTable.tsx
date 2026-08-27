@@ -812,6 +812,30 @@ export default function OccurrenceListTable({
     clearColumnPrefs();
   };
 
+  /**
+   * A cell too long for its column: one line, cut off, and the whole of it in
+   * the hover bubble. The same bubble the marks use, so a long string and a
+   * flag are read the same way — and immediately, which the browser's own
+   * tooltip is not.
+   */
+  const full = useCallback(
+    (text: string) => (
+      <span
+        onMouseEnter={(e) => {
+          const el = e.currentTarget;
+          if (el.scrollWidth <= el.clientWidth) return;
+          const box = el.getBoundingClientRect();
+          setHoverNote({ text, x: box.left, y: box.bottom + 4 });
+        }}
+        onMouseLeave={() => setHoverNote(null)}
+        className="block truncate"
+      >
+        {text}
+      </span>
+    ),
+    []
+  );
+
   const columns = useMemo<ColumnDef[]>(
     () => [
       // Where you are in the list. Not a field of the record — a record has no
@@ -1187,19 +1211,14 @@ export default function OccurrenceListTable({
         key: "recordedBy",
         label: "Recorded by",
         title: "recordedBy — the observer or collector",
-        // Narrow, and scrolled rather than truncated. A collecting team runs
-        // to four names and a locality to a paragraph; at a width that fits
-        // them the record's own fields are pushed off the screen, and at a
-        // width that doesn't, an ellipsis hides the half you needed. Scroll
-        // the cell and the whole string is there, in place.
+        // Narrow, cut off, and shown whole the moment you point at it. A
+        // collecting team runs to four names and a locality to a paragraph:
+        // at a width that fits them the record's own fields are pushed off
+        // the screen, and a cell you have to scroll sideways is a cell nobody
+        // reads. The bubble costs no width at all.
         className: "max-w-[8rem]",
         value: (p) => p.recordedBy || null,
-        render: (p) =>
-          p.recordedBy ? (
-            <span className="block overflow-x-auto whitespace-nowrap" title={p.recordedBy}>
-              {p.recordedBy}
-            </span>
-          ) : null,
+        render: (p) => (p.recordedBy ? full(p.recordedBy) : null),
       },
       // Beside the collector, because it is the collector's own number: the two
       // together — "Zak 4412" — are how a specimen is cited, and how the same
@@ -1221,11 +1240,7 @@ export default function OccurrenceListTable({
         value: (p) => localityOf(p) || null,
         render: (p) => {
           const loc = localityOf(p);
-          return loc ? (
-            <span className="block overflow-x-auto whitespace-nowrap" title={loc}>
-              {loc}
-            </span>
-          ) : null;
+          return loc ? full(loc) : null;
         },
       },
       {
@@ -1416,7 +1431,7 @@ export default function OccurrenceListTable({
         ),
       },
     ],
-    [isOutsideNativeRange, georeferences, onSaveGeoreference, onClearGeoreference, editingCoords, editingRadius, exclusions, variant, onExclude, onInclude, duplicates, unfolded, dates, onSaveDate, onClearDate, editingDate]
+    [isOutsideNativeRange, georeferences, onSaveGeoreference, onClearGeoreference, editingCoords, editingRadius, exclusions, variant, onExclude, onInclude, duplicates, unfolded, dates, onSaveDate, onClearDate, editingDate, full]
   );
 
   // The catalogue in the reader's own order, then the subset actually drawn.
@@ -1840,7 +1855,7 @@ export default function OccurrenceListTable({
             position: "fixed",
             left: Math.min(hoverNote.x, window.innerWidth - 260),
             top: Math.max(4, hoverNote.y),
-            maxWidth: 240,
+            maxWidth: 320,
             zIndex: 10002,
             pointerEvents: "none",
           }}
