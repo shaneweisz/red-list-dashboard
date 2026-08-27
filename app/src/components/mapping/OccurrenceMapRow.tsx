@@ -2314,29 +2314,21 @@ export default function OccurrenceMapRow({
   }, [bbox, fitMapToBbox]);
 
   // Map event handlers
-  const handleMapClick = useCallback((e: MapLayerMouseEvent, panelId: string) => {
-    // Measuring owns the left click while it's on. Two points, never more —
-    // and a third click doesn't move the far end, it becomes the new near one.
-    // Walking a coastline or a valley is a chain of hops, and pinning the
-    // origin made every hop after the first a measurement from the wrong place.
-    if (measure) {
-      const point: [number, number] = [e.lngLat.lng, e.lngLat.lat];
-      setMeasure(measure.length < 2 ? [...measure, point] : [measure[1], point]);
-      return;
-    }
-    const features = e.features;
-    // A point from the imported file. Where it matched a record on the map,
-    // that record's panel opens — it carries the import folded into it, and
-    // says where the two disagree. Where it matched nothing, the row gets its
-    // own small popup: it has no line in the table to send you to.
-    const filePoint = features?.find((f) => String(f.layer?.id ?? "").startsWith("pointfile-circles-"));
-    if (filePoint) {
-      const row = Number(filePoint.properties?.row);
+  /**
+   * Opening a point from the imported file.
+   *
+   * Where it matched a record on the map, that record's panel opens — it
+   * carries the import folded into it, and says where the two disagree. Where
+   * it matched nothing, the row gets its own small popup: it has no line in
+   * the table to send you to. Called by the point's own marker, since the
+   * file's points are drawn as diamonds rather than as a map layer.
+   */
+  const openPointFileRow = useCallback(
+    (row: number, lng: number, lat: number, panelId: string) => {
       const comparison = pointFileComparisonRef.current?.rows.find((r) => r.point.row === row);
       const merged = comparison?.matched
         ? occurrencesByGbifIdRef.current.get(comparison.matched.gbifID)
         : undefined;
-      const [lng, lat] = (filePoint.geometry as GeoJSON.Point).coordinates as [number, number];
       if (merged) {
         if (tooltipPinned && hoveredFeature?.properties.gbifID === merged.properties.gbifID) {
           closeTooltip();
@@ -2364,8 +2356,21 @@ export default function OccurrenceMapRow({
       setHoveredPanel(null);
       setPointFileHover({ row, lat, lng, panelId });
       pinTooltip();
+    },
+    [cancelHoverClear, closeTooltip, pinTooltip, tooltipPinned, hoveredFeature, pointFileHover]
+  );
+
+  const handleMapClick = useCallback((e: MapLayerMouseEvent, panelId: string) => {
+    // Measuring owns the left click while it's on. Two points, never more —
+    // and a third click doesn't move the far end, it becomes the new near one.
+    // Walking a coastline or a valley is a chain of hops, and pinning the
+    // origin made every hop after the first a measurement from the wrong place.
+    if (measure) {
+      const point: [number, number] = [e.lngLat.lng, e.lngLat.lat];
+      setMeasure(measure.length < 2 ? [...measure, point] : [measure[1], point]);
       return;
     }
+    const features = e.features;
     if (features && features.length > 0) {
       const gbifID = Number(features[0].properties?.gbifID);
       if (gbifID) {
@@ -2476,7 +2481,6 @@ export default function OccurrenceMapRow({
     closeTooltip,
     tooltipPinned,
     hoveredFeature,
-    pointFileHover,
   ]);
 
   /**
@@ -2691,44 +2695,6 @@ export default function OccurrenceMapRow({
     // you close it, or when you click somewhere else, which pins whatever you
     // clicked on instead.
     if (tooltipPinnedRef.current) return;
-    // A point file row isn't a GBIF record and has no entry in the table, so it
-    // gets its own small popup rather than being forced through the occurrence
-    // tooltip. Checked first: where the two layers overlap, the file's point is
-    // the one drawn on top and the one the cursor is visibly over.
-    //
-    // Opened by a click, like the record panel — hovering only tracks which
-    // record the pointer is over, for the table's sake.
-    const filePoint = features?.find((f) => String(f.layer?.id ?? "").startsWith("pointfile-circles-"));
-    if (filePoint) {
-      const row = Number(filePoint.properties?.row);
-      // Where the imported point belongs to a record that's on the map, show
-      // that record's panel — which carries the import folded into it, and
-      // says where the two disagree. Two panels for one specimen made you diff
-      // them by eye, which is the job the comparison exists to do.
-      const comparison = pointFileComparison?.rows.find((r) => r.point.row === row);
-      const merged = comparison?.matched
-        ? occurrencesByGbifId.get(comparison.matched.gbifID)
-        : undefined;
-      const [lng, lat] = (filePoint.geometry as GeoJSON.Point).coordinates as [number, number];
-      if (merged) {
-        cancelHoverClear();
-        setHoverSource("map");
-        // The imported point is where the panel hangs when the record has no
-        // position of its own — which is the usual case for a matched row,
-        // since a coordinate GBIF never published is why the assessor
-        // georeferenced it into the file. Anchored to the record's own
-        // coordinates the panel had nowhere to go, so clicking these points
-        // would show nothing at all.
-        setHoverAnchor({ gbifID: merged.properties.gbifID, lng, lat });
-        if (merged.properties.gbifID !== hoveredFeature?.properties.gbifID) setGroupIndex(0);
-        setHoveredFeature(merged);
-        setHoveredPanel(panelId);
-        return;
-      }
-      setHoveredFeature(null);
-      setHoveredPanel(null);
-      return;
-    }
     if (features && features.length > 0) {
       const props = features[0].properties;
       if (props) {
@@ -2772,7 +2738,7 @@ export default function OccurrenceMapRow({
     } else if (!tooltipHeld) {
       clearHoverSoon();
     }
-  }, [isTouchDevice, occurrencesByGbifId, tooltipHeld, hoveredFeature, clearHoverSoon, cancelHoverClear, pointFileComparison]);
+  }, [isTouchDevice, occurrencesByGbifId, tooltipHeld, hoveredFeature, clearHoverSoon, cancelHoverClear]);
 
   const handleMapMouseLeave = useCallback(() => {
     setHoveringPoint(false);
@@ -3122,7 +3088,7 @@ export default function OccurrenceMapRow({
               {...mapProps}
               style={{ width: "100%", height: "100%" }}
               mapStyle={BASEMAP_STYLES[basemap].style}
-              interactiveLayerIds={[`occ-circles-${panelId}`, `georef-point-${panelId}`, `pointfile-circles-${panelId}`]}
+              interactiveLayerIds={[`occ-circles-${panelId}`, `georef-point-${panelId}`]}
               onClick={(e: MapLayerMouseEvent) => handleMapClick(e, panelId)}
               onContextMenu={(e: MapLayerMouseEvent) => handleMapContextMenu(e, panelId)}
               onMouseMove={(e: MapLayerMouseEvent) => handleMapMouseMove(e, panelId)}
@@ -3357,20 +3323,21 @@ export default function OccurrenceMapRow({
                   produced in. A hollow ring rather than a filled dot so a point
                   sitting exactly on top of the record it came from still shows
                   the record underneath it. */}
-              {drawPointFile && pointFileGeoJson.features.length > 0 && (
-                <Source id={`pointfile-${panelId}`} type="geojson" data={pointFileGeoJson}>
-                  <Layer
-                    id={`pointfile-circles-${panelId}`}
-                    type="circle"
-                    paint={{
-                      "circle-radius": 5,
-                      "circle-color": POINT_FILE_COLOR,
-                      "circle-stroke-color": "#ffffff",
-                      "circle-stroke-width": 1.5,
-                    }}
-                  />
-                </Source>
-              )}
+              {drawPointFile &&
+                pointFileGeoJson.features.map((feature) => {
+                  const [lng, lat] = (feature.geometry as GeoJSON.Point).coordinates as [number, number];
+                  const row = Number(feature.properties?.row);
+                  return (
+                    <MapLibreMarker key={`pointfile-${row}`} longitude={lng} latitude={lat} anchor="center">
+                      <span
+                        onClick={() => openPointFileRow(row, lng, lat, panelId)}
+                        title={`Point ${row - 1} of the imported file`}
+                        style={{ background: POINT_FILE_COLOR }}
+                        className="block w-[9px] h-[9px] rotate-45 border-[1.5px] border-white shadow-sm cursor-pointer"
+                      />
+                    </MapLibreMarker>
+                  );
+                })}
               {/* A small flag beside any record the cleaning tests or the
                   native range have something to say about. What you want from
                   a flag is to see which records are being questioned across a
@@ -3733,7 +3700,7 @@ export default function OccurrenceMapRow({
                 >
                   <div className="text-[11px] text-zinc-700 dark:text-zinc-200 space-y-1">
                     <div className="flex items-center gap-1.5 font-medium">
-                      <span className="w-2 h-2 rounded-full shrink-0" style={{ background: POINT_FILE_COLOR }} />
+                      <span className="w-2 h-2 rotate-45 shrink-0" style={{ background: POINT_FILE_COLOR }} />
                       Imported record
                       {/* Counting the points, not the spreadsheet's lines:
                           the table beneath the map numbers them the same way,
@@ -5656,6 +5623,9 @@ export default function OccurrenceMapRow({
             onChange={() => setShowPointFile((v) => !v)}
             className="w-3 h-3 rounded accent-blue-600 shrink-0"
           />
+          {/* The shape they're drawn in, so the legend names what's on the
+              map rather than what colour it is. */}
+          <span className="w-2 h-2 rotate-45 shrink-0" style={{ background: POINT_FILE_COLOR }} />
           <span
             title={pointFile.fileName}
             className="flex-1 min-w-0 text-zinc-700 dark:text-zinc-200 truncate"
@@ -6817,7 +6787,7 @@ export default function OccurrenceMapRow({
                       }`}
                     >
                       {tab.dot && (
-                        <span className="w-2 h-2 rounded-full shrink-0" style={{ background: tab.dot }} />
+                        <span className="w-2 h-2 rotate-45 shrink-0" style={{ background: tab.dot }} />
                       )}
                       <span className="truncate">{tab.label}</span>
                       <span className="tabular-nums text-[10px] text-zinc-400">{tab.count.toLocaleString()}</span>
