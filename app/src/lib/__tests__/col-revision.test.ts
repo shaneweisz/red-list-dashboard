@@ -3,6 +3,7 @@ import {
   REVISION_REASONS,
   UNFLAGGED_REASONS,
   REVISION_REASON_SHORT,
+  REVISION_BARS,
   REVISION_REASON_SUMMARY,
   SPLIT_REASON,
   isFlagged,
@@ -61,13 +62,19 @@ describe("revision vocabulary", () => {
     }
   });
 
-  it("keeps every BAR on a single line", () => {
-    // Only the dashboard's bars sit on the 180px axis; UNFLAGGED_REASONS are
-    // rendered by the SSC panel in a table cell, which has room. synonym_of was
-    // the one label that spent a second line, and it is no longer a bar — so the
-    // axis is once again uniform, and this fails if anything reintroduces a wrap.
-    const twoLine = REVISION_REASONS.filter((r) => REVISION_REASON_SHORT[r].length > 21);
-    expect(twoLine).toEqual([]);
+  it("keeps every BAR LABEL on a single line", () => {
+    // The bars sit on the 180px axis; reason labels are rendered by the SSC panel
+    // in a table cell, which has room, so only bar labels are constrained.
+    expect(REVISION_BARS.filter((b) => b.label.length > 21)).toEqual([]);
+  });
+
+  it("draws every reason under exactly one bar", () => {
+    // A reason drawn under no bar is diagnosed and then silently dropped; one
+    // drawn under two would be counted twice in the totals.
+    for (const reason of REVISION_REASONS) {
+      const bars = REVISION_BARS.filter((b) => b.reasons.includes(reason));
+      expect(bars.map((b) => b.key), reason).toHaveLength(1);
+    }
   });
 });
 
@@ -79,17 +86,18 @@ describe("UNFLAGGED_REASONS", () => {
     expect(REVISION_REASONS as readonly string[]).not.toContain("extinct_unconfirmed");
   });
 
-  it("keeps CoL's own editorial state out of the bars too", () => {
-    // not_in_base and provisional describe which CoL release carries the record
-    // and how sure its editors are — not anything that happened to the taxon.
-    // Neither finishes "…so this assessment may need a look because…".
-    //
-    // synonym_of joins them: a synonym is the SAME taxon under another label, so
-    // it puts nothing about the assessment's scope in question, and 87 of its 88
-    // members were really the two CoL products disagreeing with each other.
-    for (const reason of ["not_in_base", "provisional", "synonym_of"]) {
-      expect(UNFLAGGED_REASONS as readonly string[], reason).toContain(reason);
-      expect(REVISION_REASONS as readonly string[], reason).not.toContain(reason);
+  it("gives CoL's editorial state no bar of its OWN, but does not hide it", () => {
+    // not_in_base, provisional and synonym_of each fail the "…so this assessment
+    // may need a look because…" test on their own — CoL's release vocabulary,
+    // CoL's editorial confidence, a name change that leaves the taxon alone. So
+    // none of them is its own bar. Together they support the claim none makes
+    // alone, and it is about us: this assessment maps to no single accepted CoL
+    // species, so our CoL columns for it cannot be trusted. 2,755 species failing
+    // the 1:1 match carried no flag at all when these were merely dropped.
+    const catchAll = REVISION_BARS.find((b) => b.key === "no_1to1")!;
+    for (const reason of ["not_in_base", "provisional", "synonym_of", "unmatched"]) {
+      expect(catchAll.reasons, reason).toContain(reason);
+      expect(REVISION_BARS.some((b) => b.key === reason), reason).toBe(false);
     }
   });
 

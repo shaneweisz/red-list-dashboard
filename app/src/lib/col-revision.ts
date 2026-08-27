@@ -38,9 +38,50 @@ export const REVISION_REASONS = [
   "lumped",
   "infraspecific",
   "unmatched",
+  "not_in_base",
+  "provisional",
+  "synonym_of",
   "missing_from_backbone",
   "classified_elsewhere",
 ] as const;
+
+/**
+ * The bars the chart draws. A bar is not always one reason.
+ *
+ * not_in_base, provisional and synonym_of were each dropped from the card on
+ * their own merits — CoL's release vocabulary, CoL's editorial confidence, and a
+ * name change that leaves the taxon alone. All three still hold AS NAMED
+ * REASONS: none of them finishes "…so this assessment may need a look because".
+ *
+ * Together they support a claim none of them makes alone, and it is about US
+ * rather than about IUCN: this assessment does not correspond to exactly one
+ * accepted CoL species, so every CoL-derived figure we show for it is
+ * unreliable. That is a caveat on our own columns, not a verdict on the
+ * assessment — which is why it survives the objections that removed the
+ * individual reasons. It needs no CoL vocabulary, implies nothing about who is
+ * right, and tells a reader precisely which rows to distrust. 2,755 species
+ * that fail the 1:1 match carried no flag at all before it.
+ *
+ * The bar is the catch-all; the TOOLTIP stays specific, because every one of
+ * these reasons still has its own sentence.
+ */
+export const REVISION_BARS: readonly { key: string; label: string; reasons: readonly string[] }[] = [
+  { key: SPLIT_REASON, label: "Split on CoL", reasons: [SPLIT_REASON] },
+  { key: "lumped", label: "Lumped on CoL", reasons: ["lumped"] },
+  {
+    key: "no_1to1",
+    label: "No 1:1 CoL match",
+    reasons: ["unmatched", "not_in_base", "provisional", "synonym_of", "missing_from_backbone", "classified_elsewhere"],
+  },
+  { key: "infraspecific", label: "Below species on CoL", reasons: ["infraspecific"] },
+];
+
+/** The bar a reason is drawn under, for labelling a tooltip block with the same
+ *  words the chart uses — a reader who filtered by a bar has to recognise it. */
+export function barForReason(reason: string): { key: string; label: string } | null {
+  const bar = REVISION_BARS.find((b) => b.reasons.includes(reason));
+  return bar ? { key: bar.key, label: bar.label } : null;
+}
 
 /**
  * Diagnosed by classifyNoMatch but deliberately NOT flagged on the dashboard.
@@ -112,7 +153,7 @@ export const REVISION_REASONS = [
  * EX/EW`. 103 assessed species are excluded that way — a real undercount that
  * predates this feature and wants its own fix.
  */
-export const UNFLAGGED_REASONS = ["extinct_unconfirmed", "not_in_base", "provisional", "synonym_of"] as const;
+export const UNFLAGGED_REASONS = ["extinct_unconfirmed"] as const;
 
 export type RevisionReasonCode = (typeof REVISION_REASONS)[number];
 

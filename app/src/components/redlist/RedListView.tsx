@@ -17,7 +17,7 @@ import { CATEGORY_COLORS, TAXA_BY_ID, THREATENED_CATEGORIES } from "@/config/tax
 import { speciesMatchesNode, getNodeDef, getViewRootForNode, findNode, matchesBreakdownName, breakdownDisplayName } from "@/lib/taxonomy-utils";
 import { dynamicNodeDisplayName } from "@/lib/dynamic-taxon";
 import ReviewerChart from "./ReviewerChart";
-import { REVISION_REASONS, REVISION_REASON_SHORT, REVISION_REASON_SUMMARY, revisionReasons, matchesRevisionFilter, isFlagged, colUrl, colDatasetUrl, colTaxonUrl, noMatchSentence, splitSummary, lumpSentence, type SplitSummary, newRevisionTally, tallyRevision, barTotal, REVISION_CAVEAT, type ColRevision } from "@/lib/col-revision";
+import { REVISION_BARS, barForReason, REVISION_REASON_SHORT, REVISION_REASON_SUMMARY, revisionReasons, matchesRevisionFilter, isFlagged, colUrl, colDatasetUrl, colTaxonUrl, noMatchSentence, splitSummary, lumpSentence, type SplitSummary, newRevisionTally, tallyRevision, barTotal, REVISION_CAVEAT, type ColRevision } from "@/lib/col-revision";
 import type { ColProvenance } from "@/app/api/col/provenance/route";
 import { parseAssessors } from "@/lib/parseAssessors";
 import { iucnRegionCountries, matchingRegions } from "@/lib/regions";
@@ -977,7 +977,10 @@ function RevisionTooltipContent({ flag, name, category }: { flag: ColRevision; n
         {sentences.map(({ code, node }, i) => (
           <div key={i}>
             <div className="text-[10px] font-semibold uppercase tracking-wide text-amber-300/80">
-              {REVISION_REASON_SHORT[code] ?? code}
+              {/* The BAR's words, not the reason's: a reader who filtered by
+                  "No 1:1 CoL match" has to recognise the block it returned.
+                  The sentence under it still gives the specific reason. */}
+              {barForReason(code)?.label ?? REVISION_REASON_SHORT[code] ?? code}
             </div>
             <div className="mt-0.5">{node}</div>
           </div>
@@ -3658,18 +3661,26 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
   // reason implies flagged, so it also lights the toggle.
   const taxonomicRevisionCard = (() => {
     const loading = speciesLoading && assessedSpecies.length === 0;
-    const barData = REVISION_REASONS
-      .map(reason => ({
-        code: REVISION_REASON_SHORT[reason] ?? reason,
-        rawCode: reason,
-        count: colTally.counts[reason] ?? 0,
-        label: (colTally.counts[reason] ?? 0).toLocaleString(),
+    // One bar can cover several reasons (see REVISION_BARS): a species carries
+    // exactly one reason, so summing members double-counts nothing.
+    const barCount = (bar: (typeof REVISION_BARS)[number]) =>
+      bar.reasons.reduce((n, r) => n + (colTally.counts[r] ?? 0), 0);
+    const barSelected = (bar: (typeof REVISION_BARS)[number]) =>
+      bar.reasons.some(r => selectedColReasons.has(r));
+    const barData = REVISION_BARS
+      .map(bar => ({
+        code: bar.label,
+        rawCode: bar.key,
+        count: barCount(bar),
+        label: barCount(bar).toLocaleString(),
       }))
-      .filter(d => d.count > 0 || selectedColReasons.has(d.rawCode))
+      .filter(d => d.count > 0 || selectedColReasons.size > 0)
       .sort((a, b) => b.count - a.count);
-    // FilterBarChart keys selection off the displayed `code`, not our reason id.
-    const selectedShort = new Set([...selectedColReasons].map(r => REVISION_REASON_SHORT[r] ?? r));
-    const shortToReason = new Map(barData.map(d => [d.code, d.rawCode]));
+    // FilterBarChart keys selection off the displayed `code`, not our bar key.
+    const selectedShort = new Set(REVISION_BARS.filter(barSelected).map(b => b.label));
+    const barByLabel = new Map(REVISION_BARS.map(b => [b.label, b]));
+    // Selecting a bar selects every reason it covers.
+    const reasonsForLabel = (label: string) => barByLabel.get(label)?.reasons ?? [];
     // A reason narrowing implies flagged, so the Flagged button renders pressed
     // whenever one is active — and clicking it then has to mean "turn the whole
     // thing off", not "switch flagged on" (setColMatch(null) drops the reasons
@@ -3724,15 +3735,21 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
                 dataKey="code"
                 selectedItems={selectedShort}
                 onBarClick={(data: { payload?: { code?: string } }, event: React.MouseEvent) => {
-                  const reason = data.payload?.code ? shortToReason.get(data.payload.code) : undefined;
-                  if (!reason) return;
-                  // Cmd/ctrl-click adds a reason (the reasons are mutually
-                  // exclusive per species, so multi-select is a union), plain
-                  // click replaces — same convention as Criteria/Threats.
+                  const reasons = data.payload?.code ? reasonsForLabel(data.payload.code) : [];
+                  if (!reasons.length) return;
+                  // Cmd/ctrl-click adds a bar (reasons are mutually exclusive per
+                  // species, so multi-select is a union), plain click replaces —
+                  // same convention as Criteria/Threats. A bar carries all of its
+                  // reasons in and out together, so the URL stays a reason list
+                  // and matchesRevisionFilter needs no notion of bars.
                   const isMulti = event.metaKey || event.ctrlKey;
+                  const has = reasons.every(r => selectedColReasons.has(r));
                   setColReasons(prev => {
-                    if (isMulti) { const next = new Set(prev); if (next.has(reason)) next.delete(reason); else next.add(reason); return next; }
-                    return (prev.size === 1 && prev.has(reason)) ? new Set<string>() : new Set([reason]);
+                    const next = new Set(isMulti ? prev : []);
+                    if (isMulti && has) reasons.forEach(r => next.delete(r));
+                    else if (!isMulti && has && prev.size === reasons.length) return new Set<string>();
+                    else reasons.forEach(r => next.add(r));
+                    return next;
                   });
                 }}
                 // This chart's bars are keyed by their display label, not the
@@ -3740,7 +3757,7 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
                 // a swept range comes back as short labels — map them before
                 // handing off to the shared additive/replace semantics.
                 onRangeSelect={(keys, event) => {
-                  const reasons = keys.flatMap(k => shortToReason.get(k) ?? []);
+                  const reasons = keys.flatMap(k => [...reasonsForLabel(k)]);
                   if (reasons.length) rangeSelectColReasons(reasons, event);
                 }}
                 barColor="#d97706"
@@ -5450,14 +5467,20 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
                 <span className="text-sm">×</span>
               </button>
             )}
-            {Array.from(selectedColReasons).map(reason => (
+            {/* One chip per BAR, not per reason: "No 1:1 CoL match" covers six
+                reasons, and six chips for one click would read as six filters. */}
+            {REVISION_BARS.filter(bar => bar.reasons.some(r => selectedColReasons.has(r))).map(bar => (
               <button
-                key={`col-reason-${reason}`}
-                onClick={() => setColReasons(prev => { const next = new Set(prev); next.delete(reason); return next; })}
-                title={REVISION_REASON_SUMMARY[reason] ?? reason}
+                key={`col-bar-${bar.key}`}
+                onClick={() => setColReasons(prev => {
+                  const next = new Set(prev);
+                  bar.reasons.forEach(r => next.delete(r));
+                  return next;
+                })}
+                title={bar.reasons.map(r => REVISION_REASON_SUMMARY[r]).filter(Boolean).join("; ")}
                 className="px-3 py-1.5 text-sm font-medium rounded-full bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-500 flex items-center gap-1 hover:opacity-80"
               >
-                ⚑ {REVISION_REASON_SHORT[reason] ?? reason}
+                ⚑ {bar.label}
                 <span className="text-sm">×</span>
               </button>
             ))}
