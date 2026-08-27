@@ -57,8 +57,8 @@ import { run as buildTaxaSummary } from "./build-taxa-summary";
 import { run as buildColRevisions } from "./build-col-revisions";
 import { run as checkSyncRegressions } from "./check-sync-regressions";
 import { run as buildSpeciesParquet } from "./build-parquet";
-import { run as fetchColXr, resolveXrDataset, currentReleaseOnDisk, writeReleaseMetadata } from "./fetch-col-xr";
-import { run as fetchColChecklist } from "./fetch-col-checklist";
+import { run as fetchColXr, resolveXrDataset, currentReleaseOnDisk, currentChecklistOnDisk, writeReleaseMetadata } from "./fetch-col-xr";
+import { run as fetchColChecklist, resolveChecklistDataset } from "./fetch-col-checklist";
 import { run as buildBackbone } from "./build-backbone";
 import { run as deriveGbifTaxonKeys } from "./derive-gbif-taxon-keys";
 import { run as buildMatching } from "./build-matching";
@@ -86,6 +86,9 @@ async function main() {
   const logger = new SyncLogger("sync");
   let coldpDir: string | null = null;
   let checklistTsv: string | null = null;
+  // Resolved before the download and written into the pin after a successful
+  // build, so a failed run can't leave the pin claiming a checklist we never used.
+  let checklistInfo: Awaited<ReturnType<typeof resolveChecklistDataset>> | null = null;
 
   try {
     logger.log("sync_start", { taxa: taxaFilter ?? "all", skipRedlist });
@@ -117,14 +120,29 @@ async function main() {
       // notification for this; the id is the only signal.
       const wantRelease = (await resolveXrDataset()).key;
       const haveRelease = currentReleaseOnDisk();
-      const releaseMoved = wantRelease !== haveRelease;
+      // The CURATED checklist moves independently of the XR — `3LR` was COL26.6 in
+      // June and COL26.8 by late August, while GBIF's XR pin had not moved at all.
+      // build-backbone stamps in_checklist / checklist_parent_id / checklist_name
+      // from it, and those carry claims the UI shows beside links to its pages, so
+      // gating solely on the XR would leave a rename displaying the old accepted
+      // name next to a link to the page that now disagrees. Checked before the
+      // download, since it is one metadata call against a 2 GB fetch.
+      checklistInfo = await resolveChecklistDataset();
+      const haveChecklist = currentChecklistOnDisk();
+      const xrMoved = wantRelease !== haveRelease;
+      const checklistMoved = checklistInfo.issued !== haveChecklist;
+      const releaseMoved = xrMoved || checklistMoved;
 
       if (!releaseMoved && fs.existsSync(path.join(DATA_DIR, "backbone.parquet"))) {
-        console.log(`\nPhases 2-4 (CoL backbone): skipped — GBIF still indexes release ${wantRelease}, already built.`);
+        console.log(`\nPhases 2-4 (CoL backbone): skipped — GBIF still indexes release ${wantRelease} and the curated checklist is still ${checklistInfo.alias}, already built.`);
       } else {
-        if (haveRelease) {
+        if (haveRelease && xrMoved) {
           console.log(`\nGBIF's indexed CoL release moved: ${haveRelease} → ${wantRelease}.`);
           console.log("Species keys are renumbered between releases, so the backbone is rebuilt.");
+        }
+        if (checklistMoved) {
+          console.log(`\nCurated checklist moved: ${haveChecklist ?? "(unpinned)"} → ${checklistInfo.issued} (${checklistInfo.alias}).`);
+          console.log("in_checklist / checklist_parent_id / checklist_name come from it, so the backbone is rebuilt.");
         }
         console.log("\nPhase 2: fetch-col-xr (CoL XR ColDP → NameUsage.tsv + Reference.tsv + VernacularName.tsv)");
         console.log("═".repeat(60));
@@ -175,7 +193,7 @@ async function main() {
         // test above reads. Writing it any earlier lets a failure in between
         // leave a pin claiming to be current while the keys are not — and since
         // the skip then fires, the phase that would fix them never runs again.
-        writeReleaseMetadata(coldp.xrDataset);
+        writeReleaseMetadata(coldp.xrDataset, checklistInfo ?? undefined);
       }
 
     } else {

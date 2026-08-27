@@ -45,6 +45,35 @@ import { loadEnvFiles } from "./utils";
 
 const CHECKLIST_DATASET = process.env.COL_CHECKLIST_DATASET || "3LR";
 
+/** Which curated release `3LR` currently points at. */
+export interface ChecklistInfo {
+  key: string;
+  alias: string;
+  issued: string;
+}
+
+/**
+ * Resolve the alias to the concrete release behind it.
+ *
+ * `3LR` is a MOVING pointer — it was COL26.6 in June and is COL26.8 now — while
+ * the XR pin follows GBIF's occurrence index and moves on its own schedule. The
+ * two are routinely months apart, so "has the XR moved?" cannot answer "is our
+ * checklist-derived data current?". build-backbone stamps in_checklist,
+ * checklist_parent_id and checklist_name from this release, and those carry
+ * user-facing claims with links to its pages, so a stale one shows the old
+ * accepted name beside a link to the page that now disagrees.
+ *
+ * One metadata call, so the sync can compare before committing to a 2 GB download.
+ */
+export async function resolveChecklistDataset(): Promise<ChecklistInfo> {
+  const res = await fetch(`https://api.checklistbank.org/dataset/${CHECKLIST_DATASET}`);
+  if (!res.ok) throw new Error(`Checklist metadata fetch failed (${CHECKLIST_DATASET}): ${res.status}`);
+  const d = (await res.json()) as { key?: number | string; alias?: string; issued?: string; version?: string };
+  const issued = d.issued ?? d.version ?? "";
+  if (!d.key || !issued) throw new Error(`Checklist metadata missing key/issued for ${CHECKLIST_DATASET}`);
+  return { key: String(d.key), alias: d.alias ?? CHECKLIST_DATASET, issued };
+}
+
 export async function run(opts: { destDir?: string } = {}): Promise<string> {
   const destDir = opts.destDir || fs.mkdtempSync(path.join(os.tmpdir(), "col-checklist-"));
   fs.mkdirSync(destDir, { recursive: true });

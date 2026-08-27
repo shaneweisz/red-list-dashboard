@@ -2,5 +2,10 @@
   "key": "315557",
   "alias": "COL26.6 XR",
   "doi": "10.48580/dgy8b",
-  "issued": "2026-06-19"
+  "issued": "2026-06-19",
+  "checklist": {
+    "key": "316115",
+    "alias": "COL26.8",
+    "issued": "2026-08-20"
+  }
 }
