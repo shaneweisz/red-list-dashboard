@@ -10,7 +10,7 @@
  *     split out of this one. Its CoL match is usually clean; the revision is
  *     that CoL has carved new species off it.
  *
- * They are near-disjoint in practice (151 of ~9.7k flagged species carry both),
+ * They are near-disjoint in practice (89 of ~8.7k flagged species carry both),
  * but they ARE independent, so the filter chart's bars do not partition the
  * flagged set — a species with both counts toward two bars, the same way the
  * Criteria and Habitat charts already work.
@@ -38,8 +38,6 @@ export const REVISION_REASONS = [
   "lumped",
   "infraspecific",
   "unmatched",
-  "not_in_base",
-  "provisional",
   "synonym_of",
   "missing_from_backbone",
   "classified_elsewhere",
@@ -48,19 +46,31 @@ export const REVISION_REASONS = [
 /**
  * The bars the chart draws. A bar is not always one reason.
  *
- * not_in_base, provisional and synonym_of were each dropped from the card on
- * their own merits — CoL's release vocabulary, CoL's editorial confidence, and a
- * name change that leaves the taxon alone. All three still hold AS NAMED
- * REASONS: none of them finishes "…so this assessment may need a look because".
+ * "No 1:1 CoL match" is the one bar covering several, and it means exactly what
+ * it says: we cannot pin this assessment to ONE Catalogue of Life species.
+ * Either there are no candidates (`unmatched` — CoL holds no record of the name
+ * at any status in any release) or there are two that disagree (`synonym_of` —
+ * CoL's extended release accepts the name while its curated checklist files it
+ * as a synonym of a different accepted species: Acanthoptila nipalensis ->
+ * Turdoides nipalensis). Zero or two, never one.
  *
- * Together they support a claim none of them makes alone, and it is about US
- * rather than about IUCN: this assessment does not correspond to exactly one
- * accepted CoL species, so every CoL-derived figure we show for it is
- * unreliable. That is a caveat on our own columns, not a verdict on the
- * assessment — which is why it survives the objections that removed the
- * individual reasons. It needs no CoL vocabulary, implies nothing about who is
- * right, and tells a reader precisely which rows to distrust. 2,755 species
- * that fail the 1:1 match carried no flag at all before it.
+ * That is a caveat on OUR columns rather than a verdict on the assessment, which
+ * is why the bar survives when the individual findings under it would not stand
+ * alone. It needs no CoL vocabulary and implies nothing about who is right.
+ *
+ * synonym_of is flagged but gets no bar OF ITS OWN, and the label such a bar
+ * would need is the reason. "CoL's accepted name differs" claims more than the
+ * data supports: 87 of its 88 members are CoL's two releases disagreeing with
+ * each other, not CoL settling on a different name. And there is often no single
+ * accepted name to report — CoL marks 135,881 usages "ambiguous synonym", and
+ * holds one name as BOTH accepted and synonym for 4,623 assessed species. Two
+ * checklists can differ permanently on a species concept without either being
+ * wrong (CoL recognises two Dasycercus; the 2023 revision and IUCN recognise
+ * six). Under the catch-all it makes the weaker claim that is true: we cannot
+ * pick one.
+ *
+ * What the bar deliberately does NOT cover is the pair whose record CoL holds
+ * exactly once, just not in its curated checklist — see UNFLAGGED_REASONS.
  *
  * The bar is the catch-all; the TOOLTIP stays specific, because every one of
  * these reasons still has its own sentence.
@@ -71,7 +81,7 @@ export const REVISION_BARS: readonly { key: string; label: string; reasons: read
   {
     key: "no_1to1",
     label: "No 1:1 CoL match",
-    reasons: ["unmatched", "not_in_base", "provisional", "synonym_of", "missing_from_backbone", "classified_elsewhere"],
+    reasons: ["unmatched", "synonym_of", "missing_from_backbone", "classified_elsewhere"],
   },
   { key: "infraspecific", label: "Below species on CoL", reasons: ["infraspecific"] },
 ];
@@ -98,53 +108,45 @@ export function barForReason(reason: string): { key: string; label: string } | n
  *    extinct, including the common and abundant C. arquatrix and C. elphinstonii.
  *    That is one contaminated upstream block, not a signal.
  *
- * "not_in_base" (1,786) and "provisional" (244) fail the same test, and were
- * removed for it after they had shipped as bars.
+ * "not_in_base" (2,113) and "provisional" (494) are the other two, and they are
+ * one case: CoL holds the record exactly once, at species rank, under a col_id
+ * we already use. It is simply not in CoL's CURATED checklist, or is in it with
+ * a hedged status.
  *
- * The test: every other bar finishes the sentence "…so this assessment may need
- * a look because…". Split — it may cover populations now assigned elsewhere.
- * Lumped — it may double-count with another assessment. Subspecies on CoL — the
- * rank may have moved under it. For "the record is in CoL's extended release but
- * not its curated checklist", the honest ending is "…so nothing, necessarily".
- * Nothing has been split, lumped, renamed or demoted; both describe CoL's own
- * editorial state — which of its two release products carries the record, and
- * how confident its editors are — rather than the taxon.
+ * Both shipped as bars, were dropped, then briefly came back under the "No 1:1
+ * CoL match" bar. The return was the mistake, and what makes it one is the
+ * plainest fact in this file: GBIF's occurrence index is BUILT on CoL's extended
+ * release, so an XR-only col_id is exactly as usable as a curated one — and we
+ * use it. 920 of the not_in_base species and 327 of the provisional ones carry
+ * live GBIF occurrence counts on the dashboard, 10.6 million records pulled
+ * through links the bar was simultaneously calling "no match".
  *
- * They also cost the reader CoL's product vocabulary. "XR", "Base" and
- * "provisionally accepted" name CoL's releases and internal statuses; a Red List
- * assessor has no reason to know any of them, and at 1,786 not_in_base was the
- * third-largest bar, crowding the signals that do carry an action.
+ * So the bar's claim is false of them. Their match IS 1:1. What differs is which
+ * CoL product carries it and how confident CoL's editors are — CoL's editorial
+ * state, not the arity of our mapping, and nothing a Red List assessor can act
+ * on. They also cost the reader CoL's product vocabulary: "XR", "Base" and
+ * "provisionally accepted" name CoL's releases and internal statuses, which an
+ * assessor has no reason to know, and at 2,113 not_in_base was large enough to
+ * crowd the signals that do carry an action.
+ *
+ * A measurement that looks decisive and is not, recorded so nobody redoes it:
+ * 433 of the 494 provisional records ARE in the curated checklist, against 29 of
+ * the 2,113 not_in_base ones — which reads as grounds for treating the two
+ * differently. It measures how confident CoL is in a record. The bar asks
+ * whether WE can map the assessment to one species. Both answer yes.
  *
  * The counter-argument, and why it resolves: sampling showed not_in_base names
  * often ARE synonyms in current usage (80% sit in a genus the curated checklist
  * covers thoroughly). But wherever that can actually be established the
- * classifier already reports it as synonym_of, which names the accepted species.
- * not_in_base is precisely the residue where we cannot say what it means.
+ * classifier already reports it as synonym_of, which names the accepted species
+ * and IS flagged. not_in_base is precisely the residue where we cannot say.
  *
- * "synonym_of" was removed last, and it is the subtlest of the four.
+ * What this does leave: col_described counts only in_base records, so these
+ * 2,607 assessed species sit in the numerator with no denominator entry. Against
+ * a ~2.4M denominator that is noise, and it wants a coverage-table footnote
+ * rather than a flag on a species row.
  *
- * A synonym is not a problem. Split, lumped and infraspecific all put the
- * assessment's SCOPE in question — does it cover the right populations, is it
- * double-counting, has the rank moved under it. Synonymy puts none of that in
- * question: it is the same taxon under a different label, which is what synonymy
- * means. The assessment is fine and CoL simply calls it something else, so the
- * sentence ends "…so nothing".
- *
- * It also claimed more than the data supports. 87 of its 88 members were not
- * "CoL accepts a different name" at all — they were CoL's EXTENDED release
- * accepting the name while its CURATED release filed it as a synonym. That is
- * the two products disagreeing with each other, i.e. the same editorial state
- * not_in_base describes, wearing a label that reads as a verdict about the name.
- *
- * And there is often no single accepted name to report. CoL marks 135,881 usages
- * "ambiguous synonym" — the application is uncertain by CoL's own account — and
- * holds one name as BOTH accepted and synonym for 4,623 assessed species. Two
- * checklists can differ permanently on a species concept without either being
- * wrong (CoL recognises two Dasycercus; the 2023 revision and IUCN recognise
- * six). "The accepted name" is checklist-relative, and a bar asserting one
- * flattens that.
- *
- * All four still exist, and the SSC group view still reports them: there they
+ * All three still exist, and the SSC group view still reports them: there they
  * sit in a panel explicitly about CoL-match diagnostics, which is the right home
  * for "CoL says something odd here".
  *
@@ -153,7 +155,7 @@ export function barForReason(reason: string): { key: string; label: string } | n
  * EX/EW`. 103 assessed species are excluded that way — a real undercount that
  * predates this feature and wants its own fix.
  */
-export const UNFLAGGED_REASONS = ["extinct_unconfirmed"] as const;
+export const UNFLAGGED_REASONS = ["extinct_unconfirmed", "not_in_base", "provisional"] as const;
 
 export type RevisionReasonCode = (typeof REVISION_REASONS)[number];
 

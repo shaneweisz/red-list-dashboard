@@ -86,19 +86,30 @@ describe("UNFLAGGED_REASONS", () => {
     expect(REVISION_REASONS as readonly string[]).not.toContain("extinct_unconfirmed");
   });
 
-  it("gives CoL's editorial state no bar of its OWN, but does not hide it", () => {
-    // not_in_base, provisional and synonym_of each fail the "…so this assessment
-    // may need a look because…" test on their own — CoL's release vocabulary,
-    // CoL's editorial confidence, a name change that leaves the taxon alone. So
-    // none of them is its own bar. Together they support the claim none makes
-    // alone, and it is about us: this assessment maps to no single accepted CoL
-    // species, so our CoL columns for it cannot be trusted. 2,755 species failing
-    // the 1:1 match carried no flag at all when these were merely dropped.
-    const catchAll = REVISION_BARS.find((b) => b.key === "no_1to1")!;
-    for (const reason of ["not_in_base", "provisional", "synonym_of", "unmatched"]) {
-      expect(catchAll.reasons, reason).toContain(reason);
-      expect(REVISION_BARS.some((b) => b.key === reason), reason).toBe(false);
+  it("keeps CoL's own editorial state off the card entirely", () => {
+    // not_in_base and provisional describe which CoL product carries the record
+    // and how sure its editors are — not whether WE can map the assessment. CoL
+    // holds each exactly once, GBIF's index is built on that same extended
+    // release, and 10.6M occurrence records already reach the dashboard through
+    // those links. Flagging them denies a match we are actively using.
+    for (const reason of ["not_in_base", "provisional"]) {
+      expect(UNFLAGGED_REASONS as readonly string[], reason).toContain(reason);
+      expect(REVISION_REASONS as readonly string[], reason).not.toContain(reason);
+      expect(REVISION_BARS.some((b) => b.reasons.includes(reason)), reason).toBe(false);
     }
+  });
+
+  it("limits the catch-all bar to genuine arity failures", () => {
+    // "No 1:1 CoL match" has to be literally true of everything under it: zero
+    // candidates (unmatched) or two that disagree (synonym_of). A reason where
+    // CoL holds exactly one record does not belong, however hedged that record.
+    const catchAll = REVISION_BARS.find((b) => b.key === "no_1to1")!;
+    expect([...catchAll.reasons].sort()).toEqual(
+      ["classified_elsewhere", "missing_from_backbone", "synonym_of", "unmatched"],
+    );
+    // synonym_of is flagged, but a bar of its own would have to be labelled
+    // "CoL's accepted name differs" — a claim 87 of its 88 members don't support.
+    expect(REVISION_BARS.some((b) => b.key === "synonym_of")).toBe(false);
   });
 
   it("still gives it wording, since the SSC group view reports it", () => {
