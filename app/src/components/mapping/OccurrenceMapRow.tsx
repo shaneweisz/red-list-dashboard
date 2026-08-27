@@ -6648,45 +6648,10 @@ export default function OccurrenceMapRow({
                         record list, and that list only exists in fullscreen. */}
                     {fullscreen && (
                       <>
-                      {/* Undo, redo, and what they'd act on. The label matters
-                          more than usual here: the table can hide the very rows an
-                          edit touched, so an unlabelled undo would act off-screen
-                          with nothing to say for itself. */}
-                      <div className="flex items-center rounded border border-zinc-300 dark:border-zinc-600 overflow-hidden">
-                        <button
-                          onClick={undoEdit}
-                          disabled={!canUndo}
-                          title={canUndo ? `Undo ${undoLabel ?? "the last edit"} (\u2318Z)` : "Nothing to undo"}
-                          className="px-1.5 py-1 text-xs text-zinc-600 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800 disabled:opacity-30 disabled:cursor-not-allowed"
-                        >
-                          <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                            <path strokeLinecap="round" strokeLinejoin="round" d="M9 14L4 9l5-5M4 9h11a5 5 0 010 10h-3" />
-                          </svg>
-                        </button>
-                        <button
-                          onClick={redoEdit}
-                          disabled={!canRedo}
-                          title={canRedo ? `Redo ${redoLabel ?? "the last undone edit"} (\u21e7\u2318Z)` : "Nothing to redo"}
-                          className="px-1.5 py-1 text-xs text-zinc-600 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800 disabled:opacity-30 disabled:cursor-not-allowed border-l border-zinc-200 dark:border-zinc-700"
-                        >
-                          <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                            <path strokeLinecap="round" strokeLinejoin="round" d="M15 14l5-5-5-5M20 9H9a5 5 0 000 10h3" />
-                          </svg>
-                        </button>
-                        {editHistory.length > 0 && (
-                          <button
-                            onClick={() => setHistoryOpen((v) => !v)}
-                            title="Everything you've changed this session"
-                            className="px-1.5 py-1 text-[10px] tabular-nums text-zinc-500 dark:text-zinc-400 hover:bg-zinc-50 dark:hover:bg-zinc-800 border-l border-zinc-200 dark:border-zinc-700"
-                          >
-                            {editHistory.filter((h) => !h.undone).length}
-                          </button>
-                        )}
-                      </div>
-                      {/* Saving the work, and putting a saved file back. Beside
-                          the undo history rather than hidden in a menu: the
-                          edits live in this browser only, and the button that
-                          gets them out of it should be the one you can see. */}
+                      {/* Saving the work, and putting a saved file back. First
+                          in the row and not in a menu: the edits live in this
+                          browser only, and the button that gets them out of it
+                          should be the one you can see. */}
                       <div className="inline-flex rounded border border-zinc-300 dark:border-zinc-600 overflow-hidden">
                         <button
                           onClick={saveWork}
@@ -6728,6 +6693,41 @@ export default function OccurrenceMapRow({
                             if (file) readRestoreFile(file);
                           }}
                         />
+                      </div>
+                      {/* Undo, redo, and what they'd act on. The label matters
+                          more than usual here: the table can hide the very rows an
+                          edit touched, so an unlabelled undo would act off-screen
+                          with nothing to say for itself. */}
+                      <div className="flex items-center rounded border border-zinc-300 dark:border-zinc-600 overflow-hidden">
+                        <button
+                          onClick={undoEdit}
+                          disabled={!canUndo}
+                          title={canUndo ? `Undo ${undoLabel ?? "the last edit"} (\u2318Z)` : "Nothing to undo"}
+                          className="px-1.5 py-1 text-xs text-zinc-600 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800 disabled:opacity-30 disabled:cursor-not-allowed"
+                        >
+                          <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M9 14L4 9l5-5M4 9h11a5 5 0 010 10h-3" />
+                          </svg>
+                        </button>
+                        <button
+                          onClick={redoEdit}
+                          disabled={!canRedo}
+                          title={canRedo ? `Redo ${redoLabel ?? "the last undone edit"} (\u21e7\u2318Z)` : "Nothing to redo"}
+                          className="px-1.5 py-1 text-xs text-zinc-600 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800 disabled:opacity-30 disabled:cursor-not-allowed border-l border-zinc-200 dark:border-zinc-700"
+                        >
+                          <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M15 14l5-5-5-5M20 9H9a5 5 0 000 10h3" />
+                          </svg>
+                        </button>
+                        {editHistory.length > 0 && (
+                          <button
+                            onClick={() => setHistoryOpen((v) => !v)}
+                            title="Everything you've changed this session"
+                            className="px-1.5 py-1 text-[10px] tabular-nums text-zinc-500 dark:text-zinc-400 hover:bg-zinc-50 dark:hover:bg-zinc-800 border-l border-zinc-200 dark:border-zinc-700"
+                          >
+                            {editHistory.filter((h) => !h.undone).length}
+                          </button>
+                        )}
                       </div>
                       <button
                         onClick={() => setPointFileOpen(true)}
