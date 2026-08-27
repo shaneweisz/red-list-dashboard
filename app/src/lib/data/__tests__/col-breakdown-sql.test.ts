@@ -44,20 +44,21 @@ beforeAll(async () => {
   // in_checklist / checklist_parent_id = what CoL's CURRENT RELEASE says, as
   // distinct from the extended release the rest of the backbone comes from.
   await copy(`SELECT * FROM (VALUES
-      ('IN1', NULL, 'accepted', 'species', 'Clean species', true, NULL),
-      ('XR1', NULL, 'accepted', 'species', 'Xr onlyus', false, NULL),
-      ('LUMP', NULL, 'accepted', 'species', 'Lump winner', true, NULL),
-      ('SYN1', 'IN1', 'synonym', 'species', 'Renamed away', true, 'IN1'),
-      ('SUB1', 'IN1', 'accepted', 'subspecies', 'Clean species demoted', true, NULL),
+      ('IN1', NULL, 'accepted', 'species', 'Clean species', true, NULL, NULL),
+      ('XR1', NULL, 'accepted', 'species', 'Xr onlyus', false, NULL, NULL),
+      ('LUMP', NULL, 'accepted', 'species', 'Lump winner', true, NULL, 'Lump winnerus'),
+      ('SYN1', 'IN1', 'synonym', 'species', 'Renamed away', true, 'IN1', NULL),
+      ('SUB1', 'IN1', 'accepted', 'subspecies', 'Clean species demoted', true, NULL, NULL),
       -- The Hylomyscus anselli shape: the XR accepts the name AND separately holds
       -- it as a synonym of something else, and the release contains neither record.
-      ('ANS', NULL, 'accepted', 'species', 'Anselli test', false, NULL),
-      ('ANSSYN', 'IN1', 'synonym', 'species', 'Anselli test', false, NULL),
+      ('ANS', NULL, 'accepted', 'species', 'Anselli test', false, NULL, NULL),
+      ('ANSSYN', 'IN1', 'synonym', 'species', 'Anselli test', false, NULL, NULL),
       -- One name the release files as a synonym of TWO different accepted species.
-      ('AMBX', NULL, 'accepted', 'species', 'Ambiguous target', false, NULL),
-      ('AMB1', 'IN1', 'synonym', 'species', 'Ambiguous target', true, 'IN1'),
-      ('AMB2', 'LUMP', 'synonym', 'species', 'Ambiguous target', true, 'LUMP')
-    ) v(col_id, parent_id, status, rank, scientific_name, in_checklist, checklist_parent_id)`, "backbone.parquet");
+      ('AMBX', NULL, 'accepted', 'species', 'Ambiguous target', false, NULL, NULL),
+      ('AMB1', 'IN1', 'synonym', 'species', 'Ambiguous target', true, 'IN1', NULL),
+      ('AMB2', 'LUMP', 'synonym', 'species', 'Ambiguous target', true, 'LUMP', NULL),
+      ('SPELL', 'LUMP', 'synonym', 'species', 'Spelling case', true, 'LUMP', NULL)
+    ) v(col_id, parent_id, status, rank, scientific_name, in_checklist, checklist_parent_id, checklist_name)`, "backbone.parquet");
 
   await copy(`SELECT * FROM (VALUES
       (1::BIGINT, 'Clean species', 'LC'),
@@ -68,7 +69,8 @@ beforeAll(async () => {
       (6::BIGINT, 'Lump loser', 'LC'),
       (7::BIGINT, 'Nothing at all', 'LC'),
       (8::BIGINT, 'Anselli test', 'LC'),
-      (9::BIGINT, 'Ambiguous target', 'LC')
+      (9::BIGINT, 'Ambiguous target', 'LC'),
+      (10::BIGINT, 'Spelling case', 'LC')
     ) v(id, scientific_name, iucn_category)`, "assessed.parquet");
 
   await copy(`SELECT * FROM (VALUES
@@ -80,7 +82,8 @@ beforeAll(async () => {
       ('redlist', 6::BIGINT, 'Lump loser', 'LUMP', 'synonym'),
       ('redlist', 7::BIGINT, 'Nothing at all', NULL, 'unmatched'),
       ('redlist', 8::BIGINT, 'Anselli test', 'ANS', 'accepted'),
-      ('redlist', 9::BIGINT, 'Ambiguous target', 'AMBX', 'accepted')
+      ('redlist', 9::BIGINT, 'Ambiguous target', 'AMBX', 'accepted'),
+      ('redlist', 10::BIGINT, 'Spelling case', 'XR1', 'accepted')
     ) v(src, id, scientific_name, col_id, match_method)`, "species_link.parquet");
 
   // The same temp tables the real caller builds before running the diagnostic.
@@ -142,5 +145,11 @@ describe("computeNoMatchDetails — the query, not just the classifier", () => {
     // no rename is claimed at all.
     expect(byId.get(9)?.reason).toBe("not_in_base");
     expect(byId.get(9)?.detail).toBeUndefined();
+
+    // The name shown beside a link to the release must be the RELEASE's spelling
+    // ("Lump winnerus"), not the XR's ("Lump winner") — the text and the page it
+    // sends you to have to agree.
+    expect(byId.get(10)?.reason).toBe("synonym_of");
+    expect(byId.get(10)?.detail).toBe("Lump winnerus");
   });
 });

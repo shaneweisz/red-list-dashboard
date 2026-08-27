@@ -407,7 +407,10 @@ export async function computeNoMatchDetails(
     -- unflagged rather than misflagged, which is the right direction to fail.
     syn_in_checklist AS (
       SELECT lname, any_value(col_id) AS col_id, any_value(name) AS name FROM (
-        SELECT lower(syn.scientific_name) AS lname, acc.col_id AS col_id, acc.scientific_name AS name
+        -- The release's spelling where it has one: this name is displayed next to
+        -- a link to the release's page, so it must match what is on that page.
+        SELECT lower(syn.scientific_name) AS lname, acc.col_id AS col_id,
+               coalesce(acc.checklist_name, acc.scientific_name) AS name
         FROM read_parquet('${ctx.backbonePath}') syn
         JOIN read_parquet('${ctx.backbonePath}') acc
           ON acc.col_id = syn.checklist_parent_id AND acc.in_checklist

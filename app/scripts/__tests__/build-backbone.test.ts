@@ -127,6 +127,11 @@ beforeAll(async () => {
   fs.writeFileSync(checklistTsv, [
     ["col:ID", "col:parentID", "col:status", "col:rank", "col:scientificName"].join("\t"),
     ["1", "G1", "accepted", "species", "Panthera leo"].join("\t"),
+    // The release spells this one differently from the XR ("Testus citatius"),
+    // exactly as Witheringia stramonifolia / stramoniifolia differ by a letter.
+    ["8", "G1", "accepted", "species", "Testus citatus"].join("\t"),
+    // Identical once the XR's subgenus parenthetical is stripped, so no override.
+    ["7", "G1", "accepted", "species", "Peropteryx leucoptera"].join("\t"),
     ["10", "1", "synonym", "species", "Felis splitta"].join("\t"),
     // CoL saying the name's application is UNCERTAIN. It still demotes, but it
     // must not yield an accepted name for anyone to claim.
@@ -196,6 +201,21 @@ describe("build-backbone species universe", () => {
     // which is what a rename claim has to be sourced from.
     expect(by.get("10")?.in_checklist).toBe(true);
     expect(by.get("10")?.checklist_parent_id).toBe("1");
+  });
+
+  it("records the release's own spelling, and only when it differs", async () => {
+    const rows = await query(`SELECT col_id, scientific_name, checklist_name
+                              FROM read_parquet('${backbone}') WHERE col_id IN ('1','7','8')`);
+    const by = new Map(rows.map((r: Record<string, unknown>) => [String(r.col_id), r]));
+    // Differs by a letter → carry the release's, since that is what its page says.
+    expect(by.get("8")?.scientific_name).toBe("Testus citatius");
+    expect(by.get("8")?.checklist_name).toBe("Testus citatus");
+    // Same spelling → null, so the column stays empty for all but a handful.
+    expect(by.get("1")?.checklist_name).toBeNull();
+    // Same once the XR's subgenus parenthetical is stripped → also null, i.e. the
+    // comparison runs on normalised names, not raw ColDP strings.
+    expect(by.get("7")?.scientific_name).toBe("Peropteryx leucoptera");
+    expect(by.get("7")?.checklist_name).toBeNull();
   });
 
   it("refuses to name an accepted species from an AMBIGUOUS synonym", async () => {

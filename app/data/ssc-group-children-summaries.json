@@ -19020,7 +19020,9 @@
             {
               "id": 80228941,
               "name": "Xeroderus kirbii",
-              "reason": "not_in_base",
+              "reason": "synonym_of",
+              "detail": "Xeroderus kirbyi",
+              "detailColId": "TNBNQ",
               "colId": "TNBNQ",
               "colName": "Xeroderus kirbii"
             },
@@ -53907,7 +53909,7 @@
               "id": 146114175,
               "name": "Brachistus stramoniifolius",
               "reason": "synonym_of",
-              "detail": "Witheringia stramoniifolia",
+              "detail": "Witheringia stramonifolia",
               "detailColId": "VLDMT",
               "colId": "VLDMT",
               "colName": "Witheringia stramoniifolia"

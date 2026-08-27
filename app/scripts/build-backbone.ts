@@ -177,7 +177,7 @@ export async function run(
   // demotedColIds test path): in_checklist is then false for every row, which
   // reads as "we cannot confirm this is in the curated release" — the safe
   // direction, since every consumer uses it to WITHHOLD a claim.
-  await conn.run(`CREATE TEMP TABLE checklist(col_id VARCHAR, status VARCHAR, rank VARCHAR, parent_id VARCHAR);`);
+  await conn.run(`CREATE TEMP TABLE checklist(col_id VARCHAR, status VARCHAR, rank VARCHAR, parent_id VARCHAR, scientific_name VARCHAR);`);
   if (opts.demotedColIds) {
     if (opts.demotedColIds.length) {
       await conn.run(`INSERT INTO demoted VALUES ${opts.demotedColIds.map((i) => `('${i.replace(/'/g, "''")}')`).join(",")};`);
@@ -190,7 +190,10 @@ export async function run(
     await conn.run(`
       INSERT INTO checklist
         SELECT "col:ID" AS col_id, "col:status" AS status, "col:rank" AS rank,
-               "col:parentID" AS parent_id
+               "col:parentID" AS parent_id,
+               -- Same normalisation the XR names get below, so the two are
+               -- comparable and the stored value is display-ready.
+               trim(regexp_replace(regexp_replace("col:scientificName", '\\([^)]*\\)', '', 'g'), '\\s+', ' ', 'g')) AS scientific_name
         FROM read_csv('${demotionsTsv}', delim='\t', header=true, quote='', ignore_errors=true, all_varchar=true)
         WHERE "col:ID" IS NOT NULL;`);
     await conn.run(`
@@ -254,7 +257,17 @@ export async function run(
              -- the status disclaims — Pararge xiphia, an ambiguous synonym of
              -- Pararge megera, was reported as a definite rename. 135,881 rows
              -- took a parent from an ambiguous synonym.
-             CASE WHEN lower(cl.status) = 'synonym' THEN cl.parent_id END AS checklist_parent_id
+             CASE WHEN lower(cl.status) = 'synonym' THEN cl.parent_id END AS checklist_parent_id,
+             -- The release's own spelling, stored ONLY where it differs from the
+             -- XR's — so it is null for all but a handful of rows and costs
+             -- almost nothing. Whatever text we show alongside a link to the
+             -- release has to be the text on that page: Witheringia
+             -- stramoniifolia (XR) and stramonifolia (release) are the same
+             -- species one letter apart, and displaying the wrong one is a milder
+             -- form of the mismatch that made Stenocranius raddei confusing.
+             CASE WHEN cl.scientific_name IS NOT NULL
+                       AND cl.scientific_name <> nu.scientific_name
+                  THEN cl.scientific_name END AS checklist_name
       FROM nu LEFT JOIN checklist cl ON cl.col_id = nu.col_id
     )
     TO '${backboneOut}' (FORMAT PARQUET, COMPRESSION ZSTD);
