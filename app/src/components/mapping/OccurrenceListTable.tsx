@@ -143,7 +143,7 @@ const EXTRA_COLUMNS: { key: string; label: string; title: string; numeric?: bool
 ];
 
 /** Never hidden, and never offered in the column picker. */
-const ALWAYS_VISIBLE_COLUMNS = new Set(["rowNumber", "putBack", "reason", "duplicates", "marks", "media", "type"]);
+const ALWAYS_VISIBLE_COLUMNS = new Set(["rowNumber", "putBack", "reason", "duplicates", "marks"]);
 
 /** Shown until someone changes it: the fields an assessor reads first. */
 const DEFAULT_VISIBLE_COLUMNS = [
@@ -285,6 +285,9 @@ interface ColumnDef {
   /** A control drawn in the header beside the label — the Included column's
    *  show/hide toggle. Its own clicks are kept off the sort handler. */
   headerExtra?: React.ReactNode;
+  /** Half the usual side padding: for a column of one glyph, the padding was
+   *  most of the column. */
+  compact?: boolean;
   /** Draws only `headerExtra` in the header: the eye says "shown" by itself,
    *  and the word beside it was spending a column's width on saying it twice.
    *  The label is still what the column picker lists. */
@@ -815,6 +818,7 @@ export default function OccurrenceListTable({
       {
         key: "rowNumber",
         label: "#",
+        compact: true,
         title: "The row's place in the list as it's currently sorted",
         className: "whitespace-nowrap tabular-nums w-8",
         align: "right" as const,
@@ -835,6 +839,7 @@ export default function OccurrenceListTable({
             {
               key: "duplicates",
               label: "",
+              compact: true,
               title: "Records set aside as duplicates of this one",
               className: "whitespace-nowrap w-8",
               value: (p: OccurrenceFeature["properties"]) => duplicates.get(p.gbifID)?.length ?? 0,
@@ -887,97 +892,73 @@ export default function OccurrenceListTable({
             } as ColumnDef,
           ]
         : []),
-      // The same flag the map flies beside a questioned point, so a record
-      // that is being questioned says so in both places — and says why on
-      // hover, rather than spending a column on the reasons.
+      // One column for everything the row says about itself in a symbol: a
+      // flag where the record is questioned, a star where it is a type
+      // specimen, a camera where the publisher attached a photograph. Three
+      // columns of padding for three glyphs was most of the margin.
       {
         key: "marks",
         label: "",
-        title: "Coordinate-cleaning checks this record trips, and whether it falls outside the species' native range",
-        className: "whitespace-nowrap w-5",
-        value: (p: OccurrenceFeature["properties"]) => flagsOf(p, isOutsideNativeRange).length,
+        title:
+          "What this record carries: a flag for the cleaning checks it trips or a range it falls outside, a star for a type specimen, a camera for a photograph",
+        className: "whitespace-nowrap",
+        compact: true,
+        value: (p: OccurrenceFeature["properties"]) =>
+          flagsOf(p, isOutsideNativeRange).length + (p.typeStatus ? 1 : 0) + (p.images?.length ?? 0),
         render: (p: OccurrenceFeature["properties"]) => {
           const flags = flagsOf(p, isOutsideNativeRange);
-          if (flags.length === 0) return <span />;
-          return (
-            <span
-              onMouseEnter={(e) => {
-                const box = (e.currentTarget as HTMLElement).getBoundingClientRect();
-                setHoverNote({ text: flags.join(" · "), x: box.right + 8, y: box.top - 2 });
-              }}
-              onMouseLeave={() => setHoverNote(null)}
-              className="block text-amber-600 dark:text-amber-500 cursor-help"
-            >
-              <svg className="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M5 22V3m0 0h12l-2 4 2 4H5" />
-              </svg>
-            </span>
-          );
-        },
-      } as ColumnDef,
-      // A type specimen is the sheet a name is attached to — the one a
-      // taxonomist would travel to see. Worth a mark of its own beside the
-      // flag: it is the opposite kind of fact, a reason to trust a record
-      // rather than to question it.
-      {
-        key: "type",
-        label: "",
-        title: "typeStatus — whether this record is a type specimen",
-        className: "whitespace-nowrap w-5",
-        value: (p: OccurrenceFeature["properties"]) => (p.typeStatus ? 1 : 0),
-        render: (p: OccurrenceFeature["properties"]) => {
-          const status = p.typeStatus?.trim();
-          if (!status) return <span />;
-          const label = status.charAt(0).toUpperCase() + status.slice(1).toLowerCase().replace(/_/g, " ");
-          return (
-            <span
-              onMouseEnter={(e) => {
-                const box = (e.currentTarget as HTMLElement).getBoundingClientRect();
-                setHoverNote({ text: `${label} — a type specimen`, x: box.right + 8, y: box.top - 2 });
-              }}
-              onMouseLeave={() => setHoverNote(null)}
-              className="block text-amber-500 cursor-help"
-            >
-              <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="currentColor">
-                <path d="M12 3.5l2.6 5.3 5.9.9-4.3 4.1 1 5.8-5.2-2.7-5.2 2.7 1-5.8L3.5 9.7l5.9-.9z" />
-              </svg>
-            </span>
-          );
-        },
-      } as ColumnDef,
-      // Whether the publisher attached a photograph — the specimen itself,
-      // for a herbarium sheet. Shown as a mark rather than a column of
-      // thumbnails: what you want down a list of two hundred rows is which of
-      // them you can look at, and then to look at that one.
-      {
-        key: "media",
-        label: "",
-        title: "Photographs the publisher attached to the record",
-        className: "whitespace-nowrap w-5",
-        value: (p: OccurrenceFeature["properties"]) => p.images?.length ?? 0,
-        render: (p: OccurrenceFeature["properties"]) => {
+          const type = p.typeStatus?.trim();
           const images = p.images ?? [];
-          if (images.length === 0) return <span />;
-          const image = images[0];
+          if (flags.length === 0 && !type && images.length === 0) return <span />;
+          const note = (text: string) => ({
+            onMouseEnter: (e: React.MouseEvent<HTMLElement>) => {
+              const box = e.currentTarget.getBoundingClientRect();
+              setHoverNote({ text, x: box.right + 8, y: box.top - 2 });
+            },
+            onMouseLeave: () => setHoverNote(null),
+          });
           return (
-            <a
-              href={image.url}
-              target="_blank"
-              rel="noopener noreferrer"
-              onClick={(e) => e.stopPropagation()}
-              onMouseEnter={(e) => {
-                const box = (e.currentTarget as HTMLElement).getBoundingClientRect();
-                setMediaPreview({ image, x: box.right + 8, y: box.top });
-              }}
-              onMouseLeave={() => setMediaPreview(null)}
-              className="block text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300"
-            >
-              <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
-                <rect x="3" y="5" width="18" height="14" rx="2" />
-                <circle cx="8.5" cy="10" r="1.5" />
-                <path strokeLinecap="round" strokeLinejoin="round" d="M4 17l5-5 4 4 3-2 4 4" />
-              </svg>
-            </a>
+            <span className="flex items-center gap-0.5">
+              {flags.length > 0 && (
+                <span {...note(flags.join(" · "))} className="text-amber-600 dark:text-amber-500 cursor-help">
+                  <svg className="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M5 22V3m0 0h12l-2 4 2 4H5" />
+                  </svg>
+                </span>
+              )}
+              {type && (
+                <span
+                  {...note(
+                    `${type.charAt(0).toUpperCase() + type.slice(1).toLowerCase().replace(/_/g, " ")} — a type specimen`
+                  )}
+                  className="text-amber-500 cursor-help"
+                >
+                  <svg className="w-3 h-3" viewBox="0 0 24 24" fill="currentColor">
+                    <path d="M12 3.5l2.6 5.3 5.9.9-4.3 4.1 1 5.8-5.2-2.7-5.2 2.7 1-5.8L3.5 9.7l5.9-.9z" />
+                  </svg>
+                </span>
+              )}
+              {images.length > 0 && (
+                <a
+                  href={images[0].url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  onClick={(e) => e.stopPropagation()}
+                  onMouseEnter={(e) => {
+                    const box = e.currentTarget.getBoundingClientRect();
+                    setMediaPreview({ image: images[0], x: box.right + 8, y: box.top });
+                  }}
+                  onMouseLeave={() => setMediaPreview(null)}
+                  className="text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300"
+                >
+                  <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
+                    <rect x="3" y="5" width="18" height="14" rx="2" />
+                    <circle cx="8.5" cy="10" r="1.5" />
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M4 17l5-5 4 4 3-2 4 4" />
+                  </svg>
+                </a>
+              )}
+            </span>
           );
         },
       } as ColumnDef,
@@ -1682,7 +1663,7 @@ export default function OccurrenceListTable({
                     }}
                     onDragEnd={() => setDragColumn(null)}
                     onClick={() => toggleSort(col.key)}
-                    className={`relative px-2 py-1.5 font-medium text-[11px] whitespace-nowrap cursor-pointer select-none border-b border-zinc-200 dark:border-zinc-700 hover:bg-zinc-100 dark:hover:bg-zinc-700 ${
+                    className={`relative ${col.compact ? "px-1" : "px-2"} py-1.5 font-medium text-[11px] whitespace-nowrap cursor-pointer select-none border-b border-zinc-200 dark:border-zinc-700 hover:bg-zinc-100 dark:hover:bg-zinc-700 ${
                       col.align === "right" ? "text-right" : "text-left"
                     } ${active ? "text-zinc-700 dark:text-zinc-200" : "text-zinc-500 dark:text-zinc-400"} ${
                       dragColumn === col.key ? "opacity-40" : ""
@@ -1799,7 +1780,7 @@ export default function OccurrenceListTable({
                             }
                           : undefined
                       }
-                      className={`px-2 py-1.5 align-top text-zinc-600 dark:text-zinc-300 ${
+                      className={`${col.compact ? "px-1" : "px-2"} py-1.5 align-top text-zinc-600 dark:text-zinc-300 ${
                         col.align === "right" ? "text-right" : "text-left"
                       } ${col.className ?? ""}`}
                     >
