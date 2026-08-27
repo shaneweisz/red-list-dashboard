@@ -292,6 +292,8 @@ export interface AssessorDate {
   gbifID: number;
   /** ISO 8601, as precise as the label is: yyyy, yyyy-mm or yyyy-mm-dd. */
   eventDate: string;
+  /** Where the date came from, in the assessor's words. */
+  remarks?: string;
   addedAt: string;
   addedBy?: string;
 }

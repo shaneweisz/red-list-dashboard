@@ -1760,7 +1760,10 @@ export default function OccurrenceMapRow({
    * coarse, and the Uncertainty cell is right there to sharpen it.
    */
   const saveGeoreferenceInline = useCallback(
-    (feature: OccurrenceFeature, edit: { lat: number; lon: number; uncertainty?: number }) => {
+    (
+      feature: OccurrenceFeature,
+      edit: { lat: number; lon: number; uncertainty?: number; note?: string }
+    ) => {
       const p = feature.properties;
       const existing = georeferences[p.gbifID];
       const radius =
@@ -1780,6 +1783,9 @@ export default function OccurrenceMapRow({
         georeferencedBy: existing?.georeferencedBy || accountEmail || undefined,
         georeferencedDate: new Date().toISOString(),
         georeferenceProtocol: existing?.georeferenceProtocol ?? "Typed from the locality description",
+        // Empty means "no note", not "leave the old one": clearing the box is
+        // how you take a note back.
+        georeferenceRemarks: edit.note === undefined ? existing?.georeferenceRemarks : edit.note || undefined,
       });
     },
     // handleSaveGeoreference is declared just below and is stable per render.
@@ -4898,7 +4904,7 @@ export default function OccurrenceMapRow({
    * reading of a specimen, kept apart from what GBIF published.
    */
   const saveAssessorDate = useCallback(
-    (feature: OccurrenceFeature, eventDate: string) => {
+    (feature: OccurrenceFeature, eventDate: string, note?: string) => {
       const gbifID = feature.properties.gbifID;
       commitEdits(
         {
@@ -4907,6 +4913,7 @@ export default function OccurrenceMapRow({
             [gbifID]: {
               gbifID,
               eventDate,
+              remarks: note || undefined,
               addedAt: new Date().toISOString(),
               addedBy: accountEmail || undefined,
             },

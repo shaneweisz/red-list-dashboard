@@ -149,7 +149,7 @@ const ALWAYS_VISIBLE_COLUMNS = new Set(["rowNumber", "putBack", "reason", "dupli
 const DEFAULT_VISIBLE_COLUMNS = [
   "date", "coordinates", "basisOfRecord", "locality", "stateProvince", "country",
   "uncertainty", "elevation", "recordedBy", "identifiedBy", "dataset", "catalog",
-  "establishmentMeans", "flags", "gbifID",
+  "establishmentMeans", "gbifID",
 ];
 
 const COLUMN_PREFS_KEY = "redlist-occurrence-columns:v1";
@@ -314,19 +314,24 @@ interface ColumnDef {
  */
 function DateCellEditor({
   initial,
+  initialNote,
   onCommit,
   onClear,
 }: {
   initial: string;
-  onCommit: (eventDate: string | null) => void;
+  initialNote: string;
+  onCommit: (eventDate: string | null, note: string) => void;
   onClear?: () => void;
 }) {
   const [text, setText] = useState(initial);
+  const [note, setNote] = useState(initialNote);
   const parsed = parseAssessorDate(text);
   const ok = "eventDate" in parsed;
   const empty = text.trim() === "";
+  const commit = () => onCommit(ok ? parsed.eventDate : null, note.trim());
   return (
-    <div className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
+    <div className="flex flex-col gap-0.5" onClick={(e) => e.stopPropagation()} data-cell-editor>
+      <div className="flex items-center gap-1">
       <input
         autoFocus
         value={text}
@@ -334,14 +339,18 @@ function DateCellEditor({
         onKeyDown={(e) => {
           if (e.key === "Enter") {
             e.preventDefault();
-            onCommit(ok ? parsed.eventDate : null);
+            commit();
           }
           if (e.key === "Escape") {
             e.preventDefault();
-            onCommit(null);
+            onCommit(null, note);
           }
         }}
-        onBlur={() => onCommit(ok ? parsed.eventDate : null)}
+        onBlur={(e) => {
+          // Moving between the two boxes isn't leaving the cell.
+          if ((e.relatedTarget as HTMLElement | null)?.closest("[data-cell-editor]")) return;
+          commit();
+        }}
         placeholder="yyyy-mm-dd"
         title={
           ok || empty
@@ -363,35 +372,62 @@ function DateCellEditor({
           clear
         </button>
       )}
+      </div>
+      <input
+        value={note}
+        onChange={(e) => setNote(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") { e.preventDefault(); commit(); }
+          if (e.key === "Escape") { e.preventDefault(); onCommit(null, note); }
+        }}
+        onBlur={(e) => {
+          if ((e.relatedTarget as HTMLElement | null)?.closest("[data-cell-editor]")) return;
+          commit();
+        }}
+        placeholder="why — the label, a note, a paper"
+        title="Where this date comes from, in your words. Kept with the date."
+        className="w-40 rounded border border-zinc-300 dark:border-zinc-600 bg-white dark:bg-zinc-900 px-1 py-0.5 text-[10px] text-zinc-600 dark:text-zinc-300"
+      />
     </div>
   );
 }
 
 function CoordinateCellEditor({
   initial,
+  initialNote,
   onCommit,
   onClear,
 }: {
   initial: string;
-  onCommit: (edit: { lat: number; lon: number; uncertainty?: number } | null) => void;
+  initialNote: string;
+  onCommit: (
+    edit: { lat: number; lon: number; uncertainty?: number; note?: string } | null
+  ) => void;
   onClear?: () => void;
 }) {
   const [text, setText] = useState(initial);
+  const [note, setNote] = useState(initialNote);
   const parsed = parseCoordinateCell(text);
   const empty = text.trim() === "";
+  const commit = () => onCommit(parsed ? { ...parsed, note: note.trim() } : null);
   return (
-    <div className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
+    <div className="flex flex-col gap-0.5" onClick={(e) => e.stopPropagation()} data-cell-editor>
+      <div className="flex items-center gap-1">
       <input
         autoFocus
         value={text}
         onChange={(e) => setText(e.target.value)}
         onKeyDown={(e) => {
-          if (e.key === "Enter") { e.preventDefault(); onCommit(parsed); }
+          if (e.key === "Enter") { e.preventDefault(); commit(); }
           if (e.key === "Escape") { e.preventDefault(); onCommit(null); }
         }}
         // Committing on blur as well as Enter: clicking away from a cell you
-        // have typed into should keep what you typed, not discard it.
-        onBlur={() => onCommit(parsed)}
+        // have typed into should keep what you typed, not discard it. Moving
+        // to the note box beside it isn't leaving the cell.
+        onBlur={(e) => {
+          if ((e.relatedTarget as HTMLElement | null)?.closest("[data-cell-editor]")) return;
+          commit();
+        }}
         placeholder="lat, lon"
         title="Latitude, longitude in decimal degrees. A third number is read as the uncertainty radius in metres. Enter to keep, Escape to cancel."
         className={`w-32 rounded border bg-white dark:bg-zinc-900 px-1 py-0.5 text-[11px] tabular-nums ${
@@ -409,6 +445,25 @@ function CoordinateCellEditor({
           clear
         </button>
       )}
+      </div>
+      {/* How you read the locality, in your words. A georeference is an
+          interpretation, and the next person to open this — including you in
+          six months — needs the reasoning, not just the point. */}
+      <input
+        value={note}
+        onChange={(e) => setNote(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") { e.preventDefault(); commit(); }
+          if (e.key === "Escape") { e.preventDefault(); onCommit(null); }
+        }}
+        onBlur={(e) => {
+          if ((e.relatedTarget as HTMLElement | null)?.closest("[data-cell-editor]")) return;
+          commit();
+        }}
+        placeholder="why — how you read the locality"
+        title="How you arrived at this position, in your words. Saved as the georeference's remarks."
+        className="w-40 rounded border border-zinc-300 dark:border-zinc-600 bg-white dark:bg-zinc-900 px-1 py-0.5 text-[10px] text-zinc-600 dark:text-zinc-300"
+      />
     </div>
   );
 }
@@ -480,7 +535,10 @@ interface OccurrenceListTableProps {
    * where the position is shown, rather than by opening something. The radius
    * and the note are edited in their own cells, the same way.
    */
-  onSaveGeoreference?: (feature: OccurrenceFeature, edit: { lat: number; lon: number; uncertainty?: number }) => void;
+  onSaveGeoreference?: (
+    feature: OccurrenceFeature,
+    edit: { lat: number; lon: number; uncertainty?: number; note?: string }
+  ) => void;
   /** Clears the assessor's coordinates for a record, leaving GBIF's alone. */
   onClearGeoreference?: (feature: OccurrenceFeature) => void;
   /** The record currently highlighted on the map, so its row can match. */
@@ -521,8 +579,8 @@ interface OccurrenceListTableProps {
   /** Dropping one row on another says the first duplicates the second. */
   onMarkDuplicate?: (gbifIDs: number[], primaryGbifID: number) => void;
   /** Dates the assessor read off a label GBIF didn't transcribe. */
-  dates?: Record<number, { eventDate: string }>;
-  onSaveDate?: (feature: OccurrenceFeature, eventDate: string) => void;
+  dates?: Record<number, { eventDate: string; remarks?: string }>;
+  onSaveDate?: (feature: OccurrenceFeature, eventDate: string, note?: string) => void;
   onClearDate?: (feature: OccurrenceFeature) => void;
   /** Right-clicking a row opens the record's menu where the pointer is. */
   onRowContextMenu?: (feature: OccurrenceFeature, at: { x: number; y: number }) => void;
@@ -991,9 +1049,10 @@ export default function OccurrenceListTable({
             return (
               <DateCellEditor
                 initial={mine?.eventDate ?? published ?? ""}
-                onCommit={(eventDate) => {
+                initialNote={mine?.remarks ?? ""}
+                onCommit={(eventDate, note) => {
                   setEditingDate(null);
-                  if (eventDate) onSaveDate?.(f, eventDate);
+                  if (eventDate) onSaveDate?.(f, eventDate, note);
                 }}
                 onClear={mine ? () => { setEditingDate(null); onClearDate?.(f); } : undefined}
               />
@@ -1007,7 +1066,13 @@ export default function OccurrenceListTable({
             return (
               <button
                 onClick={startEditing}
-                title={`Your date${published ? ` — GBIF published ${published}` : ", from the label"}. Click to retype it.`}
+                title={[
+                  `Your date${published ? ` — GBIF published ${published}` : ""}`,
+                  mine.remarks,
+                  "Click to retype it.",
+                ]
+                  .filter(Boolean)
+                  .join(" — ")}
                 className="block text-left text-violet-600 dark:text-violet-400 hover:underline"
               >
                 ◆ {mine.eventDate}
@@ -1023,13 +1088,16 @@ export default function OccurrenceListTable({
               published
             );
           }
+          // An empty cell you can click, rather than a cell asking to be
+          // clicked: the dash is what every other empty cell shows, and the
+          // invitation was louder than the record.
           return editable ? (
             <button
               onClick={startEditing}
               title="GBIF has no date for this record. Click here and type the one on the label."
-              className="text-violet-600 dark:text-violet-400 hover:underline decoration-dotted"
+              className="block w-full text-left text-zinc-300 dark:text-zinc-600 hover:text-violet-500"
             >
-              Add date?
+              —
             </button>
           ) : null;
         },
@@ -1052,6 +1120,7 @@ export default function OccurrenceListTable({
           if (editable && editingCoords === p.gbifID) {
             return (
               <CoordinateCellEditor
+                initialNote={mine?.georeferenceRemarks ?? ""}
                 initial={
                   mine
                     ? `${mine.decimalLatitude}, ${mine.decimalLongitude}`
@@ -1086,20 +1155,25 @@ export default function OccurrenceListTable({
                 <span className="block truncate">
                   ◆ {mine.decimalLatitude.toFixed(4)}, {mine.decimalLongitude.toFixed(4)}
                 </span>
-                <span className="block truncate text-[10px] text-zinc-400">
-                  {mine.georeferenceRemarks || "add a note"}
-                </span>
+                {mine.georeferenceRemarks && (
+                  <span className="block truncate text-[10px] text-zinc-400">
+                    {mine.georeferenceRemarks}
+                  </span>
+                )}
               </button>
             );
           }
           if (!f.geometry) {
+            // An empty cell you can click, rather than a cell asking to be
+            // clicked. The dash is what every other empty cell shows; the
+            // invitation was louder than the record it sat in.
             return editable ? (
               <button
                 onClick={startEditing}
                 title="GBIF has no coordinates for this record — only a locality description. Click here and type the position you read it as, as \u201clat, lon\u201d."
-                className="text-violet-600 dark:text-violet-400 hover:underline decoration-dotted"
+                className="block w-full text-left text-zinc-300 dark:text-zinc-600 hover:text-violet-500"
               >
-                Add georeference?
+                —
               </button>
             ) : (
               <span className="text-amber-600 dark:text-amber-400">Not georeferenced</span>
@@ -1284,28 +1358,6 @@ export default function OccurrenceListTable({
               {p.establishmentMeans.toLowerCase()}
             </span>
           ) : null,
-      },
-      {
-        key: "flags",
-        label: "Flags",
-        title: "Coordinate-cleaning checks this record trips, and whether it falls outside the species' native range — the same signals the map tooltip shows",
-        className: "max-w-[16rem]",
-        // Sort by how many flags a record trips, so the questionable records
-        // group together at one end.
-        value: (p) =>
-          (p.qualityFlags?.length ?? 0) +
-          (p.gbifIssues?.length ?? 0) +
-          (isOutsideNativeRange(p.countryCode) ? 1 : 0),
-        render: (p) => {
-          const flags = flagsOf(p, isOutsideNativeRange);
-          if (flags.length === 0) return null;
-          const text = flags.join(", ");
-          return (
-            <span className="block truncate text-amber-600 dark:text-amber-400" title={text}>
-              ⚠ {text}
-            </span>
-          );
-        },
       },
       // Everything else GBIF carries, off by default and available from the
       // column picker. Grouped roughly as GBIF groups them: taxonomy, the
