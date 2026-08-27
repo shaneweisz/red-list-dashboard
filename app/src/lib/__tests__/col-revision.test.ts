@@ -61,11 +61,13 @@ describe("revision vocabulary", () => {
     }
   });
 
-  it("keeps every BAR but the one deliberate exception on a single line", () => {
-    // Only the dashboard's bars sit on the 180px axis. UNFLAGGED_REASONS are
-    // rendered by the SSC panel in a table cell, which has room.
+  it("keeps every BAR on a single line", () => {
+    // Only the dashboard's bars sit on the 180px axis; UNFLAGGED_REASONS are
+    // rendered by the SSC panel in a table cell, which has room. synonym_of was
+    // the one label that spent a second line, and it is no longer a bar — so the
+    // axis is once again uniform, and this fails if anything reintroduces a wrap.
     const twoLine = REVISION_REASONS.filter((r) => REVISION_REASON_SHORT[r].length > 21);
-    expect(twoLine).toEqual(["synonym_of"]);
+    expect(twoLine).toEqual([]);
   });
 });
 
@@ -81,7 +83,11 @@ describe("UNFLAGGED_REASONS", () => {
     // not_in_base and provisional describe which CoL release carries the record
     // and how sure its editors are — not anything that happened to the taxon.
     // Neither finishes "…so this assessment may need a look because…".
-    for (const reason of ["not_in_base", "provisional"]) {
+    //
+    // synonym_of joins them: a synonym is the SAME taxon under another label, so
+    // it puts nothing about the assessment's scope in question, and 87 of its 88
+    // members were really the two CoL products disagreeing with each other.
+    for (const reason of ["not_in_base", "provisional", "synonym_of"]) {
       expect(UNFLAGGED_REASONS as readonly string[], reason).toContain(reason);
       expect(REVISION_REASONS as readonly string[], reason).not.toContain(reason);
     }

@@ -36,7 +36,6 @@ export const SPLIT_REASON = "split";
 export const REVISION_REASONS = [
   SPLIT_REASON,
   "lumped",
-  "synonym_of",
   "infraspecific",
   "unmatched",
   "missing_from_backbone",
@@ -81,7 +80,30 @@ export const REVISION_REASONS = [
  * classifier already reports it as synonym_of, which names the accepted species.
  * not_in_base is precisely the residue where we cannot say what it means.
  *
- * All three still exist, and the SSC group view still reports them: there they
+ * "synonym_of" was removed last, and it is the subtlest of the four.
+ *
+ * A synonym is not a problem. Split, lumped and infraspecific all put the
+ * assessment's SCOPE in question — does it cover the right populations, is it
+ * double-counting, has the rank moved under it. Synonymy puts none of that in
+ * question: it is the same taxon under a different label, which is what synonymy
+ * means. The assessment is fine and CoL simply calls it something else, so the
+ * sentence ends "…so nothing".
+ *
+ * It also claimed more than the data supports. 87 of its 88 members were not
+ * "CoL accepts a different name" at all — they were CoL's EXTENDED release
+ * accepting the name while its CURATED release filed it as a synonym. That is
+ * the two products disagreeing with each other, i.e. the same editorial state
+ * not_in_base describes, wearing a label that reads as a verdict about the name.
+ *
+ * And there is often no single accepted name to report. CoL marks 135,881 usages
+ * "ambiguous synonym" — the application is uncertain by CoL's own account — and
+ * holds one name as BOTH accepted and synonym for 4,623 assessed species. Two
+ * checklists can differ permanently on a species concept without either being
+ * wrong (CoL recognises two Dasycercus; the 2023 revision and IUCN recognise
+ * six). "The accepted name" is checklist-relative, and a bar asserting one
+ * flattens that.
+ *
+ * All four still exist, and the SSC group view still reports them: there they
  * sit in a panel explicitly about CoL-match diagnostics, which is the right home
  * for "CoL says something odd here".
  *
@@ -90,7 +112,7 @@ export const REVISION_REASONS = [
  * EX/EW`. 103 assessed species are excluded that way — a real undercount that
  * predates this feature and wants its own fix.
  */
-export const UNFLAGGED_REASONS = ["extinct_unconfirmed", "not_in_base", "provisional"] as const;
+export const UNFLAGGED_REASONS = ["extinct_unconfirmed", "not_in_base", "provisional", "synonym_of"] as const;
 
 export type RevisionReasonCode = (typeof REVISION_REASONS)[number];
 
