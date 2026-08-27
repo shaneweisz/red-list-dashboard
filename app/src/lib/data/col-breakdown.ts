@@ -417,6 +417,12 @@ export async function computeNoMatchDetails(
         WHERE syn.checklist_parent_id IS NOT NULL
           AND lower(syn.scientific_name) IN (SELECT lower(scientific_name) FROM matched_assessed)
       ) GROUP BY lname
+      -- One name, one accepted target, or no claim. CoL can hold the same name as
+      -- a synonym of several accepted species; any_value() then picked whichever
+      -- the scan reached first, which is how Andropogon virginicus was reported as
+      -- Anatherum leucostachyum when the release says Anatherum virginicum. Same
+      -- rule as name-variants' collision guard: refuse rather than guess.
+      HAVING count(DISTINCT col_id) = 1
     )` : ""}
     SELECT
       ma.id AS id, ma.scientific_name AS name,

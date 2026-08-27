@@ -247,7 +247,14 @@ export async function run(
              -- For usages the RELEASE files as a synonym, the release's own
              -- accepted parent. Not the XR's: the two can disagree, and the claim
              -- we make is about the release, so the edge must come from it.
-             CASE WHEN lower(cl.status) LIKE '%synonym%' THEN cl.parent_id END AS checklist_parent_id
+             --
+             -- Strictly 'synonym', NOT LIKE '%synonym%': that also caught
+             -- 'ambiguous synonym', which is CoL saying the name's application is
+             -- UNCERTAIN. Naming an accepted species from one asserts exactly what
+             -- the status disclaims — Pararge xiphia, an ambiguous synonym of
+             -- Pararge megera, was reported as a definite rename. 135,881 rows
+             -- took a parent from an ambiguous synonym.
+             CASE WHEN lower(cl.status) = 'synonym' THEN cl.parent_id END AS checklist_parent_id
       FROM nu LEFT JOIN checklist cl ON cl.col_id = nu.col_id
     )
     TO '${backboneOut}' (FORMAT PARQUET, COMPRESSION ZSTD);

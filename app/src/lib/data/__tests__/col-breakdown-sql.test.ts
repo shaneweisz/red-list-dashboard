@@ -35,7 +35,8 @@ beforeAll(async () => {
       ('IN1','Clean species', true, false),
       ('XR1','Xr onlyus', false, false),
       ('LUMP','Lump winner', true, false),
-      ('ANS','Anselli test', false, false)
+      ('ANS','Anselli test', false, false),
+      ('AMBX','Ambiguous target', false, false)
     ) v(col_id, scientific_name, in_base, extinct)`, "species/data_0.parquet");
 
   // Backbone: a synonym of an in-Base accepted species (the synonym_of route),
@@ -51,7 +52,11 @@ beforeAll(async () => {
       -- The Hylomyscus anselli shape: the XR accepts the name AND separately holds
       -- it as a synonym of something else, and the release contains neither record.
       ('ANS', NULL, 'accepted', 'species', 'Anselli test', false, NULL),
-      ('ANSSYN', 'IN1', 'synonym', 'species', 'Anselli test', false, NULL)
+      ('ANSSYN', 'IN1', 'synonym', 'species', 'Anselli test', false, NULL),
+      -- One name the release files as a synonym of TWO different accepted species.
+      ('AMBX', NULL, 'accepted', 'species', 'Ambiguous target', false, NULL),
+      ('AMB1', 'IN1', 'synonym', 'species', 'Ambiguous target', true, 'IN1'),
+      ('AMB2', 'LUMP', 'synonym', 'species', 'Ambiguous target', true, 'LUMP')
     ) v(col_id, parent_id, status, rank, scientific_name, in_checklist, checklist_parent_id)`, "backbone.parquet");
 
   await copy(`SELECT * FROM (VALUES
@@ -62,7 +67,8 @@ beforeAll(async () => {
       (5::BIGINT, 'Lump winner', 'LC'),
       (6::BIGINT, 'Lump loser', 'LC'),
       (7::BIGINT, 'Nothing at all', 'LC'),
-      (8::BIGINT, 'Anselli test', 'LC')
+      (8::BIGINT, 'Anselli test', 'LC'),
+      (9::BIGINT, 'Ambiguous target', 'LC')
     ) v(id, scientific_name, iucn_category)`, "assessed.parquet");
 
   await copy(`SELECT * FROM (VALUES
@@ -73,7 +79,8 @@ beforeAll(async () => {
       ('redlist', 5::BIGINT, 'Lump winner', 'LUMP', 'accepted'),
       ('redlist', 6::BIGINT, 'Lump loser', 'LUMP', 'synonym'),
       ('redlist', 7::BIGINT, 'Nothing at all', NULL, 'unmatched'),
-      ('redlist', 8::BIGINT, 'Anselli test', 'ANS', 'accepted')
+      ('redlist', 8::BIGINT, 'Anselli test', 'ANS', 'accepted'),
+      ('redlist', 9::BIGINT, 'Ambiguous target', 'AMBX', 'accepted')
     ) v(src, id, scientific_name, col_id, match_method)`, "species_link.parquet");
 
   // The same temp tables the real caller builds before running the diagnostic.
@@ -128,5 +135,12 @@ describe("computeNoMatchDetails — the query, not just the classifier", () => {
     // this species is that its record is extended-release only.
     expect(byId.get(8)?.reason).toBe("not_in_base");
     expect(byId.get(8)?.detail).toBeUndefined();
+
+    // The release files this name under TWO accepted species. Picking one would
+    // be a coin toss presented as a finding (Andropogon virginicus was reported
+    // as Anatherum leucostachyum when the release says Anatherum virginicum), so
+    // no rename is claimed at all.
+    expect(byId.get(9)?.reason).toBe("not_in_base");
+    expect(byId.get(9)?.detail).toBeUndefined();
   });
 });

@@ -3709,7 +3709,7 @@
       "name": "Small Mammal Specialist Group",
       "estimatedDescribed": 0,
       "totalAssessed": 2933,
-      "outdated": 1498,
+      "outdated": 1501,
       "gbifNeSpeciesCount": 133,
       "byCategory": {
         "CR": 74,
@@ -10407,7 +10407,7 @@
       "name": "Seahorse, Pipefish and Seadragon Specialist Group",
       "estimatedDescribed": 0,
       "totalAssessed": 308,
-      "outdated": 211,
+      "outdated": 214,
       "gbifNeSpeciesCount": 16,
       "byCategory": {
         "DD": 78,
@@ -16489,10 +16489,8 @@
             {
               "id": 173215,
               "name": "Pararge xiphia",
-              "reason": "synonym_of",
-              "detail": "Pararge megera",
-              "detailColId": "6TQRZ",
-              "colId": "6TQRZ",
+              "reason": "not_in_base",
+              "colId": "VL4BH",
               "colName": "Pararge xiphia"
             },
             {
@@ -48690,9 +48688,9 @@
               "id": 13506888,
               "name": "Andropogon virginicus",
               "reason": "synonym_of",
-              "detail": "Anatherum leucostachyum",
-              "detailColId": "LML2L",
-              "colId": "LML2L",
+              "detail": "Anatherum virginicum",
+              "detailColId": "DHZ3",
+              "colId": "DHZ3",
               "colName": "Andropogon virginicus"
             },
             {

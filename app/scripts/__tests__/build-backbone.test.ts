@@ -54,6 +54,10 @@ const ROWS: string[][] = [
   // Pre-Linnaean floor: a citation year of 1600 predates valid nomenclature (1753), so it's
   // necessarily a mis-parse — described_year must be null, not 1600.
   ["12", "F", "accepted", "species", "Testus antiquus", "L.", "Animalia", "Chordata", "Mammalia", "Carnivora", "Felidae", "Testus", "200", "false", "", "", "R5"],
+  // The curated release files this one as an AMBIGUOUS synonym (see the checklist
+  // fixture): it is demoted out of the universe like any synonym, but must not
+  // yield an accepted name for a rename claim to be built on.
+  ["13", "F", "accepted", "species", "Felis ambigua", "L.", "Animalia", "Chordata", "Mammalia", "Carnivora", "Felidae", "Felis", "200", "false", "", "", ""],
   // Unflagged fossil from a non-Base paleo source: extinct is null, so only in_base drops it.
   ["6", "F", "accepted", "species", "Cimexomys testus", "L.", "Animalia", "Chordata", "Mammalia", "Carnivora", "Felidae", "Cimexomys", "999", "", "", "", ""],
   ["4", "F", "provisionally accepted", "species", "Felis dubia", "L.", "Animalia", "Chordata", "Mammalia", "Carnivora", "Felidae", "Felis", "100", "false", "", "", ""],
@@ -124,6 +128,9 @@ beforeAll(async () => {
     ["col:ID", "col:parentID", "col:status", "col:rank", "col:scientificName"].join("\t"),
     ["1", "G1", "accepted", "species", "Panthera leo"].join("\t"),
     ["10", "1", "synonym", "species", "Felis splitta"].join("\t"),
+    // CoL saying the name's application is UNCERTAIN. It still demotes, but it
+    // must not yield an accepted name for anyone to claim.
+    ["13", "1", "ambiguous synonym", "species", "Felis ambigua"].join("\t"),
   ].join("\n") + "\n");
   await run({ tsv, referenceTsv, vernacularTsv, outDir: tmp, baseSourceIds: BASE_SOURCE_IDS, demotionsTsv: checklistTsv });
   speciesGlob = path.join(tmp, "species", "**", "*.parquet");
@@ -191,6 +198,16 @@ describe("build-backbone species universe", () => {
     expect(by.get("10")?.checklist_parent_id).toBe("1");
   });
 
+  it("refuses to name an accepted species from an AMBIGUOUS synonym", async () => {
+    // 'ambiguous synonym' is CoL declaring the name's application uncertain, so a
+    // parent taken from one would assert exactly what the status disclaims.
+    // in_checklist is still true — the usage IS in the release.
+    const rows = await query(`SELECT col_id, in_checklist, checklist_parent_id
+                              FROM read_parquet('${backbone}') WHERE col_id = '13'`);
+    expect(rows[0]?.in_checklist).toBe(true);
+    expect(rows[0]?.checklist_parent_id).toBeNull();
+  });
+
   it("tags in_base from col:sourceID against the Base GSD allowlist", async () => {
     const rows = await query(`SELECT scientific_name, in_base FROM read_parquet('${speciesGlob}', hive_partitioning=true)`);
     const byName = new Map(rows.map((r) => [r.scientific_name, r.in_base]));
@@ -230,7 +247,7 @@ describe("build-backbone species universe", () => {
 describe("build-backbone backbone.parquet", () => {
   it("carries every usage (all ranks + synonyms) for tree + synonym resolution", async () => {
     const rows = await query(`SELECT count(*) n, count(*) FILTER (status LIKE '%synonym%') syn FROM read_parquet('${backbone}')`);
-    expect(Number(rows[0].n)).toBe(14);  // all rows: family, genus, synonym, demoted species + the rest
+    expect(Number(rows[0].n)).toBe(15);  // all rows: family, genus, synonym, demoted species + the rest
     expect(Number(rows[0].syn)).toBe(1);
   });
 });
