@@ -281,6 +281,85 @@ function exclusionsKey(speciesKey: string): string {
   return `${EXCLUSIONS_PREFIX}:v${GEOREFERENCE_SCHEMA_VERSION}:${speciesKey}`;
 }
 
+/**
+ * A date the assessor supplied for a record GBIF dated badly or not at all.
+ *
+ * Its own store rather than a field on the georeference: a record can want a
+ * date and not a position — a sheet whose locality GBIF got right and whose
+ * collection date it never transcribed — and the two are separate judgements.
+ */
+export interface AssessorDate {
+  gbifID: number;
+  /** ISO 8601, as precise as the label is: yyyy, yyyy-mm or yyyy-mm-dd. */
+  eventDate: string;
+  addedAt: string;
+  addedBy?: string;
+}
+
+const DATES_PREFIX = "redlist-dates";
+
+function datesKey(speciesKey: string): string {
+  return `${DATES_PREFIX}:v${GEOREFERENCE_SCHEMA_VERSION}:${speciesKey}`;
+}
+
+/**
+ * A date as written on a label, in the forms a specimen actually carries.
+ *
+ * Rejects a date that hasn't happened, and one before Linnaeus started the
+ * naming this dashboard is about — both are typos rather than records.
+ */
+export function parseAssessorDate(text: string): { eventDate: string } | { error: string } {
+  const trimmed = text.trim();
+  if (!trimmed) return { error: "Give a date as yyyy, yyyy-mm or yyyy-mm-dd." };
+  const match = /^(\d{4})(?:-(\d{1,2}))?(?:-(\d{1,2}))?$/.exec(trimmed);
+  if (!match) return { error: "Give a date as yyyy, yyyy-mm or yyyy-mm-dd." };
+  const [, year, month, day] = match;
+  const y = Number(year);
+  if (y < 1753 || y > new Date().getFullYear()) {
+    return { error: `A year between 1753 and ${new Date().getFullYear()}.` };
+  }
+  if (month != null) {
+    const m = Number(month);
+    if (m < 1 || m > 12) return { error: "Month 1–12." };
+    if (day != null) {
+      const d = Number(day);
+      const daysInMonth = new Date(y, m, 0).getDate();
+      if (d < 1 || d > daysInMonth) return { error: `Day 1–${daysInMonth} for that month.` };
+      return { eventDate: `${year}-${String(m).padStart(2, "0")}-${String(d).padStart(2, "0")}` };
+    }
+    return { eventDate: `${year}-${String(m).padStart(2, "0")}` };
+  }
+  return { eventDate: year };
+}
+
+export function loadDates(speciesKey: string): Record<number, AssessorDate> {
+  if (typeof window === "undefined") return {};
+  try {
+    const raw = window.localStorage.getItem(datesKey(speciesKey));
+    if (!raw) return {};
+    const parsed = JSON.parse(raw);
+    if (parsed?.version !== GEOREFERENCE_SCHEMA_VERSION) return {};
+    const out: Record<number, AssessorDate> = {};
+    for (const [id, d] of Object.entries(parsed.records ?? {})) out[Number(id)] = d as AssessorDate;
+    return out;
+  } catch {
+    return {};
+  }
+}
+
+export function saveDates(speciesKey: string, records: Record<number, AssessorDate>): boolean {
+  if (typeof window === "undefined") return false;
+  try {
+    window.localStorage.setItem(
+      datesKey(speciesKey),
+      JSON.stringify({ version: GEOREFERENCE_SCHEMA_VERSION, updatedAt: new Date().toISOString(), records })
+    );
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 export function loadExclusions(speciesKey: string): Record<number, Exclusion> {
   if (typeof window === "undefined") return {};
   try {

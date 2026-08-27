@@ -6,6 +6,7 @@ import {
   duplicateOf,
   duplicateOfReason,
   resolvePrimary,
+  parseAssessorDate,
 } from "../georeferences";
 
 describe("validateGeoreference", () => {
@@ -128,5 +129,30 @@ describe("resolvePrimary", () => {
   it("stops on a cycle rather than spinning", () => {
     const exclusions = { 1: asDuplicate(2), 2: asDuplicate(1) };
     expect([1, 2]).toContain(resolvePrimary(1, exclusions));
+  });
+});
+
+describe("parseAssessorDate", () => {
+  it("takes a date as precise as the label is", () => {
+    expect(parseAssessorDate("1987")).toEqual({ eventDate: "1987" });
+    expect(parseAssessorDate("1987-3")).toEqual({ eventDate: "1987-03" });
+    expect(parseAssessorDate(" 1987-12-09 ")).toEqual({ eventDate: "1987-12-09" });
+  });
+
+  it("refuses a date that isn't one", () => {
+    expect(parseAssessorDate("")).toHaveProperty("error");
+    expect(parseAssessorDate("December 1987")).toHaveProperty("error");
+    expect(parseAssessorDate("1987-13")).toHaveProperty("error");
+    expect(parseAssessorDate("1987-02-30")).toHaveProperty("error");
+  });
+
+  it("refuses a year no specimen can carry", () => {
+    expect(parseAssessorDate("1600")).toHaveProperty("error");
+    expect(parseAssessorDate(String(new Date().getFullYear() + 1))).toHaveProperty("error");
+  });
+
+  it("keeps the last day of a month that has one", () => {
+    expect(parseAssessorDate("2024-02-29")).toEqual({ eventDate: "2024-02-29" });
+    expect(parseAssessorDate("2023-02-29")).toHaveProperty("error");
   });
 });

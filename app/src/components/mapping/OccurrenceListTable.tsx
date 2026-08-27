@@ -4,7 +4,12 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { QUALITY_FLAG_LABELS, type QualityFlag } from "@/lib/mapping/coordinate-cleaning";
 import { formatGbifIssue } from "@/lib/gbif";
-import { duplicateOf, resolvePrimary, type Georeference } from "@/lib/mapping/georeferences";
+import {
+  duplicateOf,
+  parseAssessorDate,
+  resolvePrimary,
+  type Georeference,
+} from "@/lib/mapping/georeferences";
 
 /**
  * A single GBIF occurrence, as returned by /api/occurrences. Shared with
@@ -29,6 +34,8 @@ export interface OccurrenceFeature {
     year?: number | null;
     month?: number | null;
     institutionCode?: string;
+    /** typeStatus — holotype, isotype and the rest, where the record is one. */
+    typeStatus?: string;
     /** GrSciColl's id for the holding institution — see grscicoll.ts. */
     institutionKey?: string;
     qualityFlags?: string[];
@@ -136,7 +143,7 @@ const EXTRA_COLUMNS: { key: string; label: string; title: string; numeric?: bool
 ];
 
 /** Never hidden, and never offered in the column picker. */
-const ALWAYS_VISIBLE_COLUMNS = new Set(["rowNumber", "putBack", "reason", "duplicates", "marks", "media"]);
+const ALWAYS_VISIBLE_COLUMNS = new Set(["rowNumber", "putBack", "reason", "duplicates", "marks", "media", "type"]);
 
 /** Shown until someone changes it: the fields an assessor reads first. */
 const DEFAULT_VISIBLE_COLUMNS = [
@@ -297,6 +304,69 @@ interface ColumnDef {
  * radius in metres, for when it's known at the time of typing; the radius is
  * otherwise edited in its own cell, where it's shown.
  */
+/**
+ * Typing a date into the Date cell.
+ *
+ * The same gesture as the coordinates beside it, and the same reason for it: a
+ * herbarium label carries a date that GBIF's transcription often doesn't, and
+ * the assessor reading the sheet is the person who can supply it. As precise as
+ * the label is — a year alone is an answer.
+ */
+function DateCellEditor({
+  initial,
+  onCommit,
+  onClear,
+}: {
+  initial: string;
+  onCommit: (eventDate: string | null) => void;
+  onClear?: () => void;
+}) {
+  const [text, setText] = useState(initial);
+  const parsed = parseAssessorDate(text);
+  const ok = "eventDate" in parsed;
+  const empty = text.trim() === "";
+  return (
+    <div className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
+      <input
+        autoFocus
+        value={text}
+        onChange={(e) => setText(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") {
+            e.preventDefault();
+            onCommit(ok ? parsed.eventDate : null);
+          }
+          if (e.key === "Escape") {
+            e.preventDefault();
+            onCommit(null);
+          }
+        }}
+        onBlur={() => onCommit(ok ? parsed.eventDate : null)}
+        placeholder="yyyy-mm-dd"
+        title={
+          ok || empty
+            ? "The date as the label gives it: yyyy, yyyy-mm or yyyy-mm-dd. Enter to keep, Escape to cancel."
+            : (parsed as { error: string }).error
+        }
+        className={`w-24 rounded border bg-white dark:bg-zinc-900 px-1 py-0.5 text-[11px] tabular-nums ${
+          ok || empty
+            ? "border-violet-400 text-violet-700 dark:text-violet-300"
+            : "border-red-400 text-red-600 dark:text-red-400"
+        }`}
+      />
+      {onClear && (
+        <button
+          onMouseDown={(e) => { e.preventDefault(); onClear(); }}
+          title="Drop your date and go back to what GBIF published"
+          className="text-[10px] text-zinc-400 hover:text-red-600"
+        >
+          clear
+        </button>
+      )}
+    </div>
+  );
+}
+
 function CoordinateCellEditor({
   initial,
   onCommit,
@@ -450,6 +520,10 @@ interface OccurrenceListTableProps {
   duplicates?: Map<number, OccurrenceFeature[]>;
   /** Dropping one row on another says the first duplicates the second. */
   onMarkDuplicate?: (gbifIDs: number[], primaryGbifID: number) => void;
+  /** Dates the assessor read off a label GBIF didn't transcribe. */
+  dates?: Record<number, { eventDate: string }>;
+  onSaveDate?: (feature: OccurrenceFeature, eventDate: string) => void;
+  onClearDate?: (feature: OccurrenceFeature) => void;
   /** Right-clicking a row opens the record's menu where the pointer is. */
   onRowContextMenu?: (feature: OccurrenceFeature, at: { x: number; y: number }) => void;
   /** Drawn at the right of the footer — the save button, where there is one. */
@@ -493,6 +567,9 @@ export default function OccurrenceListTable({
   excludedIds,
   variant = "records",
   focusGbifId,
+  dates,
+  onSaveDate,
+  onClearDate,
   duplicates,
   onMarkDuplicate,
   onRowContextMenu,
@@ -582,6 +659,8 @@ export default function OccurrenceListTable({
    * for about a second: long enough that the mark reads as unexplained.
    */
   const [hoverNote, setHoverNote] = useState<{ text: string; x: number; y: number } | null>(null);
+  /** The record whose date is being typed. */
+  const [editingDate, setEditingDate] = useState<number | null>(null);
   const [draggingId, setDraggingId] = useState<number | null>(null);
   const [dropTargetId, setDropTargetId] = useState<number | null>(null);
   const holdRef = useRef<{ id: number; x: number; y: number; timer: number } | null>(null);
@@ -778,6 +857,36 @@ export default function OccurrenceListTable({
           );
         },
       } as ColumnDef,
+      // A type specimen is the sheet a name is attached to — the one a
+      // taxonomist would travel to see. Worth a mark of its own beside the
+      // flag: it is the opposite kind of fact, a reason to trust a record
+      // rather than to question it.
+      {
+        key: "type",
+        label: "",
+        title: "typeStatus — whether this record is a type specimen",
+        className: "whitespace-nowrap w-5",
+        value: (p: OccurrenceFeature["properties"]) => (p.typeStatus ? 1 : 0),
+        render: (p: OccurrenceFeature["properties"]) => {
+          const status = p.typeStatus?.trim();
+          if (!status) return <span />;
+          const label = status.charAt(0).toUpperCase() + status.slice(1).toLowerCase().replace(/_/g, " ");
+          return (
+            <span
+              onMouseEnter={(e) => {
+                const box = (e.currentTarget as HTMLElement).getBoundingClientRect();
+                setHoverNote({ text: `${label} — a type specimen`, x: box.right + 8, y: box.top - 2 });
+              }}
+              onMouseLeave={() => setHoverNote(null)}
+              className="block text-amber-500 cursor-help"
+            >
+              <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="currentColor">
+                <path d="M12 3.5l2.6 5.3 5.9.9-4.3 4.1 1 5.8-5.2-2.7-5.2 2.7 1-5.8L3.5 9.7l5.9-.9z" />
+              </svg>
+            </span>
+          );
+        },
+      } as ColumnDef,
       // Whether the publisher attached a photograph — the specimen itself,
       // for a herbarium sheet. Shown as a mark rather than a column of
       // thumbnails: what you want down a list of two hundred rows is which of
@@ -867,10 +976,63 @@ export default function OccurrenceListTable({
       {
         key: "date",
         label: "Date",
-        title: "eventDate (or year/month when no full date was recorded)",
+        title:
+          "eventDate (or year/month when no full date was recorded). Click to type the date off the label yourself — yours shows in violet.",
         // Without nowrap the browser breaks yyyy-mm-dd at its hyphens.
         className: "whitespace-nowrap",
-        value: (p) => formatDate(p) || null,
+        // Sorted by the date being shown, so a record you've dated sorts where
+        // you put it rather than at the end with the undated ones.
+        value: (p) => dates?.[p.gbifID]?.eventDate ?? formatDate(p) ?? null,
+        render: (p, f) => {
+          const mine = dates?.[p.gbifID];
+          const published = formatDate(p);
+          const editable = !!onSaveDate;
+          if (editable && editingDate === p.gbifID) {
+            return (
+              <DateCellEditor
+                initial={mine?.eventDate ?? published ?? ""}
+                onCommit={(eventDate) => {
+                  setEditingDate(null);
+                  if (eventDate) onSaveDate?.(f, eventDate);
+                }}
+                onClear={mine ? () => { setEditingDate(null); onClearDate?.(f); } : undefined}
+              />
+            );
+          }
+          const startEditing = (e: React.MouseEvent) => {
+            e.stopPropagation();
+            setEditingDate(p.gbifID);
+          };
+          if (mine) {
+            return (
+              <button
+                onClick={startEditing}
+                title={`Your date${published ? ` — GBIF published ${published}` : ", from the label"}. Click to retype it.`}
+                className="block text-left text-violet-600 dark:text-violet-400 hover:underline"
+              >
+                ◆ {mine.eventDate}
+              </button>
+            );
+          }
+          if (published) {
+            return editable ? (
+              <button onClick={startEditing} title="Click to type the date off the label yourself" className="block text-left hover:underline decoration-dotted">
+                {published}
+              </button>
+            ) : (
+              published
+            );
+          }
+          return editable ? (
+            <button
+              onClick={startEditing}
+              title="GBIF has no date for this record. Click here and type the one on the label."
+              className="text-violet-600 dark:text-violet-400 hover:underline decoration-dotted"
+            >
+              Add date?
+            </button>
+          ) : null;
+        },
       },
       {
         key: "coordinates",
@@ -1191,7 +1353,7 @@ export default function OccurrenceListTable({
         ),
       },
     ],
-    [isOutsideNativeRange, georeferences, onSaveGeoreference, onClearGeoreference, editingCoords, editingRadius, exclusions, variant, onExclude, onInclude, duplicates, unfolded]
+    [isOutsideNativeRange, georeferences, onSaveGeoreference, onClearGeoreference, editingCoords, editingRadius, exclusions, variant, onExclude, onInclude, duplicates, unfolded, dates, onSaveDate, onClearDate, editingDate]
   );
 
   // The catalogue in the reader's own order, then the subset actually drawn.

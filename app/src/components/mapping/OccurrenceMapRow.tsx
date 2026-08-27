@@ -1367,6 +1367,7 @@ export default function OccurrenceMapRow({
   const {
     georeferences,
     exclusions,
+    dates: assessorDates,
     commit: commitEdits,
     undo: undoEdit,
     redo: redoEdit,
@@ -4622,7 +4623,12 @@ export default function OccurrenceMapRow({
 
       add("Species", p.species);
       add("Basis", formatBasisOfRecord(p.basisOfRecord));
-      add("Date", p.eventDate ?? p.year);
+      // The assessor's own reading of the label wins over GBIF's transcription,
+      // and says so — the same bargain as their coordinates.
+      const myDate = assessorDates[p.gbifID];
+      add("Date", myDate ? `${myDate.eventDate} · your date` : (p.eventDate ?? p.year));
+      if (myDate && (p.eventDate ?? p.year)) add("Date on GBIF", p.eventDate ?? p.year);
+      add("Type", p.typeStatus);
       add("Locality", p.locality || p.verbatimLocality);
       add("Country", p.country);
       if (position) {
@@ -4699,7 +4705,7 @@ export default function OccurrenceMapRow({
       }
       return { fields: rows, notes };
     },
-    [pointFileByGbifId, institutionNames]
+    [pointFileByGbifId, institutionNames, assessorDates]
   );
 
   /**
@@ -4884,6 +4890,43 @@ export default function OccurrenceMapRow({
    * table only scrolls when the id it's given changes.
    */
   const [focusRecord, setFocusRecord] = useState<number | null>(null);
+  /**
+   * A date the assessor read off the label, and taking it back.
+   *
+   * Held with the georeferences and the exclusions, so one undo covers it and
+   * one export carries it: it is the same kind of thing — the assessor's own
+   * reading of a specimen, kept apart from what GBIF published.
+   */
+  const saveAssessorDate = useCallback(
+    (feature: OccurrenceFeature, eventDate: string) => {
+      const gbifID = feature.properties.gbifID;
+      commitEdits(
+        {
+          dates: {
+            ...assessorDates,
+            [gbifID]: {
+              gbifID,
+              eventDate,
+              addedAt: new Date().toISOString(),
+              addedBy: accountEmail || undefined,
+            },
+          },
+        },
+        `date GBIF ${gbifID} as ${eventDate}`
+      );
+    },
+    [assessorDates, accountEmail, commitEdits]
+  );
+
+  const clearAssessorDate = useCallback(
+    (feature: OccurrenceFeature) => {
+      const next = { ...assessorDates };
+      delete next[feature.properties.gbifID];
+      commitEdits({ dates: next }, `drop your date for GBIF ${feature.properties.gbifID}`);
+    },
+    [assessorDates, commitEdits]
+  );
+
   const showRecordInTable = useCallback(
     (gbifID: number) => {
       // On whichever list holds it. A record you've set aside is in the other
@@ -4947,8 +4990,11 @@ export default function OccurrenceMapRow({
           species: p.species,
           latitude: position[1],
           longitude: position[0],
-          year: p.year,
-          eventDate: p.eventDate,
+          // Their date if they gave one: a point file's event_year is the
+          // year the specimen was collected, not the year GBIF managed to
+          // transcribe.
+          year: assessorDates[p.gbifID] ? null : p.year,
+          eventDate: assessorDates[p.gbifID]?.eventDate ?? p.eventDate,
           basisOfRecord: p.basisOfRecord,
           catalogNumber: p.catalogNumber,
           recordedBy: p.recordedBy,
@@ -4956,7 +5002,7 @@ export default function OccurrenceMapRow({
           georeferenced: !!mine,
         }];
       }),
-    [includedOccurrences, georeferences]
+    [includedOccurrences, georeferences, assessorDates]
   );
 
   const saveAsPointFile = useCallback(() => {
@@ -6877,6 +6923,9 @@ export default function OccurrenceMapRow({
                   hoveredGbifId={hoveredFeature?.properties.gbifID ?? null}
                   onHoverRow={handleHoverRow}
                   focusGbifId={focusRecord}
+                  dates={assessorDates}
+                  onSaveDate={saveAssessorDate}
+                  onClearDate={clearAssessorDate}
                   duplicates={listTab === "gbif" ? duplicatesByPrimary : undefined}
                   onMarkDuplicate={listTab === "gbif" ? markDuplicates : undefined}
                   onRowContextMenu={(feature, at) =>

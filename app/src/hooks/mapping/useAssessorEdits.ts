@@ -15,10 +15,13 @@ import {
   type History,
 } from "@/lib/mapping/edit-history";
 import {
+  loadDates,
   loadExclusions,
   loadGeoreferences,
+  saveDates,
   saveExclusions,
   saveGeoreferences,
+  type AssessorDate,
   type Exclusion,
   type Georeference,
 } from "@/lib/mapping/georeferences";
@@ -27,6 +30,8 @@ import {
 export interface AssessorEdits {
   georeferences: Record<number, Georeference>;
   exclusions: Record<number, Exclusion>;
+  /** Dates the assessor read off a label GBIF didn't transcribe. */
+  dates: Record<number, AssessorDate>;
 }
 
 /**
@@ -48,6 +53,7 @@ export function useAssessorEdits(
   const load = (key: string): AssessorEdits => ({
     georeferences: loadGeoreferences(key),
     exclusions: loadExclusions(key),
+    dates: loadDates(key),
   });
 
   const [history, setHistory] = useState<History<AssessorEdits>>(() => initHistory(load(speciesKey)));
@@ -76,7 +82,8 @@ export function useAssessorEdits(
       // the failure required.
       const savedGeoreferences = saveGeoreferences(speciesKey, edits.georeferences);
       const savedExclusions = saveExclusions(speciesKey, edits.exclusions);
-      if (!savedGeoreferences || !savedExclusions) onStorageError.current?.();
+      const savedDates = saveDates(speciesKey, edits.dates ?? {});
+      if (!savedGeoreferences || !savedExclusions || !savedDates) onStorageError.current?.();
     },
     [speciesKey]
   );
@@ -152,6 +159,7 @@ export function useAssessorEdits(
   return {
     georeferences: history.present.state.georeferences,
     exclusions: history.present.state.exclusions,
+    dates: history.present.state.dates ?? {},
     commit,
     undo,
     redo,
