@@ -3,6 +3,17 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { QUALITY_FLAG_LABELS, type QualityFlag } from "@/lib/mapping/coordinate-cleaning";
+import {
+  browserLanguage,
+  knownTranslation,
+  languageName,
+  setTranslationProvider,
+  translateText,
+  translationProvider,
+  TRANSLATION_PROVIDERS,
+  type Translation,
+  type TranslationProvider,
+} from "@/lib/mapping/translate";
 import { formatGbifIssue } from "@/lib/gbif";
 import {
   duplicateOf,
@@ -155,6 +166,14 @@ const DEFAULT_VISIBLE_COLUMNS = [
 ];
 
 const COLUMN_PREFS_KEY = "redlist-occurrence-columns:v1";
+
+/** How wide the hover bubble is allowed to get, and what it's clamped by. */
+const HOVER_NOTE_MAX_WIDTH = 320;
+/**
+ * How much room below the anchor the bubble needs before it opens downward.
+ * Roughly a bubble with a locality and its translation in it.
+ */
+const HOVER_NOTE_FLIP_MARGIN = 150;
 
 interface ColumnPrefs {
   /** Column ids in display order; anything unknown is ignored on read. */
@@ -729,7 +748,15 @@ export default function OccurrenceListTable({
    * flag. Its own bubble rather than a `title`, which the browser holds back
    * for about a second: long enough that the mark reads as unexplained.
    */
-  const [hoverNote, setHoverNote] = useState<{ text: string; x: number; y: number } | null>(null);
+  const [hoverNote, setHoverNote] = useState<{
+    text: string;
+    x: number;
+    y: number;
+    /** Where the bubble's bottom edge goes when there's no room below. */
+    above?: number;
+    /** Whether this one is worth offering to translate — a locality is. */
+    translate?: boolean;
+  } | null>(null);
   /**
    * The bubble outlives the pointer leaving the cell, long enough to reach it.
    *
@@ -739,7 +766,13 @@ export default function OccurrenceListTable({
    * between the cell and the bubble, and staying while the pointer is inside.
    */
   const noteTimer = useRef<number | null>(null);
-  const showNote = useCallback((note: { text: string; x: number; y: number }) => {
+  const showNote = useCallback((note: {
+    text: string;
+    x: number;
+    y: number;
+    above?: number;
+    translate?: boolean;
+  }) => {
     if (noteTimer.current != null) window.clearTimeout(noteTimer.current);
     noteTimer.current = null;
     setHoverNote(note);
@@ -755,6 +788,72 @@ export default function OccurrenceListTable({
     if (noteTimer.current != null) window.clearTimeout(noteTimer.current);
     noteTimer.current = null;
   }, []);
+  /**
+   * The translation of whatever the bubble is showing, once it's been asked
+   * for.
+   *
+   * Held against the string it belongs to rather than the row, because the
+   * bubble is one element that every cell borrows: moving to another locality
+   * has to stop showing the last one's translation, and coming back to a
+   * locality already translated has to show it again without spending a
+   * second request.
+   */
+  const [translation, setTranslation] = useState<{
+    source: string;
+    provider: TranslationProvider;
+    status: "loading" | "done" | "error";
+    result?: Translation;
+    error?: string;
+  } | null>(null);
+  /**
+   * Which service to ask. Remembered between sessions, and switchable from
+   * the bubble: a second opinion on a locality description is worth having,
+   * and the two services are not equally good at the same sentence.
+   */
+  const [provider, setProvider] = useState<TranslationProvider>(() => translationProvider());
+  const translateNote = useCallback((text: string, using: TranslationProvider) => {
+    const target = browserLanguage();
+    const already = knownTranslation(text, target, using);
+    if (already) {
+      setTranslation({ source: text, provider: using, status: "done", result: already });
+      return;
+    }
+    setTranslation({ source: text, provider: using, status: "loading" });
+    translateText(text, target, using)
+      .then((result) => setTranslation({ source: text, provider: using, status: "done", result }))
+      .catch((error: unknown) =>
+        setTranslation({
+          source: text,
+          provider: using,
+          status: "error",
+          error: error instanceof Error ? error.message : String(error),
+        })
+      );
+  }, []);
+  /** Switch service and ask again, in one click. */
+  const retranslateWith = useCallback(
+    (text: string, using: TranslationProvider) => {
+      setProvider(using);
+      setTranslationProvider(using);
+      translateNote(text, using);
+    },
+    [translateNote]
+  );
+  /**
+   * What belongs under the bubble's text right now: this session's attempt if
+   * it is about the string on screen, or one translated earlier and still
+   * cached, which is what makes going back to a locality free.
+   */
+  const cachedTranslation = hoverNote?.translate
+    ? knownTranslation(hoverNote.text, browserLanguage(), provider)
+    : undefined;
+  const shownTranslation = !hoverNote?.translate
+    ? null
+    : translation && translation.source === hoverNote.text
+      ? translation
+      : cachedTranslation
+        ? { source: hoverNote.text, provider, status: "done" as const, result: cachedTranslation }
+        : null;
   /** The record whose date is being typed. */
   const [editingDate, setEditingDate] = useState<number | null>(null);
   /**
@@ -867,13 +966,15 @@ export default function OccurrenceListTable({
    * tooltip is not.
    */
   const full = useCallback(
-    (text: string) => (
+    // `translate` also means the bubble is worth opening for a value that
+    // isn't cut off: the button in it is the point, not the overflow.
+    (text: string, translate = false) => (
       <span
         onMouseEnter={(e) => {
           const el = e.currentTarget;
-          if (el.scrollWidth <= el.clientWidth) return;
+          if (!translate && el.scrollWidth <= el.clientWidth) return;
           const box = el.getBoundingClientRect();
-          showNote({ text, x: box.left, y: box.bottom + 4 });
+          showNote({ text, x: box.left, y: box.bottom + 4, above: box.top - 4, translate });
         }}
         onMouseLeave={hideNoteSoon}
         className="block truncate"
@@ -1342,7 +1443,7 @@ export default function OccurrenceListTable({
         value: (p) => localityOf(p) || null,
         render: (p) => {
           const loc = localityOf(p);
-          return loc ? full(loc) : null;
+          return loc ? full(loc, true) : null;
         },
       },
       {
@@ -1998,9 +2099,17 @@ export default function OccurrenceListTable({
         <div
           style={{
             position: "fixed",
-            left: Math.min(hoverNote.x, window.innerWidth - 260),
-            top: Math.max(4, hoverNote.y),
-            maxWidth: 320,
+            // Clamped against the width the bubble can actually reach, not a
+            // narrower guess at it: with a translation under the text it takes
+            // all 320 and was running off the right edge.
+            left: Math.max(4, Math.min(hoverNote.x, window.innerWidth - HOVER_NOTE_MAX_WIDTH - 8)),
+            // A locality on the last row on screen had its bubble — and the
+            // translate button in it — below the bottom of the window. There
+            // it opens upward instead.
+            ...(hoverNote.above != null && hoverNote.y > window.innerHeight - HOVER_NOTE_FLIP_MARGIN
+              ? { bottom: Math.max(4, window.innerHeight - hoverNote.above) }
+              : { top: Math.max(4, hoverNote.y) }),
+            maxWidth: HOVER_NOTE_MAX_WIDTH,
             zIndex: 10002,
           }}
           onMouseEnter={keepNote}
@@ -2009,6 +2118,70 @@ export default function OccurrenceListTable({
           className="rounded-md bg-zinc-900/95 dark:bg-zinc-700 px-1.5 py-1 text-[10px] leading-snug text-white shadow-lg select-text cursor-text"
         >
           {hoverNote.text}
+          {/* A locality is the field a georeference is made from, and it is
+              written in the language of whoever collected the specimen. The
+              button rather than translating on sight: the free service is
+              metered by the day, and most localities are read without it. */}
+          {hoverNote.translate && (
+            <button
+              onClick={() => translateNote(hoverNote.text, provider)}
+              disabled={shownTranslation?.status === "loading"}
+              title={`Translate this locality into ${languageName(browserLanguage()) ?? browserLanguage()}, with ${TRANSLATION_PROVIDERS[provider].label}`}
+              aria-label="Translate this locality"
+              data-translate-locality
+              className="ml-1 inline-flex align-middle cursor-pointer text-white/50 hover:text-white disabled:hover:text-white/50"
+            >
+              <svg className="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
+                <circle cx="12" cy="12" r="9" />
+                <path d="M3 12h18" />
+                <path d="M12 3c2.5 2.5 3.75 5.5 3.75 9S14.5 18.5 12 21c-2.5-2.5-3.75-5.5-3.75-9S9.5 5.5 12 3z" />
+              </svg>
+            </button>
+          )}
+          {shownTranslation && (
+            <div className="mt-1 pt-1 border-t border-white/20">
+              {shownTranslation.status === "loading" && <span className="text-white/60">Translating…</span>}
+              {shownTranslation.status === "error" && (
+                <span className="text-amber-300">{shownTranslation.error}</span>
+              )}
+              {shownTranslation.status === "done" && shownTranslation.result && (
+                <>
+                  <span className="text-white/60">
+                    Translates to
+                    {shownTranslation.result.detected
+                      ? ` (${languageName(shownTranslation.result.detected)} → ${languageName(shownTranslation.result.target)})`
+                      : ""}
+                    {shownTranslation.result.truncated
+                      ? `, from its first ${TRANSLATION_PROVIDERS[shownTranslation.result.provider].maxChars} characters`
+                      : ""}
+                    :
+                  </span>{" "}
+                  {shownTranslation.result.text}
+                </>
+              )}
+              {/* Who said so, and the other one — the two services are not
+                  equally good at the same sentence, and a locality is worth a
+                  second opinion. The choice is remembered. */}
+              {shownTranslation.status !== "loading" && (
+                <div className="mt-0.5 text-white/40">
+                  via {TRANSLATION_PROVIDERS[shownTranslation.provider].label}
+                  {(Object.keys(TRANSLATION_PROVIDERS) as TranslationProvider[])
+                    .filter((other) => other !== shownTranslation.provider)
+                    .map((other) => (
+                      <button
+                        key={other}
+                        onClick={() => retranslateWith(hoverNote.text, other)}
+                        title={`Translate it with ${TRANSLATION_PROVIDERS[other].label} instead, and keep asking it from now on`}
+                        data-translate-with={other}
+                        className="ml-1 cursor-pointer underline decoration-dotted hover:text-white"
+                      >
+                        try {TRANSLATION_PROVIDERS[other].label}
+                      </button>
+                    ))}
+                </div>
+              )}
+            </div>
+          )}
         </div>,
         document.body
       )}
