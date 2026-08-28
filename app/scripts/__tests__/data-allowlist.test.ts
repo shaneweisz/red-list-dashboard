@@ -95,6 +95,20 @@ describe("data/ allowlists", () => {
     }
   });
 
+  it("keeps the repo the sole owner of col-revisions.json", () => {
+    // The card's reason codes live in this file and the vocabulary that reads
+    // them lives in src/lib/col-revision.ts. If it were R2-published as well as
+    // tracked, fetch-data-from-r2 would overwrite the committed copy at build
+    // time and the two could ship apart — renaming a reason in code would empty
+    // its bar until the next sync. So: tracked, staged weekly, never uploaded.
+    const upload = fs.readFileSync(path.join(APP, "scripts/upload-data-to-r2.ts"), "utf8");
+    const excluded = upload.match(/EXCLUDE_FROM_SYNC = new Set\(\[([^\]]*)\]\)/);
+    expect(excluded, "EXCLUDE_FROM_SYNC not found — did it move or get renamed?").toBeTruthy();
+    expect(excluded![1]).toContain('"col-revisions.json"');
+    expect(unignoredDataPaths()).toContain("data/col-revisions.json");
+    expect(stagedDataPaths()).toContain("data/col-revisions.json");
+  });
+
   it("stages an explicit list rather than everything", () => {
     const workflow = fs.readFileSync(WORKFLOW, "utf8");
     for (const line of workflow.split("\n").map((l) => l.trim())) {

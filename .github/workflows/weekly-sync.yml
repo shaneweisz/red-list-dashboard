@@ -126,8 +126,13 @@ jobs:
           # -A`/`.` here: data/ holds ~400MB of raw per-species data that must
           # never touch git, only these small, already-committed aggregate files.
           # Keep this list in exact sync with app/.gitignore's `!/data/...`
-          # exceptions (the 7 dual git-tracked-and-R2-published data/ files) plus
-          # the 2 git-tracked src/config/ pipeline outputs — data/node-children-
+          # exceptions: 7 dual git-tracked-and-R2-published data/ files, plus
+          # col-revisions.json, which the repo owns outright — it is the one
+          # tracked file NOT re-uploaded to R2, because it carries the card's
+          # reason codes and those have to ship with the code that reads them
+          # (see EXCLUDE_FROM_SYNC in upload-data-to-r2.ts). Committing it here
+          # is therefore how a sync's flag changes reach production at all.
+          # Plus the 2 git-tracked src/config/ pipeline outputs — data/node-children-
           # summaries.json (referenced here until now) was split into the two
           # table1a-/ssc-group- files below a while back and this list was never
           # updated, so this step would have failed with "pathspec did not match
