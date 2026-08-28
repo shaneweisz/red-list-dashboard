@@ -53,6 +53,14 @@ interface MapOccurrenceTooltipProps {
   onPointerEnter?: () => void;
   onPointerLeave?: () => void;
   /**
+   * Editing the record's position, where it has one to edit.
+   *
+   * Below the fields and above the actions: it belongs to the record rather
+   * than being something you do with it, and it is where the coordinates it
+   * changes are shown.
+   */
+  editor?: React.ReactNode;
+  /**
    * What you can do with this record, drawn as a block at the foot of the
    * panel.
    */
@@ -305,7 +313,8 @@ export default function MapOccurrenceTooltip(props: MapOccurrenceTooltipProps) {
         // action, or a field list long enough to scroll. Inert otherwise, so a
         // panel with four lines in it can't get between the pointer and the
         // map.
-        pointerEvents: props.page || props.actions || props.fields.length > 8 ? "auto" : "none",
+        pointerEvents:
+          props.page || props.actions || props.editor || props.fields.length > 8 ? "auto" : "none",
       }}
       onMouseEnter={props.onPointerEnter}
       onMouseLeave={props.onPointerLeave}
@@ -468,6 +477,7 @@ export default function MapOccurrenceTooltip(props: MapOccurrenceTooltipProps) {
               ))}
             </div>
           )}
+          {props.editor}
         </div>
         {props.actions && (
           <div className="border-t border-zinc-100 dark:border-zinc-800 p-1 space-y-0.5 text-[11px] text-zinc-700 dark:text-zinc-200">

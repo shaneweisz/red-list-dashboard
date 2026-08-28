@@ -16,6 +16,7 @@ import { formatGbifIssue } from "@/lib/gbif";
 import {
   duplicateOf,
   parseAssessorDate,
+  parseCoordinateEntry,
   resolvePrimary,
   type Georeference,
 } from "@/lib/mapping/georeferences";
@@ -433,7 +434,7 @@ function CoordinateCellEditor({
 }) {
   const [text, setText] = useState(initial);
   const [note, setNote] = useState(initialNote);
-  const parsed = parseCoordinateCell(text);
+  const parsed = parseCoordinateEntry(text);
   const empty = text.trim() === "";
   const commit = () => onCommit(parsed ? { ...parsed, note: note.trim() } : null);
   return (
@@ -523,23 +524,6 @@ function RadiusCellEditor({
       }`}
     />
   );
-}
-
-/**
- * "lat, lon" or "lat, lon, radius" — the forms people paste or type.
- *
- * Null for anything that isn't a position, so a half-typed cell shows as not
- * yet valid rather than being committed as a coordinate.
- */
-function parseCoordinateCell(
-  text: string
-): { lat: number; lon: number; uncertainty?: number } | null {
-  const parts = text.trim().split(/[,;\s]+/).filter(Boolean).map(Number);
-  if (parts.length < 2 || parts.length > 3 || parts.some((n) => !Number.isFinite(n))) return null;
-  const [lat, lon, uncertainty] = parts;
-  if (lat < -90 || lat > 90 || lon < -180 || lon > 180) return null;
-  if (uncertainty != null && uncertainty <= 0) return null;
-  return uncertainty != null ? { lat, lon, uncertainty } : { lat, lon };
 }
 
 interface OccurrenceListTableProps {

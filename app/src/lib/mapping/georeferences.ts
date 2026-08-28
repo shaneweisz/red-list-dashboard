@@ -183,6 +183,25 @@ export function parseCoordinatePair(text: string): { lat: number; lon: number } 
 }
 
 /**
+ * "lat, lon" or "lat, lon, radius" — the forms people paste or type.
+ *
+ * Null for anything that isn't a position, so a half-typed entry shows as not
+ * yet valid rather than being committed as a coordinate. Shared by the table's
+ * Coordinates cell and the map panel's editor, which have to agree about what
+ * counts as a position.
+ */
+export function parseCoordinateEntry(
+  text: string
+): { lat: number; lon: number; uncertainty?: number } | null {
+  const parts = text.trim().split(/[,;\s]+/).filter(Boolean).map(Number);
+  if (parts.length < 2 || parts.length > 3 || parts.some((n) => !Number.isFinite(n))) return null;
+  const [lat, lon, uncertainty] = parts;
+  if (lat < -90 || lat > 90 || lon < -180 || lon > 180) return null;
+  if (uncertainty != null && uncertainty <= 0) return null;
+  return uncertainty != null ? { lat, lon, uncertainty } : { lat, lon };
+}
+
+/**
  * A ring of points approximating a circle of `radiusMeters` around a position,
  * for drawing the uncertainty on the map. Metres are converted per-latitude, so
  * the circle stays a circle on the ground rather than becoming an ellipse away

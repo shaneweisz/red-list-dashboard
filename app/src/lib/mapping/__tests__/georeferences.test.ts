@@ -7,6 +7,7 @@ import {
   duplicateOfReason,
   resolvePrimary,
   parseAssessorDate,
+  parseCoordinateEntry,
 } from "../georeferences";
 
 describe("validateGeoreference", () => {
@@ -154,5 +155,39 @@ describe("parseAssessorDate", () => {
   it("keeps the last day of a month that has one", () => {
     expect(parseAssessorDate("2024-02-29")).toEqual({ eventDate: "2024-02-29" });
     expect(parseAssessorDate("2023-02-29")).toHaveProperty("error");
+  });
+});
+
+describe("parseCoordinateEntry", () => {
+  it("reads the pair people paste", () => {
+    expect(parseCoordinateEntry("1.1958, -76.9256")).toEqual({ lat: 1.1958, lon: -76.9256 });
+  });
+
+  it("reads a third number as the radius", () => {
+    expect(parseCoordinateEntry("1.1958, -76.9256, 2000")).toEqual({
+      lat: 1.1958,
+      lon: -76.9256,
+      uncertainty: 2000,
+    });
+  });
+
+  it("takes a space or a semicolon between them, as a label might", () => {
+    expect(parseCoordinateEntry("4.55 -75.5")).toEqual({ lat: 4.55, lon: -75.5 });
+    expect(parseCoordinateEntry("4.55; -75.5")).toEqual({ lat: 4.55, lon: -75.5 });
+  });
+
+  it("refuses a position off the globe", () => {
+    expect(parseCoordinateEntry("95, -75.5")).toBeNull();
+    expect(parseCoordinateEntry("4.55, -200")).toBeNull();
+  });
+
+  it("refuses a radius of nothing", () => {
+    expect(parseCoordinateEntry("4.55, -75.5, 0")).toBeNull();
+  });
+
+  it("says nothing rather than half a position while it's still being typed", () => {
+    expect(parseCoordinateEntry("4.55,")).toBeNull();
+    expect(parseCoordinateEntry("")).toBeNull();
+    expect(parseCoordinateEntry("north of the river")).toBeNull();
   });
 });

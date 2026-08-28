@@ -23,11 +23,12 @@ import { CATEGORY_COLORS, normalizeCategory } from "@/config/taxa";
 import { FaInfoCircle } from "react-icons/fa";
 import booleanPointInPolygon from "@turf/boolean-point-in-polygon";
 import type { Feature, Polygon, MultiPolygon } from "geojson";
+import MapGeoreferenceEditor from "./MapGeoreferenceEditor";
 import type { OccurrenceFeature as OccurrenceFeatureType } from "./OccurrenceListTable";
 // The table's own labels, so a basis of record is worded the same wherever it
 // appears. A value import from a module the map otherwise loads lazily, which
 // is fine: it's a plain object with no component behind it.
-import { BASIS_LABELS } from "./OccurrenceListTable";
+import { BASIS_LABELS, isGeoreferenceable } from "./OccurrenceListTable";
 import {
   PROTECTED_AREAS_TILE_URL,
   PROTECTED_AREAS_ATTRIBUTION,
@@ -3549,6 +3550,27 @@ export default function OccurrenceMapRow({
                     // meant hovering told you about a record and gave you no
                     // way to act on it. Clicking only pins the panel, so the
                     // buttons stay put while you reach for them.
+                    // Georeferencing without leaving the map: deciding where a
+                    // locality description points means reading the river, the
+                    // records around it and the boundary it falls inside, all
+                    // of which are under this panel.
+                    editor={
+                      fullscreen && (isGeoreferenceable(shown.properties) || mine) ? (
+                        <MapGeoreferenceEditor
+                          key={shown.properties.gbifID}
+                          initial={{
+                            lat: mine?.decimalLatitude,
+                            lon: mine?.decimalLongitude,
+                            radius: mine?.coordinateUncertaintyInMeters,
+                            note: mine?.georeferenceRemarks,
+                          }}
+                          defaultRadius={DEFAULT_GEOREFERENCE_RADIUS_M}
+                          mine={!!mine}
+                          onSave={(edit) => saveGeoreferenceInline(shown, edit)}
+                          onClear={mine ? () => clearGeoreference(shown) : undefined}
+                        />
+                      ) : undefined
+                    }
                     actions={renderRecordActions(shown.properties.gbifID, { showInTable: true })}
                     // Always there, pinned or not. It used to appear only
                     // once the panel was pinned, and since these controls are
@@ -3562,7 +3584,7 @@ export default function OccurrenceMapRow({
               {/* Where the search landed. Pinned rather than just flown to:
                   the point of looking a locality up is to compare it against
                   the records, which means both have to be on screen at once. */}
-              {previewPlace && !pinnedPlaces.some((p) => p.id === previewPlace.id) && (
+              {fullscreen && previewPlace && !pinnedPlaces.some((p) => p.id === previewPlace.id) && (
                 <MapLibreMarker
                   key={`preview-${previewPlace.id}`}
                   longitude={previewPlace.lng}
@@ -3579,7 +3601,12 @@ export default function OccurrenceMapRow({
                   </div>
                 </MapLibreMarker>
               )}
-              {pinnedPlaces.map((place) => (
+              {/* Pins belong to the page that has the locality search and the
+                  record list: they are placed to be read against a locality
+                  description, and there is none to read outside fullscreen —
+                  where they were furniture on a map answering a different
+                  question. They keep their place in storage either way. */}
+              {fullscreen && pinnedPlaces.map((place) => (
                 <MapLibreMarker key={place.id} longitude={place.lng} latitude={place.lat} anchor="bottom">
                   <div className="flex flex-col items-center -mb-1">
                     {!place.nameHidden && (
@@ -3927,6 +3954,8 @@ export default function OccurrenceMapRow({
                     {/* Silent when the point isn't protected: the overlay is
                         already showing you that, and a line saying so on every
                         click is noise on the answer you did ask for. */}
+                    {/* Fullscreen only, like the pins it drops. */}
+                    {fullscreen && (
                     <div className="pt-1 border-t border-zinc-100 dark:border-zinc-800 flex items-center gap-1">
                       <input
                         value={newPinLabel}
@@ -3954,6 +3983,7 @@ export default function OccurrenceMapRow({
                         Pin
                       </button>
                     </div>
+                    )}
                   </div>
                 </MapPopup>
               )}
