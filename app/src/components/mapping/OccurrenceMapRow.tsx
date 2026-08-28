@@ -6736,13 +6736,18 @@ export default function OccurrenceMapRow({
                                 }`
                           }
                           aria-label="Save your work to a file"
-                          className={`px-1.5 py-1 hover:bg-zinc-50 dark:hover:bg-zinc-800 disabled:opacity-30 disabled:cursor-not-allowed ${
+                          className={`flex items-center gap-1 px-1.5 py-1 hover:bg-zinc-50 dark:hover:bg-zinc-800 disabled:opacity-30 disabled:cursor-not-allowed ${
                             hasWorkToSave && !lastSavedAt ? "text-amber-600 dark:text-amber-500" : "text-zinc-600 dark:text-zinc-300"
                           }`}
                         >
                           <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                             <path strokeLinecap="round" strokeLinejoin="round" d="M12 3v12m0 0l-4-4m4 4l4-4M4 17v2a2 2 0 002 2h12a2 2 0 002-2v-2" />
                           </svg>
+                          {/* Named, where the rest of the toolbar is icons:
+                              this is the one button whose job is to get the
+                              work out of a browser that could lose it, and an
+                              arrow nobody recognises isn't an invitation. */}
+                          <span className="text-xs">Save</span>
                         </button>
                         <button
                           onClick={() => restoreInputRef.current?.click()}
