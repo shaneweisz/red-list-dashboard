@@ -7,9 +7,7 @@ import {
   browserLanguage,
   knownTranslation,
   languageName,
-  setTranslationProvider,
   translateText,
-  translationProvider,
   TRANSLATION_PROVIDERS,
   type Translation,
   type TranslationProvider,
@@ -798,62 +796,69 @@ export default function OccurrenceListTable({
    * locality already translated has to show it again without spending a
    * second request.
    */
-  const [translation, setTranslation] = useState<{
+  const [translations, setTranslations] = useState<{
     source: string;
-    provider: TranslationProvider;
-    status: "loading" | "done" | "error";
-    result?: Translation;
-    error?: string;
+    entries: Partial<
+      Record<TranslationProvider, { status: "loading" | "done" | "error"; result?: Translation; error?: string }>
+    >;
   } | null>(null);
   /**
-   * Which service to ask. Remembered between sessions, and switchable from
-   * the bubble: a second opinion on a locality description is worth having,
-   * and the two services are not equally good at the same sentence.
+   * Asks one service, keeping whatever the other already said.
+   *
+   * Both at once is the point: the two disagree, and on a locality
+   * description the disagreement is the information — one of them read
+   * "Comisaría del Vaupés" as a police station and the other as the
+   * territory it names.
    */
-  const [provider, setProvider] = useState<TranslationProvider>(() => translationProvider());
   const translateNote = useCallback((text: string, using: TranslationProvider) => {
     const target = browserLanguage();
+    const set = (entry: { status: "loading" | "done" | "error"; result?: Translation; error?: string }) =>
+      setTranslations((current) => ({
+        source: text,
+        // A different locality starts again; the same one keeps what it has.
+        entries: { ...(current?.source === text ? current.entries : {}), [using]: entry },
+      }));
     const already = knownTranslation(text, target, using);
     if (already) {
-      setTranslation({ source: text, provider: using, status: "done", result: already });
+      set({ status: "done", result: already });
       return;
     }
-    setTranslation({ source: text, provider: using, status: "loading" });
+    set({ status: "loading" });
     translateText(text, target, using)
-      .then((result) => setTranslation({ source: text, provider: using, status: "done", result }))
+      .then((result) => set({ status: "done", result }))
       .catch((error: unknown) =>
-        setTranslation({
-          source: text,
-          provider: using,
-          status: "error",
-          error: error instanceof Error ? error.message : String(error),
-        })
+        set({ status: "error", error: error instanceof Error ? error.message : String(error) })
       );
   }, []);
-  /** Switch service and ask again, in one click. */
-  const retranslateWith = useCallback(
-    (text: string, using: TranslationProvider) => {
-      setProvider(using);
-      setTranslationProvider(using);
-      translateNote(text, using);
-    },
-    [translateNote]
-  );
   /**
    * What belongs under the bubble's text right now: this session's attempt if
    * it is about the string on screen, or one translated earlier and still
    * cached, which is what makes going back to a locality free.
    */
-  const cachedTranslation = hoverNote?.translate
-    ? knownTranslation(hoverNote.text, browserLanguage(), provider)
-    : undefined;
-  const shownTranslation = !hoverNote?.translate
-    ? null
-    : translation && translation.source === hoverNote.text
-      ? translation
-      : cachedTranslation
-        ? { source: hoverNote.text, provider, status: "done" as const, result: cachedTranslation }
-        : null;
+  /**
+   * One line per service that has something to say about the locality on
+   * screen — this session's attempt, or one translated earlier and still
+   * cached, which is what makes coming back to a locality free.
+   */
+  const shownTranslations = !hoverNote?.translate
+    ? []
+    : (Object.keys(TRANSLATION_PROVIDERS) as TranslationProvider[])
+        .map((provider) => {
+          const attempt = translations?.source === hoverNote.text ? translations.entries[provider] : undefined;
+          if (attempt) return { provider, ...attempt };
+          const cached = knownTranslation(hoverNote.text, browserLanguage(), provider);
+          return cached ? { provider, status: "done" as const, result: cached, error: undefined } : null;
+        })
+        .filter((line) => line != null);
+  /**
+   * The source language, where the services that answered agree on it. They
+   * are detecting it independently, so where they disagree the header says
+   * nothing rather than picking one.
+   */
+  const detectedLanguages = new Set(
+    shownTranslations.map((line) => line.result?.detected).filter((code) => code != null)
+  );
+  const detectedSource = detectedLanguages.size === 1 ? [...detectedLanguages][0] : undefined;
   /** The record whose date is being typed. */
   const [editingDate, setEditingDate] = useState<number | null>(null);
   /**
@@ -2119,67 +2124,63 @@ export default function OccurrenceListTable({
         >
           {hoverNote.text}
           {/* A locality is the field a georeference is made from, and it is
-              written in the language of whoever collected the specimen. The
-              button rather than translating on sight: the free service is
-              metered by the day, and most localities are read without it. */}
-          {hoverNote.translate && (
-            <button
-              onClick={() => translateNote(hoverNote.text, provider)}
-              disabled={shownTranslation?.status === "loading"}
-              title={`Translate this locality into ${languageName(browserLanguage()) ?? browserLanguage()}, with ${TRANSLATION_PROVIDERS[provider].label}`}
-              aria-label="Translate this locality"
-              data-translate-locality
-              className="ml-1 inline-flex align-middle cursor-pointer text-white/50 hover:text-white disabled:hover:text-white/50"
-            >
-              <svg className="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
-                <circle cx="12" cy="12" r="9" />
-                <path d="M3 12h18" />
-                <path d="M12 3c2.5 2.5 3.75 5.5 3.75 9S14.5 18.5 12 21c-2.5-2.5-3.75-5.5-3.75-9S9.5 5.5 12 3z" />
-              </svg>
-            </button>
-          )}
-          {shownTranslation && (
-            <div className="mt-1 pt-1 border-t border-white/20">
-              {shownTranslation.status === "loading" && <span className="text-white/60">Translating…</span>}
-              {shownTranslation.status === "error" && (
-                <span className="text-amber-300">{shownTranslation.error}</span>
-              )}
-              {shownTranslation.status === "done" && shownTranslation.result && (
-                <>
-                  <span className="text-white/60">
-                    Translates to
-                    {shownTranslation.result.detected
-                      ? ` (${languageName(shownTranslation.result.detected)} → ${languageName(shownTranslation.result.target)})`
-                      : ""}
-                    {shownTranslation.result.truncated
-                      ? `, from its first ${TRANSLATION_PROVIDERS[shownTranslation.result.provider].maxChars} characters`
-                      : ""}
-                    :
-                  </span>{" "}
-                  {shownTranslation.result.text}
-                </>
-              )}
-              {/* Who said so, and the other one — the two services are not
-                  equally good at the same sentence, and a locality is worth a
-                  second opinion. The choice is remembered. */}
-              {shownTranslation.status !== "loading" && (
-                <div className="mt-0.5 text-white/40">
-                  via {TRANSLATION_PROVIDERS[shownTranslation.provider].label}
-                  {(Object.keys(TRANSLATION_PROVIDERS) as TranslationProvider[])
-                    .filter((other) => other !== shownTranslation.provider)
-                    .map((other) => (
-                      <button
-                        key={other}
-                        onClick={() => retranslateWith(hoverNote.text, other)}
-                        title={`Translate it with ${TRANSLATION_PROVIDERS[other].label} instead, and keep asking it from now on`}
-                        data-translate-with={other}
-                        className="ml-1 cursor-pointer underline decoration-dotted hover:text-white"
-                      >
-                        try {TRANSLATION_PROVIDERS[other].label}
-                      </button>
-                    ))}
+              written in the language of whoever collected the specimen. One
+              button per service rather than one button and a choice: they
+              disagree, and on a locality description the disagreement is the
+              information. Nothing is asked until it's clicked — both quotas
+              are metered by the day. */}
+          {hoverNote.translate &&
+            (Object.keys(TRANSLATION_PROVIDERS) as TranslationProvider[]).map((provider) => (
+              <button
+                key={provider}
+                onClick={() => translateNote(hoverNote.text, provider)}
+                disabled={shownTranslations.some((line) => line.provider === provider && line.status === "loading")}
+                title={`Translate this locality into ${languageName(browserLanguage()) ?? browserLanguage()} with ${TRANSLATION_PROVIDERS[provider].label}`}
+                aria-label={`Translate this locality with ${TRANSLATION_PROVIDERS[provider].label}`}
+                data-translate-with={provider}
+                className="ml-1 inline-flex align-middle cursor-pointer text-white/50 hover:text-white disabled:hover:text-white/50"
+              >
+                {provider === "google" ? (
+                  // A globe for the one that reads the whole web.
+                  <svg className="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
+                    <circle cx="12" cy="12" r="9" />
+                    <path d="M3 12h18" />
+                    <path d="M12 3c2.5 2.5 3.75 5.5 3.75 9S14.5 18.5 12 21c-2.5-2.5-3.75-5.5-3.75-9S9.5 5.5 12 3z" />
+                  </svg>
+                ) : (
+                  // An open book for the one that is a translation memory.
+                  <svg className="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M12 6.5C10.5 5.2 8.5 4.5 4 4.5v13c4.5 0 6.5.7 8 2 1.5-1.3 3.5-2 8-2v-13c-4.5 0-6.5.7-8 2z" />
+                    <path strokeLinecap="round" d="M12 6.5v13" />
+                  </svg>
+                )}
+              </button>
+            ))}
+          {shownTranslations.length > 0 && (
+            <div className="mt-1 pt-1 border-t border-white/20 space-y-0.5">
+              <span className="text-white/60">
+                Translates
+                {detectedSource ? ` from ${languageName(detectedSource)}` : ""} to{" "}
+                {languageName(browserLanguage()) ?? browserLanguage()}:
+              </span>
+              {shownTranslations.map((line) => (
+                <div key={line.provider}>
+                  <span className="text-white/40">{TRANSLATION_PROVIDERS[line.provider].label}</span>{" "}
+                  {line.status === "loading" && <span className="text-white/60">translating…</span>}
+                  {line.status === "error" && <span className="text-amber-300">{line.error}</span>}
+                  {line.status === "done" && line.result && (
+                    <>
+                      {line.result.text}
+                      {line.result.truncated && (
+                        <span className="text-white/40">
+                          {" "}
+                          (its first {TRANSLATION_PROVIDERS[line.provider].maxChars} characters)
+                        </span>
+                      )}
+                    </>
+                  )}
                 </div>
-              )}
+              ))}
             </div>
           )}
         </div>,

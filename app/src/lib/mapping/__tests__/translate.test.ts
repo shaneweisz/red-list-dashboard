@@ -7,8 +7,6 @@ import {
   browserLanguage,
   languageName,
   TRANSLATION_PROVIDERS,
-  translationProvider,
-  setTranslationProvider,
 } from "../translate";
 
 const LOCALITY = "Vereda El Cedral, bosque intervenido";
@@ -180,32 +178,6 @@ describe("Google, the other service", () => {
     await translateText(LOCALITY, "en", "google");
     expect(knownTranslation(LOCALITY, "en", "mymemory")?.text).toBe("MyMemory's answer");
     expect(knownTranslation(LOCALITY, "en", "google")?.text).toBe("Google's answer");
-  });
-});
-
-describe("the remembered choice of service", () => {
-  afterEach(() => vi.unstubAllGlobals());
-
-  it("is MyMemory until someone says otherwise", () => {
-    vi.stubGlobal("window", { localStorage: { getItem: () => null, setItem: () => {} } });
-    expect(translationProvider()).toBe("mymemory");
-  });
-
-  it("survives the session that made it", () => {
-    const data = new Map<string, string>();
-    vi.stubGlobal("window", {
-      localStorage: {
-        getItem: (k: string) => data.get(k) ?? null,
-        setItem: (k: string, v: string) => void data.set(k, v),
-      },
-    });
-    setTranslationProvider("google");
-    expect(translationProvider()).toBe("google");
-  });
-
-  it("ignores a stored name it doesn't recognise", () => {
-    vi.stubGlobal("window", { localStorage: { getItem: () => "babelfish", setItem: () => {} } });
-    expect(translationProvider()).toBe("mymemory");
   });
 });
 

@@ -1,5 +1,5 @@
-import { describe, it, expect } from "vitest";
-import { formatKind, parsePhotonResponse, searchUrl } from "../geocode";
+import { describe, it, expect, vi, afterEach } from "vitest";
+import { formatKind, loadPins, parsePhotonResponse, savePins, searchUrl, type Place } from "../geocode";
 
 describe("searchUrl", () => {
   it("asks for the query", () => {
@@ -147,5 +147,87 @@ describe("formatKind", () => {
   it("says OSM's snake_case out loud", () => {
     expect(formatKind("protected_area")).toBe("protected area");
     expect(formatKind(undefined)).toBe("");
+  });
+});
+
+describe("pins kept between sessions", () => {
+  const place = (id: string, name: string): Place => ({
+    id,
+    name,
+    context: "Vaupés, Colombia",
+    lat: 1.25,
+    lng: -70.23,
+  });
+
+  const store = () => {
+    const data = new Map<string, string>();
+    return {
+      getItem: (k: string) => data.get(k) ?? null,
+      setItem: (k: string, v: string) => void data.set(k, v),
+      removeItem: (k: string) => void data.delete(k),
+      raw: data,
+    };
+  };
+
+  afterEach(() => vi.unstubAllGlobals());
+
+  it("reads back what was pinned", () => {
+    vi.stubGlobal("window", { localStorage: store() });
+    savePins("6CX6F", [place("pin-1", "the ridge the 1987 collections came from")]);
+    expect(loadPins("6CX6F")).toEqual([place("pin-1", "the ridge the 1987 collections came from")]);
+  });
+
+  it("keeps one species' pins out of another's", () => {
+    vi.stubGlobal("window", { localStorage: store() });
+    savePins("6CX6F", [place("pin-1", "Sibundoy")]);
+    expect(loadPins("KRPN")).toEqual([]);
+  });
+
+  it("has nothing to say about a species never pinned", () => {
+    vi.stubGlobal("window", { localStorage: store() });
+    expect(loadPins("6CX6F")).toEqual([]);
+  });
+
+  it("drops a pin with no position rather than trying to draw it", () => {
+    const localStorage = store();
+    localStorage.setItem(
+      "redlist-pins:v1:6CX6F",
+      JSON.stringify({
+        version: 1,
+        updatedAt: "2026-08-28T00:00:00.000Z",
+        places: [place("pin-1", "good"), { id: "pin-2", name: "no position", context: "" }],
+      })
+    );
+    vi.stubGlobal("window", { localStorage });
+    expect(loadPins("6CX6F").map((p) => p.id)).toEqual(["pin-1"]);
+  });
+
+  it("ignores a store written by another version", () => {
+    const localStorage = store();
+    localStorage.setItem(
+      "redlist-pins:v1:6CX6F",
+      JSON.stringify({ version: 99, updatedAt: "", places: [place("pin-1", "x")] })
+    );
+    vi.stubGlobal("window", { localStorage });
+    expect(loadPins("6CX6F")).toEqual([]);
+  });
+
+  it("survives a store that isn't JSON", () => {
+    const localStorage = store();
+    localStorage.setItem("redlist-pins:v1:6CX6F", "{not json");
+    vi.stubGlobal("window", { localStorage });
+    expect(loadPins("6CX6F")).toEqual([]);
+  });
+
+  it("says so when the write fails, rather than pretending it worked", () => {
+    vi.stubGlobal("window", {
+      localStorage: {
+        getItem: () => null,
+        setItem: () => {
+          throw new Error("quota");
+        },
+      },
+    });
+    expect(savePins("6CX6F", [place("pin-1", "x")])).toBe(false);
   });
 });

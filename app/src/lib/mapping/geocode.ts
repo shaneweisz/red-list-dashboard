@@ -131,3 +131,61 @@ export function formatKind(kind?: string): string {
   if (!kind) return "";
   return kind.replace(/_/g, " ");
 }
+
+/**
+ * The places pinned while working on one species, kept between sessions.
+ *
+ * Pinning is part of reading a locality, not a passing glance at the map: the
+ * several places "Carretera Hollín-Loreto-Coca, near Volcán Sumaco" might mean
+ * are pinned together so they can be weighed against each other and against
+ * the records. That judgement takes longer than one sitting, and a reload was
+ * throwing away every pin that had been placed by hand — the ones a gazetteer
+ * doesn't know and that can't be searched for again.
+ *
+ * Per species, like the georeferences: the pins that make sense against one
+ * species' records are noise against another's.
+ */
+const PINS_PREFIX = "redlist-pins";
+const PINS_VERSION = 1;
+
+interface StoredPins {
+  version: number;
+  updatedAt: string;
+  places: Place[];
+}
+
+const pinsKey = (speciesKey: string) => `${PINS_PREFIX}:v${PINS_VERSION}:${speciesKey}`;
+
+export function loadPins(speciesKey: string): Place[] {
+  if (typeof window === "undefined") return [];
+  try {
+    const raw = window.localStorage.getItem(pinsKey(speciesKey));
+    if (!raw) return [];
+    const parsed: StoredPins = JSON.parse(raw);
+    if (parsed.version !== PINS_VERSION) return [];
+    // A pin with no position is a pin that can't be drawn; the rest of a
+    // half-written store is still worth having.
+    return (parsed.places ?? []).filter(
+      (place) =>
+        place && typeof place.id === "string" && Number.isFinite(place.lat) && Number.isFinite(place.lng)
+    );
+  } catch {
+    return [];
+  }
+}
+
+/** Replaces the stored pins for one species. Returns false if the write failed. */
+export function savePins(speciesKey: string, places: Place[]): boolean {
+  if (typeof window === "undefined") return false;
+  try {
+    const payload: StoredPins = {
+      version: PINS_VERSION,
+      updatedAt: new Date().toISOString(),
+      places,
+    };
+    window.localStorage.setItem(pinsKey(speciesKey), JSON.stringify(payload));
+    return true;
+  } catch {
+    return false;
+  }
+}

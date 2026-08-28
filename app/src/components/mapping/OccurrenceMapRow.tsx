@@ -84,7 +84,7 @@ import {
   computeEoo,
   formatAreaKm2,
 } from "@/lib/mapping/range-metrics";
-import type { Place } from "@/lib/mapping/geocode";
+import { loadPins, savePins, type Place } from "@/lib/mapping/geocode";
 import {
   FOREST_LOSS_ATTRIBUTION,
   FOREST_LOSS_CAVEAT,
@@ -958,12 +958,27 @@ export default function OccurrenceMapRow({
    * at once is how you see whether they agree with each other and with the
    * records, which is the judgement being made.
    */
-  const [pinnedPlaces, setPinnedPlaces] = useState<Place[]>([]);
+  const [pinnedPlaces, setPinnedPlaces] = useState<Place[]>(() => loadPins(speciesKey));
   /** The label being typed in the right-click panel, before the pin exists. */
   const [newPinLabel, setNewPinLabel] = useState("");
   /** A pin whose label is being renamed in place. */
   const [renamingPin, setRenamingPin] = useState<string | null>(null);
-  const pinCounter = useRef(0);
+  /**
+   * A different species is a different set of pins, read during render rather
+   * than in an effect — the same reason the assessor's edits are: an effect
+   * would paint one frame of the last species' pins over this species' map.
+   */
+  const [pinsLoadedFor, setPinsLoadedFor] = useState(speciesKey);
+  if (pinsLoadedFor !== speciesKey) {
+    setPinsLoadedFor(speciesKey);
+    setPinnedPlaces(loadPins(speciesKey));
+  }
+  // Kept between sessions: a pin dropped by hand names something no gazetteer
+  // knows, so a reload that dropped it lost work that can't be searched for
+  // again.
+  useEffect(() => {
+    savePins(speciesKey, pinnedPlaces);
+  }, [speciesKey, pinnedPlaces]);
 
   /**
    * Drops a pin where you right-clicked.
@@ -974,17 +989,24 @@ export default function OccurrenceMapRow({
    * the coordinates rather than to nothing.
    */
   const addPin = useCallback((lng: number, lat: number, label: string) => {
-    pinCounter.current += 1;
-    setPinnedPlaces((prev) => [
-      ...prev,
-      {
-        id: `pin-${pinCounter.current}`,
-        name: label.trim() || `${lat.toFixed(4)}, ${lng.toFixed(4)}`,
-        context: "",
-        lat,
-        lng,
-      },
-    ]);
+    setPinnedPlaces((prev) => {
+      // Numbered from what's already there rather than from a counter, so a
+      // pin restored from the last session can't have its id taken by a new
+      // one.
+      const used = new Set(prev.map((place) => place.id));
+      let n = prev.length + 1;
+      while (used.has(`pin-${n}`)) n += 1;
+      return [
+        ...prev,
+        {
+          id: `pin-${n}`,
+          name: label.trim() || `${lat.toFixed(4)}, ${lng.toFixed(4)}`,
+          context: "",
+          lat,
+          lng,
+        },
+      ];
+    });
   }, []);
   /** The candidate under the pointer in the results list, marked but not flown
    *  to — you're deciding which one to commit to, and moving the camera for

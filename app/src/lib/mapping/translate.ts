@@ -137,38 +137,10 @@ export function knownTranslationFailure(
 }
 
 /**
- * Which service to ask, remembered between sessions.
- *
- * A preference about how you read, like the column layout beside it, rather
- * than anything about the records — so it lives in the same browser and is
- * never part of the work that gets saved to a file.
- */
-const PROVIDER_KEY = "redlist-translate-provider:v1";
-
-export function translationProvider(): TranslationProvider {
-  if (typeof window === "undefined") return "mymemory";
-  try {
-    const stored = window.localStorage.getItem(PROVIDER_KEY);
-    return stored && stored in TRANSLATION_PROVIDERS ? (stored as TranslationProvider) : "mymemory";
-  } catch {
-    return "mymemory";
-  }
-}
-
-export function setTranslationProvider(provider: TranslationProvider): void {
-  if (typeof window === "undefined") return;
-  try {
-    window.localStorage.setItem(PROVIDER_KEY, provider);
-  } catch {
-    // The choice still holds for this page; it just won't be remembered.
-  }
-}
-
-/**
  * The language to translate into: this browser's own, falling back to English.
  *
  * The region is dropped — "pt-BR" and "pt" are the same request as far as this
- * is concerned, and MyMemory takes either.
+ * is concerned, and both services take either.
  */
 export function browserLanguage(): string {
   const tag = typeof navigator === "undefined" ? "" : navigator.language;
