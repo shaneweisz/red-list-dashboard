@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import {
   GEOCODER_ATTRIBUTION,
   formatKind,
+  googleMapsSearchUrl,
   searchPlaces,
   type Place,
 } from "@/lib/mapping/geocode";
@@ -135,15 +136,37 @@ export default function MapPlaceSearch({ getCentre, onSelect, onPreview }: MapPl
           className="flex-1 min-w-0 bg-transparent text-[13px] text-zinc-800 dark:text-zinc-100 placeholder:text-zinc-500 dark:placeholder:text-zinc-400 focus:outline-none"
         />
         {query !== "" && (
-          <button
-            onClick={() => setQuery("")}
-            title="Clear"
-            className="shrink-0 text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300"
-          >
-            <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-            </svg>
-          </button>
+          <>
+            <button
+              onClick={() => setQuery("")}
+              title="Clear"
+              className="shrink-0 text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300"
+            >
+              <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+            {/* The same search, run by Google. What's behind this box is
+                OpenStreetMap's gazetteer, which is very good on what has been
+                mapped and silent on what hasn't — and half the names on a
+                herbarium label are known only to Google. */}
+            <a
+              href={googleMapsSearchUrl(query)}
+              target="_blank"
+              rel="noopener noreferrer"
+              title="Run this search in Google Maps, in a new tab"
+              aria-label="Search Google Maps for this locality"
+              data-open-google-maps
+              className="shrink-0 text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300"
+            >
+              {/* Material Symbols' folded map (Apache 2.0): a map to open,
+                  rather than Google Maps' own pin, which in here would read as
+                  the pins this map already drops. */}
+              <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="currentColor" aria-hidden>
+                <path d="M20.5 3l-.16.03L15 5.1 9 3 3.36 4.9c-.21.07-.36.25-.36.48V20.5c0 .28.22.5.5.5l.16-.03L9 18.9l6 2.1 5.64-1.9c.21-.07.36-.25.36-.48V3.5c0-.28-.22-.5-.5-.5zM15 19l-6-2.11V5l6 2.11V19z" />
+              </svg>
+            </a>
+          </>
         )}
       </div>
 

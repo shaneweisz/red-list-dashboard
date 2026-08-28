@@ -1,5 +1,13 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
-import { formatKind, loadPins, parsePhotonResponse, savePins, searchUrl, type Place } from "../geocode";
+import {
+  formatKind,
+  googleMapsSearchUrl,
+  loadPins,
+  parsePhotonResponse,
+  savePins,
+  searchUrl,
+  type Place,
+} from "../geocode";
 
 describe("searchUrl", () => {
   it("asks for the query", () => {
@@ -229,5 +237,20 @@ describe("pins kept between sessions", () => {
       },
     });
     expect(savePins("6CX6F", [place("pin-1", "x")])).toBe(false);
+  });
+});
+
+describe("googleMapsSearchUrl", () => {
+  it("runs the same search on Google Maps", () => {
+    const url = new URL(googleMapsSearchUrl("Hacienda Varsovia, Quindío"));
+    expect(url.origin + url.pathname).toBe("https://www.google.com/maps/search/");
+    expect(url.searchParams.get("query")).toBe("Hacienda Varsovia, Quindío");
+    expect(url.searchParams.get("api")).toBe("1");
+  });
+
+  it("drops the space around what was typed", () => {
+    expect(new URL(googleMapsSearchUrl("  raudal de Yuruparí  ")).searchParams.get("query")).toBe(
+      "raudal de Yuruparí"
+    );
   });
 });

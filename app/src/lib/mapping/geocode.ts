@@ -126,6 +126,20 @@ export async function searchPlaces(query: string, options: SearchOptions = {}): 
   return parsePhotonResponse(await response.json());
 }
 
+/**
+ * The same search, run by Google Maps.
+ *
+ * The gazetteer behind the search box is OpenStreetMap's, which is very good
+ * on things that have been mapped and silent on things that haven't:
+ * "Hacienda Varsovia" and "quebrada El Cedral" are the names on herbarium
+ * labels, and half of them are known only to Google. This is the way to check
+ * before deciding the place doesn't exist.
+ */
+export function googleMapsSearchUrl(query: string): string {
+  const params = new URLSearchParams({ api: "1", query: query.trim() });
+  return `https://www.google.com/maps/search/?${params}`;
+}
+
 /** OSM's feature values are snake_case; this is how you'd say them. */
 export function formatKind(kind?: string): string {
   if (!kind) return "";
