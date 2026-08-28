@@ -101,6 +101,18 @@ import {
   FOREST_LOSS_URL,
 } from "@/lib/mapping/forest-loss";
 import {
+  DRIVERS_CANOPY_THRESHOLD,
+  FOREST_LOSS_DRIVERS,
+  FOREST_LOSS_DRIVERS_ATTRIBUTION,
+  FOREST_LOSS_DRIVERS_CAVEAT,
+  FOREST_LOSS_DRIVERS_FIRST_YEAR,
+  FOREST_LOSS_DRIVERS_LAST_YEAR,
+  FOREST_LOSS_DRIVERS_MAX_ZOOM,
+  FOREST_LOSS_DRIVERS_PAPER_URL,
+  FOREST_LOSS_DRIVERS_TILE_URL,
+  FOREST_LOSS_DRIVERS_URL,
+} from "@/lib/mapping/forest-loss-drivers";
+import {
   HABITAT_ATTRIBUTION,
   HABITAT_LEGEND,
   HABITAT_SCHEME_URL,
@@ -797,6 +809,8 @@ export default function OccurrenceMapRow({
   // regardless of whether occurrences are being filtered by it.
   const [showProtectedAreas, setShowProtectedAreas] = useState(false);
   const [showForestLoss, setShowForestLoss] = useState(false);
+  /** What the loss was for — the 1 km dominant-driver classification. */
+  const [showLossDrivers, setShowLossDrivers] = useState(false);
   const [showHabitat, setShowHabitat] = useState(false);
   const [showEcoregions, setShowEcoregions] = useState(false);
   const [showSamplingEffort, setShowSamplingEffort] = useState(false);
@@ -897,6 +911,7 @@ export default function OccurrenceMapRow({
   const [habitatLegendOpen, setHabitatLegendOpen] = useState(false);
   /** Whether the tree cover loss legend's two caveats are showing. */
   const [forestLossNotesOpen, setForestLossNotesOpen] = useState(false);
+  const [lossDriverNotesOpen, setLossDriverNotesOpen] = useState(false);
   const [biomeLegendOpen, setBiomeLegendOpen] = useState(false);
   /**
    * What's at the point last clicked: its elevation, and — when the overlay is
@@ -3304,6 +3319,22 @@ export default function OccurrenceMapRow({
                   />
                 </Source>
               )}
+              {/* What the loss was for, at 1 km. Drawn as the platform draws
+                  it — their tiles, their colours — because the legend has to
+                  be true of the pixels, and above the loss layer, since where
+                  both are on this is the one that answers "why". */}
+              {showLossDrivers && (
+                <Source
+                  id={`loss-drivers-${panelId}`}
+                  type="raster"
+                  tiles={[FOREST_LOSS_DRIVERS_TILE_URL]}
+                  tileSize={256}
+                  maxzoom={FOREST_LOSS_DRIVERS_MAX_ZOOM}
+                  attribution={FOREST_LOSS_DRIVERS_ATTRIBUTION}
+                >
+                  <Layer id={`loss-drivers-layer-${panelId}`} type="raster" paint={{ "raster-opacity": 0.85 }} />
+                </Source>
+              )}
               {/* Protected areas overlay (WDPA) — rendered before the occurrence
                   circles so the points draw on top of the shaded PA polygons */}
               {showProtectedAreas && (
@@ -4072,7 +4103,7 @@ export default function OccurrenceMapRow({
               biomes, the habitat classes, what tree cover loss does and doesn't
               mean. */}
           {!loadingOccurrences &&
-            (showSamplingEffort || showEcoregions || showForestLoss || showHabitat) && (
+            (showSamplingEffort || showEcoregions || showForestLoss || showLossDrivers || showHabitat) && (
             <div className="bg-white dark:bg-zinc-800 rounded-lg shadow-md border border-zinc-200 dark:border-zinc-700 py-1 text-[11px] text-zinc-600 dark:text-zinc-300 max-w-full">
               <div className="px-2 pb-0.5 text-[9px] uppercase tracking-wide text-zinc-400 dark:text-zinc-500">
                 Overlays
@@ -4195,6 +4226,61 @@ export default function OccurrenceMapRow({
                         {FOREST_LOSS_CAVEAT}
                       </div>
                       <div className="pt-0.5">{FOREST_LOSS_THRESHOLD_NOTE}</div>
+                    </div>
+                  )}
+                </div>
+              )}
+              {showLossDrivers && (
+                <div>
+                  <div className="flex items-center gap-2 px-2 py-0.5">
+                    <button
+                      onClick={() => setLossDriverNotesOpen((v) => !v)}
+                      title={lossDriverNotesOpen ? "Hide what this layer does and doesn't mean" : "What this layer does and doesn't mean"}
+                      className="flex-1 min-w-0 flex items-center gap-1 text-left hover:text-zinc-800 dark:hover:text-zinc-100"
+                    >
+                      <span className="truncate">Loss by dominant driver</span>
+                      <span className="text-[9px] text-zinc-400">{lossDriverNotesOpen ? "▾" : "▸"}</span>
+                    </button>
+                    {/* Seven classes, so the swatches carry their names on
+                        hover rather than in a column that would be taller than
+                        the map. Opened, each one says what it covers. */}
+                    <span className="flex items-center gap-0.5 shrink-0">
+                      {FOREST_LOSS_DRIVERS.map((driver) => (
+                        <span
+                          key={driver.label}
+                          title={`${driver.label} — ${driver.description}`}
+                          className="h-2.5 w-2.5 rounded-sm cursor-help"
+                          style={{ background: driver.color }}
+                        />
+                      ))}
+                    </span>
+                    <a
+                      href={FOREST_LOSS_DRIVERS_PAPER_URL}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      title="Sims et al. (2025), Global drivers of forest loss at 1 km resolution — the paper this classification comes from."
+                      className="shrink-0 text-zinc-300 hover:text-zinc-500 dark:text-zinc-600 dark:hover:text-zinc-400"
+                    >
+                      <FaInfoCircle className="w-3 h-3" />
+                    </a>
+                  </div>
+                  {lossDriverNotesOpen && (
+                    <div className="px-2 pb-1 pl-3 text-[10px] leading-snug text-zinc-500 dark:text-zinc-400 max-w-md">
+                      <div className="grid grid-cols-1 gap-y-0.5 pb-1">
+                        {FOREST_LOSS_DRIVERS.map((driver) => (
+                          <div key={driver.label} className="flex gap-1.5">
+                            <span
+                              className="mt-[3px] h-2 w-2 shrink-0 rounded-sm"
+                              style={{ background: driver.color }}
+                            />
+                            <span>
+                              <span className="font-medium text-zinc-600 dark:text-zinc-300">{driver.label}</span>{" "}
+                              {driver.description}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                      <div>{FOREST_LOSS_DRIVERS_CAVEAT}</div>
                     </div>
                   )}
                 </div>
@@ -4495,6 +4581,7 @@ export default function OccurrenceMapRow({
     ...(isAohAvailable ? [showAoh] : []),
     showProtectedAreas,
     showForestLoss,
+    showLossDrivers,
     showHabitat,
     showEcoregions,
     showPowoRangeOverlay,
@@ -5778,6 +5865,35 @@ export default function OccurrenceMapRow({
             e.preventDefault();
             e.stopPropagation();
             window.open(FOREST_LOSS_URL, "_blank", "noopener,noreferrer");
+          }}
+          className="shrink-0 text-zinc-300 hover:text-zinc-500 dark:text-zinc-600 dark:hover:text-zinc-400"
+        >
+          <FaInfoCircle className="w-3 h-3" />
+        </a>
+      </label>
+      {/* Next to the loss layer, because it answers the question that one
+          raises: a cleared block inside a range means something different if
+          it is a soy field, a logging rotation or a fire. */}
+      <label
+        className="flex items-center gap-2 px-2 py-0.5 text-[11px] hover:bg-zinc-50 dark:hover:bg-zinc-700 cursor-pointer"
+        title={`Why the trees went, at 1 km: Sims et al. (2025), via Global Nature Watch. Loss ${FOREST_LOSS_DRIVERS_FIRST_YEAR}\u2013${FOREST_LOSS_DRIVERS_LAST_YEAR}, cut at ${DRIVERS_CANOPY_THRESHOLD}% canopy cover. ${FOREST_LOSS_DRIVERS_CAVEAT}`}
+      >
+        <input
+          type="checkbox"
+          checked={showLossDrivers}
+          onChange={() => setShowLossDrivers((v) => !v)}
+          className="w-3 h-3 rounded accent-emerald-500 shrink-0"
+        />
+        <span className="flex-1 min-w-0 text-zinc-700 dark:text-zinc-200">Loss by dominant driver</span>
+        <a
+          href={FOREST_LOSS_DRIVERS_URL}
+          target="_blank"
+          rel="noopener noreferrer"
+          title="Tree cover loss by dominant driver, WRI/Google DeepMind. Opens Global Nature Watch, where the layer is published."
+          onClick={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            window.open(FOREST_LOSS_DRIVERS_URL, "_blank", "noopener,noreferrer");
           }}
           className="shrink-0 text-zinc-300 hover:text-zinc-500 dark:text-zinc-600 dark:hover:text-zinc-400"
         >
