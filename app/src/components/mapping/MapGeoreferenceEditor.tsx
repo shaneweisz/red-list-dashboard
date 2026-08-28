@@ -11,6 +11,11 @@ interface MapGeoreferenceEditorProps {
   /** Whether there is an assessor georeference here to take back. */
   mine: boolean;
   onSave: (edit: { lat: number; lon: number; uncertainty?: number; note?: string }) => void;
+  /**
+   * Keeps the reasoning on its own, for a locality that has none of the
+   * coordinates yet — or that never gets any.
+   */
+  onSaveNote: (text: string) => void;
   onClear?: () => void;
 }
 
@@ -35,6 +40,7 @@ export default function MapGeoreferenceEditor({
   defaultRadius,
   mine,
   onSave,
+  onSaveNote,
   onClear,
 }: MapGeoreferenceEditorProps) {
   const [text, setText] = useState(
@@ -49,8 +55,20 @@ export default function MapGeoreferenceEditor({
   const typedRadius = radius.trim() === "" ? null : Number(radius);
   const radiusValid = typedRadius == null || (Number.isFinite(typedRadius) && typedRadius > 0);
 
+  const noteChanged = note.trim() !== (initial.note ?? "").trim();
+  // A note on its own is worth keeping: the reasoning usually comes before the
+  // coordinates — "two villages of this name; the collector's route says the
+  // eastern one" is how you arrive at them — and sometimes instead of them,
+  // when a locality can't be placed at all.
+  const canSave = (parsed != null && radiusValid) || noteChanged;
+
   const save = () => {
-    if (!parsed || !radiusValid) return;
+    if (!canSave) return;
+    if (!parsed) {
+      onSaveNote(note);
+      return;
+    }
+    if (!radiusValid) return;
     onSave({
       lat: parsed.lat,
       lon: parsed.lon,
@@ -124,11 +142,13 @@ export default function MapGeoreferenceEditor({
         <span className="text-zinc-400 dark:text-zinc-500">m</span>
         <button
           onClick={save}
-          disabled={!parsed || !radiusValid}
+          disabled={!canSave}
           title={
             parsed
               ? "Keep this position for the record"
-              : "Type a position as “lat, lon” first"
+              : noteChanged
+                ? "Keep how you read this locality, without a position for it"
+                : "Type a position as “lat, lon”, or just how you read the locality"
           }
           className="ml-auto px-1.5 py-0.5 rounded bg-violet-600 hover:bg-violet-700 disabled:opacity-30 disabled:hover:bg-violet-600 text-white text-[10px]"
         >

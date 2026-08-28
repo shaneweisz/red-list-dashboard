@@ -1,5 +1,5 @@
 import type { PinnedPlace } from "./geocode";
-import type { AssessorDate, Exclusion, Georeference } from "./georeferences";
+import type { AssessorDate, Exclusion, Georeference, LocalityNote } from "./georeferences";
 import type { PointFileImport } from "./iucn-point-file";
 
 /**
@@ -27,6 +27,8 @@ export interface EditsBackup {
   georeferences: Record<number, Georeference>;
   exclusions: Record<number, Exclusion>;
   dates: Record<number, AssessorDate>;
+  /** How each locality was read, whether or not it ended up with a position. */
+  notes?: Record<number, LocalityNote>;
   /** The imported point file, if one is loaded — it is part of the work. */
   pointFile?: PointFileImport | null;
   /**
@@ -53,6 +55,10 @@ export function summariseBackup(backup: EditsBackup): string {
     const [count] = part.split(" ");
     return count === "1" ? part : `${part}s`;
   });
+  // Only where there are some: the three above are the shape of the work and
+  // worth stating at zero, the rest are extras and read as noise at zero.
+  const notes = Object.keys(backup.notes ?? {}).length;
+  if (notes) parts.push(`${notes} locality note${notes === 1 ? "" : "s"}`);
   if (backup.pointFile) parts.push(`${backup.pointFile.points.length} imported point${backup.pointFile.points.length === 1 ? "" : "s"}`);
   if (backup.pins?.length) parts.push(`${backup.pins.length} pin${backup.pins.length === 1 ? "" : "s"}`);
   return parts.join(", ");
@@ -94,6 +100,7 @@ export function readEditsBackup(
       georeferences: backup.georeferences ?? {},
       exclusions: backup.exclusions ?? {},
       dates: backup.dates ?? {},
+      notes: backup.notes ?? {},
       // Written by a build that had no pins in it, or by one that had none
       // placed: either way there is nothing to put back.
       pins: backup.pins ?? [],

@@ -147,3 +147,44 @@ describe("the pins in the saved file", () => {
     expect(read.backup.pins).toEqual([]);
   });
 });
+
+describe("the locality notes in the saved file", () => {
+  const note = {
+    gbifID: 4,
+    text: "Two villages of this name; the collector's route says the eastern one",
+    addedAt: "2026-08-28T10:00:00.000Z",
+  };
+
+  const withNotes = () =>
+    buildEditsBackup({
+      speciesKey: "6CX6F",
+      scientificName: "Dioscorea biplicata",
+      savedAt: "2026-08-28T09:30:00.000Z",
+      georeferences: {},
+      exclusions: {},
+      dates: {},
+      notes: { 4: note },
+      pointFile: null,
+    });
+
+  it("carries the reasoning for a locality that was never placed", () => {
+    const read = readEditsBackup(JSON.stringify(withNotes()), "6CX6F");
+    if (!("backup" in read)) throw new Error("expected a backup");
+    expect(read.backup.notes?.[4]).toEqual(note);
+  });
+
+  it("counts them where the dialog asks whether to restore", () => {
+    expect(summariseBackup(withNotes())).toContain("1 locality note");
+  });
+
+  it("says nothing about notes where there are none", () => {
+    expect(summariseBackup({ ...withNotes(), notes: {} })).not.toContain("locality note");
+  });
+
+  it("reads a file written before notes were in it", () => {
+    const older = { ...withNotes(), notes: undefined };
+    const read = readEditsBackup(JSON.stringify(older), "6CX6F");
+    if (!("backup" in read)) throw new Error("expected a backup");
+    expect(read.backup.notes).toEqual({});
+  });
+});

@@ -317,6 +317,65 @@ export interface AssessorDate {
   addedBy?: string;
 }
 
+/**
+ * What the assessor makes of a locality, before — or without — a position.
+ *
+ * "Two villages of this name; the collector's route says the eastern one" is
+ * the reasoning a georeference is built from, and it is often written down
+ * before the coordinates are settled and sometimes instead of them: a locality
+ * you cannot place is still worth saying you cannot place, and why.
+ *
+ * Its own store, for the same reason the dates have one: a record can want a
+ * note and no position. Where a georeference does exist the note is copied
+ * onto it as `georeferenceRemarks` when it is saved, so an exported row still
+ * carries the reasoning to whoever reads it outside this dashboard — but this
+ * is the copy that is edited, and the one to read.
+ */
+export interface LocalityNote {
+  gbifID: number;
+  /** The reasoning, in the assessor's words. Empty means the note is gone. */
+  text: string;
+  addedAt: string;
+  addedBy?: string;
+}
+
+const NOTES_PREFIX = "redlist-geonotes";
+
+function notesKey(speciesKey: string): string {
+  return `${NOTES_PREFIX}:v${GEOREFERENCE_SCHEMA_VERSION}:${speciesKey}`;
+}
+
+export function loadNotes(speciesKey: string): Record<number, LocalityNote> {
+  if (typeof window === "undefined") return {};
+  try {
+    const raw = window.localStorage.getItem(notesKey(speciesKey));
+    if (!raw) return {};
+    const parsed = JSON.parse(raw);
+    if (parsed?.version !== GEOREFERENCE_SCHEMA_VERSION) return {};
+    const out: Record<number, LocalityNote> = {};
+    for (const [id, n] of Object.entries(parsed.records ?? {})) {
+      const note = n as LocalityNote;
+      if (note?.text?.trim()) out[Number(id)] = note;
+    }
+    return out;
+  } catch {
+    return {};
+  }
+}
+
+export function saveNotes(speciesKey: string, records: Record<number, LocalityNote>): boolean {
+  if (typeof window === "undefined") return false;
+  try {
+    window.localStorage.setItem(
+      notesKey(speciesKey),
+      JSON.stringify({ version: GEOREFERENCE_SCHEMA_VERSION, updatedAt: new Date().toISOString(), records })
+    );
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 const DATES_PREFIX = "redlist-dates";
 
 function datesKey(speciesKey: string): string {

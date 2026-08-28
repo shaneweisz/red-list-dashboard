@@ -18,12 +18,15 @@ import {
   loadDates,
   loadExclusions,
   loadGeoreferences,
+  loadNotes,
   saveDates,
   saveExclusions,
   saveGeoreferences,
+  saveNotes,
   type AssessorDate,
   type Exclusion,
   type Georeference,
+  type LocalityNote,
 } from "@/lib/mapping/georeferences";
 
 /** Everything the assessor has added to a species, as one document. */
@@ -32,6 +35,8 @@ export interface AssessorEdits {
   exclusions: Record<number, Exclusion>;
   /** Dates the assessor read off a label GBIF didn't transcribe. */
   dates: Record<number, AssessorDate>;
+  /** How the assessor reads a locality, with or without a position for it. */
+  notes: Record<number, LocalityNote>;
 }
 
 /**
@@ -54,6 +59,7 @@ export function useAssessorEdits(
     georeferences: loadGeoreferences(key),
     exclusions: loadExclusions(key),
     dates: loadDates(key),
+    notes: loadNotes(key),
   });
 
   const [history, setHistory] = useState<History<AssessorEdits>>(() => initHistory(load(speciesKey)));
@@ -83,7 +89,8 @@ export function useAssessorEdits(
       const savedGeoreferences = saveGeoreferences(speciesKey, edits.georeferences);
       const savedExclusions = saveExclusions(speciesKey, edits.exclusions);
       const savedDates = saveDates(speciesKey, edits.dates ?? {});
-      if (!savedGeoreferences || !savedExclusions || !savedDates) onStorageError.current?.();
+      const savedNotes = saveNotes(speciesKey, edits.notes ?? {});
+      if (!savedGeoreferences || !savedExclusions || !savedDates || !savedNotes) onStorageError.current?.();
     },
     [speciesKey]
   );
@@ -160,6 +167,7 @@ export function useAssessorEdits(
     georeferences: history.present.state.georeferences,
     exclusions: history.present.state.exclusions,
     dates: history.present.state.dates ?? {},
+    notes: history.present.state.notes ?? {},
     commit,
     undo,
     redo,

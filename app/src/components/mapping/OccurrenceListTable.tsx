@@ -3,15 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { QUALITY_FLAG_LABELS, type QualityFlag } from "@/lib/mapping/coordinate-cleaning";
-import {
-  browserLanguage,
-  knownTranslation,
-  languageName,
-  translateText,
-  TRANSLATION_PROVIDERS,
-  type Translation,
-  type TranslationProvider,
-} from "@/lib/mapping/translate";
+import { browserLanguage, googleTranslateUrl, languageName } from "@/lib/mapping/translate";
 import { formatGbifIssue } from "@/lib/gbif";
 import {
   duplicateOf,
@@ -19,6 +11,7 @@ import {
   parseCoordinateEntry,
   resolvePrimary,
   type Georeference,
+  type LocalityNote,
 } from "@/lib/mapping/georeferences";
 
 /**
@@ -541,6 +534,14 @@ interface OccurrenceListTableProps {
   /** The assessor's own georeferences, keyed by gbifID. */
   georeferences?: Record<number, Georeference>;
   /**
+   * How the assessor reads each locality, with or without a position for it —
+   * the reasoning is often written before the coordinates are settled, and
+   * sometimes instead of them.
+   */
+  localityNotes?: Record<number, LocalityNote>;
+  /** Keeps that reasoning. Absent = feature unavailable. */
+  onSaveLocalityNote?: (feature: OccurrenceFeature, text: string) => void;
+  /**
    * Saves coordinates typed into the Coordinates cell. Absent = feature
    * unavailable.
    *
@@ -632,6 +633,8 @@ export default function OccurrenceListTable({
   isOutsideNativeRange,
   nativeRangeSourceLabel,
   georeferences,
+  localityNotes,
+  onSaveLocalityNote,
   onSaveGeoreference,
   onClearGeoreference,
   hoveredGbifId,
@@ -770,79 +773,6 @@ export default function OccurrenceListTable({
     if (noteTimer.current != null) window.clearTimeout(noteTimer.current);
     noteTimer.current = null;
   }, []);
-  /**
-   * The translation of whatever the bubble is showing, once it's been asked
-   * for.
-   *
-   * Held against the string it belongs to rather than the row, because the
-   * bubble is one element that every cell borrows: moving to another locality
-   * has to stop showing the last one's translation, and coming back to a
-   * locality already translated has to show it again without spending a
-   * second request.
-   */
-  const [translations, setTranslations] = useState<{
-    source: string;
-    entries: Partial<
-      Record<TranslationProvider, { status: "loading" | "done" | "error"; result?: Translation; error?: string }>
-    >;
-  } | null>(null);
-  /**
-   * Asks one service, keeping whatever the other already said.
-   *
-   * Both at once is the point: the two disagree, and on a locality
-   * description the disagreement is the information — one of them read
-   * "Comisaría del Vaupés" as a police station and the other as the
-   * territory it names.
-   */
-  const translateNote = useCallback((text: string, using: TranslationProvider) => {
-    const target = browserLanguage();
-    const set = (entry: { status: "loading" | "done" | "error"; result?: Translation; error?: string }) =>
-      setTranslations((current) => ({
-        source: text,
-        // A different locality starts again; the same one keeps what it has.
-        entries: { ...(current?.source === text ? current.entries : {}), [using]: entry },
-      }));
-    const already = knownTranslation(text, target, using);
-    if (already) {
-      set({ status: "done", result: already });
-      return;
-    }
-    set({ status: "loading" });
-    translateText(text, target, using)
-      .then((result) => set({ status: "done", result }))
-      .catch((error: unknown) =>
-        set({ status: "error", error: error instanceof Error ? error.message : String(error) })
-      );
-  }, []);
-  /**
-   * What belongs under the bubble's text right now: this session's attempt if
-   * it is about the string on screen, or one translated earlier and still
-   * cached, which is what makes going back to a locality free.
-   */
-  /**
-   * One line per service that has something to say about the locality on
-   * screen — this session's attempt, or one translated earlier and still
-   * cached, which is what makes coming back to a locality free.
-   */
-  const shownTranslations = !hoverNote?.translate
-    ? []
-    : (Object.keys(TRANSLATION_PROVIDERS) as TranslationProvider[])
-        .map((provider) => {
-          const attempt = translations?.source === hoverNote.text ? translations.entries[provider] : undefined;
-          if (attempt) return { provider, ...attempt };
-          const cached = knownTranslation(hoverNote.text, browserLanguage(), provider);
-          return cached ? { provider, status: "done" as const, result: cached, error: undefined } : null;
-        })
-        .filter((line) => line != null);
-  /**
-   * The source language, where the services that answered agree on it. They
-   * are detecting it independently, so where they disagree the header says
-   * nothing rather than picking one.
-   */
-  const detectedLanguages = new Set(
-    shownTranslations.map((line) => line.result?.detected).filter((code) => code != null)
-  );
-  const detectedSource = detectedLanguages.size === 1 ? [...detectedLanguages][0] : undefined;
   /** The record whose date is being typed. */
   const [editingDate, setEditingDate] = useState<number | null>(null);
   /**
@@ -991,20 +921,15 @@ export default function OccurrenceListTable({
     const note = noteEditor.text.trim();
     const p = noteEditor.feature.properties;
     if (noteEditor.kind === "georeference") {
-      const mine = georeferences?.[p.gbifID];
-      if (mine && note !== (mine.georeferenceRemarks ?? "")) {
-        onSaveGeoreference?.(noteEditor.feature, {
-          lat: mine.decimalLatitude,
-          lon: mine.decimalLongitude,
-          uncertainty: mine.coordinateUncertaintyInMeters,
-          note,
-        });
-      }
+      // Its own store, so it can be written for a record that has no position
+      // yet — the caller copies it onto the georeference where there is one.
+      const current = localityNotes?.[p.gbifID]?.text ?? georeferences?.[p.gbifID]?.georeferenceRemarks ?? "";
+      if (note !== current) onSaveLocalityNote?.(noteEditor.feature, note);
     } else {
       const mine = dates?.[p.gbifID];
       if (mine && note !== (mine.remarks ?? "")) onSaveDate?.(noteEditor.feature, mine.eventDate, note);
     }
-  }, [noteEditor, georeferences, dates, onSaveGeoreference, onSaveDate]);
+  }, [noteEditor, georeferences, localityNotes, dates, onSaveLocalityNote, onSaveDate]);
 
   /** The ⓘ that carries a reason: hover to read it, click to rewrite it. */
   const noteIcon = useCallback(
@@ -1348,6 +1273,9 @@ export default function OccurrenceListTable({
             e.stopPropagation();
             setEditingCoords(p.gbifID);
           };
+          // The note store is what's read; a georeference saved before it
+          // existed still carries its own remarks.
+          const noteText = localityNotes?.[p.gbifID]?.text ?? mine?.georeferenceRemarks;
           if (mine) {
             return (
               <span className="flex items-center whitespace-nowrap">
@@ -1358,7 +1286,7 @@ export default function OccurrenceListTable({
                 >
                   ◆ {mine.decimalLatitude.toFixed(4)}, {mine.decimalLongitude.toFixed(4)}
                 </button>
-                {noteIcon(f, "georeference", mine.georeferenceRemarks)}
+                {noteIcon(f, "georeference", noteText)}
               </span>
             );
           }
@@ -1367,13 +1295,19 @@ export default function OccurrenceListTable({
             // clicked. The dash is what every other empty cell shows; the
             // invitation was louder than the record it sat in.
             return editable ? (
-              <button
-                onClick={startEditing}
-                title="GBIF has no coordinates for this record — only a locality description. Click here and type the position you read it as, as \u201clat, lon\u201d."
-                className="block w-full text-left text-zinc-300 dark:text-zinc-600 hover:text-violet-500"
-              >
-                —
-              </button>
+              // The ⓘ appears once there is reasoning to read, which there can
+              // be before there is a position: a locality nobody can place is
+              // still worth recording as one, with why.
+              <span className="flex items-center whitespace-nowrap">
+                <button
+                  onClick={startEditing}
+                  title="GBIF has no coordinates for this record — only a locality description. Click here and type the position you read it as, as \u201clat, lon\u201d."
+                  className="flex-1 text-left text-zinc-300 dark:text-zinc-600 hover:text-violet-500"
+                >
+                  —
+                </button>
+                {noteText ? noteIcon(f, "georeference", noteText) : null}
+              </span>
             ) : (
               <span className="text-amber-600 dark:text-amber-400">Not georeferenced</span>
             );
@@ -1387,13 +1321,16 @@ export default function OccurrenceListTable({
           // as though you had put it there said the opposite of the truth.
           // The flag in the margin is what says it's questionable.
           return editable ? (
-            <button
-              onClick={startEditing}
-              title="GBIF flags these coordinates. Click here and type your own."
-              className="block text-left hover:underline decoration-dotted"
-            >
-              {text}
-            </button>
+            <span className="flex items-center whitespace-nowrap">
+              <button
+                onClick={startEditing}
+                title="GBIF flags these coordinates. Click here and type your own."
+                className="text-left hover:underline decoration-dotted"
+              >
+                {text}
+              </button>
+              {noteText ? noteIcon(f, "georeference", noteText) : null}
+            </span>
           ) : (
             text
           );
@@ -1623,7 +1560,7 @@ export default function OccurrenceListTable({
         ),
       },
     ],
-    [isOutsideNativeRange, nativeRangeSourceLabel, georeferences, onSaveGeoreference, onClearGeoreference, editingCoords, editingRadius, exclusions, variant, onExclude, onInclude, duplicates, unfolded, dates, onSaveDate, onClearDate, editingDate, full, showNote, hideNoteSoon, noteIcon]
+    [isOutsideNativeRange, nativeRangeSourceLabel, georeferences, localityNotes, onSaveGeoreference, onClearGeoreference, editingCoords, editingRadius, exclusions, variant, onExclude, onInclude, duplicates, unfolded, dates, onSaveDate, onClearDate, editingDate, full, showNote, hideNoteSoon, noteIcon]
   );
 
   // The catalogue in the reader's own order, then the subset actually drawn.
@@ -2108,64 +2045,28 @@ export default function OccurrenceListTable({
         >
           {hoverNote.text}
           {/* A locality is the field a georeference is made from, and it is
-              written in the language of whoever collected the specimen. One
-              button per service rather than one button and a choice: they
-              disagree, and on a locality description the disagreement is the
-              information. Nothing is asked until it's clicked — both quotas
-              are metered by the day. */}
-          {hoverNote.translate &&
-            (Object.keys(TRANSLATION_PROVIDERS) as TranslationProvider[]).map((provider) => (
-              <button
-                key={provider}
-                onClick={() => translateNote(hoverNote.text, provider)}
-                disabled={shownTranslations.some((line) => line.provider === provider && line.status === "loading")}
-                title={`Translate this locality into ${languageName(browserLanguage()) ?? browserLanguage()} with ${TRANSLATION_PROVIDERS[provider].label}`}
-                aria-label={`Translate this locality with ${TRANSLATION_PROVIDERS[provider].label}`}
-                data-translate-with={provider}
-                className="ml-1 inline-flex align-middle cursor-pointer text-white/50 hover:text-white disabled:hover:text-white/50"
-              >
-                {provider === "google" ? (
-                  // A globe for the one that reads the whole web.
-                  <svg className="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
-                    <circle cx="12" cy="12" r="9" />
-                    <path d="M3 12h18" />
-                    <path d="M12 3c2.5 2.5 3.75 5.5 3.75 9S14.5 18.5 12 21c-2.5-2.5-3.75-5.5-3.75-9S9.5 5.5 12 3z" />
-                  </svg>
-                ) : (
-                  // An open book for the one that is a translation memory.
-                  <svg className="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M12 6.5C10.5 5.2 8.5 4.5 4 4.5v13c4.5 0 6.5.7 8 2 1.5-1.3 3.5-2 8-2v-13c-4.5 0-6.5.7-8 2z" />
-                    <path strokeLinecap="round" d="M12 6.5v13" />
-                  </svg>
-                )}
-              </button>
-            ))}
-          {shownTranslations.length > 0 && (
-            <div className="mt-1 pt-1 border-t border-white/20 space-y-0.5">
-              <span className="text-white/60">
-                Translates
-                {detectedSource ? ` from ${languageName(detectedSource)}` : ""} to{" "}
-                {languageName(browserLanguage()) ?? browserLanguage()}:
-              </span>
-              {shownTranslations.map((line) => (
-                <div key={line.provider}>
-                  <span className="text-white/40">{TRANSLATION_PROVIDERS[line.provider].label}</span>{" "}
-                  {line.status === "loading" && <span className="text-white/60">translating…</span>}
-                  {line.status === "error" && <span className="text-amber-300">{line.error}</span>}
-                  {line.status === "done" && line.result && (
-                    <>
-                      {line.result.text}
-                      {line.result.truncated && (
-                        <span className="text-white/40">
-                          {" "}
-                          (its first {TRANSLATION_PROVIDERS[line.provider].maxChars} characters)
-                        </span>
-                      )}
-                    </>
-                  )}
-                </div>
-              ))}
-            </div>
+              written in the language of whoever collected the specimen. The
+              way out is Google's own page rather than a translation drawn into
+              this bubble: what you want when a locality doesn't parse is
+              today's model, the alternatives and the dictionary entries, and
+              none of that fits here. */}
+          {hoverNote.translate && (
+            <a
+              href={googleTranslateUrl(hoverNote.text, browserLanguage())}
+              target="_blank"
+              rel="noopener noreferrer"
+              title={`Open this locality in Google Translate — ${languageName(browserLanguage()) ?? browserLanguage()}, in a new tab`}
+              aria-label="Open this locality in Google Translate"
+              data-open-google-translate
+              className="ml-1 inline-flex align-middle cursor-pointer text-white/50 hover:text-white"
+            >
+              {/* Google's own translate glyph, from Material Symbols
+                  (Apache 2.0): the unbranded one, which is the mark for
+                  translation everywhere rather than the Google logo. */}
+              <svg className="w-3 h-3" viewBox="0 0 24 24" fill="currentColor" aria-hidden>
+                <path d="M12.87 15.07l-2.54-2.51.03-.03c1.74-1.94 2.98-4.17 3.71-6.53H17V4h-7V2H8v2H1v1.99h11.17C11.5 7.92 10.44 9.75 9 11.35 8.07 10.32 7.3 9.19 6.69 8h-2c.73 1.63 1.73 3.17 2.98 4.56l-5.09 5.02L4 19l5-5 3.11 3.11.76-2.04zM18.5 10h-2L12 22h2l1.12-3h4.75L21 22h2l-4.5-12zm-2.62 7l1.62-4.33L19.12 17h-3.24z" />
+              </svg>
+            </a>
           )}
         </div>,
         document.body

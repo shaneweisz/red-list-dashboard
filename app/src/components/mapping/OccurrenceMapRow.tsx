@@ -1405,6 +1405,7 @@ export default function OccurrenceMapRow({
     georeferences,
     exclusions,
     dates: assessorDates,
+    notes: assessorNotes,
     commit: commitEdits,
     undo: undoEdit,
     redo: redoEdit,
@@ -3562,11 +3563,15 @@ export default function OccurrenceMapRow({
                             lat: mine?.decimalLatitude,
                             lon: mine?.decimalLongitude,
                             radius: mine?.coordinateUncertaintyInMeters,
-                            note: mine?.georeferenceRemarks,
+                            // The note store is what's edited; a georeference
+                            // saved before it existed still carries its own.
+                            note:
+                              assessorNotes[shown.properties.gbifID]?.text ?? mine?.georeferenceRemarks,
                           }}
                           defaultRadius={DEFAULT_GEOREFERENCE_RADIUS_M}
                           mine={!!mine}
                           onSave={(edit) => saveGeoreferenceInline(shown, edit)}
+                          onSaveNote={(text) => saveAssessorNote(shown, text)}
                           onClear={mine ? () => clearGeoreference(shown) : undefined}
                         />
                       ) : undefined
@@ -4964,6 +4969,7 @@ export default function OccurrenceMapRow({
       georeferences,
       exclusions,
       dates: assessorDates,
+      notes: assessorNotes,
       pointFile,
       pins: pinnedPlaces,
     });
@@ -4976,7 +4982,7 @@ export default function OccurrenceMapRow({
     link.click();
     URL.revokeObjectURL(url);
     setLastSavedAt(savedAt);
-  }, [speciesKey, scientificName, georeferences, exclusions, assessorDates, pointFile, pinnedPlaces]);
+  }, [speciesKey, scientificName, georeferences, exclusions, assessorDates, assessorNotes, pointFile, pinnedPlaces]);
 
   const [lastSavedAt, setLastSavedAt] = useState<string | null>(null);
   /** How many records the assessor has touched. */
@@ -4986,8 +4992,9 @@ export default function OccurrenceMapRow({
         ...Object.keys(georeferences),
         ...Object.keys(exclusions),
         ...Object.keys(assessorDates),
+        ...Object.keys(assessorNotes),
       ]).size,
-    [georeferences, exclusions, assessorDates]
+    [georeferences, exclusions, assessorDates, assessorNotes]
   );
   /**
    * Everything the file would carry, not just the edited records.
@@ -5036,6 +5043,7 @@ export default function OccurrenceMapRow({
           georeferences: backup.georeferences,
           exclusions: backup.exclusions,
           dates: backup.dates,
+          notes: backup.notes ?? {},
         },
         `restore the work saved ${backup.savedAt.slice(0, 10)}`
       );
@@ -5088,6 +5096,47 @@ export default function OccurrenceMapRow({
       );
     },
     [assessorDates, accountEmail, commitEdits]
+  );
+
+  /**
+   * The reasoning about a locality, saved whether or not it has been placed.
+   *
+   * Often it is written first — "two villages of this name; the collector's
+   * route says the eastern one" is how you arrive at the coordinates — and
+   * sometimes it is all there is to say: a locality nobody can place is still
+   * worth recording as one, with why.
+   *
+   * Copied onto the georeference as its remarks where there is one, so an
+   * exported row carries the reasoning to whoever reads it outside this
+   * dashboard. This store is the copy that gets edited.
+   */
+  const saveAssessorNote = useCallback(
+    (feature: OccurrenceFeature, text: string) => {
+      const gbifID = feature.properties.gbifID;
+      const note = text.trim();
+      const nextNotes = { ...assessorNotes };
+      if (note) {
+        nextNotes[gbifID] = {
+          gbifID,
+          text: note,
+          addedAt: new Date().toISOString(),
+          addedBy: accountEmail || undefined,
+        };
+      } else {
+        delete nextNotes[gbifID];
+      }
+      const mine = georeferences[gbifID];
+      commitEdits(
+        {
+          notes: nextNotes,
+          ...(mine
+            ? { georeferences: { ...georeferences, [gbifID]: { ...mine, georeferenceRemarks: note || undefined } } }
+            : {}),
+        },
+        note ? `note how you read GBIF ${gbifID}` : `drop your note on GBIF ${gbifID}`
+      );
+    },
+    [assessorNotes, georeferences, accountEmail, commitEdits]
   );
 
   const clearAssessorDate = useCallback(
@@ -7189,6 +7238,8 @@ export default function OccurrenceMapRow({
                   georeferences={georeferences}
                   onSaveGeoreference={saveGeoreferenceInline}
                   onClearGeoreference={clearGeoreference}
+                  localityNotes={assessorNotes}
+                  onSaveLocalityNote={saveAssessorNote}
                   hoveredGbifId={hoveredFeature?.properties.gbifID ?? null}
                   onHoverRow={handleHoverRow}
                   focusGbifId={focusRecord}
