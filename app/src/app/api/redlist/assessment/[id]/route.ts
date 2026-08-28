@@ -27,6 +27,12 @@ function getLocalizedText(
   return desc.en || null;
 }
 
+// IUCN classification-scheme codes come back underscore-separated ("1_4", "7_3")
+// but are written with dots everywhere else ("1.4", "7.3").
+function normalizeClassificationCode(code: string | null | undefined): string {
+  return code ? code.replace(/_/g, ".") : "";
+}
+
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
@@ -100,19 +106,25 @@ export async function GET(
             description: getLocalizedText(data.population_trend.description),
           }
         : null,
-      // Structured data: habitats array
+      // Structured data: habitats array.
+      // suitability / season / majorImportance are the qualifiers that say how
+      // much a habitat actually matters to the species, so keep them verbatim
+      // ("Suitable" vs "Marginal", "Resident" vs "Breeding Season", "Yes"/"No")
+      // rather than collapsing them to booleans.
       habitats: Array.isArray(data.habitats)
         ? data.habitats.map(
             (h: {
               code?: string;
               description?: { en?: string } | string;
               suitability?: string;
+              season?: string;
               majorImportance?: string;
             }) => ({
-              code: h.code || "",
+              code: normalizeClassificationCode(h.code),
               name: getLocalizedText(h.description) || h.code || "",
               suitability: h.suitability || null,
-              major_importance: h.majorImportance === "Yes",
+              season: h.season || null,
+              major_importance: h.majorImportance || null,
             })
           )
         : null,
@@ -130,7 +142,7 @@ export async function GET(
               score?: string;
               stresses?: { code?: string; description?: { en?: string } | string }[];
             }) => ({
-              code: t.code || "",
+              code: normalizeClassificationCode(t.code),
               name:
                 getLocalizedText(t.title) ||
                 getLocalizedText(t.description) ||
@@ -161,7 +173,7 @@ export async function GET(
               title?: { en?: string } | string;
               description?: { en?: string } | string;
             }) => ({
-              code: c.code || "",
+              code: normalizeClassificationCode(c.code),
               name:
                 getLocalizedText(c.title) ||
                 getLocalizedText(c.description) ||
