@@ -175,6 +175,43 @@ interface ColumnPrefs {
   widths?: Record<string, number>;
 }
 
+/**
+ * How the table is sorted, remembered per browser.
+ *
+ * Its own key rather than a field of the column layout: sorting by date
+ * ascending shouldn't freeze today's shipped column order into storage, which
+ * is what writing a layout out to record it would do — and the column
+ * picker's reset is about columns, not about how you left the table sorted.
+ */
+const SORT_PREFS_KEY = "redlist-occurrence-sort:v1";
+
+interface SortPrefs {
+  key: string;
+  asc: boolean;
+}
+
+function loadSortPrefs(): SortPrefs | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const raw = window.localStorage.getItem(SORT_PREFS_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    if (typeof parsed?.key !== "string" || typeof parsed?.asc !== "boolean") return null;
+    return parsed as SortPrefs;
+  } catch {
+    return null;
+  }
+}
+
+function saveSortPrefs(prefs: SortPrefs) {
+  if (typeof window === "undefined") return;
+  try {
+    window.localStorage.setItem(SORT_PREFS_KEY, JSON.stringify(prefs));
+  } catch {
+    // A browser refusing storage shouldn't cost you the table.
+  }
+}
+
 /** Narrow enough to still show something, wide enough to be worth dragging to. */
 const MIN_COLUMN_WIDTH = 60;
 const MAX_COLUMN_WIDTH = 900;
@@ -416,6 +453,7 @@ function CoordinateCellEditor({
   initial,
   initialNote,
   onCommit,
+  onCommitNote,
   onClear,
 }: {
   initial: string;
@@ -423,13 +461,29 @@ function CoordinateCellEditor({
   onCommit: (
     edit: { lat: number; lon: number; uncertainty?: number; note?: string } | null
   ) => void;
+  /**
+   * Keeps the reasoning where there is no position to hang it on.
+   *
+   * Without this the note went in the bin: an empty coordinate box means
+   * there is no georeference to write, and everything typed beside it left
+   * with the editor — which is exactly the case where the reasoning is worth
+   * most, because it is why you couldn't place it.
+   */
+  onCommitNote: (text: string) => void;
   onClear?: () => void;
 }) {
   const [text, setText] = useState(initial);
   const [note, setNote] = useState(initialNote);
   const parsed = parseCoordinateEntry(text);
   const empty = text.trim() === "";
-  const commit = () => onCommit(parsed ? { ...parsed, note: note.trim() } : null);
+  const commit = () => {
+    if (parsed) {
+      onCommit({ ...parsed, note: note.trim() });
+      return;
+    }
+    if (note.trim() !== initialNote.trim()) onCommitNote(note);
+    onCommit(null);
+  };
   return (
     <div className="flex flex-col gap-0.5" onClick={(e) => e.stopPropagation()} data-cell-editor>
       <div className="flex items-center gap-1">
@@ -662,8 +716,11 @@ export default function OccurrenceListTable({
   const [editingCoords, setEditingCoords] = useState<number | null>(null);
   /** The record whose Uncertainty cell is open for typing, if any. */
   const [editingRadius, setEditingRadius] = useState<number | null>(null);
-  const [sortKey, setSortKey] = useState<string>("date");
-  const [sortAsc, setSortAsc] = useState(false);
+  // Newest first by default, matching GBIF's own result order — and whatever
+  // you last sorted by after that. Read lazily so the first paint is already
+  // sorted your way rather than the default flashing past.
+  const [sortKey, setSortKey] = useState<string>(() => loadSortPrefs()?.key ?? "date");
+  const [sortAsc, setSortAsc] = useState(() => loadSortPrefs()?.asc ?? false);
 
   // Which columns are shown and in what order, remembered per browser. Read
   // lazily so the first paint is already the reader's own layout rather than
@@ -1253,7 +1310,7 @@ export default function OccurrenceListTable({
           if (editable && editingCoords === p.gbifID) {
             return (
               <CoordinateCellEditor
-                initialNote={mine?.georeferenceRemarks ?? ""}
+                initialNote={localityNotes?.[p.gbifID]?.text ?? mine?.georeferenceRemarks ?? ""}
                 initial={
                   mine
                     ? `${mine.decimalLatitude}, ${mine.decimalLongitude}`
@@ -1265,6 +1322,7 @@ export default function OccurrenceListTable({
                   setEditingCoords(null);
                   if (edit) onSaveGeoreference?.(f, edit);
                 }}
+                onCommitNote={(text) => onSaveLocalityNote?.(f, text)}
                 onClear={mine ? () => { setEditingCoords(null); onClearGeoreference?.(f); } : undefined}
               />
             );
@@ -1560,7 +1618,7 @@ export default function OccurrenceListTable({
         ),
       },
     ],
-    [isOutsideNativeRange, nativeRangeSourceLabel, georeferences, localityNotes, onSaveGeoreference, onClearGeoreference, editingCoords, editingRadius, exclusions, variant, onExclude, onInclude, duplicates, unfolded, dates, onSaveDate, onClearDate, editingDate, full, showNote, hideNoteSoon, noteIcon]
+    [isOutsideNativeRange, nativeRangeSourceLabel, georeferences, localityNotes, onSaveGeoreference, onSaveLocalityNote, onClearGeoreference, editingCoords, editingRadius, exclusions, variant, onExclude, onInclude, duplicates, unfolded, dates, onSaveDate, onClearDate, editingDate, full, showNote, hideNoteSoon, noteIcon]
   );
 
   // The catalogue in the reader's own order, then the subset actually drawn.
@@ -1761,13 +1819,18 @@ export default function OccurrenceListTable({
   };
 
   const toggleSort = (key: string) => {
-    if (key === sortKey) {
-      setSortAsc((v) => !v);
-    } else {
-      setSortKey(key);
-      // Text columns read best A→Z first; dates and counts most-recent/largest first.
-      setSortAsc(!["date", "uncertainty", "elevation", "gbifID", "flags", "coordinates"].includes(key));
-    }
+    // Text columns read best A→Z first; dates and counts most-recent/largest
+    // first.
+    const asc =
+      key === sortKey
+        ? !sortAsc
+        : !["date", "uncertainty", "elevation", "gbifID", "flags", "coordinates"].includes(key);
+    setSortKey(key);
+    setSortAsc(asc);
+    // Kept, because it is a way of reading rather than a passing choice: an
+    // assessor working through a species by collection date was re-sorting the
+    // table on every reload.
+    saveSortPrefs({ key, asc });
   };
 
   if (loading) {
