@@ -64,7 +64,20 @@ beforeAll(async () => {
       -- An accepted record must outrank a provisional one for the same key.
       ('PV2', NULL, 'provisionally accepted', 'species', 'Aloeides dentatum'),
       -- Species-rank synonym reachable only by normalising.
-      ('SY2', 'C3', 'synonym', 'species', 'Felis catta')
+      ('SY2', 'C3', 'synonym', 'species', 'Felis catta'),
+      -- Pass 7. X8JX is the real record behind the reported case: CoL spells
+      -- Pungeler's moth without the diaeresis, IUCN transliterates it, and no
+      -- termination rule brings the two together.
+      ('X8JX', NULL, 'accepted', 'species', 'Colostygia pungeleri'),
+      -- The refusal that proves the key is not simply believed: GBIF's index put
+      -- the Red List's 'Agrotis sabine' on this record, a different name AND a
+      -- synonym. 95SNW must never be linked.
+      ('95SNW', 'AGR1', 'synonym', 'species', 'Agrotis sabura'),
+      ('AGR1', NULL, 'accepted', 'species', 'Agrotis segetum'),
+      -- An orthographic variant that is a SYNONYM resolves to its parent, as
+      -- passes 2 and 5 do.
+      ('IVA2', 'IVA1', 'synonym', 'species', 'Iva xanthiifolia'),
+      ('IVA1', NULL, 'accepted', 'species', 'Cyclachaena xanthiifolia')
     ) v(col_id, parent_id, status, rank, scientific_name)`, "backbone.parquet");
 
   // Our IUCN-assessed species.
@@ -90,7 +103,16 @@ beforeAll(async () => {
       -- Provisionally accepted, spelled identically — no GBIF key at all.
       (13::BIGINT, 'Idaea josephinae', 'insecta', 'geometridae', NULL::VARCHAR),
       -- Reaches a species-rank SYNONYM only after normalising → accepted parent C3.
-      (14::BIGINT, 'Felis cattus', 'mammalia', 'felidae', NULL::VARCHAR)
+      (14::BIGINT, 'Felis cattus', 'mammalia', 'felidae', NULL::VARCHAR),
+      -- Pass 7: spelling differs INSIDE the name, so passes 4-6 all miss; GBIF's
+      -- key names the record, and the two are one name differently spelled.
+      (15::BIGINT, 'Colostygia puengeleri', 'insecta', 'geometridae', 'X8JX'),
+      -- Pass 7 must refuse this: GBIF's key names a different name entirely.
+      (16::BIGINT, 'Agrotis sabine', 'insecta', 'noctuidae', '95SNW'),
+      -- Pass 7 onto a synonym resolves to the accepted parent.
+      (17::BIGINT, 'Iva xanthifolia', 'magnoliopsida', 'asteraceae', 'IVA2'),
+      -- A GBIF key pointing nowhere in CoL cannot invent a match.
+      (18::BIGINT, 'Nusquam inventus', 'insecta', 'nowhere', 'NOSUCH')
     ) v(id, scientific_name, class_name, family, gbif_species_key)`, "assessed.parquet");
 
   // GBIF-only species (no IUCN synonyms).
@@ -102,7 +124,7 @@ beforeAll(async () => {
   // the synonym "Macronycteris vittatus" — which is CoL's accepted name (C2).
   fs.writeFileSync(path.join(tmp, "redlist", "mammals.csv"),
     "sis_taxon_id,synonyms\n1,\n2,\n3,Macronycteris vittatus:NEW\n4,\n5,Sasia africana:NEW\n" +
-    "6,\n7,\n8,\n9,\n10,\n11,\n12,\n13,\n14,\n");
+    "6,\n7,\n8,\n9,\n10,\n11,\n12,\n13,\n14,\n15,\n16,\n17,\n18,\n");
 
   await run({ dataDir: tmp });
   link = path.join(tmp, "species_link.parquet");
@@ -213,5 +235,54 @@ describe("build-matching ladder (continued)", () => {
     expect(byCol.get("SA")).toBe("iucn_synonym_covered"); // the in-universe duplicate, covered
     // The NE de-dup keys on DISTINCT redlist col_id — both VE and SA are excluded.
     expect(new Set(r5.map((x) => x.col_id))).toEqual(new Set(["VE", "SA"]));
+  });
+});
+
+describe("build-matching pass 7 — orthographic variant, corroborated by GBIF", () => {
+  // Passes 4-6 normalise Latin TERMINATIONS. A difference INSIDE the name defeats
+  // them, so these rows reached pass 7 with no match at all. What makes acting on
+  // GBIF's key safe here is that it is never acted on alone: the record it names
+  // has to hold the same name, differently spelled.
+  it("links the reported case, which no earlier pass could reach", async () => {
+    // Colostygia puengeleri / CoL's Colostygia pungeleri — Rudolf Pungeler's name
+    // transliterated one way by IUCN and stripped of its diaeresis by CoL. The
+    // dashboard reported "No CoL match" while holding X8JX as its GBIF key.
+    const r = (await rows()).find((x) => Number(x.id) === 15)!;
+    expect(r.col_id).toBe("X8JX");
+    expect(r.match_method).toBe("orthographic_variant");
+  });
+
+  it("REFUSES a key whose record is a different name", async () => {
+    // The reason this is a corroboration and not a shortcut. GBIF's matcher put
+    // Agrotis sabine on Agrotis sabura Mabille, 1888. Believing the key would
+    // hand this assessment another species' occurrence records; #490 removed the
+    // pass that did exactly that.
+    const r = (await rows()).find((x) => Number(x.id) === 16)!;
+    expect(r.col_id).toBeNull();
+    expect(r.match_method).toBe("unmatched");
+  });
+
+  it("resolves a variant that is a synonym to its accepted parent", async () => {
+    // Same rule as passes 2 and 5: the link points at the accepted concept, not
+    // at the synonym record GBIF happened to name.
+    const r = (await rows()).find((x) => Number(x.id) === 17)!;
+    expect(r.col_id).toBe("IVA1");
+    expect(r.match_method).toBe("orthographic_variant");
+  });
+
+  it("cannot invent a match from a key CoL does not hold", async () => {
+    const r = (await rows()).find((x) => Number(x.id) === 18)!;
+    expect(r.col_id).toBeNull();
+    expect(r.match_method).toBe("unmatched");
+  });
+
+  it("never overrides an earlier pass", async () => {
+    // Pass 7 is last for a reason: every earlier pass reasons from the name or
+    // from recorded synonymy, and only this one leans on a third party. Row 11's
+    // GBIF key points at C6 while its own name matches C5 exactly — pass 1 must
+    // still win, or a GBIF key could silently move an exactly-matched species.
+    const r = (await rows()).find((x) => Number(x.id) === 11)!;
+    expect(r.col_id).toBe("C5");
+    expect(r.match_method).toBe("accepted");
   });
 });
