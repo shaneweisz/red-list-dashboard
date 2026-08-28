@@ -79,11 +79,21 @@ export default function MapGeoreferenceEditor({
     });
   };
 
-  // Enter saves from any of the three boxes: this is one answer in three
-  // parts, not three fields to tab through.
+  // Enter saves from the two number boxes: this is one answer in three parts,
+  // not three fields to tab through.
   const onKeyDown = (e: React.KeyboardEvent) => {
     e.stopPropagation();
     if (e.key === "Enter") {
+      e.preventDefault();
+      save();
+    }
+  };
+
+  // The note is prose, so Enter belongs to the paragraph. ⌘/Ctrl-Enter is the
+  // way out of it, as it is everywhere else a box holds more than one line.
+  const onNoteKeyDown = (e: React.KeyboardEvent) => {
+    e.stopPropagation();
+    if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
       e.preventDefault();
       save();
     }
@@ -157,15 +167,21 @@ export default function MapGeoreferenceEditor({
       </div>
       {/* The reasoning, which is the part worth keeping: a georeference is an
           interpretation of a locality description, and the next person to open
-          this — including you in six months — needs how you read it. */}
-      <input
+          this — including you in six months — needs how you read it.
+
+          A box you can pull open rather than a single line: the reasoning runs
+          to a paragraph — which of two villages, whose route, what the label
+          spells differently — and typing it into a one-line field meant
+          writing it blind. It keeps whatever height you give it. */}
+      <textarea
         value={note}
         onChange={(e) => setNote(e.target.value)}
-        onKeyDown={onKeyDown}
+        onKeyDown={onNoteKeyDown}
+        rows={2}
         placeholder="why — how you read the locality"
-        title="How you arrived at this position, in your words. Saved as the georeference's remarks."
+        title="How you arrived at this position, in your words. Enter starts a new line; ⌘/Ctrl-Enter saves. Drag the corner to make the box bigger."
         aria-label="Why — how you read the locality"
-        className="w-full rounded border border-zinc-300 dark:border-zinc-600 bg-white dark:bg-zinc-900 px-1 py-0.5 text-[10px] text-zinc-600 dark:text-zinc-300"
+        className="w-full min-h-[2.5rem] resize-y rounded border border-zinc-300 dark:border-zinc-600 bg-white dark:bg-zinc-900 px-1 py-0.5 text-[10px] leading-snug text-zinc-600 dark:text-zinc-300"
       />
     </div>
   );

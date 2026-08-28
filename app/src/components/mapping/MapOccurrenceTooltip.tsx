@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useMap } from "react-map-gl/maplibre";
+import LinkifiedText from "./LinkifiedText";
 
 interface MapOccurrenceTooltipProps {
   lat: number;
@@ -17,7 +18,7 @@ interface MapOccurrenceTooltipProps {
    * plain columns say the same things and let you compare one record with the
    * next without decoding the formatting first.
    */
-  fields: { label: string; value: string }[];
+  fields: { label: string; value: string; link?: boolean }[];
   /**
    * What this dashboard says about the record, as opposed to what GBIF
    * publishes about it: the coordinate-cleaning flags, whether it falls
@@ -452,7 +453,10 @@ export default function MapOccurrenceTooltip(props: MapOccurrenceTooltipProps) {
                   <td className="py-[1px] pr-1.5 whitespace-nowrap text-zinc-400 dark:text-zinc-500">
                     {field.label}
                   </td>
-                  <td className="py-[1px] break-words text-zinc-700 dark:text-zinc-200">{field.value}</td>
+                  {/* pre-line for the note, which can be a paragraph now. */}
+                  <td className="py-[1px] break-words whitespace-pre-line text-zinc-700 dark:text-zinc-200">
+                    {field.link ? <LinkifiedText text={field.value} /> : field.value}
+                  </td>
                 </tr>
               ))}
             </tbody>

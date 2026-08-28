@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { QUALITY_FLAG_LABELS, type QualityFlag } from "@/lib/mapping/coordinate-cleaning";
 import { browserLanguage, googleTranslateUrl, languageName } from "@/lib/mapping/translate";
+import LinkifiedText from "./LinkifiedText";
 import { formatGbifIssue } from "@/lib/gbif";
 import {
   duplicateOf,
@@ -2104,9 +2105,14 @@ export default function OccurrenceListTable({
           onMouseEnter={keepNote}
           onMouseLeave={hideNoteSoon}
           data-hover-note
-          className="rounded-md bg-zinc-900/95 dark:bg-zinc-700 px-1.5 py-1 text-[10px] leading-snug text-white shadow-lg select-text cursor-text"
+          // pre-line, because a note can now be written as a paragraph: the
+          // line breaks someone typed are part of what they wrote.
+          className="rounded-md bg-zinc-900/95 dark:bg-zinc-700 px-1.5 py-1 text-[10px] leading-snug text-white shadow-lg select-text cursor-text whitespace-pre-line"
         >
-          {hoverNote.text}
+          {/* A note often cites where the answer came from. The bubble already
+              survives the pointer travelling into it, so a link in here can
+              actually be reached. */}
+          <LinkifiedText text={hoverNote.text} />
           {/* A locality is the field a georeference is made from, and it is
               written in the language of whoever collected the specimen. The
               way out is Google's own page rather than a translation drawn into

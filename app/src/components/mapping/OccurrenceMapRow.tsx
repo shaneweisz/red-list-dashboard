@@ -1811,7 +1811,10 @@ export default function OccurrenceMapRow({
         existing?.coordinateUncertaintyInMeters ??
         p.coordinateUncertaintyInMeters ??
         DEFAULT_GEOREFERENCE_RADIUS_M;
-      handleSaveGeoreference({
+      // Empty means "no note", not "leave the old one": clearing the box is
+      // how you take a note back.
+      const note = edit.note === undefined ? undefined : edit.note.trim();
+      const georeference: Georeference = {
         ...existing,
         gbifID: p.gbifID,
         occurrenceID: p.occurrenceID ?? existing?.occurrenceID,
@@ -1823,32 +1826,42 @@ export default function OccurrenceMapRow({
         georeferencedBy: existing?.georeferencedBy || accountEmail || undefined,
         georeferencedDate: new Date().toISOString(),
         georeferenceProtocol: existing?.georeferenceProtocol ?? "Typed from the locality description",
-        // Empty means "no note", not "leave the old one": clearing the box is
-        // how you take a note back.
-        georeferenceRemarks: edit.note === undefined ? existing?.georeferenceRemarks : edit.note || undefined,
-      });
+        georeferenceRemarks:
+          note === undefined ? existing?.georeferenceRemarks : note || undefined,
+      };
+      // The note goes to its own store as well as onto the georeference, so
+      // dropping the coordinates doesn't take the reasoning with them — why
+      // you placed a record where you did is often why you moved it, and it
+      // was the only copy.
+      const nextNotes = { ...assessorNotes };
+      if (note !== undefined) {
+        if (note) {
+          nextNotes[p.gbifID] = {
+            gbifID: p.gbifID,
+            text: note,
+            addedAt: new Date().toISOString(),
+            addedBy: accountEmail || undefined,
+          };
+        } else {
+          delete nextNotes[p.gbifID];
+        }
+      }
+      commitEdits(
+        { georeferences: { ...georeferences, [p.gbifID]: georeference }, notes: nextNotes },
+        existing ? "edit a georeference" : "add a georeference"
+      );
     },
-    // handleSaveGeoreference is declared just below and is stable per render.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [georeferences, accountEmail, scientificName]
+    [georeferences, assessorNotes, accountEmail, scientificName, commitEdits]
   );
 
   const clearGeoreference = useCallback(
     (feature: OccurrenceFeature) => {
+      // Only the coordinates. The reasoning stays: it is as often about why
+      // the record can't be placed as about where it was placed, and it lives
+      // in its own store precisely so this can't take it.
       const next = { ...georeferences };
       delete next[feature.properties.gbifID];
       commitEdits({ georeferences: next }, "delete a georeference");
-    },
-    [georeferences, commitEdits]
-  );
-
-  const handleSaveGeoreference = useCallback(
-    (georeference: Georeference) => {
-      commitEdits(
-        { georeferences: { ...georeferences, [georeference.gbifID]: georeference } },
-        georeferences[georeference.gbifID] ? "edit a georeference" : "add a georeference"
-      );
-      setGeorefMessage(null);
     },
     [georeferences, commitEdits]
   );
@@ -3512,7 +3525,8 @@ export default function OccurrenceMapRow({
                 // Built here because this is where the assessor's own
                 // coordinates, the cleaning flags and the native-range check
                 // all live.
-                const { fields, notes } = recordFields(shown, mine, hInat);
+                const editorBelow = fullscreen && (isGeoreferenceable(shown.properties) || !!mine);
+                const { fields, notes } = recordFields(shown, mine, hInat, { editorBelow });
                 return (
                   <MapOccurrenceTooltip
                     lat={hLat}
@@ -3556,7 +3570,7 @@ export default function OccurrenceMapRow({
                     // records around it and the boundary it falls inside, all
                     // of which are under this panel.
                     editor={
-                      fullscreen && (isGeoreferenceable(shown.properties) || mine) ? (
+                      editorBelow ? (
                         <MapGeoreferenceEditor
                           key={shown.properties.gbifID}
                           initial={{
@@ -4712,7 +4726,15 @@ export default function OccurrenceMapRow({
   );
 
   const recordFields = useCallback(
-    (feature: OccurrenceFeature, mine?: Georeference, inat?: InatObservation) => {
+    (
+      feature: OccurrenceFeature,
+      mine?: Georeference,
+      inat?: InatObservation,
+      // Set where the georeference editor is drawn under these fields: what
+      // the assessor supplied is in the boxes there, and repeating it in the
+      // table above them made the panel say everything twice.
+      opts: { editorBelow?: boolean } = {}
+    ) => {
       const p = feature.properties;
       const position = mine
         ? [mine.decimalLongitude, mine.decimalLatitude]
@@ -4721,13 +4743,13 @@ export default function OccurrenceMapRow({
       // What GBIF publishes about the record, and what this dashboard says
       // about it, kept apart. Mixed together, "Outside native range" read as
       // another field off the record rather than a call we made about it.
-      const rows: { label: string; value: string }[] = [];
+      const rows: { label: string; value: string; link?: boolean }[] = [];
       const notes: { label: string; value: string; flag?: boolean }[] = [];
       const text = (value: unknown) =>
         (Array.isArray(value) ? value.join(", ") : value == null ? "" : String(value)).trim();
-      const add = (label: string, value: unknown) => {
+      const add = (label: string, value: unknown, link = false) => {
         const t = text(value);
-        if (t) rows.push({ label, value: t });
+        if (t) rows.push({ label, value: t, link });
       };
 
       add("Species", p.species);
@@ -4740,17 +4762,30 @@ export default function OccurrenceMapRow({
       add("Type", p.typeStatus);
       add("Locality", p.locality || p.verbatimLocality);
       add("Country", p.country);
-      if (position) {
-        add("Coordinates", `${position[1].toFixed(4)}, ${position[0].toFixed(4)}`);
+      // With the editor below, this table goes back to being what GBIF
+      // published: its coordinates where it has any, its uncertainty, and
+      // nothing about the position you supplied.
+      const ownFields = opts.editorBelow && mine;
+      const shownPosition = ownFields ? feature.geometry?.coordinates : position;
+      const shownUncertainty = ownFields ? p.coordinateUncertaintyInMeters : uncertainty;
+      if (shownPosition) {
+        add("Coordinates", `${shownPosition[1].toFixed(4)}, ${shownPosition[0].toFixed(4)}`);
       }
       add(
-        mine ? "Radius" : "GPS uncertainty",
-        uncertainty == null ? null : uncertainty >= 1000 ? `${(uncertainty / 1000).toFixed(1)} km` : `${uncertainty} m`
+        mine && !ownFields ? "Radius" : "GPS uncertainty",
+        shownUncertainty == null
+          ? null
+          : shownUncertainty >= 1000
+            ? `${(shownUncertainty / 1000).toFixed(1)} km`
+            : `${shownUncertainty} m`
       );
-      if (mine) {
+      if (mine && !ownFields) {
         add("Coordinates by", "You");
         add("Method", mine.georeferenceProtocol);
-        add("Note", mine.georeferenceRemarks);
+        // The reasoning is where an address gets written down — the GEOLocate
+        // result, the herbarium's page for the sheet — so it is the one field
+        // whose links are worth following from here.
+        add("Note", assessorNotes[p.gbifID]?.text ?? mine.georeferenceRemarks, true);
       }
       if (p.basisOfRecord === "PRESERVED_SPECIMEN") {
         // Two fields, not one joined pair. A record can carry a collection
@@ -4814,7 +4849,7 @@ export default function OccurrenceMapRow({
       }
       return { fields: rows, notes };
     },
-    [pointFileByGbifId, institutionNames, assessorDates]
+    [pointFileByGbifId, institutionNames, assessorDates, assessorNotes]
   );
 
   /**
