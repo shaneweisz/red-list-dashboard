@@ -90,7 +90,7 @@ function CategoryBadge({ code, small }: { code: string; small?: boolean }) {
 // How much assessment narrative is shown inline, as one budget spent across
 // all seven sections in order — not per section. The assessments run long; past
 // this the IUCN Red List page has the full text, one click away.
-const NARRATIVE_WORD_LIMIT = 100;
+const NARRATIVE_WORD_LIMIT = 200;
 
 // The assessment's narrative fields, in display order.
 const NARRATIVE_FIELDS: {
