@@ -23,7 +23,14 @@
  *  6. provisionally-accepted match → a separate gap rather than a spelling one:
  *     col_acc is the displayable universe (status='accepted' only), so a name CoL
  *     lists as provisionally accepted never linked at all, even spelled identically.
- *  7. else unmatched.
+ *  7. orthographic-variant match, CORROBORATED — passes 4-6 normalise Latin
+ *     TERMINATIONS only, so a difference inside the name still misses
+ *     (Colostygia puengeleri / CoL's Colostygia pungeleri, both for Pungeler).
+ *     GBIF's index is built on CoL, so an unmatched row's gbif_species_key is an
+ *     independent matcher's candidate col_id. It is accepted only when the record
+ *     it names is the same name differently spelled (name-variants.ts), which
+ *     refuses GBIF's Agrotis sabine -> Agrotis sabura. Neither signal alone.
+ *  8. else unmatched.
  *
  * Passes 4-6 refuse an ambiguous normalised key outright instead of guessing.
  *
@@ -40,7 +47,7 @@
 import * as path from "path";
 import { DuckDBInstance } from "@duckdb/node-api";
 import { loadEnvFiles, DATA_DIR, CSV_QUOTING } from "./utils";
-import { speciesNameParts, normalisedKey } from "./name-variants";
+import { speciesNameParts, normalisedKey, orthographicallySame } from "./name-variants";
 
 export async function run(opts: { dataDir?: string } = {}): Promise<void> {
   const dir = opts.dataDir || DATA_DIR;
@@ -241,22 +248,83 @@ export async function run(opts: { dataDir?: string } = {}): Promise<void> {
     console.log(`  ${ambiguous} species left unmatched: their normalised name offers more than one CoL record`);
   }
 
+  // (7) Orthographic-variant pass, CORROBORATED by GBIF's own index.
+  //
+  // Passes 4-6 normalise Latin TERMINATIONS. They do not touch the spelling
+  // inside a name, so an umlaut transliterated one way by IUCN and another by
+  // CoL still misses: Colostygia puengeleri vs CoL's Colostygia pungeleri, both
+  // honouring Rudolf Pungeler. Same for i/y, doubled consonants and hyphens.
+  //
+  // name-variants.ts declines all of those on the names alone, deliberately — a
+  // wrong match hands one species' occurrence records to another, and a doubled
+  // consonant really can be two names. This pass supplies the evidence that
+  // header says is missing, WITHOUT taking anyone's word for it:
+  //
+  //   GBIF's occurrence index is built on CoL, so gbif_species_key IS a col_id —
+  //   an independent matcher's answer. #490 removed the pass that simply
+  //   believed it, and rightly: GBIF put Agrotis sabine on Agrotis sabura
+  //   Mabille, 1888, a different name and a synonym at that.
+  //
+  // So the key is only a CANDIDATE. It is accepted when the record it names is
+  // the same name differently spelled, and refused otherwise. Neither signal
+  // decides alone; sabine/sabura fails the name test and stays unmatched.
+  const orthoCandidates = await (await conn.run(`
+    SELECT o.id, o.scientific_name, b.col_id, b.parent_id, b.status, b.scientific_name AS col_name
+    FROM ours o
+    LEFT JOIN acc_match a ON a.id = o.id
+    LEFT JOIN col_syn s ON s.nm = o.nm
+    LEFT JOIN iucn_match i ON i.id = o.id
+    LEFT JOIN variant_match v ON v.id = o.id
+    JOIN read_parquet('${backbone}') b ON b.col_id = o.gbif_species_key
+    WHERE o.src = 'redlist'
+      AND a.col_id IS NULL AND s.col_id IS NULL AND i.col_id IS NULL AND v.col_id IS NULL
+      AND o.gbif_species_key IS NOT NULL
+      AND b.rank = 'species';
+  `)).getRowObjects();
+
+  const orthoPairs: { id: number; colId: string }[] = [];
+  let orthoRejected = 0;
+  for (const r of orthoCandidates) {
+    // The name test, on the record GBIF actually named.
+    if (!orthographicallySame(String(r.scientific_name), String(r.col_name))) { orthoRejected++; continue; }
+    // A synonym resolves to its accepted parent, exactly as passes 2 and 5 do.
+    // 'misapplied' is evidence AGAINST the names being one name, so it is skipped
+    // here for the same reason it is skipped there.
+    const status = String(r.status ?? "");
+    const colId = status === "accepted" || status === "provisionally accepted"
+      ? String(r.col_id)
+      : status.includes("synonym") ? (r.parent_id as string | null) : null;
+    if (!colId) { orthoRejected++; continue; }
+    orthoPairs.push({ id: Number(r.id), colId });
+  }
+
+  await conn.run(`CREATE TEMP TABLE ortho_match (id BIGINT, col_id VARCHAR);`);
+  for (let i = 0; i < orthoPairs.length; i += 1000) {
+    const chunk = orthoPairs.slice(i, i + 1000)
+      .map((p) => `(${p.id}, '${p.colId.replace(/'/g, "''")}')`).join(",");
+    await conn.run(`INSERT INTO ortho_match VALUES ${chunk};`);
+  }
+  console.log(`  ${orthoPairs.length} matched on an orthographic variant of the name GBIF's index points at` +
+    ` (${orthoRejected} such candidates refused: GBIF named a record spelled differently enough to be another name)`);
+
   // Primary link — one row per species (its single best match).
   await conn.run(`
     CREATE TEMP TABLE primary_link AS
       SELECT o.src, o.id, o.sis_taxon_id, o.gbif_species_key, o.scientific_name,
-             coalesce(a.col_id, s.col_id, i.col_id, v.col_id) AS col_id,
+             coalesce(a.col_id, s.col_id, i.col_id, v.col_id, x.col_id) AS col_id,
              CASE WHEN a.col_id IS NOT NULL AND a.ncand = 1 THEN 'accepted'
                   WHEN a.col_id IS NOT NULL THEN 'accepted_homonym'
                   WHEN s.col_id IS NOT NULL THEN 'synonym'
                   WHEN i.col_id IS NOT NULL THEN 'iucn_synonym'
                   WHEN v.col_id IS NOT NULL THEN v.method
+                  WHEN x.col_id IS NOT NULL THEN 'orthographic_variant'
                   ELSE 'unmatched' END AS match_method
       FROM ours o
       LEFT JOIN acc_match a ON a.id = o.id
       LEFT JOIN col_syn s ON s.nm = o.nm AND a.col_id IS NULL
       LEFT JOIN iucn_match i ON i.id = o.id AND a.col_id IS NULL AND s.col_id IS NULL
-      LEFT JOIN variant_match v ON v.id = o.id;
+      LEFT JOIN variant_match v ON v.id = o.id
+      LEFT JOIN ortho_match x ON x.id = o.id;
   `);
   // Covered col_ids — a Red List species's OTHER names (its IUCN synonyms) can each
   // resolve to a CoL accepted concept beyond its primary match. This matters when CoL
@@ -295,11 +363,12 @@ export async function run(opts: { dataDir?: string } = {}): Promise<void> {
              count(*) FILTER (WHERE match_method = 'accepted_variant') AS accvar,
              count(*) FILTER (WHERE match_method = 'synonym_variant') AS synvar,
              count(*) FILTER (WHERE match_method = 'provisional') AS prov,
+             count(*) FILTER (WHERE match_method = 'orthographic_variant') AS ortho,
              count(*) FILTER (WHERE match_method = 'unmatched') AS un
       FROM '${out}' WHERE src = '${src}' AND match_method <> 'iucn_synonym_covered'`))[0];
     const t = Number(r.total), m = Number(r.matched);
     console.log(`${src}: ${t.toLocaleString()} | matched ${(100 * m / t).toFixed(1)}% ` +
-      `(accepted ${Number(r.acc).toLocaleString()}, via-CoL-synonym ${Number(r.syn).toLocaleString()}, via-IUCN-synonym ${Number(r.isyn).toLocaleString()}, via-variant-accepted ${Number(r.accvar).toLocaleString()}, via-variant-synonym ${Number(r.synvar).toLocaleString()}, via-provisional ${Number(r.prov).toLocaleString()}, homonym-resolved ${Number(r.hom).toLocaleString()}, unmatched ${Number(r.un).toLocaleString()})`);
+      `(accepted ${Number(r.acc).toLocaleString()}, via-CoL-synonym ${Number(r.syn).toLocaleString()}, via-IUCN-synonym ${Number(r.isyn).toLocaleString()}, via-variant-accepted ${Number(r.accvar).toLocaleString()}, via-variant-synonym ${Number(r.synvar).toLocaleString()}, via-provisional ${Number(r.prov).toLocaleString()}, via-orthographic ${Number(r.ortho).toLocaleString()}, homonym-resolved ${Number(r.hom).toLocaleString()}, unmatched ${Number(r.un).toLocaleString()})`);
   }
   const cov = Number((await q(`SELECT count(*) c FROM '${out}' WHERE match_method = 'iucn_synonym_covered'`))[0].c);
   console.log(`  + ${cov.toLocaleString()} extra col_ids covered via IUCN synonyms (NE-dedup only — e.g. Sasia/Verreauxia africana)`);

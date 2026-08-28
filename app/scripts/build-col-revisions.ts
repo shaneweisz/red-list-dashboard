@@ -42,7 +42,7 @@ import {
   type NoMatchDetail,
 } from "../src/lib/data/col-breakdown";
 import { SPLIT_REASON, UNFLAGGED_REASONS, GENUS_DIFFERS_REASON, RENAMED_REASON } from "../src/lib/col-revision";
-import { normalisedKey, speciesNameParts, canonicalEpithet } from "./name-variants";
+import { orthographicallySame, speciesNameParts, canonicalEpithet } from "./name-variants";
 
 // Keep in sync with build-taxa-summary.ts / species-duckdb.ts.
 const EXCLUDED_COL_IDS_SQL = `('6MB3T')`; // Homo sapiens
@@ -318,8 +318,9 @@ export async function run(): Promise<void> {
   //    and picking one would be us adjudicating. Refused, not guessed.
   //  - the matched record is below species rank: CoL's accepted species is then
   //    its parent, which the `infraspecific` bar already reports.
-  //  - names differing only in a Latin termination: one name under ICZN 58 /
-  //    ICN 53.3, so reporting it as a different name is simply wrong.
+  //  - names differing only in spelling: one name under ICZN 58 / ICN 53.3
+  //    (terminations) and ICZN 32.5.2 / ICN 60 (orthography), so reporting it as
+  //    a different name is simply wrong.
   if (hasBackbone) {
     const renameRows = (await conn.runAndReadAll(`
       WITH linked AS (
@@ -351,7 +352,13 @@ export async function run(): Promise<void> {
     let genusDiffers = 0, renamed = 0, variantOnly = 0, alsoLumped = 0;
     for (const r of renameRows) {
       const iucn = String(r.name), acc = String(r.acc_name);
-      if (normalisedKey(iucn) && normalisedKey(iucn) === normalisedKey(acc)) { variantOnly++; continue; }
+      // The full orthographic rule, not just terminations. "CoL accepts a
+      // different name" has to be FALSE of a name CoL merely spells differently
+      // — Colostygia puengeleri / pungeleri is one name under ICZN 32.5.2.1, and
+      // reporting it as a different name would be exactly the error this bar was
+      // built to avoid. Using the looser rule here reports FEWER differences,
+      // which is the safe direction for a claim about someone else's data.
+      if (orthographicallySame(iucn, acc)) { variantOnly++; continue; }
       const mine = speciesNameParts(iucn), theirs = speciesNameParts(acc);
       // A genus transfer keeps the epithet and changes the genus — canonically,
       // since the epithet's ending usually shifts to agree with the new genus
@@ -383,7 +390,7 @@ export async function run(): Promise<void> {
     counts[GENUS_DIFFERS_REASON] = genusDiffers;
     counts[RENAMED_REASON] = renamed;
     console.log(`  CoL revisions: ${genusDiffers + renamed} assessments have a different accepted name in the release ` +
-      `(${genusDiffers} differ in genus alone, ${renamed} in the epithet; ${variantOnly} excluded as termination variants, ` +
+      `(${genusDiffers} differ in genus alone, ${renamed} in the epithet; ${variantOnly} excluded as one name spelled two ways, ` +
       `${alsoLumped} as already carried by the lump bar)`);
   }
 
