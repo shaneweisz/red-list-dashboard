@@ -92,19 +92,35 @@ function CategoryBadge({ code, small }: { code: string; small?: boolean }) {
 // the full text, and it is one click away.
 const NARRATIVE_WORD_LIMIT = 100;
 
-// Collapsible section for narrative text, capped at NARRATIVE_WORD_LIMIT words
+// The assessment's narrative fields, in display order.
+const NARRATIVE_FIELDS: {
+  title: string;
+  field: "rationale" | "population" | "habitat" | "threats" | "conservation_actions" | "use_trade" | "range";
+}[] = [
+  { title: "Rationale", field: "rationale" },
+  { title: "Population", field: "population" },
+  { title: "Habitat & Ecology", field: "habitat" },
+  { title: "Threats", field: "threats" },
+  { title: "Conservation Actions", field: "conservation_actions" },
+  { title: "Use & Trade", field: "use_trade" },
+  { title: "Geographic Range", field: "range" },
+];
+
+// Collapsible section for narrative text. The text arrives already capped at
+// NARRATIVE_WORD_LIMIT; `fullTextUrl` is passed only to the first cut section,
+// so the "read the full assessment" link appears once, not on each of them.
 function NarrativeSection({
   title,
-  content,
+  text,
+  truncated,
   fullTextUrl,
 }: {
   title: string;
-  content: string;
-  fullTextUrl: string;
+  text: string;
+  truncated: boolean;
+  fullTextUrl?: string;
 }) {
   const [expanded, setExpanded] = useState(true);
-  const { text, truncated } = truncateWords(stripHtml(content), NARRATIVE_WORD_LIMIT);
-  if (!text) return null;
 
   return (
     <div className="border-b border-zinc-100 dark:border-zinc-800 last:border-0">
@@ -124,9 +140,10 @@ function NarrativeSection({
       {expanded && (
         <div className="pb-3 pl-5 text-sm text-zinc-600 dark:text-zinc-400 whitespace-pre-line leading-relaxed">
           {text}
-          {truncated && (
+          {truncated && "\u2026"}
+          {truncated && fullTextUrl && (
             <>
-              {"\u2026 "}
+              {" "}
               <a
                 href={fullTextUrl}
                 target="_blank"
@@ -563,6 +580,13 @@ function AssessmentDetailView({
   const trendText = getTrendText(detail.population_trend);
   const assessmentUrl =
     detail.url || `https://www.iucnredlist.org/species/${detail.sis_taxon_id}/${detail.assessment_id}`;
+  const narratives = NARRATIVE_FIELDS.flatMap(({ title, field }) => {
+    const raw = detail[field];
+    if (!raw) return [];
+    const { text, truncated } = truncateWords(stripHtml(raw), NARRATIVE_WORD_LIMIT);
+    return text ? [{ title, text, truncated }] : [];
+  });
+  const firstTruncated = narratives.findIndex((n) => n.truncated);
 
   return (
     <div className="space-y-3">
@@ -625,17 +649,19 @@ function AssessmentDetailView({
 
       {/* Narrative sections */}
       <div className="border border-zinc-100 dark:border-zinc-800 rounded-lg overflow-hidden px-3 divide-y divide-zinc-100 dark:divide-zinc-800">
-        {detail.rationale && <NarrativeSection title="Rationale" content={detail.rationale} fullTextUrl={assessmentUrl} />}
-        {detail.population && <NarrativeSection title="Population" content={detail.population} fullTextUrl={assessmentUrl} />}
-        {detail.habitat && <NarrativeSection title="Habitat & Ecology" content={detail.habitat} fullTextUrl={assessmentUrl} />}
-        {detail.threats && <NarrativeSection title="Threats" content={detail.threats} fullTextUrl={assessmentUrl} />}
-        {detail.conservation_actions && <NarrativeSection title="Conservation Actions" content={detail.conservation_actions} fullTextUrl={assessmentUrl} />}
-        {detail.use_trade && <NarrativeSection title="Use & Trade" content={detail.use_trade} fullTextUrl={assessmentUrl} />}
-        {detail.range && <NarrativeSection title="Geographic Range" content={detail.range} fullTextUrl={assessmentUrl} />}
+        {narratives.map((n, i) => (
+          <NarrativeSection
+            key={n.title}
+            title={n.title}
+            text={n.text}
+            truncated={n.truncated}
+            fullTextUrl={i === firstTruncated ? assessmentUrl : undefined}
+          />
+        ))}
       </div>
 
       {/* No narrative data message */}
-      {!detail.rationale && !detail.population && !detail.habitat && !detail.threats && !detail.conservation_actions && !detail.range && (
+      {narratives.length === 0 && (
         <div className="text-sm text-zinc-400 py-2 italic">
           No detailed narrative data available for this assessment. View the full assessment on{" "}
           <a
