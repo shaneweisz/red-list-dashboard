@@ -218,7 +218,8 @@ export function getColRevisions(): Map<number, ColRevision> {
     // flagged species, so the shipped file stays small. See build-col-revisions.
     const file = JSON.parse(fs.readFileSync(COL_REVISIONS_PATH, "utf-8")) as {
       species: Record<string, { r?: string; d?: string; i?: number; dc?: string; c?: string; n?: string; k?: string;
-        s?: [string, string, string, string][]; lw?: [string, string, string][]; ln?: string }>;
+        s?: [string, string, string, string][]; lw?: [string, string, string][]; ln?: string;
+        an?: string; ac?: string; gm?: 1 }>;
     };
     for (const [id, e] of Object.entries(file.species ?? {})) {
       out.set(Number(id), {
@@ -240,6 +241,9 @@ export function getColRevisions(): Map<number, ColRevision> {
           })),
         } : {}),
         ...(e.ln != null ? { lumpedUnder: e.ln } : {}),
+        ...(e.an != null ? { acceptedName: e.an } : {}),
+        ...(e.ac != null ? { acceptedColId: e.ac } : {}),
+        ...(e.gm ? { genusMoved: true } : {}),
         ...(e.s?.length ? {
           splitInto: e.s.map(([name, colId, prevName, prevColId]) => ({
             name,

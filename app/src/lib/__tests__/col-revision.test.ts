@@ -22,11 +22,18 @@ import {
   tallyRevision,
   barTotal,
   visibleBars,
+  acceptedNameSentence,
+  GENUS_MOVED_REASON,
+  RENAMED_REASON,
 } from "@/lib/col-revision";
 
 // The no-match reason codes come from classifyNoMatch (lib/data/col-breakdown);
 // this file is the UI's side of that contract. A new reason added there with no
 // wording here would render as a bare snake_case code, which is what these catch.
+// Signals that sit alongside the no-match reasons as bars and filter values but
+// are NOT produced by classifyNoMatch, so noMatchSentence has no case for them.
+const PSEUDO_REASONS = new Set<string>([SPLIT_REASON, GENUS_MOVED_REASON, RENAMED_REASON]);
+
 describe("revision vocabulary", () => {
   // Wording must cover the reasons the dashboard flags AND the ones it only
   // diagnoses — the SSC group view still renders those.
@@ -36,7 +43,9 @@ describe("revision vocabulary", () => {
     for (const reason of ALL_REASONS) {
       expect(REVISION_REASON_SHORT[reason], `short label for ${reason}`).toBeTruthy();
       expect(REVISION_REASON_SUMMARY[reason], `summary for ${reason}`).toBeTruthy();
-      if (reason === SPLIT_REASON) continue; // not a noMatchSentence case — see splitSentence
+      // The pseudo-reasons are signals in their own right, not classifyNoMatch
+      // verdicts, so each has its own sentence function instead.
+      if (PSEUDO_REASONS.has(reason)) continue;
       for (const subject of ["Panthera leo", null]) {
         const sentence = noMatchSentence({ reason, detail: "Panthera tigris" }, subject);
         expect(sentence.before, `${reason} / subject=${subject}`).toBeTruthy();
@@ -149,6 +158,62 @@ describe("UNFLAGGED_REASONS", () => {
   });
 });
 
+describe("the accepted-name signal", () => {
+  const moved: ColRevision = { acceptedName: "Sibirenauta elongata", acceptedColId: "ABC12", genusMoved: true };
+  const renamed: ColRevision = { acceptedName: "Dalbergia emirnensis", acceptedColId: "XYZ99" };
+
+  it("flags a species whose ONLY signal is a different accepted name", () => {
+    // These match CoL cleanly — no reason, no split, no lump. Before this signal
+    // nothing on the card caught them, which is the whole point of adding it.
+    expect(isFlagged(moved)).toBe(true);
+    expect(isFlagged({})).toBe(false);
+  });
+
+  it("routes each to its own bar", () => {
+    expect(revisionReasons(moved)).toEqual([GENUS_MOVED_REASON]);
+    expect(revisionReasons(renamed)).toEqual([RENAMED_REASON]);
+    // A genus move and a plain rename must never both fire for one species.
+    expect(revisionReasons(moved)).toHaveLength(1);
+  });
+
+  it("counts alongside the other signals rather than replacing them", () => {
+    // A species can be split AND renamed; both bars must return it.
+    const both: ColRevision = { ...renamed, splitInto: [{ name: "X y", colId: "Q" }] };
+    expect(revisionReasons(both).sort()).toEqual([RENAMED_REASON, SPLIT_REASON].sort());
+  });
+
+  it("keeps CoL's name as its own part, so it can be linked", () => {
+    const s = acceptedNameSentence(renamed, "Dalbergia campenonii")!;
+    expect(s.detail).toBe("Dalbergia emirnensis");
+    expect(s.before).not.toContain("Dalbergia emirnensis");
+  });
+
+  it("states it as CoL's position, never as the correct name", () => {
+    for (const flag of [moved, renamed]) {
+      const s = acceptedNameSentence(flag, "Aplexa elongata")!;
+      const full = `${s.before}${s.detail}${s.after}`;
+      expect(full).toContain("Catalogue of Life");
+      // "correct", "should be" and friends would make the card an accusation.
+      expect(full).not.toMatch(/correct|should be|wrong|actually/i);
+    }
+  });
+
+  it("says where the difference falls", () => {
+    expect(acceptedNameSentence(moved, "Aplexa elongata")!.before).toMatch(/genus/i);
+    expect(acceptedNameSentence(renamed, "Dalbergia campenonii")!.before).not.toMatch(/genus/i);
+  });
+
+  it("has a terse framing for the SSC panel, which names the species already", () => {
+    const s = acceptedNameSentence(renamed, null)!;
+    expect(s.before).not.toContain("Dalbergia campenonii");
+    expect(s.detail).toBe("Dalbergia emirnensis");
+  });
+
+  it("is null when there is no accepted-name difference", () => {
+    expect(acceptedNameSentence({ reason: "unmatched" }, "Bufo bufo")).toBeNull();
+  });
+});
+
 describe("isFlagged / revisionReasons", () => {
   it("treats the two signals as independent, and a species with both as belonging to both bars", () => {
     expect(revisionReasons({ reason: "lumped" })).toEqual(["lumped"]);
@@ -248,7 +313,7 @@ describe("noMatchSentence", () => {
     // earlier version of this test required a literal "so", which the
     // provisional wording then dropped for a better sentence.
     for (const reason of REVISION_REASONS) {
-      if (reason === SPLIT_REASON || reason === "lumped") continue; // their own summaries
+      if (PSEUDO_REASONS.has(reason) || reason === "lumped") continue; // their own summaries
       const flag = { reason, detail: "Panthera tigris" };
       const full = noMatchExplanation(flag, "Panthera leo").split(" ").length;
       const terse = noMatchExplanation(flag, null).split(" ").length;

@@ -17,7 +17,7 @@ import { CATEGORY_COLORS, TAXA_BY_ID, THREATENED_CATEGORIES } from "@/config/tax
 import { speciesMatchesNode, getNodeDef, getViewRootForNode, findNode, matchesBreakdownName, breakdownDisplayName } from "@/lib/taxonomy-utils";
 import { dynamicNodeDisplayName } from "@/lib/dynamic-taxon";
 import ReviewerChart from "./ReviewerChart";
-import { REVISION_BARS, visibleBars, barForReason, REVISION_REASON_SHORT, REVISION_REASON_SUMMARY, revisionReasons, matchesRevisionFilter, isFlagged, colUrl, colDatasetUrl, colTaxonUrl, noMatchSentence, splitSummary, lumpSentence, type SplitSummary, newRevisionTally, tallyRevision, barTotal, REVISION_CAVEAT, type ColRevision } from "@/lib/col-revision";
+import { REVISION_BARS, visibleBars, barForReason, acceptedNameSentence, GENUS_MOVED_REASON, RENAMED_REASON, REVISION_REASON_SHORT, REVISION_REASON_SUMMARY, revisionReasons, matchesRevisionFilter, isFlagged, colUrl, colDatasetUrl, colTaxonUrl, noMatchSentence, splitSummary, lumpSentence, type SplitSummary, newRevisionTally, tallyRevision, barTotal, REVISION_CAVEAT, type ColRevision } from "@/lib/col-revision";
 import type { ColProvenance } from "@/app/api/col/provenance/route";
 import { parseAssessors } from "@/lib/parseAssessors";
 import { iucnRegionCountries, matchingRegions } from "@/lib/regions";
@@ -963,6 +963,16 @@ function RevisionTooltipContent({ flag, name, category }: { flag: ColRevision; n
         {linkSubject(s.before)}
         {s.detail != null && colLink(s.detail, flag.detailColId)}
         {s.after}
+      </span>
+    ) });
+  }
+  const accepted = acceptedNameSentence(flag, name);
+  if (accepted) {
+    sentences.push({ code: flag.genusMoved ? GENUS_MOVED_REASON : RENAMED_REASON, node: (
+      <span key="accepted">
+        {linkSubject(accepted.before)}
+        {colLink(accepted.detail, flag.acceptedColId)}
+        {accepted.after}
       </span>
     ) });
   }
