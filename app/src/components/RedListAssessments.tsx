@@ -30,9 +30,6 @@ interface AssessmentDetail {
   use_trade: string | null;
   range: string | null;
   population_trend: { code: string; description?: string } | string | null;
-  habitats: ({ code: string; name: string; suitability?: string | null; season?: string | null; major_importance?: string | null } | string)[] | null;
-  threat_classification: ({ code: string; name: string; timing?: string | null; scope?: string | null; severity?: string | null; score?: string | null; stresses?: string[] | null } | string)[] | null;
-  conservation_actions_classification: ({ code: string; name: string } | string)[] | null;
   systems: ({ code: string; description?: string } | string)[] | null;
   scopes: ({ code: string; description?: string } | string)[] | null;
   supplementary_info: {
@@ -109,18 +106,32 @@ function CategoryBadge({ code, small }: { code: string; small?: boolean }) {
   );
 }
 
-// A narrative section of the assessment. Always expanded — the assessment text
-// is the point of the tab, so there is nothing to hide behind a toggle.
+// Collapsible section for narrative text
 function NarrativeSection({ title, content }: { title: string; content: string }) {
+  const [expanded, setExpanded] = useState(true);
   const text = stripHtml(content);
   if (!text) return null;
 
   return (
-    <div className="border-b border-zinc-100 dark:border-zinc-800 last:border-0 py-2">
-      <h5 className="text-sm font-medium text-zinc-700 dark:text-zinc-300">{title}</h5>
-      <div className="pt-1 text-sm text-zinc-600 dark:text-zinc-400 whitespace-pre-line leading-relaxed">
-        {text}
-      </div>
+    <div className="border-b border-zinc-100 dark:border-zinc-800 last:border-0">
+      <button
+        className="flex items-center gap-2 w-full py-2 text-left text-sm font-medium text-zinc-700 dark:text-zinc-300 hover:text-zinc-900 dark:hover:text-zinc-100"
+        onClick={() => setExpanded(!expanded)}
+      >
+        <svg
+          className={`w-3 h-3 flex-shrink-0 text-zinc-400 transition-transform ${expanded ? "rotate-90" : ""}`}
+          fill="currentColor"
+          viewBox="0 0 20 20"
+        >
+          <path fillRule="evenodd" d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 011.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z" clipRule="evenodd" />
+        </svg>
+        {title}
+      </button>
+      {expanded && (
+        <div className="pb-3 pl-5 text-sm text-zinc-600 dark:text-zinc-400 whitespace-pre-line leading-relaxed">
+          {text}
+        </div>
+      )}
     </div>
   );
 }
@@ -244,26 +255,42 @@ function ComparisonSection({
   olderYear: string;
   newerYear: string;
 }) {
+  const [expanded, setExpanded] = useState(false);
+
   return (
     <div className="border border-zinc-100 dark:border-zinc-800 rounded-lg overflow-hidden">
-      <div className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-zinc-700 dark:text-zinc-300 border-b border-zinc-100 dark:border-zinc-800">
+      <button
+        className="flex items-center gap-2 w-full px-3 py-2 text-left text-sm font-medium text-zinc-700 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800/50"
+        onClick={() => setExpanded(!expanded)}
+      >
+        <svg
+          className={`w-3 h-3 flex-shrink-0 text-zinc-400 transition-transform ${expanded ? "rotate-90" : ""}`}
+          fill="currentColor"
+          viewBox="0 0 20 20"
+        >
+          <path fillRule="evenodd" d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 011.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z" clipRule="evenodd" />
+        </svg>
         {title}
-        <span className="text-xs text-zinc-400 font-normal">(changed)</span>
-      </div>
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-0 divide-y md:divide-y-0 md:divide-x divide-zinc-100 dark:divide-zinc-800">
-        <div className="p-3">
-          <div className="text-xs font-medium text-zinc-400 mb-1">{olderYear} assessment</div>
-          <div className="text-xs text-zinc-500 dark:text-zinc-400 whitespace-pre-line leading-relaxed">
-            {olderText || <span className="italic">Not available</span>}
+        <span className="text-xs text-zinc-400 font-normal">
+          (changed)
+        </span>
+      </button>
+      {expanded && (
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-0 divide-y md:divide-y-0 md:divide-x divide-zinc-100 dark:divide-zinc-800">
+          <div className="p-3">
+            <div className="text-xs font-medium text-zinc-400 mb-1">{olderYear} assessment</div>
+            <div className="text-xs text-zinc-500 dark:text-zinc-400 whitespace-pre-line leading-relaxed max-h-60 overflow-y-auto">
+              {olderText || <span className="italic">Not available</span>}
+            </div>
+          </div>
+          <div className="p-3">
+            <div className="text-xs font-medium text-zinc-400 mb-1">{newerYear} assessment</div>
+            <div className="text-xs text-zinc-500 dark:text-zinc-400 whitespace-pre-line leading-relaxed max-h-60 overflow-y-auto">
+              {newerText || <span className="italic">Not available</span>}
+            </div>
           </div>
         </div>
-        <div className="p-3">
-          <div className="text-xs font-medium text-zinc-400 mb-1">{newerYear} assessment</div>
-          <div className="text-xs text-zinc-500 dark:text-zinc-400 whitespace-pre-line leading-relaxed">
-            {newerText || <span className="italic">Not available</span>}
-          </div>
-        </div>
-      </div>
+      )}
     </div>
   );
 }
@@ -633,107 +660,6 @@ function SupplementaryMetrics({
   );
 }
 
-// A qualifier on a habitat or threat code — "Suitability: Marginal",
-// "Severity: Rapid declines". These qualifiers are what separate a habitat the
-// species merely tolerates from one it depends on, so they are spelled out on
-// screen rather than tucked into a hover tooltip.
-type Qualifier = { label: string; value: string | null };
-
-// Values that mean "this one carries weight" and are worth picking out in colour.
-const ALERT_VALUES = /ongoing|whole|majority|rapid declin|high impact/i;
-const GOOD_VALUES = /^(yes|suitable)$/i;
-
-function qualifierTone(value: string): "alert" | "good" | undefined {
-  if (ALERT_VALUES.test(value)) return "alert";
-  if (GOOD_VALUES.test(value)) return "good";
-  return undefined;
-}
-
-function QualifierList({ items }: { items: Qualifier[] }) {
-  if (items.length === 0) return null;
-  return (
-    <div className="flex flex-wrap items-baseline gap-x-3 gap-y-0.5 mt-1 text-[11px] leading-snug">
-      {items.map((q) => {
-        const tone = q.value ? qualifierTone(q.value) : undefined;
-        return (
-          <span key={q.label} className="text-zinc-400 dark:text-zinc-500">
-            {q.label}:{" "}
-            {q.value ? (
-              <span
-                className={
-                  tone === "alert"
-                    ? "font-medium text-red-600 dark:text-red-400"
-                    : tone === "good"
-                    ? "font-medium text-emerald-700 dark:text-emerald-400"
-                    : "text-zinc-600 dark:text-zinc-300"
-                }
-              >
-                {q.value}
-              </span>
-            ) : (
-              <span className="italic text-zinc-400 dark:text-zinc-600">not specified</span>
-            )}
-          </span>
-        );
-      })}
-    </div>
-  );
-}
-
-// One entry of an IUCN classification scheme (habitat, threat, action): its
-// code, its name, and any qualifiers underneath.
-function ClassificationRow({
-  code,
-  name,
-  qualifiers,
-  footnote,
-}: {
-  code?: string;
-  name: string;
-  qualifiers?: Qualifier[];
-  footnote?: string | null;
-}) {
-  return (
-    <li className="px-3 py-2">
-      <div className="flex items-baseline gap-2">
-        {code && (
-          <span className="font-mono text-[11px] text-zinc-400 dark:text-zinc-500 shrink-0 w-12">
-            {code}
-          </span>
-        )}
-        <span className="text-sm text-zinc-700 dark:text-zinc-300">{name}</span>
-      </div>
-      <div className={code ? "pl-14" : undefined}>
-        {qualifiers && <QualifierList items={qualifiers} />}
-        {footnote && (
-          <div className="mt-1 text-[11px] leading-snug text-zinc-400 dark:text-zinc-500">{footnote}</div>
-        )}
-      </div>
-    </li>
-  );
-}
-
-function ClassificationSection({
-  title,
-  count,
-  children,
-}: {
-  title: string;
-  count: number;
-  children: React.ReactNode;
-}) {
-  return (
-    <div>
-      <h4 className="text-xs font-medium text-zinc-500 dark:text-zinc-400 mb-1">
-        {title} <span className="text-zinc-400 dark:text-zinc-500 font-normal">({count})</span>
-      </h4>
-      <ul className="rounded-lg border border-zinc-100 dark:border-zinc-800 divide-y divide-zinc-100 dark:divide-zinc-800">
-        {children}
-      </ul>
-    </div>
-  );
-}
-
 function AssessmentDetailView({
   detail,
   assessment,
@@ -816,72 +742,6 @@ function AssessmentDetailView({
         {detail.use_trade && <NarrativeSection title="Use & Trade" content={detail.use_trade} />}
         {detail.range && <NarrativeSection title="Geographic Range" content={detail.range} />}
       </div>
-
-      {/* Structured data: Habitats */}
-      {detail.habitats && detail.habitats.length > 0 && (
-        <ClassificationSection title="Habitats" count={detail.habitats.length}>
-          {detail.habitats.map((h, i) =>
-            typeof h === "string" ? (
-              <ClassificationRow key={i} name={h} />
-            ) : (
-              <ClassificationRow
-                key={i}
-                code={h.code}
-                name={h.name}
-                qualifiers={[
-                  { label: "Suitability", value: h.suitability ?? null },
-                  ...(h.season ? [{ label: "Season", value: h.season }] : []),
-                  { label: "Major importance", value: h.major_importance ?? null },
-                ]}
-              />
-            )
-          )}
-        </ClassificationSection>
-      )}
-
-      {/* Structured data: Threats */}
-      {detail.threat_classification && detail.threat_classification.length > 0 && (
-        <ClassificationSection title="Threats" count={detail.threat_classification.length}>
-          {detail.threat_classification.map((t, i) =>
-            typeof t === "string" ? (
-              <ClassificationRow key={i} name={t} />
-            ) : (
-              <ClassificationRow
-                key={i}
-                code={t.code}
-                name={t.name}
-                qualifiers={[
-                  { label: "Timing", value: t.timing ?? null },
-                  { label: "Scope", value: t.scope ?? null },
-                  { label: "Severity", value: t.severity ?? null },
-                  { label: "Impact", value: t.score ?? null },
-                ]}
-                footnote={
-                  t.stresses && t.stresses.length > 0
-                    ? `Stresses: ${t.stresses.join(", ")}`
-                    : null
-                }
-              />
-            )
-          )}
-        </ClassificationSection>
-      )}
-
-      {/* Structured data: Conservation Actions */}
-      {detail.conservation_actions_classification && detail.conservation_actions_classification.length > 0 && (
-        <ClassificationSection
-          title="Conservation Actions"
-          count={detail.conservation_actions_classification.length}
-        >
-          {detail.conservation_actions_classification.map((c, i) =>
-            typeof c === "string" ? (
-              <ClassificationRow key={i} name={c} />
-            ) : (
-              <ClassificationRow key={i} code={c.code} name={c.name} />
-            )
-          )}
-        </ClassificationSection>
-      )}
 
       {/* No narrative data message */}
       {!detail.rationale && !detail.population && !detail.habitat && !detail.threats && !detail.conservation_actions && !detail.range && (
