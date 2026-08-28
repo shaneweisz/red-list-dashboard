@@ -90,3 +90,26 @@ export function stripHtml(html: string): string {
     .join("\n")
     .trim();
 }
+
+/**
+ * Cut plain text down to at most `limit` words, preserving the whitespace
+ * (paragraph breaks included) between the words that are kept. Returns the
+ * text unchanged, with `truncated: false`, when it is already short enough.
+ */
+export function truncateWords(
+  text: string,
+  limit: number
+): { text: string; truncated: boolean } {
+  // Split keeping the separators, so a paragraph break inside the kept part
+  // survives instead of collapsing to a single space.
+  const parts = text.split(/(\s+)/);
+  let words = 0;
+  for (let i = 0; i < parts.length; i++) {
+    if (i % 2 === 1 || parts[i] === "") continue; // odd indices are separators
+    words++;
+    if (words > limit) {
+      return { text: parts.slice(0, i).join("").trimEnd(), truncated: true };
+    }
+  }
+  return { text, truncated: false };
+}

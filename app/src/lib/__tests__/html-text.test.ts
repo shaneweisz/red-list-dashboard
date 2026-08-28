@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { decodeHtmlEntities, stripHtml } from "../html-text";
+import { decodeHtmlEntities, stripHtml, truncateWords } from "../html-text";
 
 describe("decodeHtmlEntities", () => {
   it("decodes decimal numeric references", () => {
@@ -44,5 +44,28 @@ describe("stripHtml", () => {
 
   it("collapses runs of blank lines and trims", () => {
     expect(stripHtml("<p>A</p><p></p><p></p><p>B</p>  ")).toBe("A\n\nB");
+  });
+});
+
+describe("truncateWords", () => {
+  const text = Array.from({ length: 120 }, (_, i) => `w${i + 1}`).join(" ");
+
+  it("leaves text at or under the limit alone", () => {
+    expect(truncateWords("one two three", 3)).toEqual({ text: "one two three", truncated: false });
+  });
+
+  it("keeps exactly `limit` words when cutting", () => {
+    const { text: cut, truncated } = truncateWords(text, 100);
+    expect(truncated).toBe(true);
+    expect(cut.split(/\s+/)).toHaveLength(100);
+    expect(cut.endsWith("w100")).toBe(true);
+  });
+
+  it("preserves paragraph breaks inside the kept text", () => {
+    expect(truncateWords("one two\n\nthree four", 3).text).toBe("one two\n\nthree");
+  });
+
+  it("handles leading whitespace without miscounting", () => {
+    expect(truncateWords("  one two three", 2)).toEqual({ text: "  one two", truncated: true });
   });
 });
