@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { decodeHtmlEntities, stripHtml, truncateWords } from "../html-text";
+import { decodeHtmlEntities, stripHtml, truncateSections, truncateWords } from "../html-text";
 
 describe("decodeHtmlEntities", () => {
   it("decodes decimal numeric references", () => {
@@ -67,5 +67,51 @@ describe("truncateWords", () => {
 
   it("handles leading whitespace without miscounting", () => {
     expect(truncateWords("  one two three", 2)).toEqual({ text: "  one two", truncated: true });
+  });
+});
+
+describe("truncateSections", () => {
+  const words = (n: number, prefix: string) =>
+    Array.from({ length: n }, (_, i) => `${prefix}${i + 1}`).join(" ");
+
+  it("keeps every section when the budget covers them all", () => {
+    const input = [{ title: "a", text: words(10, "a") }, { title: "b", text: words(10, "b") }];
+    const out = truncateSections(input, 100);
+    expect(out.truncated).toBe(false);
+    expect(out.sections.map((s) => s.title)).toEqual(["a", "b"]);
+    expect(out.sections.every((s) => !s.truncated)).toBe(true);
+  });
+
+  it("spends one budget across sections and drops everything after the cut", () => {
+    const input = [
+      { title: "a", text: words(60, "a") },
+      { title: "b", text: words(60, "b") },
+      { title: "c", text: words(60, "c") },
+    ];
+    const out = truncateSections(input, 100);
+    expect(out.truncated).toBe(true);
+    expect(out.sections.map((s) => s.title)).toEqual(["a", "b"]);
+    expect(out.sections[0].truncated).toBe(false);
+    expect(out.sections[1].truncated).toBe(true);
+    // 60 whole + 40 of the next = the full budget, nothing more
+    expect(out.sections.reduce((n, s) => n + s.text.split(/\s+/).length, 0)).toBe(100);
+  });
+
+  it("cuts inside the first section when it alone exceeds the budget", () => {
+    const out = truncateSections([{ title: "a", text: words(300, "a") }, { title: "b", text: "b1" }], 100);
+    expect(out.sections.map((s) => s.title)).toEqual(["a"]);
+    expect(out.sections[0].truncated).toBe(true);
+  });
+
+  it("reports truncation when the budget lands exactly on a boundary with more to come", () => {
+    const out = truncateSections([{ title: "a", text: words(100, "a") }, { title: "b", text: "b1" }], 100);
+    expect(out.truncated).toBe(true);
+    expect(out.sections.map((s) => s.title)).toEqual(["a"]);
+    expect(out.sections[0].truncated).toBe(false); // section a itself is whole
+  });
+
+  it("is not truncated when the budget lands exactly on the last section", () => {
+    const out = truncateSections([{ title: "a", text: words(100, "a") }], 100);
+    expect(out.truncated).toBe(false);
   });
 });

@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback, useRef } from "react";
 import { CATEGORY_COLORS, CATEGORY_NAMES, normalizeCategory } from "@/config/taxa";
-import { stripHtml, truncateWords } from "@/lib/html-text";
+import { stripHtml, truncateSections } from "@/lib/html-text";
 
 interface PreviousAssessment {
   year: string;
@@ -87,9 +87,9 @@ function CategoryBadge({ code, small }: { code: string; small?: boolean }) {
   );
 }
 
-// How much of a narrative section is shown inline. The assessments run long
-// and there are seven of these sections; past this the IUCN Red List page has
-// the full text, and it is one click away.
+// How much assessment narrative is shown inline, as one budget spent across
+// all seven sections in order — not per section. The assessments run long; past
+// this the IUCN Red List page has the full text, one click away.
 const NARRATIVE_WORD_LIMIT = 100;
 
 // The assessment's narrative fields, in display order.
@@ -106,18 +106,16 @@ const NARRATIVE_FIELDS: {
   { title: "Geographic Range", field: "range" },
 ];
 
-// Collapsible section for narrative text. The text arrives already capped at
-// NARRATIVE_WORD_LIMIT; `fullTextUrl` is passed only to the first cut section,
-// so the "read the full assessment" link appears once, not on each of them.
+// Collapsible section for narrative text. The text arrives already capped;
+// `fullTextUrl` is passed only to the last section shown, where the narrative
+// stops, so the "read the full assessment" link appears once.
 function NarrativeSection({
   title,
   text,
-  truncated,
   fullTextUrl,
 }: {
   title: string;
   text: string;
-  truncated: boolean;
   fullTextUrl?: string;
 }) {
   const [expanded, setExpanded] = useState(true);
@@ -140,8 +138,8 @@ function NarrativeSection({
       {expanded && (
         <div className="pb-3 pl-5 text-sm text-zinc-600 dark:text-zinc-400 whitespace-pre-line leading-relaxed">
           {text}
-          {truncated && "\u2026"}
-          {truncated && fullTextUrl && (
+          {fullTextUrl && "\u2026"}
+          {fullTextUrl && (
             <>
               {" "}
               <a
@@ -580,13 +578,13 @@ function AssessmentDetailView({
   const trendText = getTrendText(detail.population_trend);
   const assessmentUrl =
     detail.url || `https://www.iucnredlist.org/species/${detail.sis_taxon_id}/${detail.assessment_id}`;
-  const narratives = NARRATIVE_FIELDS.flatMap(({ title, field }) => {
-    const raw = detail[field];
-    if (!raw) return [];
-    const { text, truncated } = truncateWords(stripHtml(raw), NARRATIVE_WORD_LIMIT);
-    return text ? [{ title, text, truncated }] : [];
-  });
-  const firstTruncated = narratives.findIndex((n) => n.truncated);
+  const { sections: narratives, truncated: narrativeCutShort } = truncateSections(
+    NARRATIVE_FIELDS.flatMap(({ title, field }) => {
+      const text = detail[field] ? stripHtml(detail[field] as string) : "";
+      return text ? [{ title, text }] : [];
+    }),
+    NARRATIVE_WORD_LIMIT
+  );
 
   return (
     <div className="space-y-3">
@@ -654,8 +652,7 @@ function AssessmentDetailView({
             key={n.title}
             title={n.title}
             text={n.text}
-            truncated={n.truncated}
-            fullTextUrl={i === firstTruncated ? assessmentUrl : undefined}
+            fullTextUrl={narrativeCutShort && i === narratives.length - 1 ? assessmentUrl : undefined}
           />
         ))}
       </div>

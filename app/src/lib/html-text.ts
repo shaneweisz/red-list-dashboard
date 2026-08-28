@@ -113,3 +113,36 @@ export function truncateWords(
   }
   return { text, truncated: false };
 }
+
+function countWords(text: string): number {
+  const trimmed = text.trim();
+  return trimmed ? trimmed.split(/\s+/).length : 0;
+}
+
+/**
+ * Spend one shared word budget across a run of sections, in order. Sections are
+ * kept whole until the budget runs out; the section that exhausts it is cut
+ * (`truncated: true`) and every section after it is dropped entirely.
+ *
+ * The returned `truncated` says whether anything was withheld at all — either
+ * the last kept section was cut, or sections below it were dropped — so the
+ * caller can offer the full text in one place.
+ */
+export function truncateSections<T extends { text: string }>(
+  sections: T[],
+  limit: number
+): { sections: (T & { truncated: boolean })[]; truncated: boolean } {
+  const kept: (T & { truncated: boolean })[] = [];
+  let remaining = limit;
+
+  for (const section of sections) {
+    // Budget spent, but there is still a section to show: it's withheld.
+    if (remaining <= 0) return { sections: kept, truncated: true };
+    const { text, truncated } = truncateWords(section.text, remaining);
+    kept.push({ ...section, text, truncated });
+    if (truncated) return { sections: kept, truncated: true };
+    remaining -= countWords(text);
+  }
+
+  return { sections: kept, truncated: false };
+}
