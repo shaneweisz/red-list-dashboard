@@ -31,11 +31,29 @@
  *  classifyNoMatch), but it sits alongside them as a bar and a filter value. */
 export const SPLIT_REASON = "split";
 
+/**
+ * The accepted-name pseudo-reasons, split by WHERE the difference falls.
+ *
+ * The commonest kind keeps the epithet and differs only in the genus (Aplexa
+ * elongata / Sibirenauta elongata). Separating it lets a reader who does not
+ * accept CoL's generic limits set those aside without dismissing the rest, and
+ * keeps a single 8k bar off an axis whose next largest is 4k.
+ *
+ * "differs", never "moved": a move has a direction, and we do not know it. IUCN
+ * has the newer treatment at least as often as CoL does — CoL accepts Bos bison
+ * for Bison bison, and Myodes glareolus for Clethrionomys glareolus. Naming the
+ * act would credit CoL with a revision that, in those cases, IUCN made first.
+ */
+export const GENUS_DIFFERS_REASON = "genus_differs";
+export const RENAMED_REASON = "renamed";
+
 /** Reason codes, in the order the filter chart lists them: most likely to
  *  reflect a real taxonomic revision first, bookkeeping gaps last. */
 export const REVISION_REASONS = [
   SPLIT_REASON,
   "lumped",
+  GENUS_DIFFERS_REASON,
+  RENAMED_REASON,
   "infraspecific",
   "unmatched",
   "missing_from_backbone",
@@ -77,6 +95,8 @@ export const REVISION_REASONS = [
 export const REVISION_BARS: readonly { key: string; label: string; reasons: readonly string[] }[] = [
   { key: SPLIT_REASON, label: "Split on CoL", reasons: [SPLIT_REASON] },
   { key: "lumped", label: "Lumped on CoL", reasons: ["lumped"] },
+  { key: GENUS_DIFFERS_REASON, label: "Different genus on CoL", reasons: [GENUS_DIFFERS_REASON] },
+  { key: RENAMED_REASON, label: "Different name on CoL", reasons: [RENAMED_REASON] },
   { key: "unmatched", label: "No CoL match", reasons: ["unmatched"] },
   { key: "infraspecific", label: "Below species on CoL", reasons: ["infraspecific"] },
   // Zero in every sync so far; the chart drops empty bars, so they cost nothing
@@ -206,6 +226,14 @@ export const REVISION_REASON_SHORT: Record<string, string> = {
   // outright, and "CoL's accepted name differs" is about CoL's accepted name.
   split: "Split on CoL",
   lumped: "Lumped on CoL",
+  // Split by WHERE the difference falls. Both say "different", not "moved" or
+  // "renamed": naming the act would pick a direction, and the direction is
+  // genuinely unknown — IUCN has the newer treatment at least as often. It also
+  // avoids a second trap: most of the epithet cases are synonymies onto another
+  // species (Dalbergia campenonii -> D. emirnensis), where nothing was renamed
+  // and something was merged.
+  genus_differs: "Different genus on CoL",
+  renamed: "Different name on CoL",
   // Not "Renamed": two thirds are genus transfers, which a rename describes
   // well, but the rest are synonymies onto a different species (Dalbergia
   // campenonii -> D. emirnensis), where nothing was renamed.
@@ -249,6 +277,8 @@ export const REVISION_REASON_SHORT: Record<string, string> = {
  */
 export const REVISION_REASON_SUMMARY: Record<string, string> = {
   split: "Catalogue of Life says species have been split out of this one",
+  genus_differs: "Catalogue of Life's curated release uses a different genus for this species",
+  renamed: "Catalogue of Life's curated release accepts a different name for this species",
   lumped: "Catalogue of Life says this is one species with another assessment",
   synonym_of: "Catalogue of Life says it accepts a different name for this species",
   infraspecific: "Catalogue of Life says this is a subspecies, variety or form of another species",
@@ -307,11 +337,21 @@ export interface ColRevision {
    *  infraspecific name that now resolves to it ("Vallonia costata var. montana
    *  Sterki, 1893"). Never empty when present. */
   splitInto?: SplitEntry[];
+  /** The accepted name CoL's CURATED release uses for this species, when that is
+   *  a different name from IUCN's. Measured against the release rather than
+   *  inferred from a failed match: these assessments match CoL cleanly, which is
+   *  why no other signal catches them. */
+  acceptedName?: string;
+  /** That accepted record's CoL id, so the name can link to it. */
+  acceptedColId?: string;
+  /** The difference is in the genus alone — same epithet, different genus. */
+  genusDiffers?: boolean;
 }
 
 /** Does this species carry any revision signal at all? */
 export function isFlagged(flag: ColRevision | null | undefined): boolean {
-  return flag != null && (flag.reason != null || (flag.splitInto?.length ?? 0) > 0 || (flag.lumpedWith?.length ?? 0) > 0);
+  return flag != null && (flag.reason != null || (flag.splitInto?.length ?? 0) > 0
+    || (flag.lumpedWith?.length ?? 0) > 0 || flag.acceptedName != null);
 }
 
 /**
@@ -335,6 +375,7 @@ export function revisionReasons(flag: ColRevision): string[] {
   // fallback such a flag would be flagged but sit in no bar, so nothing could
   // select it.
   if (flag.lumpedWith?.length || flag.reason === "lumped") out.push("lumped");
+  if (flag.acceptedName != null) out.push(flag.genusDiffers ? GENUS_DIFFERS_REASON : RENAMED_REASON);
   if (flag.reason != null && flag.reason !== "lumped") out.push(flag.reason);
   return out;
 }
@@ -641,9 +682,36 @@ export function revisionSentences(flag: ColRevision, subject: string): string[] 
     const { before, detail, after } = noMatchSentence(flag, subject);
     out.push(`${before}${detail ?? ""}${after}`);
   }
+  const accepted = acceptedNameSentence(flag, subject);
+  if (accepted) out.push(`${accepted.before}${accepted.detail}${accepted.after}`);
   const split = splitSentence(flag, subject);
   if (split) out.push(split);
   return out;
+}
+
+/**
+ * "CoL's curated release accepts a different name for this species", in parts so
+ * the accepted name can be a link to its own CoL record.
+ *
+ * Reported speech throughout, like every other sentence here: CoL accepts a
+ * name, it does not establish one. Two checklists can differ permanently on a
+ * species concept without either being wrong, and the card says so beneath.
+ */
+export function acceptedNameSentence(
+  flag: ColRevision,
+  subject: string | null = null,
+): { before: string; detail: string; after: string } | null {
+  if (flag.acceptedName == null) return null;
+  const name = flag.acceptedName;
+  if (subject == null) {
+    // The SSC panel names the species in the column beside this one.
+    return flag.genusDiffers
+      ? { before: `${COL} uses another genus: `, detail: name, after: "" }
+      : { before: `${COL} accepts `, detail: name, after: "" };
+  }
+  return flag.genusDiffers
+    ? { before: `${COL} uses a different genus for ${subject}, accepting `, detail: name, after: "." }
+    : { before: `${COL} accepts a different name for ${subject}: `, detail: name, after: "." };
 }
 
 /** The sentence as one plain string, for a `title`/tooltip that can't hold a link. */

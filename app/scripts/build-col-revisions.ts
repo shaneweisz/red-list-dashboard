@@ -41,7 +41,8 @@ import {
   type BreakdownQueryContext,
   type NoMatchDetail,
 } from "../src/lib/data/col-breakdown";
-import { SPLIT_REASON, UNFLAGGED_REASONS } from "../src/lib/col-revision";
+import { SPLIT_REASON, UNFLAGGED_REASONS, GENUS_DIFFERS_REASON, RENAMED_REASON } from "../src/lib/col-revision";
+import { normalisedKey, speciesNameParts, canonicalEpithet } from "./name-variants";
 
 // Keep in sync with build-taxa-summary.ts / species-duckdb.ts.
 const EXCLUDED_COL_IDS_SQL = `('6MB3T')`; // Homo sapiens
@@ -63,9 +64,12 @@ export interface ColRevisionsFile {
    *  infraspecific name that now resolves there — the evidence for the split),
    *  lw = the OTHER IUCN assessments sharing this species' CoL record
    *  [name, its own synonym record, IUCN category], ln = CoL's accepted name for
-   *  that shared record. */
+   *  that shared record, an = the accepted name CoL's CURATED release uses for
+   *  this species when it differs, ac = that record's CoL id, gd = the
+   *  difference is in the genus alone (same epithet, different genus). */
   species: Record<string, { r?: string; d?: string; i?: number; dc?: string; c?: string; n?: string; k?: string;
-    s?: [string, string, string, string][]; lw?: [string, string, string][]; ln?: string }>;
+    s?: [string, string, string, string][]; lw?: [string, string, string][]; ln?: string;
+    an?: string; ac?: string; gd?: 1 }>;
 }
 
 export async function run(): Promise<void> {
@@ -297,6 +301,90 @@ export async function run(): Promise<void> {
     }
     counts["lumped"] = lumped;
     console.log(`  CoL revisions: ${lumped} assessments share a CoL record with another`);
+  }
+
+  // ---------------------------------------------------------------------------
+  // Signal 4: the accepted name CoL's CURATED release uses is a different name.
+  //
+  // Measured against the release itself, not inferred from a failed match — the
+  // assessment's own CoL record is fine, which is why nothing else on the card
+  // catches these. Two ways the release can disagree with IUCN's name: it
+  // accepts the matched record under another spelling (checklist_name), or it
+  // files that name as a synonym of a different accepted species.
+  //
+  // Three exclusions, each removing a case where "a different name" would be
+  // false rather than merely uninteresting:
+  //  - more than one accepted name (4,446): CoL genuinely has no single answer,
+  //    and picking one would be us adjudicating. Refused, not guessed.
+  //  - the matched record is below species rank: CoL's accepted species is then
+  //    its parent, which the `infraspecific` bar already reports.
+  //  - names differing only in a Latin termination: one name under ICZN 58 /
+  //    ICN 53.3, so reporting it as a different name is simply wrong.
+  if (hasBackbone) {
+    const renameRows = (await conn.runAndReadAll(`
+      WITH linked AS (
+        SELECT a.id, a.scientific_name AS iucn, b.col_id, b.in_checklist,
+               b.checklist_parent_id,
+               coalesce(b.checklist_name, b.scientific_name) AS self_name
+        FROM read_parquet('${assessedPath}') a
+        JOIN read_parquet('${link}') l ON l.sis_taxon_id = a.id AND l.src = 'redlist'
+        JOIN read_parquet('${backbonePath}') b ON b.col_id = l.col_id
+        WHERE b.rank = 'species'
+      ),
+      resolved AS (
+        SELECT k.id, k.iucn,
+               CASE WHEN k.checklist_parent_id IS NOT NULL THEN p.col_id ELSE k.col_id END AS acc_id,
+               CASE WHEN k.checklist_parent_id IS NOT NULL
+                    THEN coalesce(p.checklist_name, p.scientific_name) ELSE k.self_name END AS acc_name,
+               CASE WHEN k.checklist_parent_id IS NOT NULL THEN p.in_checklist ELSE k.in_checklist END AS acc_in_checklist
+        FROM linked k
+        LEFT JOIN read_parquet('${backbonePath}') p ON p.col_id = k.checklist_parent_id
+      )
+      SELECT id, any_value(iucn) AS name, any_value(acc_name) AS acc_name, any_value(acc_id) AS acc_id
+      FROM resolved
+      WHERE acc_in_checklist AND acc_name IS NOT NULL
+      GROUP BY id
+      HAVING count(DISTINCT acc_id) = 1
+         AND lower(any_value(acc_name)) <> lower(any_value(iucn))
+      ORDER BY id`)).getRowObjects();
+
+    let genusDiffers = 0, renamed = 0, variantOnly = 0, alsoLumped = 0;
+    for (const r of renameRows) {
+      const iucn = String(r.name), acc = String(r.acc_name);
+      if (normalisedKey(iucn) && normalisedKey(iucn) === normalisedKey(acc)) { variantOnly++; continue; }
+      const mine = speciesNameParts(iucn), theirs = speciesNameParts(acc);
+      // A genus transfer keeps the epithet and changes the genus — canonically,
+      // since the epithet's ending usually shifts to agree with the new genus
+      // (Anolis wattsi -> Norops wattsii). Anything else is a different name.
+      const isGenusMove = mine != null && theirs != null
+        && mine[0] !== theirs[0] && canonicalEpithet(mine[1]) === canonicalEpithet(theirs[1]);
+      const entry = species[String(r.id)] ?? {};
+      // The lump bar already says this, with more: it names the other
+      // assessments sharing the record and their categories. 2,209 of the 2,218
+      // lumped-and-renamed species resolve to exactly the lump's own accepted
+      // name, so a second bar would restate one fact and inflate the count.
+      // Dropped entirely rather than silenced, because a bar that returns a row
+      // whose tooltip never explains it is the worse failure.
+      if (entry.lw?.length && entry.ln != null && entry.ln.toLowerCase() === acc.toLowerCase()) {
+        alsoLumped++;
+        continue;
+      }
+      entry.an = acc;
+      if (r.acc_id != null) entry.ac = String(r.acc_id);
+      // Where the flag points when this is the ONLY signal (7,915 species): the
+      // record CoL accepts. Without it the flag has no link target and no
+      // provenance block, so the reader is told CoL disagrees and given no way
+      // to check who said so.
+      if (entry.c == null && r.acc_id != null) entry.c = String(r.acc_id);
+      if (isGenusMove) entry.gd = 1;
+      species[String(r.id)] = entry;
+      if (isGenusMove) genusDiffers++; else renamed++;
+    }
+    counts[GENUS_DIFFERS_REASON] = genusDiffers;
+    counts[RENAMED_REASON] = renamed;
+    console.log(`  CoL revisions: ${genusDiffers + renamed} assessments have a different accepted name in the release ` +
+      `(${genusDiffers} differ in genus alone, ${renamed} in the epithet; ${variantOnly} excluded as termination variants, ` +
+      `${alsoLumped} as already carried by the lump bar)`);
   }
 
   const out: ColRevisionsFile = { counts, total: Object.keys(species).length, species };
