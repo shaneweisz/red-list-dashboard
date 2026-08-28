@@ -132,10 +132,27 @@ export async function resolveXrDataset(): Promise<XrDatasetInfo> {
  * and a changed one is exactly the signal that keys must be re-resolved.
  */
 export function currentReleaseOnDisk(): string | null {
+  return readPin()?.key ?? null;
+}
+
+/**
+ * Which curated CoL release the checklist-derived columns were built from.
+ *
+ * Pinned separately because `3LR` moves on its own schedule — it is COL26.8 while
+ * the XR pin is COL26.6 XR, two releases behind. Null when the pin predates this
+ * field, which the sync reads as "unknown, so rebuild": we cannot tell which
+ * checklist produced the backbone on disk, and guessing it is current is the
+ * failure mode that leaves a claim pointing at a page that disagrees with it.
+ */
+export function currentChecklistOnDisk(): string | null {
+  return readPin()?.checklist?.issued ?? null;
+}
+
+function readPin(): { key?: string; checklist?: { issued?: string } } | null {
   try {
     const p = path.join(__dirname, "../src/config/col-release.json");
     if (!fs.existsSync(p)) return null;
-    return JSON.parse(fs.readFileSync(p, "utf-8")).key ?? null;
+    return JSON.parse(fs.readFileSync(p, "utf-8"));
   } catch {
     return null;
   }
@@ -145,10 +162,12 @@ export function currentReleaseOnDisk(): string | null {
 // from — checked into git (like col-taxon-ids.json) so the frontend's "Source" link
 // cites and links to the specific dataset version, not a generic/dateless CoL homepage
 // link that silently goes stale as new releases ship.
-export function writeReleaseMetadata(xr: XrDatasetInfo): void {
+export function writeReleaseMetadata(xr: XrDatasetInfo, checklist?: { key: string; alias: string; issued: string }): void {
   const outPath = path.join(__dirname, "../src/config/col-release.json");
-  fs.writeFileSync(outPath, JSON.stringify(xr, null, 2) + "\n");
-  console.log(`fetch-col-xr: wrote ${outPath} (${xr.alias}, ${xr.key})`);
+  const pin = checklist ? { ...xr, checklist } : { ...xr };
+  fs.writeFileSync(outPath, JSON.stringify(pin, null, 2) + "\n");
+  console.log(`fetch-col-xr: wrote ${outPath} (${xr.alias}, ${xr.key}` +
+    (checklist ? `; checklist ${checklist.alias}, ${checklist.issued}` : "") + ")");
 }
 
 export async function run(opts: { destDir?: string } = {}): Promise<ColXrPaths> {

@@ -68,11 +68,13 @@ const COL_BASE_DATASET = process.env.COL_BASE_DATASET || "3LR";
 // NOT recognize that col_id as an accepted species — i.e. it's a synonym (incl.
 // ambiguous synonym), misapplied, or accepted only at an infraspecific rank. Such
 // col_ids are dropped from the XR species universe (see the demotion overlay above).
+// Written against the `checklist` temp table's plain column names, not the raw
+// ColDP headers, since that table is now the single reader of the TSV.
 const DEMOTED_PREDICATE = `
-  lower("col:status") LIKE '%synonym%'
-  OR lower("col:status") = 'misapplied'
-  OR (lower("col:status") IN ('accepted', 'provisionally accepted')
-      AND lower("col:rank") IN ('subspecies','variety','form','subvariety','subform','natio','aberration'))`;
+  lower(status) LIKE '%synonym%'
+  OR lower(status) = 'misapplied'
+  OR (lower(status) IN ('accepted', 'provisionally accepted')
+      AND lower(rank) IN ('subspecies','variety','form','subvariety','subform','natio','aberration'))`;
 
 // CoL lineage → IUCN Table 1a group, per Table 1a's footnote definitions (2025-2):
 // crustaceans = note 6's 7 classes (Maxillopoda split into CoL's copepoda/thecostraca/
@@ -166,18 +168,38 @@ export async function run(
 
   // Curated-checklist demotion denylist (col_ids the curated checklist demotes — see
   // header). Injected directly (tests), else read from the checklist NameUsage, else
-  // empty (no demotions). col_ids are shared with XR, so this is an exact anti-join.
+  // empty (no demotions). col_ids are shared with XR, so this is an exact anti-join
+  // for usages both carry — the release also holds ~94.7k the XR does not, which
+  // an anti-join simply never reaches.
   await conn.run(`CREATE TEMP TABLE demoted(col_id VARCHAR);`);
+  // Always present, so the backbone projection can join unconditionally. Left
+  // empty when the checklist isn't available (a partial run, or the injected
+  // demotedColIds test path): in_checklist is then false for every row, which
+  // reads as "we cannot confirm this is in the curated release" — the safe
+  // direction, since every consumer uses it to WITHHOLD a claim.
+  await conn.run(`CREATE TEMP TABLE checklist(col_id VARCHAR, status VARCHAR, rank VARCHAR, parent_id VARCHAR, scientific_name VARCHAR);`);
   if (opts.demotedColIds) {
     if (opts.demotedColIds.length) {
       await conn.run(`INSERT INTO demoted VALUES ${opts.demotedColIds.map((i) => `('${i.replace(/'/g, "''")}')`).join(",")};`);
     }
   } else if (demotionsTsv) {
     if (!fs.existsSync(demotionsTsv)) throw new Error(`Checklist demotions TSV not found: ${demotionsTsv}`);
+    // One read of the 1.8 GB checklist TSV, two consumers: the demotion denylist
+    // below, and the in_checklist/checklist_parent_id columns on backbone.parquet.
+    // It used to be read once per consumer.
+    await conn.run(`
+      INSERT INTO checklist
+        SELECT "col:ID" AS col_id, "col:status" AS status, "col:rank" AS rank,
+               "col:parentID" AS parent_id,
+               -- Same normalisation the XR names get below, so the two are
+               -- comparable and the stored value is display-ready.
+               trim(regexp_replace(regexp_replace("col:scientificName", '\\([^)]*\\)', '', 'g'), '\\s+', ' ', 'g')) AS scientific_name
+        FROM read_csv('${demotionsTsv}', delim='\t', header=true, quote='', ignore_errors=true, all_varchar=true)
+        WHERE "col:ID" IS NOT NULL;`);
     await conn.run(`
       INSERT INTO demoted
-      SELECT DISTINCT "col:ID" FROM read_csv('${demotionsTsv}', delim='\t', header=true, quote='', ignore_errors=true, all_varchar=true)
-      WHERE "col:ID" IS NOT NULL AND (${DEMOTED_PREDICATE});`);
+      SELECT DISTINCT col_id FROM checklist
+      WHERE ${DEMOTED_PREDICATE};`);
   }
 
   // Load the full NameUsage once. all_varchar avoids type-sniffing surprises on
@@ -217,7 +239,37 @@ export async function run(
 
   // backbone.parquet — the lean tree + synonyms (all ranks, all statuses).
   await conn.run(`
-    COPY (SELECT col_id, parent_id, status, rank, scientific_name, authorship FROM nu)
+    COPY (
+      SELECT nu.col_id, nu.parent_id, nu.status, nu.rank, nu.scientific_name, nu.authorship,
+             -- Is this usage in CoL's CURRENT curated release? The XR carries
+             -- everything, reconciled or not; only the release is what a reader
+             -- sees on catalogueoflife.org. Claims sourced from XR-only records
+             -- send people to a page that doesn't corroborate them, which is how
+             -- Stenocranius raddei and Hylomyscus anselli were both misreported.
+             cl.col_id IS NOT NULL AS in_checklist,
+             -- For usages the RELEASE files as a synonym, the release's own
+             -- accepted parent. Not the XR's: the two can disagree, and the claim
+             -- we make is about the release, so the edge must come from it.
+             --
+             -- Strictly 'synonym', NOT LIKE '%synonym%': that also caught
+             -- 'ambiguous synonym', which is CoL saying the name's application is
+             -- UNCERTAIN. Naming an accepted species from one asserts exactly what
+             -- the status disclaims — Pararge xiphia, an ambiguous synonym of
+             -- Pararge megera, was reported as a definite rename. 135,881 rows
+             -- took a parent from an ambiguous synonym.
+             CASE WHEN lower(cl.status) = 'synonym' THEN cl.parent_id END AS checklist_parent_id,
+             -- The release's own spelling, stored ONLY where it differs from the
+             -- XR's — so it is null for all but a handful of rows and costs
+             -- almost nothing. Whatever text we show alongside a link to the
+             -- release has to be the text on that page: Witheringia
+             -- stramoniifolia (XR) and stramonifolia (release) are the same
+             -- species one letter apart, and displaying the wrong one is a milder
+             -- form of the mismatch that made Stenocranius raddei confusing.
+             CASE WHEN cl.scientific_name IS NOT NULL
+                       AND cl.scientific_name <> nu.scientific_name
+                  THEN cl.scientific_name END AS checklist_name
+      FROM nu LEFT JOIN checklist cl ON cl.col_id = nu.col_id
+    )
     TO '${backboneOut}' (FORMAT PARQUET, COMPRESSION ZSTD);
   `);
 

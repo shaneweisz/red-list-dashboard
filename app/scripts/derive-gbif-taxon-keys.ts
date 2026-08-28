@@ -20,9 +20,14 @@
  *   2. NO OVERLAP — no key in a group is an ancestor of another in the same group.
  *                  Overlapping keys double-count in the year-bucketed count phase.
  *
- * Keys come from GBIF, never from a local copy of the checklist: GBIF's occurrence
- * index contains usages the published CoL export does not (see
- * docs/gbif-col-migration.md), so only GBIF can say what its own keys are.
+ * Keys come from GBIF, never from a local copy of the checklist. The reason is NOT
+ * that GBIF holds usages our export lacks — every one of the 140,482 GBIF keys our
+ * assessed data carries is present in backbone.parquet. It is that GBIF's matcher
+ * answers a different question: it returns the key for the NAME as the Red List
+ * wrote it, where a CoL join returns the accepted CONCEPT that name folds into.
+ * Those differ for 3,215 assessed species, and counting the concept attributes a
+ * broader taxon's records to a narrower assessment (Octolobus angustatus: 62
+ * occurrences under its own name, 702 under CoL's accepted concept).
  *
  * Usage:
  *   npx tsx scripts/derive-gbif-taxon-keys.ts            # report only

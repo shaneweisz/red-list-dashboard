@@ -19,7 +19,7 @@
 import type { DuckDBConnection } from "@duckdb/node-api";
 import { filterToSql, type NodeFilter } from "@/lib/taxonomy-sql";
 
-export type NoMatchReason = "no_link" | "missing_from_backbone" | "infraspecific" | "provisional" | "lumped" | "not_in_base" | "extinct_unconfirmed" | "classified_elsewhere";
+export type NoMatchReason = "unmatched" | "missing_from_backbone" | "infraspecific" | "provisional" | "lumped" | "not_in_base" | "extinct_unconfirmed" | "classified_elsewhere" | "synonym_of";
 export interface NoMatchDetail {
   id: number;
   name: string;
@@ -28,6 +28,20 @@ export interface NoMatchDetail {
   detail?: string;
   /** That species' own assessed id, so the frontend can link to it too ("lumped"/"infraspecific", only when the parent is itself IUCN-assessed). */
   detailId?: number;
+  /** The CoL id this assessment links to, so the UI can deep-link to the CoL
+   *  record that disagrees with it. Absent when nothing matched at all. */
+  colId?: string;
+  /** CoL's rank for the record, when it sits below species ("infraspecific"
+   *  only). Carried so the wording can say which — 124 of these are varieties
+   *  and one is a form, and calling those a subspecies is simply wrong. */
+  rank?: string;
+  /** The CoL record for `detail`, so the UI can link that name to CoL too. */
+  detailColId?: string;
+  /** CoL's OWN accepted name for that col_id, when the species/ universe has it.
+   *  Differs from `detail` when CoL's accepted name is neither this species nor
+   *  the assessed one that won the tie-break (e.g. a lump under a third name), so
+   *  the UI can name the species the two were merged INTO rather than guess. */
+  colName?: string;
 }
 
 // Heuristic "split from" flag for Not Evaluated species — see SPLIT_CANDIDATES_SQL
@@ -52,9 +66,15 @@ export interface BreakdownEntry {
 
 // Classifies one "no match" diagnosis row (see computeBreakdownEntry's diagRows
 // query) into a human-explainable reason, cheapest/most-specific check first:
-//  - no_link: never matched to any CoL name at all.
-//  - infraspecific: its linked col_id IS in the current backbone, but at subspecies/
-//    variety/form rank, not species rank — CoL currently treats it as part of
+//  - unmatched: CoL has no species-level record for this name — either nothing
+//    matched at all, or what matched sits at genus rank or above, which is not
+//    a species record however real it is (Amazona violacea matches the GENUS
+//    Amazona; reporting that as a demotion would read "a subspecies of
+//    Psittacidae"). Named for species_link's own match_method rather than for
+//    the absent row, and distinct from the family of reasons that all mean "no
+//    1:1 match" — this is the one where CoL has nothing to point at.
+//  - infraspecific: its linked col_id IS in the current backbone, but at a rank
+//    below species (subspecies, variety, form), not species rank — CoL currently treats it as part of
 //    another species rather than its own (e.g. Arctocephalus townsendi is currently
 //    "Arctocephalus philippii townsendi" in CoL). `detail`/`detailId` name the
 //    parent it's classified under, linked if that parent is itself IUCN-assessed.
@@ -68,13 +88,26 @@ export interface BreakdownEntry {
 //    and for whenever backbone.parquet isn't available at build time).
 //  - lumped: its linked col_id IS in the universe, but a DIFFERENT assessed species
 //    won the accepted-name tie-break for it (a genuine CoL synonymy/lump).
-//  - not_in_base: its linked col_id exists and matches this name, but isn't in CoL's
-//    curated Base checklist yet (freshly split/described, still XR-only).
+//  - synonym_of: same as not_in_base (its linked col_id is XR-only), BUT IUCN's own
+//    name is separately held by the curated checklist AS A SYNONYM of an accepted
+//    species — so "not in the checklist yet" would be exactly backwards. The usual
+//    cause is a genus transfer CoL has made and IUCN hasn't (Acanthoptila nipalensis
+//    -> Turdoides nipalensis, Sorbus minima -> Hedlundia minima). Checked before
+//    not_in_base, since it is the more specific finding.
+//  - not_in_base: its linked col_id exists and matches this name, isn't in CoL's
+//    curated Base checklist, and the checklist doesn't cover the name as a synonym
+//    either (freshly split/described, still XR-only).
 //  - extinct_unconfirmed: CoL flags its linked col_id extinct, but IUCN hasn't
 //    confirmed EX/EW for it (so it falls outside the extant-or-EX/EW universe).
 //  - classified_elsewhere: none of the above — the linked col_id is real, in_base,
 //    and extant, but CoL's own class/order/family for it doesn't match this name
 //    (a CoL-side reclassification, e.g. the pre-fix Ziphiidae/Hyperoodontidae case).
+/** Ranks that are genuinely below species — the only ones a demotion can mean.
+ *  ColDP's infraspecific set; anything else is not a demotion. */
+const INFRASPECIFIC_RANKS = new Set([
+  "subspecies", "variety", "subvariety", "form", "subform", "convariety", "cultivar",
+]);
+
 export function classifyNoMatch(row: Record<string, unknown>): NoMatchDetail {
   const id = Number(row.id);
   const name = String(row.name);
@@ -85,24 +118,82 @@ export function classifyNoMatch(row: Record<string, unknown>): NoMatchDetail {
   const winnerName = row.winner_name as string | null;
   const winnerId = row.winner_id as number | null;
   const bkRank = row.bk_rank as string | null;
+  const parentColId = row.parent_col_id as string | null;
+  const provColId = row.prov_col_id as string | null;
+  const synName = row.syn_name as string | null;
+  const synColId = row.syn_col_id as string | null;
   const parentName = row.parent_name as string | null;
   const parentAssessedId = row.parent_assessed_id as number | null;
   const parentAssessedName = row.parent_assessed_name as string | null;
-  if (!linkedColId) return { id, name, reason: "no_link" };
-  if (!linkedName) {
-    if (bkRank === "species") return { id, name, reason: "provisional" };
-    if (bkRank) {
-      if (parentAssessedName) {
-        return { id, name, reason: "infraspecific", detail: parentAssessedName, detailId: parentAssessedId != null ? Number(parentAssessedId) : undefined };
-      }
-      if (parentName) return { id, name, reason: "infraspecific", detail: parentName };
-    }
-    return { id, name, reason: "missing_from_backbone" };
+  if (!linkedColId) {
+    // Nothing in species_link — but CoL may still hold the name, just not as an
+    // accepted species: build-matching only links accepted names, so a
+    // provisionally-accepted record (134 species) never gets linked and would
+    // otherwise be reported as "no CoL name at all", which is plainly wrong to
+    // anyone who looks the name up (e.g. Idaea josephinae -> C7CM2).
+    if (provColId) return { id, name, reason: "provisional", colId: provColId };
+    return { id, name, reason: "unmatched" };
   }
-  if (winnerName) return { id, name, reason: "lumped", detail: winnerName, detailId: winnerId != null ? Number(winnerId) : undefined };
-  if (!linkedInBase) return { id, name, reason: "not_in_base" };
-  if (linkedExtinct) return { id, name, reason: "extinct_unconfirmed" };
-  return { id, name, reason: "classified_elsewhere" };
+  // Every remaining reason has a col_id to point at, and — where species/ knows
+  // the name — CoL's own accepted spelling of it.
+  const ref = { colId: linkedColId, ...(linkedName ? { colName: linkedName } : {}) };
+  if (!linkedName) {
+    if (bkRank === "species") return { id, name, reason: "provisional", ...ref };
+    // Only ranks genuinely BELOW species are a demotion. Anything at or above it
+    // (3 species match a genus record) has no species-level CoL record at all,
+    // which is what `unmatched` says — reporting it as infraspecific produced
+    // "ranks this as a subspecies of Psittacidae", the parent being a family.
+    if (bkRank && INFRASPECIFIC_RANKS.has(bkRank)) {
+      const rank = { rank: bkRank };
+      if (parentAssessedName) {
+        return { id, name, reason: "infraspecific", detail: parentAssessedName, detailId: parentAssessedId != null ? Number(parentAssessedId) : undefined, ...(parentColId ? { detailColId: parentColId } : {}), ...rank, ...ref };
+      }
+      if (parentName) return { id, name, reason: "infraspecific", detail: parentName, ...(parentColId ? { detailColId: parentColId } : {}), ...rank, ...ref };
+      // Below species but no parent resolved: we know it is a demotion and can't
+      // say of what, so fall through rather than guess.
+    } else if (bkRank) {
+      // At or above species rank, so there is no species record to point at.
+      return { id, name, reason: "unmatched", ...ref };
+    }
+    return { id, name, reason: "missing_from_backbone", ...ref };
+  }
+  if (winnerName) return { id, name, reason: "lumped", detail: winnerName, detailId: winnerId != null ? Number(winnerId) : undefined, detailColId: linkedColId, ...ref };
+  if (!linkedInBase) {
+    // ONE route, deliberately: the backbone must hold THIS NAME as a synonym of a
+    // species the curated checklist accepts. That is a claim a reader can check on
+    // the CoL page we link to, which is the whole value of the flag.
+    //
+    // The link table's 'iucn_synonym_covered' row used to be accepted as evidence
+    // too, and it is not evidence of this. It is written when one of IUCN's OWN
+    // recorded synonyms resolves somewhere in CoL — which says nothing about how
+    // CoL treats the assessed name. Stenocranius raddei was reported as "CoL
+    // accepts Microtus gregalis for this species": CoL in fact accepts
+    // Stenocranius raddei (T6LK3), and the Microtus link came from IUCN's own
+    // synonyms Arvicola raddei / Lasiopodomys raddei, which CoL files under
+    // Microtus gregalis. Anyone opening the linked page found no such synonym.
+    //
+    // That route produced 272 of 426 synonym_of flags, and in 270 of them CoL
+    // accepted the assessed name all along — so there was no disagreement to
+    // report at all. They fall through to not_in_base, which is what is actually
+    // true of them: CoL has the name, in its extended release only.
+    const synonymName = synName;
+    const synonymColId = synColId;
+    // A "synonym of" the SAME name is not a rename — it is CoL holding more than
+    // one record for one name. Metacanthus concolor (White, 1878) has three:
+    // two accepted under different parents and a synonym pointing at one of
+    // them. Reported as synonym_of it would read "files Metacanthus concolor as
+    // a synonym of Metacanthus concolor". Fall through to not_in_base, which is
+    // true of the record actually matched.
+    if (synonymName && synonymColId && synonymName.toLowerCase() !== name.toLowerCase()) {
+      // Link to the ACCEPTED record, not the XR-only one this assessment matched:
+      // that XR id is exactly the one CoL may since have retired (Sorbus minima's
+      // VJSZQ now 404s as "removed"), and the accepted record is what a reader wants.
+      return { id, name, reason: "synonym_of", detail: synonymName, detailColId: synonymColId, ...ref, colId: synonymColId };
+    }
+    return { id, name, reason: "not_in_base", ...ref };
+  }
+  if (linkedExtinct) return { id, name, reason: "extinct_unconfirmed", ...ref };
+  return { id, name, reason: "classified_elsewhere", ...ref };
 }
 
 // Precomputes a col_id -> likely-former-parent lookup, once per caller lifetime
@@ -124,6 +215,28 @@ export function classifyNoMatch(row: Record<string, unknown>): NoMatchDetail {
 // resolves one extra hop up (subspecies -> its own parent) whenever the synonym's
 // immediate parent turns out to be an accepted subspecies/infraspecific rank
 // rather than the species itself.
+//
+// Worked example — Vallonia costata (IUCN LC, CoL 7FDLW). CoL holds six
+// historical infraspecific names under it, every one status='synonym'. What each
+// one now POINTS AT is the whole signal:
+//
+//   Vallonia costata euryomphalus     -> 7FDN4  V. subcyclophorella  extinct -> dropped
+//   Vallonia costata var. amurensis   -> 7TKP8  V. patens            SPLIT
+//   Vallonia costata var. helvetica   -> 7FDLW  V. costata itself            -> dropped
+//   Vallonia costata var. minor       -> 7TKP7  V. parvula           SPLIT
+//   Vallonia costata var. montana     -> 7FDMB  V. gracilicosta      SPLIT
+//   Vallonia costata var. pyrenaica   -> 7FDLW  V. costata itself            -> dropped
+//
+// Three point at other accepted species that IUCN has not assessed, so those are
+// the three the flag names. The other three are dropped by the filters below:
+// two resolve back to V. costata (already assessed, so not an NE candidate) and
+// one to an extinct species (outside the extant universe).
+//
+// The evidence is visible on CoL's site, but only from the NEW species' page —
+// V. gracilicosta (7FDMB) lists "Vallonia costata var. montana Sterki, 1893"
+// among its synonyms. There is no view from V. costata's own page showing names
+// that used to sit under it and now resolve elsewhere, which is why this has to
+// be derived rather than read off.
 //
 // This only catches the "was a named subspecies, got promoted" pattern (the
 // common case in recent Bovidae/Giraffidae splits) — it won't catch a split into
@@ -202,34 +315,23 @@ export interface BreakdownQueryContext {
 }
 
 /**
- * One breakdown entry (colDescribed/colNe split by name, plus the no-match
- * diagnostic) for a single narrowed filter. Callers must have already built
- * ctx.assessedCidsTable and, if ctx.hasBackbone, the split_candidates/
- * col_to_assessed temp tables (see the file doc comment for why building them
- * is the caller's responsibility, not this function's).
+ * The "which assessed species here have no clean 1:1 CoL match, and why"
+ * diagnostic on its own — shared between computeBreakdownEntry (one breakdown
+ * name at a time) and scripts/build-col-revisions.ts, which runs it ONCE over
+ * every assessed species to build the dashboard-wide flag. Both call sites must
+ * classify identically, so the query lives here rather than being written twice.
+ *
+ * `speciesWhere`/`assessedWhere` scope the CoL universe and the assessed set
+ * respectively (they differ: only the species/ side takes a nodeId, so a
+ * CoL-species-name override can't wrongly zero out an IUCN-sourced match — see
+ * computeBreakdownEntry). Pass "true" for both to diagnose everything.
  */
-export async function computeBreakdownEntry(
+export async function computeNoMatchDetails(
   ctx: BreakdownQueryContext,
-  name: string,
-  narrowed: NodeFilter,
-  nodeId: string | undefined,
-): Promise<BreakdownEntry> {
-  const { conn, speciesGlob, assessedPath, linkPath, universeSql: universe, assessedCidsTable, excludedColIdsSql: EXCLUDED_COL_IDS_SQL, hasBackbone } = ctx;
-
-  const bRows = await (await conn.run(`
-    SELECT count(*) FILTER (in_base AND ${universe} AND col_id NOT IN ${EXCLUDED_COL_IDS_SQL}) AS n,
-           count(*) FILTER (in_base AND ${universe} AND col_id NOT IN ${EXCLUDED_COL_IDS_SQL} AND col_id NOT IN (SELECT col_id FROM ${assessedCidsTable})) AS ne
-    FROM read_parquet('${speciesGlob}', hive_partitioning=true)
-    WHERE ${filterToSql(narrowed, nodeId)}`)).getRowObjects();
-  // IUCN's own count of assessed species matching this one name — via filterToSql
-  // WITHOUT nodeId, so a Bison-style CoL species-name override (which only makes
-  // sense for CoL-sourced rows) doesn't wrongly zero out an IUCN-sourced match
-  // (assessed.parquet still says "Bison bison", never CoL's lumped "Bos bison").
-  // Compared against count-neCount on the frontend to flag likely splits/lumps/
-  // coverage gaps the CoL-derived figures paper over (see BreakdownList in
-  // TaxaSummary.tsx).
-  const trueRows = await (await conn.run(`
-    SELECT count(*) AS n FROM read_parquet('${assessedPath}') WHERE ${filterToSql(narrowed)}`)).getRowObjects();
+  speciesWhere: string,
+  assessedWhere: string,
+): Promise<NoMatchDetail[]> {
+  const { conn, speciesGlob, assessedPath, linkPath, universeSql: universe, excludedColIdsSql: EXCLUDED_COL_IDS_SQL, hasBackbone } = ctx;
   // The specific assessed species (sis_taxon_id) behind that gap, plus enough
   // context (its own primary CoL link, and who "won" that link if it lost a tie)
   // to classify WHY each one doesn't have a clean match — see classifyNoMatch.
@@ -237,9 +339,9 @@ export async function computeBreakdownEntry(
   // (shared between species/ and assessed.parquet, e.g. scientific_name) never
   // collide. Two assessed species can share one col_id (a genuine CoL lump — e.g.
   // Wild Pig SG's Sus bucculentus (EX) is CoL-synonymized into Sus scrofa (LC),
-  // both linked to the same accepted col_id) — count(*) over distinct col_ids
-  // (bRows above) only "sees" that pair once, so trueAssessed can exceed
-  // count-neCount even when every assessed id technically has SOME link.
+  // both linked to the same accepted col_id) — a count(*) over distinct col_ids
+  // only "sees" that pair once, so computeBreakdownEntry's trueAssessed can exceed
+  // its count-neCount even when every assessed id technically has SOME link.
   // ROW_NUMBER picks one canonical "CoL Match" winner per col_id (preferring an
   // accepted-name match over a synonym-derived one); every other candidate for
   // that col_id, and every id with no valid link at all, ends up unmatched —
@@ -247,10 +349,10 @@ export async function computeBreakdownEntry(
   const diagRows = await (await conn.run(`
     WITH matched_species AS (
       SELECT col_id FROM read_parquet('${speciesGlob}', hive_partitioning=true)
-      WHERE in_base AND ${universe} AND col_id NOT IN ${EXCLUDED_COL_IDS_SQL} AND ${filterToSql(narrowed, nodeId)}
+      WHERE in_base AND ${universe} AND col_id NOT IN ${EXCLUDED_COL_IDS_SQL} AND ${speciesWhere}
     ),
     matched_assessed AS (
-      SELECT id, scientific_name FROM read_parquet('${assessedPath}') WHERE ${filterToSql(narrowed)}
+      SELECT id, scientific_name FROM read_parquet('${assessedPath}') WHERE ${assessedWhere}
     ),
     primary_links AS (
       -- Primary link only (excludes 'iucn_synonym_covered' — a bookkeeping alias
@@ -273,13 +375,67 @@ export async function computeBreakdownEntry(
     ),
     winners AS (
       SELECT col_id, id AS winner_id, name AS winner_name FROM candidate_links WHERE rn = 1
-    )
+    )${hasBackbone ? `,
+    -- Names CoL holds ONLY as a provisionally-accepted species. Semi-joined to the
+    -- assessed names in scope, so this reads backbone.parquet against a small
+    -- build side rather than scanning it whole, and pre-aggregated so it can't
+    -- multiply rows in the SELECT below.
+    prov_by_name AS (
+      SELECT lower(scientific_name) AS lname, min(col_id) AS col_id
+      FROM read_parquet('${ctx.backbonePath}')
+      WHERE rank = 'species' AND status = 'provisionally accepted'
+        AND lower(scientific_name) IN (SELECT lower(scientific_name) FROM matched_assessed)
+      GROUP BY 1
+    ),
+    -- The backbone's own synonym -> accepted-in-Base edge, for the names
+    -- 'iucn_synonym_covered' misses. Same semi-join shape as prov_by_name.
+    -- Synonymies CoL's CURRENT RELEASE holds, not the extended release's.
+    --
+    -- This used to require only that the ACCEPTED PARENT was in Base, letting an
+    -- XR-only synonym record carry the claim. That is how Hylomyscus anselli was
+    -- reported as "CoL's accepted name is Hylomyscus kerbispeterhansi": the
+    -- evidence was VB6RW, an XR-only record, while the release contains no
+    -- Hylomyscus anselli at all. 64 of 148 such flags could not be checked by a
+    -- reader on the page they linked to.
+    --
+    -- Both sides now come from the release: in_checklist on the synonym, and
+    -- checklist_parent_id for the accepted target (the release's own edge — the
+    -- XR's parent can differ, and the claim is about the release).
+    --
+    -- Known gap: 66 assessed names are release synonyms whose record the XR
+    -- lacks entirely, so they have no backbone row to carry the flag. They go
+    -- unflagged rather than misflagged, which is the right direction to fail.
+    syn_in_checklist AS (
+      SELECT lname, any_value(col_id) AS col_id, any_value(name) AS name FROM (
+        -- The release's spelling where it has one: this name is displayed next to
+        -- a link to the release's page, so it must match what is on that page.
+        SELECT lower(syn.scientific_name) AS lname, acc.col_id AS col_id,
+               coalesce(acc.checklist_name, acc.scientific_name) AS name
+        FROM read_parquet('${ctx.backbonePath}') syn
+        JOIN read_parquet('${ctx.backbonePath}') acc
+          ON acc.col_id = syn.checklist_parent_id AND acc.in_checklist
+        -- checklist_parent_id is set only for usages the release itself files as
+        -- a synonym, so it already implies in_checklist; testing both would read
+        -- as two guarantees where there is one.
+        WHERE syn.checklist_parent_id IS NOT NULL
+          AND lower(syn.scientific_name) IN (SELECT lower(scientific_name) FROM matched_assessed)
+      ) GROUP BY lname
+      -- One name, one accepted target, or no claim. CoL can hold the same name as
+      -- a synonym of several accepted species; any_value() then picked whichever
+      -- the scan reached first, which is how Andropogon virginicus was reported as
+      -- Anatherum leucostachyum when the release says Anatherum virginicum. Same
+      -- rule as name-variants' collision guard: refuse rather than guess.
+      HAVING count(DISTINCT col_id) = 1
+    )` : ""}
     SELECT
       ma.id AS id, ma.scientific_name AS name,
       pl.col_id AS linked_col_id,
       sp.scientific_name AS linked_name, sp.in_base AS linked_in_base, sp.extinct AS linked_extinct,
       w.winner_name AS winner_name, w.winner_id AS winner_id
       ${hasBackbone ? `,
+      pbn.col_id AS prov_col_id,
+      sib.name AS syn_name, sib.col_id AS syn_col_id,
+      bk.parent_id AS parent_col_id,
       bk.rank AS bk_rank,
       bkparent.scientific_name AS parent_name,
       ca.assessed_id AS parent_assessed_id, ca.assessed_name AS parent_assessed_name` : ""}
@@ -294,7 +450,9 @@ export async function computeBreakdownEntry(
     -- infraspecific/provisional reasons.
     LEFT JOIN read_parquet('${ctx.backbonePath}') bk ON bk.col_id = pl.col_id
     LEFT JOIN read_parquet('${ctx.backbonePath}') bkparent ON bkparent.col_id = bk.parent_id
-    LEFT JOIN col_to_assessed ca ON ca.col_id = bk.parent_id` : ""}
+    LEFT JOIN col_to_assessed ca ON ca.col_id = bk.parent_id
+    LEFT JOIN prov_by_name pbn ON pl.col_id IS NULL AND pbn.lname = lower(ma.scientific_name)
+    LEFT JOIN syn_in_checklist sib ON sib.lname = lower(ma.scientific_name)` : ""}
     WHERE cl.id IS NULL
     -- Deterministic order — this JOIN chain has no natural order, and without one
     -- DuckDB's parallel scan returns diagRows (and so noMatchIds/noMatchDetails)
@@ -302,7 +460,7 @@ export async function computeBreakdownEntry(
     -- huge same-set reordering diff (build time) or a jittery UI (live).
     ORDER BY ma.id`)).getRowObjects();
   // Note: trueAssessed - noMatchIds.length (the "CoL Match" count shown in the
-  // popover) is NOT expected to equal count - neCount above — the latter's
+  // popover) is NOT expected to equal computeBreakdownEntry's count - neCount — the latter's
   // "linked" definition (assessedCidsTable) includes col_ids only reachable via
   // an 'iucn_synonym_covered' bookkeeping alias (an NE-dedup mechanism, not a
   // real second described species), which noMatchIds deliberately excludes so
@@ -310,7 +468,39 @@ export async function computeBreakdownEntry(
   // col_ids at once. Both are correct; they answer different questions (CoL's
   // own described-vs-assessed split, vs. which specific IUCN-assessed species
   // have a clean 1:1 CoL match).
-  const noMatchDetails = diagRows.map((r) => classifyNoMatch(r));
+  return diagRows.map((r) => classifyNoMatch(r));
+}
+
+/**
+ * One breakdown entry (colDescribed/colNe split by name, plus the no-match
+ * diagnostic) for a single narrowed filter. Callers must have already built
+ * ctx.assessedCidsTable and, if ctx.hasBackbone, the split_candidates/
+ * col_to_assessed temp tables (see the file doc comment for why building them
+ * is the caller's responsibility, not this function's).
+ */
+export async function computeBreakdownEntry(
+  ctx: BreakdownQueryContext,
+  name: string,
+  narrowed: NodeFilter,
+  nodeId: string | undefined,
+): Promise<BreakdownEntry> {
+  const { conn, speciesGlob, assessedPath, universeSql: universe, assessedCidsTable, excludedColIdsSql: EXCLUDED_COL_IDS_SQL, hasBackbone } = ctx;
+
+  const bRows = await (await conn.run(`
+    SELECT count(*) FILTER (in_base AND ${universe} AND col_id NOT IN ${EXCLUDED_COL_IDS_SQL}) AS n,
+           count(*) FILTER (in_base AND ${universe} AND col_id NOT IN ${EXCLUDED_COL_IDS_SQL} AND col_id NOT IN (SELECT col_id FROM ${assessedCidsTable})) AS ne
+    FROM read_parquet('${speciesGlob}', hive_partitioning=true)
+    WHERE ${filterToSql(narrowed, nodeId)}`)).getRowObjects();
+  // IUCN's own count of assessed species matching this one name — via filterToSql
+  // WITHOUT nodeId, so a Bison-style CoL species-name override (which only makes
+  // sense for CoL-sourced rows) doesn't wrongly zero out an IUCN-sourced match
+  // (assessed.parquet still says "Bison bison", never CoL's lumped "Bos bison").
+  // Compared against count-neCount on the frontend to flag likely splits/lumps/
+  // coverage gaps the CoL-derived figures paper over (see BreakdownList in
+  // TaxaSummary.tsx).
+  const trueRows = await (await conn.run(`
+    SELECT count(*) AS n FROM read_parquet('${assessedPath}') WHERE ${filterToSql(narrowed)}`)).getRowObjects();
+  const noMatchDetails = await computeNoMatchDetails(ctx, filterToSql(narrowed, nodeId), filterToSql(narrowed));
   // "Split from" candidates for this name's NE species — a lookup against the
   // once-per-caller-lifetime split_candidates table, not a fresh backbone.parquet
   // scan. Deliberately scoped to the SAME NE universe as bRows.ne (in_base,

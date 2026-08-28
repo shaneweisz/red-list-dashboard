@@ -20,29 +20,14 @@ import { isLiveDrilldownNode, nextDynamicRank, isDynamicNodeId, dynamicNodeDispl
 import type { RedListSpecies } from "@/hooks/useRedListSpeciesQuery";
 import { prettifyQs } from "@/lib/query-string";
 import { sisRowKey } from "@/lib/species-row-key";
+// Reason labels are shared with the main dashboard's taxonomic-revision flag —
+// see lib/col-revision.ts (both surfaces must explain a reason the same way).
+import { noMatchSentence } from "@/lib/col-revision";
 
 // See scripts/build-taxa-summary.ts's classifyNoMatch for what each reason means.
 // Modular/additive on top of colBreakdown[].noMatchIds — safe to drop independently
 // of the count-only CoL Match / No CoL Match mechanism it rides alongside.
-type NoMatchDetail = { id: number; name: string; reason: string; detail?: string; detailId?: number };
-const NO_MATCH_REASON_LABEL: Record<string, string> = {
-  no_link: "not yet matched to any Catalogue of Life name",
-  missing_from_backbone: "its Catalogue of Life match isn't in the current backbone",
-  infraspecific: "Catalogue of Life doesn't recognize this as a distinct species — it's currently classified as part of",
-  provisional: "matched to a Catalogue of Life name that's only provisionally accepted, not yet fully accepted",
-  lumped: "Catalogue of Life treats this as the same species as",
-  not_in_base: "not yet in Catalogue of Life's curated checklist",
-  // Usually a species-boundary disagreement, not a data error: e.g. Equus ferus
-  // (wild horse) — CoL treats it and Equus przewalskii (Przewalski's horse) as two
-  // separate species, one of them (the true wild tarpan) extinct; this IUCN
-  // assessment lumps them as one species, which is why IUCN doesn't call it
-  // Extinct/Extinct in the Wild even though CoL's own record for this exact name
-  // is flagged extinct. Verified case-by-case, not assumed — see the CoL/IUCN
-  // record comparison in this file's git history (2026-07-21) if this needs
-  // re-checking for a different species.
-  extinct_unconfirmed: "Catalogue of Life's record for this exact name is flagged extinct, but this IUCN assessment (a living-species category) isn't Extinct/Extinct in the Wild — usually because the two databases draw the species boundary differently here (e.g. IUCN's assessment covers a broader concept that includes a still-living population Catalogue of Life treats as its own separate species)",
-  classified_elsewhere: "Catalogue of Life classifies this under a different name here",
-};
+type NoMatchDetail = { id: number; name: string; reason: string; detail?: string; detailId?: number; detailColId?: string; colId?: string; colName?: string };
 
 // See scripts/build-taxa-summary.ts's SPLIT_CANDIDATES_SQL for the mechanism and its
 // caveats — a name-pattern heuristic (former-subspecies synonym → promoted species),
@@ -686,26 +671,29 @@ function SpeciesListPanel({
                       )}
                     </td>
                     <td className="py-1 pr-2 text-zinc-300">
-                      {detail && (
-                        <>
-                          {NO_MATCH_REASON_LABEL[detail.reason] ?? detail.reason}
-                          {detail.detail && (
-                            detail.detailId != null ? (
-                              <>
-                                {" "}
+                      {detail && (() => {
+                        // Subject-free framing: the Name column beside this one
+                        // already says which species it is (see noMatchSentence).
+                        const sentence = noMatchSentence(detail, null);
+                        return (
+                          <>
+                            {sentence.before}
+                            {sentence.detail && (
+                              detail.detailId != null ? (
                                 <a
                                   href={speciesHref(nodeId, sisRowKey(detail.detailId), "reassessments")}
                                   target="_blank"
                                   rel="noopener noreferrer"
                                   className="text-blue-300 hover:text-blue-200 underline"
                                 >
-                                  {detail.detail}
+                                  {sentence.detail}
                                 </a>
-                              </>
-                            ) : ` ${detail.detail}`
-                          )}
-                        </>
-                      )}
+                              ) : sentence.detail
+                            )}
+                            {sentence.after}
+                          </>
+                        );
+                      })()}
                       {split && (
                         <span
                           title="Heuristic: Catalogue of Life still records this name as a former subspecies of the linked species — not a confirmed taxonomic changelog."

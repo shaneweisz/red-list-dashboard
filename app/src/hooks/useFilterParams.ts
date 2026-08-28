@@ -80,6 +80,7 @@ export const OWN_PARAM_NAMES = [
   "categories", "years", "assessmentYears", "describedYears", "obsRanges", "assessmentCounts",
   "systems", "trends", "movement", "threats", "criteria", "habitat", "habitatBreadth",
   "habitatImportance", "habitatSeasons", "habitatSuitability", "bd", "endemics", "growthForms",
+  "colMatch", "colReasons",
   "assessors", "reviewers", "facilitators", "search", "outdated", "minObs", "maxObs",
   "minAssessmentYear", "maxAssessmentYear", "minDescribedYear", "maxDescribedYear",
   "species", "tab", "sort", "dir", "sort2", "dir2", "mapview", "mapsort", "mapdir",
@@ -249,6 +250,20 @@ export function parseParams(search: string, suffix: string = "") {
     criteria: p.get(k("criteria"))
       ? new Set(p.get(k("criteria"))!.split(",").filter(Boolean))
       : new Set<string>(),
+    // Catalogue of Life match state — "flagged" = no clean 1:1 CoL match (a
+    // possible taxonomic revision since the assessment), "clean" = its mirror
+    // image. Any other/missing value means no filter. colReasons narrows
+    // "flagged" to specific reasons (see lib/col-revision.ts); it implies
+    // flagged on its own, so the two are independent params, like
+    // habitat/habitatBreadth.
+    colMatch: (
+      p.get(k("colMatch")) === "flagged" ? "flagged"
+      : p.get(k("colMatch")) === "clean" ? "clean"
+      : null
+    ) as "flagged" | "clean" | null,
+    colReasons: p.get(k("colReasons"))
+      ? new Set(p.get(k("colReasons"))!.split(",").filter(Boolean))
+      : new Set<string>(),
     habitat: p.get(k("habitat"))
       ? new Set(p.get(k("habitat"))!.split(",").filter(Boolean))
       : new Set<string>(),
@@ -338,6 +353,8 @@ export function buildQs(state: {
   movementPatterns: Set<string>;
   threats: Set<string>;
   criteria: Set<string>;
+  colMatch?: "flagged" | "clean" | null;
+  colReasons?: Set<string>;
   habitat: Set<string>;
   habitatBreadth: "specialist" | "generalist" | null;
   habitatImportance: Set<string>;
@@ -389,6 +406,8 @@ export function buildQs(state: {
   if (state.movementPatterns.size > 0) p.set(k("movement"), [...state.movementPatterns].join(","));
   if (state.threats.size > 0) p.set(k("threats"), [...state.threats].join(","));
   if (state.criteria.size > 0) p.set(k("criteria"), [...state.criteria].join(","));
+  if (state.colMatch) p.set(k("colMatch"), state.colMatch);
+  if (state.colReasons && state.colReasons.size > 0) p.set(k("colReasons"), [...state.colReasons].join(","));
   if (state.habitat.size > 0) p.set(k("habitat"), [...state.habitat].join(","));
   if (state.habitatBreadth) p.set(k("habitatBreadth"), state.habitatBreadth);
   if (!setEqualsArray(state.habitatImportance, ALL_HABITAT_IMPORTANCE)) p.set(k("habitatImportance"), [...state.habitatImportance].join(","));
@@ -795,6 +814,32 @@ export function useFilterParams(paramSuffix: string = "") {
     [syncUrl]
   );
 
+  const setColMatch = useCallback(
+    (value: "flagged" | "clean" | null) => {
+      setState(prev => {
+        // Leaving the flagged bucket makes a reason narrowing meaningless, so
+        // clear it rather than leaving an invisible filter behind a toggle the
+        // user just switched off.
+        const next = { ...prev, colMatch: value, colReasons: value === "flagged" ? prev.colReasons : new Set<string>() };
+        queueMicrotask(() => syncUrl(next, false));
+        return next;
+      });
+    },
+    [syncUrl]
+  );
+
+  const setColReasons = useCallback(
+    (updater: Set<string> | ((prev: Set<string>) => Set<string>)) => {
+      setState(prev => {
+        const nextVal = typeof updater === "function" ? updater(prev.colReasons) : updater;
+        const next = { ...prev, colReasons: nextVal };
+        queueMicrotask(() => syncUrl(next, false));
+        return next;
+      });
+    },
+    [syncUrl]
+  );
+
   const setSelectedHabitat = useCallback(
     (updater: Set<string> | ((prev: Set<string>) => Set<string>)) => {
       setState(prev => {
@@ -1054,6 +1099,8 @@ export function useFilterParams(paramSuffix: string = "") {
         movementPatterns: new Set<string>(),
         threats: new Set<string>(),
         criteria: new Set<string>(),
+        colMatch: null,
+        colReasons: new Set<string>(),
         habitat: new Set<string>(),
         habitatBreadth: null,
         habitatImportance: new Set<string>(ALL_HABITAT_IMPORTANCE),
@@ -1097,6 +1144,8 @@ export function useFilterParams(paramSuffix: string = "") {
         movementPatterns: new Set<string>(),
         threats: new Set<string>(),
         criteria: new Set<string>(),
+        colMatch: null,
+        colReasons: new Set<string>(),
         habitat: new Set<string>(),
         habitatBreadth: null,
         habitatImportance: new Set<string>(ALL_HABITAT_IMPORTANCE),
@@ -1140,6 +1189,8 @@ export function useFilterParams(paramSuffix: string = "") {
     selectedMovementPatterns: state.movementPatterns,
     selectedThreats: state.threats,
     selectedCriteria: state.criteria,
+    colMatch: state.colMatch,
+    selectedColReasons: state.colReasons,
     selectedHabitat: state.habitat,
     habitatBreadth: state.habitatBreadth,
     selectedHabitatImportance: state.habitatImportance,
@@ -1162,6 +1213,8 @@ export function useFilterParams(paramSuffix: string = "") {
     mapSortKey: state.mapSortKey,
     mapSortDirection: state.mapSortDirection,
 
+    setColMatch,
+    setColReasons,
     setViewMode,
     setLayoutMode,
     navigateToTaxonSubgroup,

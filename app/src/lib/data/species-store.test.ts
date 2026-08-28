@@ -12,7 +12,7 @@ vi.mock("./csv", () => ({
 
 import * as fs from "fs";
 import { readCsv } from "./csv";
-import { getAssessorCandidates, getAssessorCandidatesByCountry, getReviewerCandidatesByCountry } from "./species-store";
+import { getAssessorCandidates, getAssessorCandidatesByCountry, getReviewerCandidatesByCountry, getColRevisions, _resetCaches } from "./species-store";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -822,5 +822,74 @@ describe("getReviewerCandidatesByCountry", () => {
     const beetleResult = getReviewerCandidatesByCountry([group], ["ZA"], { orderNames: ["coleoptera"] });
     expect(beetleResult).toHaveLength(1);
     expect(beetleResult[0].name).toBe("Beetle Reviewer");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// getColRevisions — the on-disk encoding is deliberately terse (short keys,
+// omitted fields), so the decoder is exactly the kind of thing that breaks
+// silently: a wrong key name yields a flag with everything undefined, and the
+// UI just stops flagging rather than throwing. These pin the wire format.
+// ---------------------------------------------------------------------------
+describe("getColRevisions", () => {
+  beforeEach(() => {
+    _resetCaches();
+    vi.mocked(fs.existsSync).mockReset();
+    vi.mocked(fs.readFileSync).mockReset();
+  });
+
+  const load = (file: unknown) => {
+    vi.mocked(fs.existsSync).mockReturnValue(true);
+    vi.mocked(fs.readFileSync).mockReturnValue(JSON.stringify(file));
+    return getColRevisions();
+  };
+
+  it("expands every short key onto its long name", () => {
+    const map = load({ species: { "41775": { r: "lumped", d: "Sus scrofa", i: 123, dc: "SUSSC", c: "7PST9", n: "Sus x", s: [["Sus y", "SUSY1"]] } } });
+    expect(map.get(41775)).toEqual({
+      reason: "lumped", detail: "Sus scrofa", detailId: 123, detailColId: "SUSSC",
+      colId: "7PST9", colName: "Sus x", splitInto: [{ name: "Sus y", colId: "SUSY1" }],
+    });
+  });
+
+  it("keeps a split name with no CoL record as plain text rather than a dead link", () => {
+    const map = load({ species: { "1": { s: [["Sus y", ""], ["Sus z", "SUSZ1"]] } } });
+    expect(map.get(1)!.splitInto).toEqual([{ name: "Sus y" }, { name: "Sus z", colId: "SUSZ1" }]);
+  });
+
+  it("keys by number, not by the string the JSON object uses", () => {
+    const map = load({ species: { "811": { s: [["Alcelaphus cokii", "L7YRS"]] } } });
+    expect(map.get(811)).toBeTruthy();
+    expect(map.has(811)).toBe(true);
+  });
+
+  it("omits absent fields rather than setting them undefined", () => {
+    const map = load({ species: { "811": { s: [["Alcelaphus cokii", "L7YRS"]], c: "BHBY" } } });
+    // A split-only flag has no no-match reason at all.
+    expect(map.get(811)).toEqual({ colId: "BHBY", splitInto: [{ name: "Alcelaphus cokii", colId: "L7YRS" }] });
+    expect("reason" in map.get(811)!).toBe(false);
+  });
+
+  it("drops an empty split list instead of carrying a flag that means nothing", () => {
+    const map = load({ species: { "1": { r: "no_link" }, "2": { s: [] } } });
+    expect(map.get(1)).toEqual({ reason: "no_link" });
+    expect(map.get(2)).toEqual({});
+  });
+
+  it("returns an empty map when the file is missing, so a stale sync still serves species", () => {
+    vi.mocked(fs.existsSync).mockReturnValue(false);
+    expect(getColRevisions().size).toBe(0);
+    expect(fs.readFileSync).not.toHaveBeenCalled();
+  });
+
+  it("tolerates a file with no species key", () => {
+    expect(load({ counts: {}, total: 0 }).size).toBe(0);
+  });
+
+  it("reads the file once and caches it for the process", () => {
+    load({ species: { "1": { r: "no_link" } } });
+    getColRevisions();
+    getColRevisions();
+    expect(fs.readFileSync).toHaveBeenCalledTimes(1);
   });
 });

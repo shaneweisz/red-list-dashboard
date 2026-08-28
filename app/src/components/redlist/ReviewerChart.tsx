@@ -13,7 +13,7 @@ type ViewMode = "assessors" | "reviewers" | "facilitators";
 
 /** Tab order, label and bar colour for each credit type the chart can show. */
 const MODES: ReadonlyArray<{ mode: ViewMode; label: string; color: string }> = [
-  { mode: "assessors", label: "Assessors", color: "#fb923c" },
+  { mode: "assessors", label: "Assessors", color: "#8b5cf6" },
   { mode: "reviewers", label: "Reviewers", color: "#818cf8" },
   // Facilitators: the individuals behind an organisational assessor (all bird
   // assessments are assessed by "BirdLife International").

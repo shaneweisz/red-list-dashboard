@@ -158,9 +158,10 @@ Phases 7–12 build the **Catalogue of Life backbone** (run on a full sync only)
 11. `build-synonym-index` — CoL synonyms → their accepted species, so search for an old/synonym name still finds the current one
 12. `build-col-taxon-ids` — resolves every taxon name referenced in `taxonomy-tree.ts`'s filters against `backbone.parquet` → `src/config/col-taxon-ids.json` (each name's CoL taxon id, so the dashboard can link a name straight to its CoL page). Small and derived from committed source, so — unlike the other outputs here — it's **committed to git**, not published to R2. Re-run standalone (`npx tsx scripts/build-col-taxon-ids.ts`) whenever a node's filter changes, without needing a full sync.
 
-Phase 13 runs **last**, after the CoL backbone, since it depends on those artifacts:
+Phases 13 and 13a run **last**, after the CoL backbone, since they depend on those artifacts:
 
 13. `build-taxa-summary` — aggregates per-taxon CSVs + the CoL backbone (`species/`, `species_link.parquet`) → `data/taxa-summary.json` and `data/table1a-children-summaries.json`/`data/ssc-group-children-summaries.json` (split from a single `node-children-summaries.json` — the old combined name, kept here as a pointer for anyone searching it), including per-group `col_described`/`col_ne` counts
+13a. `build-col-revisions` — the "possible taxonomic revision" flag, unscoped over every assessed species → `data/col-revisions.json` (`sis_taxon_id → flag`). Two signals share the file: the same "why does this species have no clean 1:1 CoL match" diagnostic Phase 13 computes per SSC group, and the species CoL has likely split *out* of an assessed one (`split_candidates`, inverted). Feeds the dashboard's **Possible Taxonomic Revision** filter chart and the per-row ⚑ flag. Small (~580 KB) and CI-relevant, so it's **committed to git** alongside `taxa-summary.json`, and published to R2 with the rest of the sync
 
 **Publishing a refresh.** `app/data/` lives in a private R2 bucket; the active version is pinned via `app/latest-sync.txt`. To publish a fresh sync:
 
