@@ -149,6 +149,19 @@ describe("orthographicallySame — spellings the codes call one name", () => {
     ["doubled consonant, ICN 60.1", "Inga vilosissima", "Inga villosissima"],
     ["doubled i inside the epithet", "Iva xanthifolia", "Iva xanthiifolia"],
     ["doubled i inside the epithet", "Weinmannia paulliniifolia", "Weinmannia paullinifolia"],
+    // The -i / -ii / -ei family: Rec. 60C.1 gives -i for a personal name ending
+    // in a vowel or -er and -ii for one ending in a consonant, and ICN 60.12
+    // makes the wrong choice an error to be CORRECTED. One man, one name.
+    ["personal-name termination, -ii / -ei", "Chionanthus holdridgii", "Chionanthus holdridgei"],
+    ["personal-name termination, -ii / -ei", "Sterculia cheekii", "Sterculia cheekei"],
+    ["personal-name termination, -i / -ei", "Quercus augustinei", "Quercus augustini"],
+    // Reclassified from a negative while writing this. #490 called it "an
+    // inserted syllable", but there is no inserted syllable: La Billardiere's
+    // name ends in a vowel, so -ei is the regular termination and -eri treats it
+    // as ending in -er. Same person, same name, wrong connecting vowel. The
+    // STRICT rule still refuses it (see sameSpeciesName above) — it takes GBIF
+    // naming the record before this is acted on.
+    ["personal-name termination, -i / -ei", "Agathis labillardieri", "Agathis labillardierei"],
     ["hyphen carries no weight", "Solanum rudepannum", "Solanum rude-pannum"],
     ["hyphen carries no weight", "Xylopia le-testui", "Xylopia letestui"],
     ["identical names are trivially the same", "Panthera leo", "Panthera leo"],
@@ -181,9 +194,19 @@ describe("orthographicallySame — differences no folding may erase", () => {
     ["a genus transfer is a taxonomic act", "Agrochola kindermannii", "Anchoscelis kindermanni"],
     ["different species in one genus", "Ochotona pallasii", "Ochotona curzoniae"],
     ["a subspecies is a different rank", "Ochotona pallasii", "Ochotona pallasi hamica"],
-    ["an inserted syllable is not a spelling", "Agathis labillardieri", "Agathis labillardierei"],
-    ["patronymic gender needs the description", "Asparagus faulknerae", "Asparagus faulkneri"],
-    ["patronymic gender needs the description", "Acrogomphus walshi", "Acrogomphus walshae"],
+    // -ae is where the termination folding STOPS: it honours a different person
+    // (or corrects which one), which no code calls a spelling. Folding the
+    // trailing "i" away outright would equate all of these.
+    ["patronymic gender is not a termination", "Asparagus faulknerae", "Asparagus faulkneri"],
+    ["patronymic gender is not a termination", "Acrogomphus walshi", "Acrogomphus walshae"],
+    ["patronymic gender is not a termination", "Ceratinopsis dippenaari", "Ceratinopsis dippenaarae"],
+    ["patronymic gender is not a termination", "Ephedra fedtschenkoae", "Ephedra fedtschenkoi"],
+    // Reported, and refused on purpose. CoL holds NO record named Andrena
+    // juliana at any status; only GBIF's fuzzy matcher connects it to CoL's
+    // Andrena julliani (a synonym of Andrena mucida). juliana is a feminine
+    // form and julliani a masculine genitive of a different stem — no code makes
+    // them one name, so this needs evidence neither signal supplies.
+    ["a feminine form is not a masculine genitive", "Andrena juliana", "Andrena julliani"],
   ];
   for (const [why, a, b] of different) {
     it(`${why}: ${a} != ${b}`, () => {

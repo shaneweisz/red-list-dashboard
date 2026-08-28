@@ -169,6 +169,9 @@ export function normalisedKey(name: string): string | null {
  *    (Codia spatulata / spathulata, Xerocrassa rithymna / rhithymna);
  *  - doubled vs single consonants, ICN 60.1 (Inga vilosissima / villosissima);
  *  - doubled vs single i inside the epithet (Iva xanthifolia / xanthiifolia);
+ *  - the termination of a personal-name epithet, Rec. 60C.1 with ICN 60.12 —
+ *    -i / -ii / -ei all form one man's name (Chionanthus holdridgii /
+ *    holdridgei), though NOT -ae, which honours someone else;
  *  - hyphens and apostrophes, ICN 60.11 / ICZN 32.5.2.4 (Solanum rudepannum /
  *    rude-pannum, Xylopia le-testui / letestui).
  *
@@ -206,7 +209,18 @@ export function orthographicKey(name: string): string | null {
       .replace(/j/g, "i")
       // A doubled letter is the same letter: covers the consonant and the -ii-
       // cases alike, and a run of three or more folds the same way.
-      .replace(/(.)\1+/g, "$1");
+      .replace(/(.)\1+/g, "$1")
+      // The termination of a personal-name epithet. Rec. 60C.1 gives -i for a
+      // name ending in a vowel or -er and -ii for one ending in a consonant, so
+      // one person yields holdridgei / holdridgii and labillardierei /
+      // labillardieri; ICN Art. 60.12 makes the wrong choice an error to be
+      // CORRECTED, i.e. one name, not two. -ii has already folded to -i above,
+      // so only -ei is left to fold.
+      //
+      // Stops at the masculine forms. Folding the trailing "i" away outright
+      // would equate walshi with walshae — a change of which person the name
+      // honours, which no code calls a spelling — and that guard is tested.
+      .replace(/ei$/, "i");
   const genus = fold(parts[0]);
   // Terminations too, so this is a strict SUPERSET of normalisedKey rather than
   // a rule pointing at a different axis. Folding covers spelling and
