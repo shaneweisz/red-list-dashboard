@@ -1611,6 +1611,8 @@ export default function OccurrenceMapRow({
   // there's nothing to fall back to silently, since the source picker itself
   // (below) is only ever shown once nativeCountriesWcvp is known to be non-empty.
   const effectiveNativeCountries = nativeRangeSource === "wcvp" ? (nativeCountriesWcvp ?? undefined) : nativeCountriesRedList;
+  /** The name of the source the native-range check is currently running on. */
+  const nativeRangeSourceLabel = nativeRangeSource === "wcvp" ? "POWO" : "IUCN";
   // Only a species with a Red List assessment has an IUCN native range. An
   // unassessed species arrives here with no list at all (the dashboard withholds
   // its GBIF-derived countries), and an overlay offered but permanently disabled
@@ -4623,11 +4625,15 @@ export default function OccurrenceMapRow({
       const p = feature.properties;
       const marks = (p.qualityFlags ?? []).map((f) => QUALITY_FLAG_LABELS[f as QualityFlag] || f);
       if (isOutsideNativeRange(p.countryCode, effectiveNativeCountries)) {
-        marks.push(`Outside the native range${p.country ? ` (recorded in ${p.country})` : ""}`);
+        // Named for the source, as in the table: POWO and the Red List can
+        // disagree about where a species is native.
+        marks.push(
+          `Outside ${nativeRangeSourceLabel} native range${p.country ? ` (recorded in ${p.country})` : ""}`
+        );
       }
       return marks.length ? marks.join(" · ") : null;
     },
-    [effectiveNativeCountries]
+    [effectiveNativeCountries, nativeRangeSourceLabel]
   );
 
   const recordFields = useCallback(
@@ -7085,6 +7091,7 @@ export default function OccurrenceMapRow({
                   variant={listTab === "excluded" ? "excluded" : "records"}
                   loading={loadingOccurrences}
                   isOutsideNativeRange={isOutsideNativeRangeForList}
+                  nativeRangeSourceLabel={nativeRangeSourceLabel}
                   georeferences={georeferences}
                   onSaveGeoreference={saveGeoreferenceInline}
                   onClearGeoreference={clearGeoreference}

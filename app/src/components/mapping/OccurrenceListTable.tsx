@@ -252,11 +252,15 @@ function elevationOf(p: OccurrenceFeature["properties"]): number | null {
  */
 function flagsOf(
   p: OccurrenceFeature["properties"],
-  isOutsideNativeRange: (countryCode: string | null | undefined) => boolean
+  isOutsideNativeRange: (countryCode: string | null | undefined) => boolean,
+  nativeRangeSourceLabel: string
 ): string[] {
   const flags = (p.gbifIssues ?? []).map((i) => `GBIF: ${formatGbifIssue(i)}`);
   flags.push(...(p.qualityFlags ?? []).map((f) => QUALITY_FLAG_LABELS[f as QualityFlag] ?? f));
-  if (isOutsideNativeRange(p.countryCode)) flags.push("Outside native range");
+  // Named for the source it came from: POWO and the Red List can disagree
+  // about where a species is native, and which of them called this record
+  // out is the first thing you need to know to judge it.
+  if (isOutsideNativeRange(p.countryCode)) flags.push(`Outside ${nativeRangeSourceLabel} native range`);
   return flags;
 }
 
@@ -530,6 +534,9 @@ interface OccurrenceListTableProps {
    *  "outside native range" flag shown in the Flags column (same signal the map
    *  tooltip shows). */
   isOutsideNativeRange: (countryCode: string | null | undefined) => boolean;
+  /** Which source that range came from — "POWO" or "IUCN" — for the flag's
+   *  own wording. */
+  nativeRangeSourceLabel: string;
   /** The assessor's own georeferences, keyed by gbifID. */
   georeferences?: Record<number, Georeference>;
   /**
@@ -622,6 +629,7 @@ export default function OccurrenceListTable({
   occurrences,
   loading,
   isOutsideNativeRange,
+  nativeRangeSourceLabel,
   georeferences,
   onSaveGeoreference,
   onClearGeoreference,
@@ -1036,9 +1044,9 @@ export default function OccurrenceListTable({
         className: "whitespace-nowrap",
         compact: true,
         value: (p: OccurrenceFeature["properties"]) =>
-          flagsOf(p, isOutsideNativeRange).length + (p.typeStatus ? 1 : 0) + (p.images?.length ?? 0),
+          flagsOf(p, isOutsideNativeRange, nativeRangeSourceLabel).length + (p.typeStatus ? 1 : 0) + (p.images?.length ?? 0),
         render: (p: OccurrenceFeature["properties"]) => {
-          const flags = flagsOf(p, isOutsideNativeRange);
+          const flags = flagsOf(p, isOutsideNativeRange, nativeRangeSourceLabel);
           const type = p.typeStatus?.trim();
           const images = p.images ?? [];
           if (flags.length === 0 && !type && images.length === 0) return <span />;
@@ -1525,7 +1533,7 @@ export default function OccurrenceListTable({
         ),
       },
     ],
-    [isOutsideNativeRange, georeferences, onSaveGeoreference, onClearGeoreference, editingCoords, editingRadius, exclusions, variant, onExclude, onInclude, duplicates, unfolded, dates, onSaveDate, onClearDate, editingDate, full, showNote, hideNoteSoon, noteIcon]
+    [isOutsideNativeRange, nativeRangeSourceLabel, georeferences, onSaveGeoreference, onClearGeoreference, editingCoords, editingRadius, exclusions, variant, onExclude, onInclude, duplicates, unfolded, dates, onSaveDate, onClearDate, editingDate, full, showNote, hideNoteSoon, noteIcon]
   );
 
   // The catalogue in the reader's own order, then the subset actually drawn.
