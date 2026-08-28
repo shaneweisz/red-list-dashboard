@@ -1,3 +1,4 @@
+import type { PinnedPlace } from "./geocode";
 import type { AssessorDate, Exclusion, Georeference } from "./georeferences";
 import type { PointFileImport } from "./iucn-point-file";
 
@@ -10,8 +11,8 @@ import type { PointFileImport } from "./iucn-point-file";
  * default and a bad single point of failure — "clear browsing data" takes a
  * fortnight of georeferencing with it, and no undo reaches across a reload.
  *
- * So: a file. One JSON document holding the four stores, written by hand from
- * a button, read back by another. Not a sync, not a format anyone else has to
+ * So: a file. One JSON document holding every store, written by hand from a
+ * button, read back by another. Not a sync, not a format anyone else has to
  * understand — the thing you can put in a Dropbox folder and stop worrying.
  */
 export const EDITS_BACKUP_VERSION = 1;
@@ -28,6 +29,14 @@ export interface EditsBackup {
   dates: Record<number, AssessorDate>;
   /** The imported point file, if one is loaded — it is part of the work. */
   pointFile?: PointFileImport | null;
+  /**
+   * The places pinned on the map.
+   *
+   * A pin dropped by hand names something no gazetteer knows — "the ridge the
+   * 1987 collections came from" — so it can't be searched for again, which
+   * makes it work rather than a view setting.
+   */
+  pins?: PinnedPlace[];
 }
 
 export function buildEditsBackup(backup: Omit<EditsBackup, "kind" | "version">): EditsBackup {
@@ -45,6 +54,7 @@ export function summariseBackup(backup: EditsBackup): string {
     return count === "1" ? part : `${part}s`;
   });
   if (backup.pointFile) parts.push(`${backup.pointFile.points.length} imported point${backup.pointFile.points.length === 1 ? "" : "s"}`);
+  if (backup.pins?.length) parts.push(`${backup.pins.length} pin${backup.pins.length === 1 ? "" : "s"}`);
   return parts.join(", ");
 }
 
@@ -84,6 +94,9 @@ export function readEditsBackup(
       georeferences: backup.georeferences ?? {},
       exclusions: backup.exclusions ?? {},
       dates: backup.dates ?? {},
+      // Written by a build that had no pins in it, or by one that had none
+      // placed: either way there is nothing to put back.
+      pins: backup.pins ?? [],
     },
   };
 }

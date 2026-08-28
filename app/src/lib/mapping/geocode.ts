@@ -145,18 +145,30 @@ export function formatKind(kind?: string): string {
  * Per species, like the georeferences: the pins that make sense against one
  * species' records are noise against another's.
  */
+/**
+ * A pinned place, with the one bit of display state that belongs to the pin
+ * rather than to the place: whether its label is folded away.
+ *
+ * Half a dozen pins around one locality description cover the records they
+ * were placed to be compared against, so the names come off once you know
+ * which pin is which — and the pin itself stays where it is.
+ */
+export interface PinnedPlace extends Place {
+  nameHidden?: boolean;
+}
+
 const PINS_PREFIX = "redlist-pins";
 const PINS_VERSION = 1;
 
 interface StoredPins {
   version: number;
   updatedAt: string;
-  places: Place[];
+  places: PinnedPlace[];
 }
 
 const pinsKey = (speciesKey: string) => `${PINS_PREFIX}:v${PINS_VERSION}:${speciesKey}`;
 
-export function loadPins(speciesKey: string): Place[] {
+export function loadPins(speciesKey: string): PinnedPlace[] {
   if (typeof window === "undefined") return [];
   try {
     const raw = window.localStorage.getItem(pinsKey(speciesKey));
@@ -175,7 +187,7 @@ export function loadPins(speciesKey: string): Place[] {
 }
 
 /** Replaces the stored pins for one species. Returns false if the write failed. */
-export function savePins(speciesKey: string, places: Place[]): boolean {
+export function savePins(speciesKey: string, places: PinnedPlace[]): boolean {
   if (typeof window === "undefined") return false;
   try {
     const payload: StoredPins = {

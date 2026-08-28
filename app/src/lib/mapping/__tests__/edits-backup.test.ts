@@ -93,3 +93,57 @@ describe("the saved-work file", () => {
     );
   });
 });
+
+describe("the pins in the saved file", () => {
+  const pin = {
+    id: "pin-1",
+    name: "the ridge the 1987 collections came from",
+    context: "",
+    lat: 1.25,
+    lng: -70.23,
+  };
+
+  const withPins = () =>
+    buildEditsBackup({
+      speciesKey: "6CX6F",
+      scientificName: "Dioscorea biplicata",
+      savedAt: "2026-08-28T09:30:00.000Z",
+      georeferences: {},
+      exclusions: {},
+      dates: {},
+      pointFile: null,
+      pins: [pin, { ...pin, id: "pin-2", name: "Mitú", nameHidden: true }],
+    });
+
+  it("carries a pin a gazetteer could never find again", () => {
+    const read = readEditsBackup(JSON.stringify(withPins()), "6CX6F");
+    expect("backup" in read).toBe(true);
+    if (!("backup" in read)) return;
+    expect(read.backup.pins?.[0]).toEqual(pin);
+  });
+
+  it("remembers which names were folded away", () => {
+    const read = readEditsBackup(JSON.stringify(withPins()), "6CX6F");
+    if (!("backup" in read)) throw new Error("expected a backup");
+    expect(read.backup.pins?.[1].nameHidden).toBe(true);
+  });
+
+  it("counts them where the dialog asks whether to restore", () => {
+    expect(summariseBackup(withPins())).toContain("2 pins");
+  });
+
+  it("says one pin, not one pins", () => {
+    expect(summariseBackup({ ...withPins(), pins: [pin] })).toMatch(/\b1 pin$/);
+  });
+
+  it("says nothing about pins where none were placed", () => {
+    expect(summariseBackup({ ...withPins(), pins: [] })).not.toContain("pin");
+  });
+
+  it("reads a file written before pins were in it", () => {
+    const older = { ...withPins(), pins: undefined };
+    const read = readEditsBackup(JSON.stringify(older), "6CX6F");
+    if (!("backup" in read)) throw new Error("expected a backup");
+    expect(read.backup.pins).toEqual([]);
+  });
+});

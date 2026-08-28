@@ -84,7 +84,7 @@ import {
   computeEoo,
   formatAreaKm2,
 } from "@/lib/mapping/range-metrics";
-import { loadPins, savePins, type Place } from "@/lib/mapping/geocode";
+import { loadPins, savePins, type Place, type PinnedPlace } from "@/lib/mapping/geocode";
 import {
   FOREST_LOSS_ATTRIBUTION,
   FOREST_LOSS_CAVEAT,
@@ -958,7 +958,7 @@ export default function OccurrenceMapRow({
    * at once is how you see whether they agree with each other and with the
    * records, which is the judgement being made.
    */
-  const [pinnedPlaces, setPinnedPlaces] = useState<Place[]>(() => loadPins(speciesKey));
+  const [pinnedPlaces, setPinnedPlaces] = useState<PinnedPlace[]>(() => loadPins(speciesKey));
   /** The label being typed in the right-click panel, before the pin exists. */
   const [newPinLabel, setNewPinLabel] = useState("");
   /** A pin whose label is being renamed in place. */
@@ -3582,6 +3582,7 @@ export default function OccurrenceMapRow({
               {pinnedPlaces.map((place) => (
                 <MapLibreMarker key={place.id} longitude={place.lng} latitude={place.lat} anchor="bottom">
                   <div className="flex flex-col items-center -mb-1">
+                    {!place.nameHidden && (
                     <span className="flex items-center gap-1 px-1.5 py-0.5 rounded bg-zinc-900/80 text-white text-[10px] whitespace-nowrap">
                       {renamingPin === place.id ? (
                         // Keystrokes stop here: MapLibre listens for keys on
@@ -3627,9 +3628,26 @@ export default function OccurrenceMapRow({
                         </svg>
                       </button>
                     </span>
-                    <svg className="w-5 h-5 -mt-0.5 text-zinc-900" viewBox="0 0 24 24" fill="currentColor">
-                      <path d="M12 2a7 7 0 00-7 7c0 5 7 13 7 13s7-8 7-13a7 7 0 00-7-7zm0 9.5A2.5 2.5 0 1112 6.5a2.5 2.5 0 010 5z" />
-                    </svg>
+                    )}
+                    {/* The pin itself folds its own label away. Half a dozen
+                        pins around one locality description cover the records
+                        they were placed to be read against, and by then you
+                        know which pin is which. */}
+                    <button
+                      onClick={() =>
+                        setPinnedPlaces((prev) =>
+                          prev.map((p) => (p.id === place.id ? { ...p, nameHidden: !p.nameHidden } : p))
+                        )
+                      }
+                      title={place.nameHidden ? `Show this pin's name — ${place.name}` : "Hide this pin's name"}
+                      aria-label={place.nameHidden ? "Show this pin's name" : "Hide this pin's name"}
+                      data-pin-toggle={place.id}
+                      className="-mt-0.5 cursor-pointer text-zinc-900 hover:text-zinc-700"
+                    >
+                      <svg className="w-5 h-5" viewBox="0 0 24 24" fill="currentColor">
+                        <path d="M12 2a7 7 0 00-7 7c0 5 7 13 7 13s7-8 7-13a7 7 0 00-7-7zm0 9.5A2.5 2.5 0 1112 6.5a2.5 2.5 0 010 5z" />
+                      </svg>
+                    </button>
                   </div>
                 </MapLibreMarker>
               ))}
@@ -4917,6 +4935,7 @@ export default function OccurrenceMapRow({
       exclusions,
       dates: assessorDates,
       pointFile,
+      pins: pinnedPlaces,
     });
     const url = URL.createObjectURL(
       new Blob([JSON.stringify(backup, null, 2)], { type: "application/json" })
@@ -4927,10 +4946,10 @@ export default function OccurrenceMapRow({
     link.click();
     URL.revokeObjectURL(url);
     setLastSavedAt(savedAt);
-  }, [speciesKey, scientificName, georeferences, exclusions, assessorDates, pointFile]);
+  }, [speciesKey, scientificName, georeferences, exclusions, assessorDates, pointFile, pinnedPlaces]);
 
   const [lastSavedAt, setLastSavedAt] = useState<string | null>(null);
-  /** How many records the assessor has touched — nothing to save if none. */
+  /** How many records the assessor has touched. */
   const editCount = useMemo(
     () =>
       new Set([
@@ -4940,6 +4959,22 @@ export default function OccurrenceMapRow({
       ]).size,
     [georeferences, exclusions, assessorDates]
   );
+  /**
+   * Everything the file would carry, not just the edited records.
+   *
+   * A morning spent pinning the places a locality description might mean, or
+   * an imported point file, is work in exactly the sense this button exists
+   * for — and both were leaving it greyed out.
+   */
+  const savableSummary = useMemo(() => {
+    const parts: string[] = [];
+    if (editCount > 0) parts.push(`${editCount} record${editCount === 1 ? "" : "s"} edited`);
+    if (pinnedPlaces.length > 0)
+      parts.push(`${pinnedPlaces.length} pin${pinnedPlaces.length === 1 ? "" : "s"}`);
+    if (pointFile) parts.push("an imported point file");
+    return parts.join(", ");
+  }, [editCount, pinnedPlaces.length, pointFile]);
+  const hasWorkToSave = savableSummary !== "";
   const [pendingRestore, setPendingRestore] = useState<EditsBackup | null>(null);
   const restoreInputRef = useRef<HTMLInputElement | null>(null);
 
@@ -4960,8 +4995,9 @@ export default function OccurrenceMapRow({
    *
    * Restoring is itself an edit — if the file turns out to be the wrong one,
    * or older than you thought, undo takes you back to what was here. The point
-   * file is set separately, since it is a file you loaded rather than an
-   * interpretation you made.
+   * file and the pins are set separately: neither is in the document the
+   * history is kept over, so undo doesn't reach them. The dialog counts both
+   * before it asks, so nothing goes quietly.
    */
   const applyRestore = useCallback(
     (backup: EditsBackup) => {
@@ -4974,6 +5010,7 @@ export default function OccurrenceMapRow({
         `restore the work saved ${backup.savedAt.slice(0, 10)}`
       );
       if (backup.pointFile) importPointFile(backup.pointFile);
+      if (backup.pins?.length) setPinnedPlaces(backup.pins);
       setPendingRestore(null);
     },
     [commitEdits, importPointFile]
@@ -6690,17 +6727,17 @@ export default function OccurrenceMapRow({
                       <div className="inline-flex rounded border border-zinc-300 dark:border-zinc-600 overflow-hidden">
                         <button
                           onClick={saveWork}
-                          disabled={editCount === 0}
+                          disabled={!hasWorkToSave}
                           title={
-                            editCount === 0
-                              ? "Nothing to save yet — georeference, date or set aside a record first"
-                              : `Save your work for this species to a file — ${editCount} record${
-                                  editCount === 1 ? "" : "s"
-                                } edited${lastSavedAt ? `, last saved ${lastSavedAt.slice(11, 16)}` : ", never saved"}`
+                            !hasWorkToSave
+                              ? "Nothing to save yet — georeference, date or set aside a record, or pin a place"
+                              : `Save your work for this species to a file — ${savableSummary}${
+                                  lastSavedAt ? `, last saved ${lastSavedAt.slice(11, 16)}` : ", never saved"
+                                }`
                           }
                           aria-label="Save your work to a file"
                           className={`px-1.5 py-1 hover:bg-zinc-50 dark:hover:bg-zinc-800 disabled:opacity-30 disabled:cursor-not-allowed ${
-                            editCount > 0 && !lastSavedAt ? "text-amber-600 dark:text-amber-500" : "text-zinc-600 dark:text-zinc-300"
+                            hasWorkToSave && !lastSavedAt ? "text-amber-600 dark:text-amber-500" : "text-zinc-600 dark:text-zinc-300"
                           }`}
                         >
                           <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
