@@ -149,12 +149,28 @@ export function normalisedKey(name: string): string | null {
  * Red List name we failed to match still carries a gbif_species_key that IS a
  * col_id — an independent matcher's answer to the same question. Taking that on
  * faith is what #490 removed, and rightly: GBIF's matcher put `Agrotis sabine`
- * on `Agrotis sabura` Mabille, 1888 — a different name, and a synonym at that.
+ * on `Agrotis sabura` Mabille, 1888, which is neither that name nor a spelling
+ * of it.
  *
  * So neither signal is trusted alone. This rule asks only "are these two the
  * same name spelled differently?", and build-matching applies it ONLY to the
  * record GBIF already pointed at. Two weak independent signals agreeing; either
  * one by itself is refused.
+ *
+ * Refusing the col_id is NOT a verdict on the occurrence records keyed there,
+ * and the two must not be conflated. species-key.ts has already applied its own
+ * guard to that key — every candidate this rule refuses was reached by the
+ * species' OWN canonical name, never by a Red List synonym, which is the
+ * distinction that keeps a species from inheriting another's records (see
+ * decideKey, and the Catapodium borgesii case behind it). Those counts are
+ * GBIF's answer for this name, presented as GBIF's.
+ *
+ * The col_id carries a heavier load: WE author claims from it — the card's
+ * flags, taxonomic placement, NE de-duplication, the described-species
+ * denominator. Acrogomphus walshi / walshae is in the refused set, and linking
+ * it would have us assert the assessment corresponds to a species named after a
+ * different person. A higher bar for the col_id than for the record count is
+ * the point, not an inconsistency.
  *
  * The variations folded here are the ones the codes themselves call orthographic
  * variants of one name rather than competing names:
