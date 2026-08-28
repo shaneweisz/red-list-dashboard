@@ -86,6 +86,30 @@ export const REVISION_BARS: readonly { key: string; label: string; reasons: read
   { key: "classified_elsewhere", label: "Reclassified", reasons: ["classified_elsewhere"] },
 ];
 
+/**
+ * The bars to draw, commonest first.
+ *
+ * An empty bar is drawn ONLY when it is the one selected. Cross-filtering can
+ * drive the bar you just clicked to zero, and dropping it then would leave
+ * nothing on the card to click to undo the filter. Keeping every empty bar
+ * whenever anything at all was selected is the wrong reading of that rule: it
+ * put "Dangling link" and "Reclassified" — zero in every sync so far — onto the
+ * card the moment any filter was applied.
+ */
+export function visibleBars(
+  counts: Readonly<Record<string, number>>,
+  selected: ReadonlySet<string>,
+): { bar: (typeof REVISION_BARS)[number]; count: number; selected: boolean }[] {
+  return REVISION_BARS
+    .map((bar) => ({
+      bar,
+      count: bar.reasons.reduce((n, r) => n + (counts[r] ?? 0), 0),
+      selected: bar.reasons.some((r) => selected.has(r)),
+    }))
+    .filter((b) => b.count > 0 || b.selected)
+    .sort((a, b) => b.count - a.count);
+}
+
 /** The bar a reason is drawn under, for labelling a tooltip block with the same
  *  words the chart uses — a reader who filtered by a bar has to recognise it. */
 export function barForReason(reason: string): { key: string; label: string } | null {

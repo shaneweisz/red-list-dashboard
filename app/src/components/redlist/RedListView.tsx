@@ -17,7 +17,7 @@ import { CATEGORY_COLORS, TAXA_BY_ID, THREATENED_CATEGORIES } from "@/config/tax
 import { speciesMatchesNode, getNodeDef, getViewRootForNode, findNode, matchesBreakdownName, breakdownDisplayName } from "@/lib/taxonomy-utils";
 import { dynamicNodeDisplayName } from "@/lib/dynamic-taxon";
 import ReviewerChart from "./ReviewerChart";
-import { REVISION_BARS, barForReason, REVISION_REASON_SHORT, REVISION_REASON_SUMMARY, revisionReasons, matchesRevisionFilter, isFlagged, colUrl, colDatasetUrl, colTaxonUrl, noMatchSentence, splitSummary, lumpSentence, type SplitSummary, newRevisionTally, tallyRevision, barTotal, REVISION_CAVEAT, type ColRevision } from "@/lib/col-revision";
+import { REVISION_BARS, visibleBars, barForReason, REVISION_REASON_SHORT, REVISION_REASON_SUMMARY, revisionReasons, matchesRevisionFilter, isFlagged, colUrl, colDatasetUrl, colTaxonUrl, noMatchSentence, splitSummary, lumpSentence, type SplitSummary, newRevisionTally, tallyRevision, barTotal, REVISION_CAVEAT, type ColRevision } from "@/lib/col-revision";
 import type { ColProvenance } from "@/app/api/col/provenance/route";
 import { parseAssessors } from "@/lib/parseAssessors";
 import { iucnRegionCountries, matchingRegions } from "@/lib/regions";
@@ -3661,21 +3661,15 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
   // reason implies flagged, so it also lights the toggle.
   const taxonomicRevisionCard = (() => {
     const loading = speciesLoading && assessedSpecies.length === 0;
-    // One bar can cover several reasons (see REVISION_BARS): a species carries
-    // exactly one reason, so summing members double-counts nothing.
-    const barCount = (bar: (typeof REVISION_BARS)[number]) =>
-      bar.reasons.reduce((n, r) => n + (colTally.counts[r] ?? 0), 0);
     const barSelected = (bar: (typeof REVISION_BARS)[number]) =>
       bar.reasons.some(r => selectedColReasons.has(r));
-    const barData = REVISION_BARS
-      .map(bar => ({
-        code: bar.label,
-        rawCode: bar.key,
-        count: barCount(bar),
-        label: barCount(bar).toLocaleString(),
-      }))
-      .filter(d => d.count > 0 || selectedColReasons.size > 0)
-      .sort((a, b) => b.count - a.count);
+    // Which bars are drawn, and the empty-bar rule, live in col-revision.ts.
+    const barData = visibleBars(colTally.counts, selectedColReasons).map(({ bar, count }) => ({
+      code: bar.label,
+      rawCode: bar.key,
+      count,
+      label: count.toLocaleString(),
+    }));
     // FilterBarChart keys selection off the displayed `code`, not our bar key.
     const selectedShort = new Set(REVISION_BARS.filter(barSelected).map(b => b.label));
     const barByLabel = new Map(REVISION_BARS.map(b => [b.label, b]));

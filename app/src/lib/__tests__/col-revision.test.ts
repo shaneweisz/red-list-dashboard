@@ -21,6 +21,7 @@ import {
   newRevisionTally,
   tallyRevision,
   barTotal,
+  visibleBars,
 } from "@/lib/col-revision";
 
 // The no-match reason codes come from classifyNoMatch (lib/data/col-breakdown);
@@ -75,6 +76,39 @@ describe("revision vocabulary", () => {
       const bars = REVISION_BARS.filter((b) => b.reasons.includes(reason));
       expect(bars.map((b) => b.key), reason).toHaveLength(1);
     }
+  });
+});
+
+describe("visibleBars", () => {
+  const counts = { split: 160, lumped: 128, infraspecific: 42, unmatched: 5 };
+  const labels = (c: Record<string, number>, sel: string[] = []) =>
+    visibleBars(c, new Set(sel)).map((b) => b.bar.label);
+
+  it("drops empty bars when nothing is selected", () => {
+    // missing_from_backbone and classified_elsewhere are zero in every sync so
+    // far. They must not appear just because they have a bar defined.
+    expect(labels(counts)).toEqual([
+      "Split on CoL", "Lumped on CoL", "Below species on CoL", "No CoL match",
+    ]);
+  });
+
+  it("still drops empty bars when a DIFFERENT bar is selected", () => {
+    // The regression: `count > 0 || anythingSelected` drew every empty bar as
+    // soon as one filter was applied, putting "Dangling link" and "Reclassified"
+    // on the card at zero.
+    expect(labels(counts, ["lumped"])).not.toContain("Dangling link");
+    expect(labels(counts, ["lumped"])).not.toContain("Reclassified");
+  });
+
+  it("keeps a SELECTED bar that cross-filtering has driven to zero", () => {
+    // The rule the clause exists for: drop it and there is nothing left on the
+    // card to click to undo the filter.
+    expect(labels({ ...counts, unmatched: 0 }, ["unmatched"])).toContain("No CoL match");
+    expect(labels({ ...counts, unmatched: 0 })).not.toContain("No CoL match");
+  });
+
+  it("orders by count, commonest first", () => {
+    expect(visibleBars(counts, new Set()).map((b) => b.count)).toEqual([160, 128, 42, 5]);
   });
 });
 
