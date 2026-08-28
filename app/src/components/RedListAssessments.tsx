@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback, useRef } from "react";
 import { CATEGORY_COLORS, CATEGORY_NAMES, normalizeCategory } from "@/config/taxa";
+import { stripHtml, truncateSections } from "@/lib/html-text";
 
 interface PreviousAssessment {
   year: string;
@@ -29,30 +30,8 @@ interface AssessmentDetail {
   use_trade: string | null;
   range: string | null;
   population_trend: { code: string; description?: string } | string | null;
-  habitats: ({ code: string; name: string; suitability?: string; major_importance?: boolean } | string)[] | null;
-  threat_classification: ({ code: string; name: string; timing?: string | null; scope?: string | null; severity?: string | null; score?: string | null; stresses?: string[] | null } | string)[] | null;
-  conservation_actions_classification: ({ code: string; name: string } | string)[] | null;
   systems: ({ code: string; description?: string } | string)[] | null;
   scopes: ({ code: string; description?: string } | string)[] | null;
-  supplementary_info: {
-    estimated_extent_of_occurence: string | null;
-    estimated_area_of_occupancy: string | null;
-    population_size: string | null;
-    number_of_locations: string | null;
-    no_of_subpopulations: string | null;
-    generational_length: string | null;
-    upper_elevation_limit: number | null;
-    lower_elevation_limit: number | null;
-    upper_depth_limit: number | null;
-    lower_depth_limit: number | null;
-    movement_patterns: string | null;
-    congregatory: string | null;
-    population_severely_fragmented: string | null;
-    population_continuing_decline: string | null;
-    continuing_decline_in_extent_of_occurence: string | null;
-    continuing_decline_in_area_of_occupancy: string | null;
-    continuing_decline_in_number_of_locations: string | null;
-  } | null;
   cached?: boolean;
   error?: string;
 }
@@ -108,27 +87,38 @@ function CategoryBadge({ code, small }: { code: string; small?: boolean }) {
   );
 }
 
-// Strip HTML tags from narrative text returned by IUCN API
-function stripHtml(html: string): string {
-  return html
-    .replace(/<br\s*\/?>/gi, "\n")
-    .replace(/<\/p>/gi, "\n\n")
-    .replace(/<[^>]+>/g, "")
-    .replace(/&amp;/g, "&")
-    .replace(/&lt;/g, "<")
-    .replace(/&gt;/g, ">")
-    .replace(/&quot;/g, '"')
-    .replace(/&#039;/g, "'")
-    .replace(/&nbsp;/g, " ")
-    .replace(/\n{3,}/g, "\n\n")
-    .trim();
-}
+// How much assessment narrative is shown inline, as one budget spent across
+// all seven sections in order — not per section. The assessments run long; past
+// this the IUCN Red List page has the full text, one click away.
+const NARRATIVE_WORD_LIMIT = 200;
 
-// Collapsible section for narrative text
-function NarrativeSection({ title, content }: { title: string; content: string }) {
+// The assessment's narrative fields, in display order.
+const NARRATIVE_FIELDS: {
+  title: string;
+  field: "rationale" | "population" | "habitat" | "threats" | "conservation_actions" | "use_trade" | "range";
+}[] = [
+  { title: "Rationale", field: "rationale" },
+  { title: "Population", field: "population" },
+  { title: "Habitat & Ecology", field: "habitat" },
+  { title: "Threats", field: "threats" },
+  { title: "Conservation Actions", field: "conservation_actions" },
+  { title: "Use & Trade", field: "use_trade" },
+  { title: "Geographic Range", field: "range" },
+];
+
+// Collapsible section for narrative text. The text arrives already capped;
+// `fullTextUrl` is passed only to the last section shown, where the narrative
+// stops, so the "read the full assessment" link appears once.
+function NarrativeSection({
+  title,
+  text,
+  fullTextUrl,
+}: {
+  title: string;
+  text: string;
+  fullTextUrl?: string;
+}) {
   const [expanded, setExpanded] = useState(true);
-  const text = stripHtml(content);
-  if (!text) return null;
 
   return (
     <div className="border-b border-zinc-100 dark:border-zinc-800 last:border-0">
@@ -148,6 +138,20 @@ function NarrativeSection({ title, content }: { title: string; content: string }
       {expanded && (
         <div className="pb-3 pl-5 text-sm text-zinc-600 dark:text-zinc-400 whitespace-pre-line leading-relaxed">
           {text}
+          {fullTextUrl && "\u2026"}
+          {fullTextUrl && (
+            <>
+              {" "}
+              <a
+                href={fullTextUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-blue-500 hover:underline whitespace-nowrap"
+              >
+                read the full assessment on the IUCN Red List ↗
+              </a>
+            </>
+          )}
         </div>
       )}
     </div>
@@ -563,121 +567,6 @@ export default function RedListAssessments({
   );
 }
 
-// Format large numbers with commas and optional unit
-function formatMetric(value: string | number | null, unit?: string): string | null {
-  if (value === null || value === undefined) return null;
-  const num = typeof value === "string" ? parseFloat(value) : value;
-  if (isNaN(num)) return String(value);
-  const formatted = num.toLocaleString("en", { maximumFractionDigits: 1 });
-  return unit ? `${formatted} ${unit}` : formatted;
-}
-
-// Compact grid showing key quantitative metrics from supplementary_info
-function SupplementaryMetrics({
-  info,
-}: {
-  info: AssessmentDetail["supplementary_info"];
-}) {
-  if (!info) return null;
-
-  // Build list of metrics to show (only non-null values)
-  const metrics: { label: string; value: string; declining?: boolean }[] = [];
-
-  if (info.estimated_extent_of_occurence) {
-    const v = formatMetric(info.estimated_extent_of_occurence, "km²");
-    if (v) metrics.push({
-      label: "EOO",
-      value: v,
-      declining: info.continuing_decline_in_extent_of_occurence === "Yes",
-    });
-  }
-  if (info.estimated_area_of_occupancy) {
-    const v = formatMetric(info.estimated_area_of_occupancy, "km²");
-    if (v) metrics.push({
-      label: "AOO",
-      value: v,
-      declining: info.continuing_decline_in_area_of_occupancy === "Yes",
-    });
-  }
-  if (info.population_size) {
-    const v = formatMetric(info.population_size);
-    if (v) metrics.push({
-      label: "Population",
-      value: v,
-      declining: info.population_continuing_decline === "Yes",
-    });
-  }
-  if (info.number_of_locations) {
-    const v = formatMetric(info.number_of_locations);
-    if (v) metrics.push({
-      label: "Locations",
-      value: v,
-      declining: info.continuing_decline_in_number_of_locations === "Yes",
-    });
-  }
-  if (info.no_of_subpopulations) {
-    metrics.push({ label: "Subpopulations", value: info.no_of_subpopulations });
-  }
-  if (info.generational_length) {
-    const v = formatMetric(info.generational_length, "yr");
-    if (v) metrics.push({ label: "Generation length", value: v });
-  }
-
-  // Elevation range
-  if (info.lower_elevation_limit != null || info.upper_elevation_limit != null) {
-    const lo = info.lower_elevation_limit;
-    const hi = info.upper_elevation_limit;
-    if (lo != null && hi != null) {
-      metrics.push({ label: "Elevation", value: `${lo.toLocaleString()}–${hi.toLocaleString()} m` });
-    } else if (hi != null) {
-      metrics.push({ label: "Elevation", value: `≤ ${hi.toLocaleString()} m` });
-    } else if (lo != null) {
-      metrics.push({ label: "Elevation", value: `≥ ${lo.toLocaleString()} m` });
-    }
-  }
-
-  // Depth range
-  if (info.lower_depth_limit != null || info.upper_depth_limit != null) {
-    const shallow = info.upper_depth_limit;
-    const deep = info.lower_depth_limit;
-    if (shallow != null && deep != null) {
-      metrics.push({ label: "Depth", value: `${shallow.toLocaleString()}–${deep.toLocaleString()} m` });
-    } else if (deep != null) {
-      metrics.push({ label: "Depth", value: `≤ ${deep.toLocaleString()} m` });
-    }
-  }
-
-  if (info.movement_patterns) {
-    metrics.push({ label: "Movement", value: info.movement_patterns });
-  }
-  if (info.congregatory) {
-    metrics.push({ label: "Congregatory", value: info.congregatory });
-  }
-  if (info.population_severely_fragmented === "Yes") {
-    metrics.push({ label: "Severely fragmented", value: "Yes" });
-  }
-
-  if (metrics.length === 0) return null;
-
-  return (
-    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-x-4 gap-y-2 py-2 px-3 bg-zinc-50 dark:bg-zinc-800/40 rounded-lg border border-zinc-100 dark:border-zinc-800">
-      {metrics.map((m, i) => (
-        <div key={i} className="min-w-0">
-          <div className="text-xs sm:text-[10px] uppercase tracking-wider text-zinc-400 truncate">
-            {m.label}
-          </div>
-          <div className="text-sm font-medium text-zinc-700 dark:text-zinc-300 truncate flex items-center gap-1">
-            {m.value}
-            {m.declining && (
-              <span className="text-red-500 text-xs" title="Continuing decline">↓</span>
-            )}
-          </div>
-        </div>
-      ))}
-    </div>
-  );
-}
-
 function AssessmentDetailView({
   detail,
   assessment,
@@ -687,6 +576,15 @@ function AssessmentDetailView({
 }) {
   const catCode = getCategoryCode(detail.red_list_category) !== "?" ? getCategoryCode(detail.red_list_category) : assessment.category;
   const trendText = getTrendText(detail.population_trend);
+  const assessmentUrl =
+    detail.url || `https://www.iucnredlist.org/species/${detail.sis_taxon_id}/${detail.assessment_id}`;
+  const { sections: narratives, truncated: narrativeCutShort } = truncateSections(
+    NARRATIVE_FIELDS.flatMap(({ title, field }) => {
+      const text = detail[field] ? stripHtml(detail[field] as string) : "";
+      return text ? [{ title, text }] : [];
+    }),
+    NARRATIVE_WORD_LIMIT
+  );
 
   return (
     <div className="space-y-3">
@@ -747,108 +645,24 @@ function AssessmentDetailView({
         </div>
       )}
 
-      {/* Key metrics grid */}
-      <SupplementaryMetrics info={detail.supplementary_info} />
-
       {/* Narrative sections */}
       <div className="border border-zinc-100 dark:border-zinc-800 rounded-lg overflow-hidden px-3 divide-y divide-zinc-100 dark:divide-zinc-800">
-        {detail.rationale && <NarrativeSection title="Rationale" content={detail.rationale} />}
-        {detail.population && <NarrativeSection title="Population" content={detail.population} />}
-        {detail.habitat && <NarrativeSection title="Habitat & Ecology" content={detail.habitat} />}
-        {detail.threats && <NarrativeSection title="Threats" content={detail.threats} />}
-        {detail.conservation_actions && <NarrativeSection title="Conservation Actions" content={detail.conservation_actions} />}
-        {detail.use_trade && <NarrativeSection title="Use & Trade" content={detail.use_trade} />}
-        {detail.range && <NarrativeSection title="Geographic Range" content={detail.range} />}
+        {narratives.map((n, i) => (
+          <NarrativeSection
+            key={n.title}
+            title={n.title}
+            text={n.text}
+            fullTextUrl={narrativeCutShort && i === narratives.length - 1 ? assessmentUrl : undefined}
+          />
+        ))}
       </div>
 
-      {/* Structured data: Habitats */}
-      {detail.habitats && detail.habitats.length > 0 && (
-        <div>
-          <h4 className="text-xs font-medium text-zinc-500 dark:text-zinc-400 mb-1">Habitats</h4>
-          <div className="flex flex-wrap gap-1">
-            {detail.habitats.map((h, i) => {
-              const name = typeof h === "string" ? h : h.name;
-              const title = typeof h === "string" ? h : `${h.name}${h.suitability ? ` (${h.suitability})` : ""}${h.major_importance ? " - Major importance" : ""}`;
-              const majorImportance = typeof h === "string" ? false : h.major_importance;
-              return (
-                <span
-                  key={i}
-                  className="text-xs px-2 py-0.5 rounded bg-green-50 dark:bg-green-900/20 text-green-700 dark:text-green-400"
-                  title={title}
-                >
-                  {name}
-                  {majorImportance && <span className="ml-0.5 opacity-60">*</span>}
-                </span>
-              );
-            })}
-          </div>
-        </div>
-      )}
-
-      {/* Structured data: Threats */}
-      {detail.threat_classification && detail.threat_classification.length > 0 && (
-        <div>
-          <h4 className="text-xs font-medium text-zinc-500 dark:text-zinc-400 mb-1">Threat Classification</h4>
-          <div className="flex flex-wrap gap-1">
-            {detail.threat_classification.map((t, i) => {
-              if (typeof t === "string") {
-                return (
-                  <span key={i} className="text-xs px-2 py-0.5 rounded bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-400">
-                    {t}
-                  </span>
-                );
-              }
-              const tooltipParts = [t.name];
-              if (t.timing) tooltipParts.push(`Timing: ${t.timing}`);
-              if (t.scope) tooltipParts.push(`Scope: ${t.scope}`);
-              if (t.severity) tooltipParts.push(`Severity: ${t.severity}`);
-              if (t.score) tooltipParts.push(`Impact: ${t.score}`);
-              if (t.stresses && t.stresses.length > 0) tooltipParts.push(`Stresses: ${t.stresses.join(", ")}`);
-              const isOngoing = t.timing?.toLowerCase().includes("ongoing");
-              const isSevere = t.severity?.toLowerCase().includes("rapid") || t.severity?.toLowerCase().includes("very rapid");
-              return (
-                <span
-                  key={i}
-                  className={`text-xs px-2 py-0.5 rounded ${
-                    isOngoing && isSevere
-                      ? "bg-red-100 dark:bg-red-900/40 text-red-800 dark:text-red-300 font-medium"
-                      : "bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-400"
-                  }`}
-                  title={tooltipParts.join("\n")}
-                >
-                  {t.code && <span className="opacity-50 mr-1">{t.code}</span>}
-                  {t.name}
-                  {t.timing && <span className="ml-1 opacity-50">({t.timing})</span>}
-                </span>
-              );
-            })}
-          </div>
-        </div>
-      )}
-
-      {/* Structured data: Conservation Actions */}
-      {detail.conservation_actions_classification && detail.conservation_actions_classification.length > 0 && (
-        <div>
-          <h4 className="text-xs font-medium text-zinc-500 dark:text-zinc-400 mb-1">Conservation Actions</h4>
-          <div className="flex flex-wrap gap-1">
-            {detail.conservation_actions_classification.map((c, i) => (
-              <span
-                key={i}
-                className="text-xs px-2 py-0.5 rounded bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-400"
-              >
-                {typeof c === "string" ? c : c.name}
-              </span>
-            ))}
-          </div>
-        </div>
-      )}
-
       {/* No narrative data message */}
-      {!detail.rationale && !detail.population && !detail.habitat && !detail.threats && !detail.conservation_actions && !detail.range && (
+      {narratives.length === 0 && (
         <div className="text-sm text-zinc-400 py-2 italic">
           No detailed narrative data available for this assessment. View the full assessment on{" "}
           <a
-            href={detail.url || `https://www.iucnredlist.org/species/${detail.sis_taxon_id}/${detail.assessment_id}`}
+            href={assessmentUrl}
             target="_blank"
             rel="noopener noreferrer"
             className="text-blue-500 hover:underline"
