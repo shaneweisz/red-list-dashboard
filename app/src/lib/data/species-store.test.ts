@@ -853,19 +853,19 @@ describe("getColRevisions", () => {
   });
 
   it("expands the accepted-name signal, including its boolean", () => {
-    // gm ships as 1 rather than true to keep the file small; a decoder that
-    // passed it through would put `genusMoved: 1` on the flag and silently send
+    // gd ships as 1 rather than true to keep the file small; a decoder that
+    // passed it through would put `genusDiffers: 1` on the flag and silently send
     // every genus transfer to the wrong bar.
-    const map = load({ species: { "7": { an: "Sibirenauta elongata", ac: "ABC12", gm: 1 } } });
+    const map = load({ species: { "7": { an: "Sibirenauta elongata", ac: "ABC12", gd: 1 } } });
     expect(map.get(7)).toEqual({
-      acceptedName: "Sibirenauta elongata", acceptedColId: "ABC12", genusMoved: true,
+      acceptedName: "Sibirenauta elongata", acceptedColId: "ABC12", genusDiffers: true,
     });
   });
 
-  it("leaves genusMoved off a plain rename rather than setting it false", () => {
+  it("leaves genusDiffers off a plain rename rather than setting it false", () => {
     const map = load({ species: { "8": { an: "Dalbergia emirnensis", ac: "XYZ99" } } });
     expect(map.get(8)).toEqual({ acceptedName: "Dalbergia emirnensis", acceptedColId: "XYZ99" });
-    expect("genusMoved" in map.get(8)!).toBe(false);
+    expect("genusDiffers" in map.get(8)!).toBe(false);
   });
 
   it("keeps a split name with no CoL record as plain text rather than a dead link", () => {

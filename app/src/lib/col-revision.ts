@@ -32,16 +32,19 @@
 export const SPLIT_REASON = "split";
 
 /**
- * The accepted-name pseudo-reasons, split by WHERE the difference is.
+ * The accepted-name pseudo-reasons, split by WHERE the difference falls.
  *
- * A genus transfer keeps the epithet and moves the species (Aplexa elongata ->
- * Sibirenauta elongata); it is the commonest kind by far, and the one most
- * likely to be CoL's opinion rather than a correction. Separating it lets a
- * reader who does not accept CoL's generic limits set those aside without
- * dismissing the rest, and keeps a single 10k bar off an axis whose next
- * largest is 4k.
+ * The commonest kind keeps the epithet and differs only in the genus (Aplexa
+ * elongata / Sibirenauta elongata). Separating it lets a reader who does not
+ * accept CoL's generic limits set those aside without dismissing the rest, and
+ * keeps a single 8k bar off an axis whose next largest is 4k.
+ *
+ * "differs", never "moved": a move has a direction, and we do not know it. IUCN
+ * has the newer treatment at least as often as CoL does — CoL accepts Bos bison
+ * for Bison bison, and Myodes glareolus for Clethrionomys glareolus. Naming the
+ * act would credit CoL with a revision that, in those cases, IUCN made first.
  */
-export const GENUS_MOVED_REASON = "genus_moved";
+export const GENUS_DIFFERS_REASON = "genus_differs";
 export const RENAMED_REASON = "renamed";
 
 /** Reason codes, in the order the filter chart lists them: most likely to
@@ -49,7 +52,7 @@ export const RENAMED_REASON = "renamed";
 export const REVISION_REASONS = [
   SPLIT_REASON,
   "lumped",
-  GENUS_MOVED_REASON,
+  GENUS_DIFFERS_REASON,
   RENAMED_REASON,
   "infraspecific",
   "unmatched",
@@ -92,7 +95,7 @@ export const REVISION_REASONS = [
 export const REVISION_BARS: readonly { key: string; label: string; reasons: readonly string[] }[] = [
   { key: SPLIT_REASON, label: "Split on CoL", reasons: [SPLIT_REASON] },
   { key: "lumped", label: "Lumped on CoL", reasons: ["lumped"] },
-  { key: GENUS_MOVED_REASON, label: "Moved genus on CoL", reasons: [GENUS_MOVED_REASON] },
+  { key: GENUS_DIFFERS_REASON, label: "Different genus on CoL", reasons: [GENUS_DIFFERS_REASON] },
   { key: RENAMED_REASON, label: "Different name on CoL", reasons: [RENAMED_REASON] },
   { key: "unmatched", label: "No CoL match", reasons: ["unmatched"] },
   { key: "infraspecific", label: "Below species on CoL", reasons: ["infraspecific"] },
@@ -223,13 +226,13 @@ export const REVISION_REASON_SHORT: Record<string, string> = {
   // outright, and "CoL's accepted name differs" is about CoL's accepted name.
   split: "Split on CoL",
   lumped: "Lumped on CoL",
-  // Split by WHERE the difference falls, because the two carry different weight.
-  // A genus transfer keeps the species and moves it; the label says the act, not
-  // a verdict. "Different name" is the residue where the epithet itself differs
-  // — deliberately NOT "Renamed", since most of these are synonymies onto
-  // another species (Dalbergia campenonii -> D. emirnensis), where nothing was
-  // renamed and something was merged.
-  genus_moved: "Moved genus on CoL",
+  // Split by WHERE the difference falls. Both say "different", not "moved" or
+  // "renamed": naming the act would pick a direction, and the direction is
+  // genuinely unknown — IUCN has the newer treatment at least as often. It also
+  // avoids a second trap: most of the epithet cases are synonymies onto another
+  // species (Dalbergia campenonii -> D. emirnensis), where nothing was renamed
+  // and something was merged.
+  genus_differs: "Different genus on CoL",
   renamed: "Different name on CoL",
   // Not "Renamed": two thirds are genus transfers, which a rename describes
   // well, but the rest are synonymies onto a different species (Dalbergia
@@ -274,7 +277,7 @@ export const REVISION_REASON_SHORT: Record<string, string> = {
  */
 export const REVISION_REASON_SUMMARY: Record<string, string> = {
   split: "Catalogue of Life says species have been split out of this one",
-  genus_moved: "Catalogue of Life's curated release places this species in a different genus",
+  genus_differs: "Catalogue of Life's curated release uses a different genus for this species",
   renamed: "Catalogue of Life's curated release accepts a different name for this species",
   lumped: "Catalogue of Life says this is one species with another assessment",
   synonym_of: "Catalogue of Life says it accepts a different name for this species",
@@ -341,8 +344,8 @@ export interface ColRevision {
   acceptedName?: string;
   /** That accepted record's CoL id, so the name can link to it. */
   acceptedColId?: string;
-  /** The difference is a genus transfer — same epithet, different genus. */
-  genusMoved?: boolean;
+  /** The difference is in the genus alone — same epithet, different genus. */
+  genusDiffers?: boolean;
 }
 
 /** Does this species carry any revision signal at all? */
@@ -372,7 +375,7 @@ export function revisionReasons(flag: ColRevision): string[] {
   // fallback such a flag would be flagged but sit in no bar, so nothing could
   // select it.
   if (flag.lumpedWith?.length || flag.reason === "lumped") out.push("lumped");
-  if (flag.acceptedName != null) out.push(flag.genusMoved ? GENUS_MOVED_REASON : RENAMED_REASON);
+  if (flag.acceptedName != null) out.push(flag.genusDiffers ? GENUS_DIFFERS_REASON : RENAMED_REASON);
   if (flag.reason != null && flag.reason !== "lumped") out.push(flag.reason);
   return out;
 }
@@ -702,12 +705,12 @@ export function acceptedNameSentence(
   const name = flag.acceptedName;
   if (subject == null) {
     // The SSC panel names the species in the column beside this one.
-    return flag.genusMoved
-      ? { before: `Placed by ${COL} in another genus, as `, detail: name, after: "" }
+    return flag.genusDiffers
+      ? { before: `${COL} uses another genus: `, detail: name, after: "" }
       : { before: `${COL} accepts `, detail: name, after: "" };
   }
-  return flag.genusMoved
-    ? { before: `${COL} places ${subject} in a different genus, accepting `, detail: name, after: " for it." }
+  return flag.genusDiffers
+    ? { before: `${COL} uses a different genus for ${subject}, accepting `, detail: name, after: "." }
     : { before: `${COL} accepts a different name for ${subject}: `, detail: name, after: "." };
 }
 

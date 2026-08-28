@@ -23,7 +23,7 @@ import {
   barTotal,
   visibleBars,
   acceptedNameSentence,
-  GENUS_MOVED_REASON,
+  GENUS_DIFFERS_REASON,
   RENAMED_REASON,
 } from "@/lib/col-revision";
 
@@ -32,7 +32,7 @@ import {
 // wording here would render as a bare snake_case code, which is what these catch.
 // Signals that sit alongside the no-match reasons as bars and filter values but
 // are NOT produced by classifyNoMatch, so noMatchSentence has no case for them.
-const PSEUDO_REASONS = new Set<string>([SPLIT_REASON, GENUS_MOVED_REASON, RENAMED_REASON]);
+const PSEUDO_REASONS = new Set<string>([SPLIT_REASON, GENUS_DIFFERS_REASON, RENAMED_REASON]);
 
 describe("revision vocabulary", () => {
   // Wording must cover the reasons the dashboard flags AND the ones it only
@@ -75,7 +75,12 @@ describe("revision vocabulary", () => {
   it("keeps every BAR LABEL on a single line", () => {
     // The bars sit on the 180px axis; reason labels are rendered by the SSC panel
     // in a table cell, which has room, so only bar labels are constrained.
-    expect(REVISION_BARS.filter((b) => b.label.length > 21)).toEqual([]);
+    //
+    // 22, not the 21 this started at: "Different genus on CoL" is 22 and was
+    // checked in a real browser at the real axis width, where it renders on one
+    // line. The cap exists to stop labels growing without anyone deciding to,
+    // so it sits at the longest label anyone has deliberately chosen.
+    expect(REVISION_BARS.filter((b) => b.label.length > 22)).toEqual([]);
   });
 
   it("draws every reason under exactly one bar", () => {
@@ -159,7 +164,7 @@ describe("UNFLAGGED_REASONS", () => {
 });
 
 describe("the accepted-name signal", () => {
-  const moved: ColRevision = { acceptedName: "Sibirenauta elongata", acceptedColId: "ABC12", genusMoved: true };
+  const moved: ColRevision = { acceptedName: "Sibirenauta elongata", acceptedColId: "ABC12", genusDiffers: true };
   const renamed: ColRevision = { acceptedName: "Dalbergia emirnensis", acceptedColId: "XYZ99" };
 
   it("flags a species whose ONLY signal is a different accepted name", () => {
@@ -170,7 +175,7 @@ describe("the accepted-name signal", () => {
   });
 
   it("routes each to its own bar", () => {
-    expect(revisionReasons(moved)).toEqual([GENUS_MOVED_REASON]);
+    expect(revisionReasons(moved)).toEqual([GENUS_DIFFERS_REASON]);
     expect(revisionReasons(renamed)).toEqual([RENAMED_REASON]);
     // A genus move and a plain rename must never both fire for one species.
     expect(revisionReasons(moved)).toHaveLength(1);

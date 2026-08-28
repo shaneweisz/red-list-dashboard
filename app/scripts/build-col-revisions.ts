@@ -41,7 +41,7 @@ import {
   type BreakdownQueryContext,
   type NoMatchDetail,
 } from "../src/lib/data/col-breakdown";
-import { SPLIT_REASON, UNFLAGGED_REASONS, GENUS_MOVED_REASON, RENAMED_REASON } from "../src/lib/col-revision";
+import { SPLIT_REASON, UNFLAGGED_REASONS, GENUS_DIFFERS_REASON, RENAMED_REASON } from "../src/lib/col-revision";
 import { normalisedKey, speciesNameParts, canonicalEpithet } from "./name-variants";
 
 // Keep in sync with build-taxa-summary.ts / species-duckdb.ts.
@@ -65,11 +65,11 @@ export interface ColRevisionsFile {
    *  lw = the OTHER IUCN assessments sharing this species' CoL record
    *  [name, its own synonym record, IUCN category], ln = CoL's accepted name for
    *  that shared record, an = the accepted name CoL's CURATED release uses for
-   *  this species when it differs, ac = that record's CoL id, gm = that
-   *  difference is a genus transfer (same epithet, different genus). */
+   *  this species when it differs, ac = that record's CoL id, gd = the
+   *  difference is in the genus alone (same epithet, different genus). */
   species: Record<string, { r?: string; d?: string; i?: number; dc?: string; c?: string; n?: string; k?: string;
     s?: [string, string, string, string][]; lw?: [string, string, string][]; ln?: string;
-    an?: string; ac?: string; gm?: 1 }>;
+    an?: string; ac?: string; gd?: 1 }>;
 }
 
 export async function run(): Promise<void> {
@@ -348,7 +348,7 @@ export async function run(): Promise<void> {
          AND lower(any_value(acc_name)) <> lower(any_value(iucn))
       ORDER BY id`)).getRowObjects();
 
-    let genusMoved = 0, renamed = 0, variantOnly = 0, alsoLumped = 0;
+    let genusDiffers = 0, renamed = 0, variantOnly = 0, alsoLumped = 0;
     for (const r of renameRows) {
       const iucn = String(r.name), acc = String(r.acc_name);
       if (normalisedKey(iucn) && normalisedKey(iucn) === normalisedKey(acc)) { variantOnly++; continue; }
@@ -376,14 +376,14 @@ export async function run(): Promise<void> {
       // provenance block, so the reader is told CoL disagrees and given no way
       // to check who said so.
       if (entry.c == null && r.acc_id != null) entry.c = String(r.acc_id);
-      if (isGenusMove) entry.gm = 1;
+      if (isGenusMove) entry.gd = 1;
       species[String(r.id)] = entry;
-      if (isGenusMove) genusMoved++; else renamed++;
+      if (isGenusMove) genusDiffers++; else renamed++;
     }
-    counts[GENUS_MOVED_REASON] = genusMoved;
+    counts[GENUS_DIFFERS_REASON] = genusDiffers;
     counts[RENAMED_REASON] = renamed;
-    console.log(`  CoL revisions: ${genusMoved + renamed} assessments have a different accepted name in the release ` +
-      `(${genusMoved} genus transfers, ${renamed} otherwise; ${variantOnly} excluded as termination variants, ` +
+    console.log(`  CoL revisions: ${genusDiffers + renamed} assessments have a different accepted name in the release ` +
+      `(${genusDiffers} differ in genus alone, ${renamed} in the epithet; ${variantOnly} excluded as termination variants, ` +
       `${alsoLumped} as already carried by the lump bar)`);
   }
 
