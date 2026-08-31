@@ -4704,11 +4704,17 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
 
             {/* Years Since Assessed / Year of Latest Assessment */}
             <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-3 flex flex-col">
-              <div className="flex flex-wrap items-center justify-between mb-1 gap-x-2 gap-y-1">
+              {/* The charts row is a fixed-width 3-up grid, so this header always has
+                  ~305px to work with, whatever the viewport. Title + Needs Updating +
+                  the view select came to ~341px, which wrapped the two controls onto
+                  a row of their own; the sizes below (and on both controls) are what
+                  fits them beside the title instead. It still wraps rather than
+                  overflowing if a platform's text runs wider than the ~6px to spare. */}
+              <div className="flex flex-wrap items-center justify-between mb-1 gap-x-1.5 gap-y-1">
                 <span className="text-sm font-semibold text-zinc-900 dark:text-zinc-100 whitespace-nowrap">
                   {yearsChartMode === "range" ? "Years Since Assessed" : "Year of Latest Assessment"}
                 </span>
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-1">
                   {/* Outdated shortcut: filter to species assessed >10 years ago (mirrors the Threatened button).
                       Range-view only — the Year view's muting is only year-granular, so the button's precise
                       cutoff date doesn't line up as cleanly there. */}
@@ -4716,7 +4722,7 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
                     <button
                       type="button"
                       onClick={handleOutdatedClick}
-                      className={`px-2 py-0.5 text-xs font-semibold rounded transition-colors ${
+                      className={`px-1 py-0.5 text-[11px] font-semibold rounded transition-colors ${
                         isOutdatedSelected
                           ? "bg-red-600 text-white shadow-sm"
                           : "bg-zinc-100 dark:bg-zinc-800 text-zinc-500 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-300"
@@ -4765,15 +4771,25 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
                     );
                   })()}
                   {!(isSingleSpecies && singleSpecies) && (
-                    <select
-                      value={yearsChartMode}
-                      onChange={(e) => changeYearsChartMode(e.target.value as "range" | "year")}
-                      aria-label="Year chart view"
-                      className="text-xs font-semibold bg-zinc-100 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-md px-1.5 py-0.5 text-zinc-700 dark:text-zinc-300 focus:outline-none focus:ring-1 focus:ring-blue-500 cursor-pointer"
-                    >
-                      <option value="range">Range</option>
-                      <option value="year">Year</option>
-                    </select>
+                    // appearance-none + our own chevron: a native select reserves a
+                    // chunk of width for the platform's own arrow (wider still on
+                    // macOS) that no amount of padding reclaims. The chevron is an SVG
+                    // rather than a "▾" glyph so its width doesn't vary by platform
+                    // font either — see the header's note on how little room there is.
+                    <div className="relative">
+                      <select
+                        value={yearsChartMode}
+                        onChange={(e) => changeYearsChartMode(e.target.value as "range" | "year")}
+                        aria-label="Year chart view"
+                        className="appearance-none text-[11px] font-semibold bg-zinc-100 dark:bg-zinc-800 rounded-md pl-1 pr-3 py-0.5 text-zinc-700 dark:text-zinc-300 focus:outline-none focus:ring-1 focus:ring-blue-500 cursor-pointer"
+                      >
+                        <option value="range">Range</option>
+                        <option value="year">Year</option>
+                      </select>
+                      <svg aria-hidden className="pointer-events-none absolute right-0.5 top-1/2 -translate-y-1/2 w-2 h-2 text-zinc-500 dark:text-zinc-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={3} strokeLinecap="round" strokeLinejoin="round">
+                        <polyline points="6 9 12 15 18 9" />
+                      </svg>
+                    </div>
                   )}
                 </div>
               </div>
