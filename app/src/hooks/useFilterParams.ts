@@ -25,6 +25,16 @@ export type ViewMode = "reassessments" | "new-assessments";
 // navigateToTaxonSubgroup below) or a country (see enterCountryDrilldown).
 export type LayoutMode = "table1a" | "ssc" | "country" | null;
 
+/**
+ * Values the species detail panel's `?tab=` can take.
+ *
+ * "assessors" and "reviewers" are legacy aliases: the two Suggested tabs merged
+ * into one ("candidates") with a credit-line toggle, and links predating that
+ * still name them. They stay accepted here and are mapped — with the role they
+ * asked for preselected — by RedListView's visibleTab/roleFromLegacyTab.
+ */
+export type DetailTabParam = "gbif" | "literature" | "redlist" | "wikipedia" | "cites" | "candidates" | "assessors" | "reviewers" | "col" | "eol";
+
 // WorldMap's own Map/List toggle and the list view's column sort — URL-synced
 // (distinct from sortField/sortDirection above, which sort the species table)
 // so a list-view sort like "most outdated plants" is a shareable link.
@@ -344,7 +354,7 @@ export function parseParams(search: string, suffix: string = "") {
     // The row key, namespaced (`sis-…`/`col-…`). parseSpeciesParam also accepts the
     // pre-namespace bare-number form so existing links keep working — see its doc.
     species: speciesKey,
-    tab: (p.get(k("tab")) || null) as "gbif" | "literature" | "redlist" | "wikipedia" | "cites" | "assessors" | "reviewers" | "col" | "eol" | null,
+    tab: (p.get(k("tab")) || null) as DetailTabParam | null,
   };
 }
 
@@ -397,7 +407,7 @@ export function buildQs(state: {
   mapSortKey?: MapSortKey;
   mapSortDirection?: "asc" | "desc";
   species: string | null;
-  tab: "gbif" | "literature" | "redlist" | "wikipedia" | "cites" | "assessors" | "reviewers" | "col" | "eol" | null;
+  tab: DetailTabParam | null;
 }, suffix: string = ""): string {
   const p = new URLSearchParams();
   const k = (name: string) => paramKey(name, suffix);
@@ -1087,7 +1097,7 @@ export function useFilterParams(paramSuffix: string = "") {
   );
 
   const setSpeciesParam = useCallback(
-    (species: string | null, tab: "gbif" | "literature" | "redlist" | "wikipedia" | "cites" | "assessors" | "reviewers" | "col" | "eol" = "gbif") => {
+    (species: string | null, tab: DetailTabParam = "gbif") => {
       setState(prev => {
         const next = { ...prev, species, tab: species != null ? tab : null };
         queueMicrotask(() => syncUrl(next, true));
@@ -1098,7 +1108,7 @@ export function useFilterParams(paramSuffix: string = "") {
   );
 
   const setTabParam = useCallback(
-    (tab: "gbif" | "literature" | "redlist" | "wikipedia" | "cites" | "assessors" | "reviewers" | "col" | "eol") => {
+    (tab: DetailTabParam) => {
       setState(prev => {
         if (prev.species == null) return prev; // no species selected, nothing to update
         const next = { ...prev, tab };

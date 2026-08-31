@@ -4,7 +4,7 @@ import { useState, useEffect, useMemo } from "react";
 import { countriesToRegions, regionColor, countryToRegion } from "@/lib/regions";
 import { ALPHA2_TO_NAME } from "@/lib/countries";
 import { candidateScopeToken } from "@/lib/candidate-scope";
-import type { CandidateRank, CandidateTier, CreditCandidate, CreditRole } from "@/lib/data/species-store";
+import { CREDIT_ROLES, type CandidateRank, type CandidateTier, type CreditCandidate, type CreditRole } from "@/lib/credit-candidates";
 
 interface CandidatesResponse {
   candidates: CreditCandidate[];
@@ -14,8 +14,10 @@ interface CandidatesResponse {
 }
 
 interface CandidatesTableProps {
-  /** Which credit line to rank people by — drives the copy and the endpoint. */
+  /** Which credit line to rank people by — drives the copy and the query. */
   role: CreditRole;
+  /** Controlled by the parent so the choice persists across species. */
+  onRoleChange: (role: CreditRole) => void;
   /** The Not-Evaluated species suggestions are being made for. */
   species: {
     taxonGroup: string;
@@ -31,16 +33,17 @@ type SortField = "inRegion" | "total";
 
 const PAGE_SIZE = 10;
 
-const COPY = {
-  assessors: { noun: "Assessor", verb: "Assessed", none: "No assessor candidates found", failed: "Failed to load assessor candidates" },
-  reviewers: { noun: "Reviewer", verb: "Reviewed", none: "No reviewer candidates found", failed: "Failed to load reviewer candidates" },
-} as const;
+const COPY: Record<CreditRole, { label: string; noun: string; verb: string; past: string; none: string; failed: string }> = {
+  assessors: { label: "Assessors", noun: "Assessor", verb: "Assessed", past: "assessed", none: "No assessor candidates found", failed: "Failed to load assessor candidates" },
+  reviewers: { label: "Reviewers", noun: "Reviewer", verb: "Reviewed", past: "reviewed", none: "No reviewer candidates found", failed: "Failed to load reviewer candidates" },
+  facilitators: { label: "Facilitators", noun: "Facilitator", verb: "Facilitated", past: "facilitated", none: "No facilitator candidates found", failed: "Failed to load facilitator candidates" },
+};
 
 const RANK_TITLE: Record<CandidateRank, string> = {
   group: "Whole taxon group", class: "Class", order: "Order", family: "Family", genus: "Genus",
 };
 
-export default function CandidatesTable({ role, species }: CandidatesTableProps) {
+export default function CandidatesTable({ role, onRoleChange, species }: CandidatesTableProps) {
   const [data, setData] = useState<CandidatesResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -77,8 +80,8 @@ export default function CandidatesTable({ role, species }: CandidatesTableProps)
     if (species.orderName) params.set("order", species.orderName);
     if (species.family) params.set("family", species.family);
 
-    const endpoint = role === "assessors" ? "assessor-candidates-by-country" : "reviewer-candidates-by-country";
-    fetch(`/api/redlist/${endpoint}?${params}`, { signal: controller.signal })
+    params.set("role", role);
+    fetch(`/api/redlist/credit-candidates?${params}`, { signal: controller.signal })
       .then(async (res) => {
         if (!res.ok) {
           const body = await res.json().catch(() => ({}));
@@ -147,31 +150,52 @@ export default function CandidatesTable({ role, species }: CandidatesTableProps)
     </div>
   ) : null;
 
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center p-8">
-        <svg className="w-5 h-5 animate-spin text-zinc-400" fill="none" viewBox="0 0 24 24">
-          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
-        </svg>
+  // Credit-line picker, styled like the Assessors/Reviewers/Facilitators toggle on
+  // the filter chart so the two read as the same control. Rendered OUTSIDE the
+  // loading/error/empty branches below: a role with no candidates must still offer
+  // the way back to one that has some.
+  const rolePicker = (
+    <div className="flex flex-wrap items-center gap-2 mb-2">
+      <div className="inline-flex rounded-md bg-zinc-100 dark:bg-zinc-800 p-0.5 shrink-0">
+        {CREDIT_ROLES.map((r) => (
+          <button
+            key={r}
+            onClick={() => onRoleChange(r)}
+            className={`px-2 py-0.5 text-xs font-semibold rounded transition-colors ${
+              r === role
+                ? "bg-white dark:bg-zinc-700 text-zinc-900 dark:text-zinc-100 shadow-sm"
+                : "text-zinc-500 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-300"
+            }`}
+          >
+            {COPY[r].label}
+          </button>
+        ))}
       </div>
-    );
-  }
+      {role === "facilitators" && (
+        <span className="text-[11px] text-zinc-400 dark:text-zinc-500">
+          The people behind an organisational assessor — every bird assessment is credited to BirdLife International.
+        </span>
+      )}
+    </div>
+  );
 
-  if (error) {
-    return <div className="text-sm text-red-500 p-4">{copy.failed}</div>;
-  }
-
-  if (!data || data.candidates.length === 0) {
-    return <div className="text-sm text-zinc-400 italic p-4">{copy.none}</div>;
-  }
-
-  return (
-    <div className="px-4 pb-3 pt-1">
+  const body = loading ? (
+    <div className="flex items-center justify-center p-8">
+      <svg className="w-5 h-5 animate-spin text-zinc-400" fill="none" viewBox="0 0 24 24">
+        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+      </svg>
+    </div>
+  ) : error ? (
+    <div className="text-sm text-red-500 py-3">{copy.failed}</div>
+  ) : !data || data.candidates.length === 0 ? (
+    <div className="text-sm text-zinc-400 italic py-3">{copy.none}</div>
+  ) : (
+    <>
       {rankPicker}
       {sorted.length === 0 ? (
         <div className="text-sm text-zinc-400 italic py-3">
-          Nobody has {role === "assessors" ? "assessed" : "reviewed"} a species in {label} yet — try a broader group above.
+          Nobody has {copy.past} a species in {label} yet — try a broader group above.
         </div>
       ) : (
       <table className="w-full text-xs">
@@ -275,6 +299,13 @@ export default function CandidatesTable({ role, species }: CandidatesTableProps)
           </button>
         </div>
       )}
+    </>
+  );
+
+  return (
+    <div className="px-4 pb-3 pt-1">
+      {rolePicker}
+      {body}
     </div>
   );
 }

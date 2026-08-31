@@ -33,6 +33,8 @@ export type ViewPreferenceKey =
   | "yearsChartMode"
   /** Credit chart tab: assessors | reviewers | facilitators. */
   | "creditChartMode"
+  /** Suggested Experts tab: assessors | reviewers | facilitators. */
+  | "candidateRole"
   /** Country card: "map" vs "list". */
   | "countryViewMode";
 

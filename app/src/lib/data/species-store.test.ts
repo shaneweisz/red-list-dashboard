@@ -12,7 +12,8 @@ vi.mock("./csv", () => ({
 
 import * as fs from "fs";
 import { readCsv } from "./csv";
-import { getCreditCandidates, getColRevisions, _resetCaches, type CandidateRank } from "./species-store";
+import { getCreditCandidates, getColRevisions, _resetCaches } from "./species-store";
+import type { CandidateRank } from "@/lib/credit-candidates";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -41,6 +42,8 @@ interface TestAssessment {
   date: string | null;
   assessors: string | null;
   reviewers: string | null;
+  /** Optional in the files too — see PreviousAssessment. */
+  facilitators?: string | null;
 }
 
 type HistoryMap = Record<string, TestAssessment[]>;
@@ -300,17 +303,52 @@ describe("getCreditCandidates", () => {
 
   // ── roles ─────────────────────────────────────────────────────────────────
 
-  it("ranks reviewers off the reviewers column, not the assessors one", () => {
+  it("reads each role off its own credit column", () => {
     const group = uniqueGroup();
     const row = makeRow({ countries: ["ZA"], scientific_name: "Panthera pardus" });
     setup([row], {
       [String(row.sis_taxon_id)]: [
-        { id: 1, year: "2020", category: "LC", date: "2020-01-01", assessors: "Dr. Assessor", reviewers: "Dr. Reviewer" },
+        { id: 1, year: "2020", category: "LC", date: "2020-01-01", assessors: "Dr. Assessor", reviewers: "Dr. Reviewer", facilitators: "Dr. Facilitator" },
       ],
     });
 
     expect(getCreditCandidates("assessors", target(group), ["ZA"]).candidates.map((c) => c.name)).toEqual(["Dr. Assessor"]);
     expect(getCreditCandidates("reviewers", target(group), ["ZA"]).candidates.map((c) => c.name)).toEqual(["Dr. Reviewer"]);
+    expect(getCreditCandidates("facilitators", target(group), ["ZA"]).candidates.map((c) => c.name)).toEqual(["Dr. Facilitator"]);
+  });
+
+  // The facilitator line is the whole point for organisationally-assessed groups:
+  // every bird assessment credits "BirdLife International" as the assessor, so
+  // only this role can name a person.
+  it("tiers facilitators by lineage like any other role", () => {
+    const group = uniqueGroup();
+    const sameFamily = makeRow({ countries: ["ZA"], scientific_name: "Acinonyx jubatus", family: "Felidae" });
+    const sameOrder = makeRow({ countries: ["ZA"], scientific_name: "Canis mesomelas", family: "Canidae" });
+    setup([sameFamily, sameOrder], {
+      [String(sameFamily.sis_taxon_id)]: [
+        { id: 1, year: "2020", category: "LC", date: "2020-01-01", assessors: "BirdLife International", reviewers: null, facilitators: "Symes, A." },
+      ],
+      [String(sameOrder.sis_taxon_id)]: [
+        { id: 2, year: "2019", category: "LC", date: "2019-01-01", assessors: "BirdLife International", reviewers: null, facilitators: "Symes, A." },
+      ],
+    });
+
+    const tiers = getCreditCandidates("facilitators", target(group), ["ZA"]).candidates[0].tiers;
+    expect(tiers.family?.total).toBe(1);
+    expect(tiers.order?.total).toBe(2);
+  });
+
+  it("returns no facilitators when the history predates the field", () => {
+    const group = uniqueGroup();
+    const row = makeRow({ countries: ["ZA"], scientific_name: "Panthera pardus" });
+    // History JSON written before fetch-redlist-species emitted facilitators has
+    // no such key at all — that must read as "nobody", never throw.
+    setup([row], {
+      [String(row.sis_taxon_id)]: [
+        { id: 1, year: "2020", category: "LC", date: "2020-01-01", assessors: "Dr. Assessor", reviewers: null },
+      ],
+    });
+    expect(getCreditCandidates("facilitators", target(group), ["ZA"]).candidates).toEqual([]);
   });
 
   it("returns no reviewers when species carry assessors only", () => {
