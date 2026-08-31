@@ -66,6 +66,14 @@ export function browseInputToDashboardQuery(input: BrowseInput): string {
   applySharedFilters(input, criteria);
   emitSharedParams(criteria, p);
 
+  // The dashboard's Threats chart defaults to a threatened-only (CR/EN/VU) scope,
+  // which also narrows a threat SELECTION (see RedListView's matchesThreatFilter).
+  // /browse and MCP have no such scope — `threats` there is a plain code match over
+  // every species — so a link carrying threats has to opt out of it explicitly, or
+  // the dashboard would silently show a smaller set than the answer it links from.
+  // Someone who wants the reliable-only view flips the card's dropdown themselves.
+  if (p.get("threats")) p.set("threatsScope", "all");
+
   // Countries + region (region expands to its country set — lossless).
   const countries = new Set<string>([
     ...resolveCountries(arr(input.countries)).codes,
