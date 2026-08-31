@@ -4003,7 +4003,7 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
             {threatsScopeMenuOpen && (
               <div className="absolute right-0 top-full mt-1 z-20 bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-lg shadow-lg py-1 w-72">
                 {([
-                  { value: "threatened" as const, label: "Threatened only", hint: "CR, EN and VU assessments — IUCN advises threat coding is only reliable for these" },
+                  { value: "threatened" as const, label: "Threatened only", hint: "Critically Endangered, Endangered and Vulnerable assessments" },
                   { value: "all" as const, label: "All species", hint: "Also count threats coded on non-threatened assessments" },
                 ]).map(({ value, label, hint }) => (
                   <label
