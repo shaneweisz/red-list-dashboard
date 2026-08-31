@@ -16,7 +16,7 @@
 // before initialization").
 import { taxaUrlToken, stripNodePrefix } from "@/lib/taxonomy-utils";
 import { rankOrderFor, buildDynamicNodeId, type DynamicRank } from "@/lib/dynamic-taxon";
-import type { CandidateRank } from "@/lib/data/species-store";
+import type { CandidateRank } from "@/lib/credit-candidates";
 
 export type ScopeLineage = Partial<Record<DynamicRank, string | null | undefined>>;
 

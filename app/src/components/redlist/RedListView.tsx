@@ -29,13 +29,16 @@ import { useSpeciesCache } from "@/contexts/SpeciesCacheContext";
 import { isOutdated, outdatedCutoffDate } from "@/lib/outdated";
 
 import CandidatesTable from "../CandidatesTable";
+import { CREDIT_ROLES, type CreditRole } from "@/lib/credit-candidates";
 import { getLastSearchResult, clearLastSearchResult, type SearchResult } from "../SpeciesSearchBar";
 import { migratePinnedSpecies } from "@/lib/species-row-key";
 
 // Species list is served by the DuckDB/Parquet-backed /api/redlist/species route.
 const SPECIES_API = "/api/redlist/species";
 
-type DetailTab = "gbif" | "literature" | "redlist" | "wikipedia" | "cites" | "assessors" | "reviewers" | "col" | "eol";
+type DetailTab = "gbif" | "literature" | "redlist" | "wikipedia" | "cites" | "candidates" | "col" | "eol";
+/** Tab names that appear in shared links but are no longer tabs of their own. */
+type LegacyDetailTab = DetailTab | "assessors" | "reviewers";
 
 // Encyclopedia of Life tab is hidden for now. The tab, its panel and the
 // /api/eol routes are all still here — flip this back to true to bring it back.
@@ -43,10 +46,19 @@ const SHOW_EOL_TAB = false;
 
 // A ?tab=eol link (or a stale one) shouldn't strand the user on a tab with no
 // button in the bar, so fall back to the default tab while EoL is hidden.
-function visibleTab(tab: DetailTab | null | undefined): DetailTab {
+function visibleTab(tab: LegacyDetailTab | null | undefined): DetailTab {
   if (!tab) return "gbif";
+  // The Suggested Assessors and Suggested Reviewers tabs merged into one tab with
+  // a credit-line toggle; a link naming either still opens it (on that role — see
+  // roleFromLegacyTab).
+  if (tab === "assessors" || tab === "reviewers") return "candidates";
   if (tab === "eol" && !SHOW_EOL_TAB) return "gbif";
   return tab;
+}
+
+/** The credit line a legacy ?tab= asked for, so such a link lands where it meant to. */
+function roleFromLegacyTab(tab: LegacyDetailTab | null | undefined): CreditRole | null {
+  return tab === "assessors" || tab === "reviewers" ? tab : null;
 }
 
 // Dynamically import OccurrenceMapRow to avoid SSR issues with Leaflet
@@ -1492,6 +1504,40 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
   const changeCreditChartMode = useCallback((mode: CreditChartMode) => {
     setAssessorReviewerMode(mode);
     writeViewPreference("creditChartMode", mode);
+  }, []);
+
+  // Which credit line the Suggested Experts tab ranks. Remembered like the chart
+  // toggle above (someone at BirdLife wants Facilitators every session), but under
+  // its own key: the two are different surfaces and picking one shouldn't move the
+  // other. A legacy ?tab=assessors/reviewers link names a role explicitly, and an
+  // explicit choice in the URL beats the remembered one — so it wins the race with
+  // the restore effect by seeding the initial state.
+  const roleFromUrlRef = useRef(false);
+  const storedRoleAppliedRef = useRef(false);
+  const [candidateRole, setCandidateRole] = useState<CreditRole>("assessors");
+  useEffect(() => {
+    // A legacy ?tab=assessors/reviewers link names a role explicitly, and an
+    // explicit choice in the URL beats the remembered one. It arrives LATE:
+    // useFilterParams hydrates from window.location in its own mount effect, so
+    // urlTab is still null on the first pass through here — which is why this
+    // latches when the role turns up rather than reading it once at mount.
+    // Opening the tab then rewrites ?tab= to "candidates", and that must not undo
+    // it either: without the latch, a ?tab=reviewers link opened on Facilitators
+    // for anyone whose remembered choice was Facilitators.
+    const legacy = roleFromLegacyTab(urlTab);
+    if (legacy) {
+      roleFromUrlRef.current = true;
+      setCandidateRole(legacy);
+      return;
+    }
+    if (roleFromUrlRef.current || storedRoleAppliedRef.current) return;
+    storedRoleAppliedRef.current = true;
+    const stored = readViewPreference("candidateRole", CREDIT_ROLES);
+    if (stored) setCandidateRole(stored);
+  }, [urlTab]);
+  const changeCandidateRole = useCallback((role: CreditRole) => {
+    setCandidateRole(role);
+    writeViewPreference("candidateRole", role);
   }, []);
 
   // Map/List is URL state (mapview=), so the stored preference applies only
@@ -6207,18 +6253,10 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
                                 </button>
                                 {s.category === "NE" && (
                                   <button
-                                    className={`shrink-0 px-2 sm:px-4 py-2 text-sm font-medium whitespace-nowrap transition-colors ${activeDetailTab === "assessors" ? "text-blue-600 dark:text-blue-400 border-b-2 border-blue-600 dark:border-blue-400" : "text-zinc-500 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-300"}`}
-                                    onClick={() => setActiveDetailTab("assessors")}
+                                    className={`shrink-0 px-2 sm:px-4 py-2 text-sm font-medium whitespace-nowrap transition-colors ${activeDetailTab === "candidates" ? "text-blue-600 dark:text-blue-400 border-b-2 border-blue-600 dark:border-blue-400" : "text-zinc-500 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-300"}`}
+                                    onClick={() => setActiveDetailTab("candidates")}
                                   >
-                                    Suggested Assessors
-                                  </button>
-                                )}
-                                {s.category === "NE" && (
-                                  <button
-                                    className={`shrink-0 px-2 sm:px-4 py-2 text-sm font-medium whitespace-nowrap transition-colors ${activeDetailTab === "reviewers" ? "text-blue-600 dark:text-blue-400 border-b-2 border-blue-600 dark:border-blue-400" : "text-zinc-500 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-300"}`}
-                                    onClick={() => setActiveDetailTab("reviewers")}
-                                  >
-                                    Suggested Reviewers
+                                    Suggested Experts
                                   </button>
                                 )}
                           </div>
@@ -6332,14 +6370,9 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
                             <CitesSummary scientificName={s.scientific_name} />
                           </div>
                           )}
-                          {s.category === "NE" && (visitedTabs.has("assessors")) && (
-                            <div style={{ display: activeDetailTab === "assessors" ? undefined : "none" }}>
-                              <CandidatesTable role="assessors" species={candidateSpecies} />
-                            </div>
-                          )}
-                          {s.category === "NE" && (visitedTabs.has("reviewers")) && (
-                            <div style={{ display: activeDetailTab === "reviewers" ? undefined : "none" }}>
-                              <CandidatesTable role="reviewers" species={candidateSpecies} />
+                          {s.category === "NE" && (visitedTabs.has("candidates")) && (
+                            <div style={{ display: activeDetailTab === "candidates" ? undefined : "none" }}>
+                              <CandidatesTable role={candidateRole} onRoleChange={changeCandidateRole} species={candidateSpecies} />
                             </div>
                           )}
                           </div>

@@ -11,6 +11,11 @@ import { readCsv } from "./csv";
 import { countryToRegion } from "../regions";
 import type { ColRevision } from "../col-revision";
 import type { NoMatchReason, NoMatchDetail } from "./col-breakdown";
+import {
+  CANDIDATE_RANKS,
+  type CandidateRank, type CandidateResult, type CandidateTier,
+  type CreditCandidate, type CreditRole, type TargetLineage,
+} from "@/lib/credit-candidates";
 
 // =============================================================================
 // PATHS
@@ -59,6 +64,17 @@ export interface PreviousAssessment {
   date: string | null;
   assessors: string | null;
   reviewers: string | null;
+  /**
+   * The individuals behind an organisational assessor — every bird assessment
+   * credits "BirdLife International", so the assessor line can't identify a
+   * person and the facilitator line is the only one that can.
+   *
+   * Optional because it is optional in the FILES, not just the type: history
+   * JSON written before fetch-redlist-species started emitting the field has no
+   * such key (same story as `criteria` — see build-parquet.ts, which reads these
+   * same files and coalesces both).
+   */
+  facilitators?: string | null;
 }
 
 export interface TaxaSummaryRow {
@@ -263,64 +279,12 @@ export function getColRevisions(): Map<number, ColRevision> {
 // SUGGESTED ASSESSOR / REVIEWER CANDIDATES
 // =============================================================================
 
-/** Which credit line a candidate ranking is taken over. */
-export type CreditRole = "assessors" | "reviewers";
-
-/**
- * Granularities a candidate ranking can be taken at, broadest first.
- *
- * "group" is the target species' own IUCN Table 1a taxon group (Mammals, Corals,
- * Flowering Plants, …) — one CSV, and the scope the tab had before this. The rest
- * come from the TARGET SPECIES' own lineage, not from whatever taxon the dashboard
- * happens to have selected: "family" means "this species' family". That's what
- * makes the ranking answer the question the tab is actually asked — who already
- * works on things like this animal — and it's why the scope no longer depends on
- * the selected node at all (which live drilldown had quietly broken; see #499).
- */
-export const CANDIDATE_RANKS = ["group", "class", "order", "family", "genus"] as const;
-export type CandidateRank = (typeof CANDIDATE_RANKS)[number];
-
-/** The target (Not-Evaluated) species the ranking is being built for. */
-export interface TargetLineage {
-  /** Table 1a taxon group — the CSV scanned, and the broadest rank offered. */
-  taxonGroup: string;
-  /** Genus is its first word; the Red List CSVs carry no genus column. */
-  scientificName?: string | null;
-  className?: string | null;
-  orderName?: string | null;
-  family?: string | null;
-}
-
-export interface CandidateTier {
-  /** Species this person is credited on within the rank, countries ignored. */
-  total: number;
-  /** …of which share at least one country with the target species. */
-  inRegion: number;
-  /** Per-region / per-country species counts, over the `inRegion` species. */
-  regionCounts: Record<string, number>;
-  countryCounts: Record<string, number>;
-  /**
-   * Most recent assessment THIS PERSON is credited on within the rank — not the
-   * species' own latest assessment date, which is what the by-country query used
-   * to report: a 2009 assessor of a species reassessed by someone else in 2023
-   * was shown as having last worked on it in 2023.
-   */
-  latestDate: string;
-}
-
-export interface CreditCandidate {
-  name: string;
-  /** Only the ranks this person actually has species in. */
-  tiers: Partial<Record<CandidateRank, CandidateTier>>;
-}
-
-export interface CandidateResult {
-  candidates: CreditCandidate[];
-  /** Ranks worth offering for this species, broadest first. */
-  ranks: CandidateRank[];
-  /** Deepest offered rank with enough candidates to open on. */
-  defaultRank: CandidateRank;
-}
+// Vocabulary and result shapes live in lib/credit-candidates.ts, which the client
+// imports as values too (this module reaches for `fs` and can't be bundled there).
+// Re-exported so callers that want both the query and its types have one import.
+export type {
+  CreditRole, CandidateRank, TargetLineage, CandidateTier, CreditCandidate, CandidateResult,
+} from "@/lib/credit-candidates";
 
 /** Below this many candidates a rank is too thin to open on (but still offered). */
 const MIN_CANDIDATES_FOR_DEFAULT = 3;
@@ -409,15 +373,20 @@ export function getCreditCandidates(
       year: row.year_published,
       category: row.category,
       date: row.assessment_date,
+      // The per-group CSV carries no credit columns at all, so a species with no
+      // history file contributes nobody, whichever role is asked for.
       assessors: null as string | null,
       reviewers: null as string | null,
+      facilitators: null as string | null,
     }];
 
     // Credit each person once per species, dated by the most recent assessment
     // OF THIS SPECIES that person is actually on.
     const dateByName = new Map<string, string>();
     for (const assessment of allAssessments) {
-      const credited = role === "assessors" ? assessment.assessors : assessment.reviewers;
+      const credited = role === "assessors" ? assessment.assessors
+        : role === "reviewers" ? assessment.reviewers
+        : assessment.facilitators ?? null;
       if (!credited) continue;
       const date = assessment.date ?? "";
       for (const name of parseAssessorNames(credited)) {

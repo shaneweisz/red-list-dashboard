@@ -1,17 +1,21 @@
 /**
- * Shared handler behind /api/redlist/{assessor,reviewer}-candidates-by-country.
+ * GET /api/redlist/credit-candidates — who could assess, review or facilitate a
+ * Not-Evaluated species, ranked at every taxonomic granularity at once.
  *
- * The two routes differ only in which credit line they rank people by, so they
- * both delegate here. Scope comes from the TARGET SPECIES' own lineage (its taxon
- * group, class, order, family, genus) rather than from the dashboard's selected
- * taxon — see getCreditCandidates. That is what lets the response carry a ranking
- * at every granularity at once, and it is also why the selected node (which live
- * drilldown could make an id the static tree has no entry for) no longer figures
- * in this query at all.
+ * One endpoint for all three credit lines (`role=`), replacing the two
+ * near-identical {assessor,reviewer}-candidates-by-country routes: they differed
+ * only in which column they read, and facilitators would have made a third copy.
+ *
+ * Scope comes from the TARGET SPECIES' own lineage (its taxon group, class, order,
+ * family, genus) rather than from the dashboard's selected taxon — see
+ * getCreditCandidates. That is what lets one response carry a ranking at every
+ * granularity, and why the selected node (which live drilldown could make an id
+ * the static tree has no entry for) does not figure in this query at all.
  */
 
 import { NextRequest, NextResponse } from "next/server";
-import { getCreditCandidates, type CreditRole, type CandidateRank } from "@/lib/data/species-store";
+import { getCreditCandidates } from "@/lib/data/species-store";
+import { CREDIT_ROLES, type CreditRole, type CandidateRank } from "@/lib/credit-candidates";
 import { findNode } from "@/lib/taxonomy-utils";
 import { buildDynamicNodeId, dynamicNodeDisplayName } from "@/lib/dynamic-taxon";
 import { ensureVernacularNamesLoaded } from "@/lib/data/vernacular-names";
@@ -52,14 +56,25 @@ function rankLabels(
   return labels;
 }
 
-export function handleCandidatesRequest(request: NextRequest, role: CreditRole): NextResponse {
+const isCreditRole = (v: string | null): v is CreditRole =>
+  !!v && (CREDIT_ROLES as readonly string[]).includes(v);
+
+export function handleCandidatesRequest(request: NextRequest): NextResponse {
   const searchParams = request.nextUrl.searchParams;
   const taxonGroup = searchParams.get("taxonGroup");
+  const roleParam = searchParams.get("role");
   const countriesParam = searchParams.get("countries") ?? "";
 
   if (!taxonGroup) {
     return NextResponse.json({ error: "taxonGroup is required" }, { status: 400 });
   }
+  if (!isCreditRole(roleParam)) {
+    return NextResponse.json(
+      { error: `role must be one of ${CREDIT_ROLES.join(", ")}` },
+      { status: 400 },
+    );
+  }
+  const role: CreditRole = roleParam;
 
   const target = {
     taxonGroup,
