@@ -78,13 +78,21 @@ const paramKey = (name: string, suffix: string): string => (suffix ? `${name}${s
 export const OWN_PARAM_NAMES = [
   "view", "layout", "origin", "countries", "region", "taxa", "subgroups",
   "categories", "years", "assessmentYears", "describedYears", "obsRanges", "assessmentCounts",
-  "systems", "trends", "movement", "threats", "criteria", "habitat", "habitatBreadth",
+  "systems", "trends", "movement", "threats", "threatsScope", "criteria", "habitat", "habitatBreadth",
   "habitatImportance", "habitatSeasons", "habitatSuitability", "bd", "endemics", "growthForms",
   "colMatch", "colReasons",
   "assessors", "reviewers", "facilitators", "search", "outdated", "minObs", "maxObs",
   "minAssessmentYear", "maxAssessmentYear", "minDescribedYear", "maxDescribedYear",
   "species", "tab", "sort", "dir", "sort2", "dir2", "mapview", "mapsort", "mapdir",
 ];
+
+/**
+ * Which species the Threats chart (and a threat selection made from it) covers.
+ * IUCN's feedback is that threat coding is only reliable for threatened
+ * assessments, so "threatened" (CR/EN/VU) is the default and "all" is the
+ * explicit opt-in to the fuller, patchier data.
+ */
+export type ThreatsScope = "threatened" | "all";
 
 /** Columns the species table can be sorted by. */
 export type SortField = "year" | "category" | "totalGbif" | "newGbif" | "pctNewGbif" | "describedYear";
@@ -247,6 +255,11 @@ export function parseParams(search: string, suffix: string = "") {
     threats: p.get(k("threats"))
       ? new Set(p.get(k("threats"))!.split(",").filter(Boolean))
       : new Set<string>(),
+    // Which species the threat axis covers. IUCN's own advice is that threat
+    // coding is only reliable for threatened (CR/EN/VU) assessments, so
+    // "threatened" is the DEFAULT and the param is only written to the URL for
+    // the opt-out ("all"). Absent/unrecognised therefore means threatened.
+    threatsScope: (p.get(k("threatsScope")) === "all" ? "all" : "threatened") as ThreatsScope,
     criteria: p.get(k("criteria"))
       ? new Set(p.get(k("criteria"))!.split(",").filter(Boolean))
       : new Set<string>(),
@@ -352,6 +365,7 @@ export function buildQs(state: {
   populationTrends: Set<string>;
   movementPatterns: Set<string>;
   threats: Set<string>;
+  threatsScope?: ThreatsScope;
   criteria: Set<string>;
   colMatch?: "flagged" | "clean" | null;
   colReasons?: Set<string>;
@@ -405,6 +419,8 @@ export function buildQs(state: {
   if (state.populationTrends.size > 0) p.set(k("trends"), [...state.populationTrends].join(","));
   if (state.movementPatterns.size > 0) p.set(k("movement"), [...state.movementPatterns].join(","));
   if (state.threats.size > 0) p.set(k("threats"), [...state.threats].join(","));
+  // Only the opt-out is written — "threatened" is the default (see parseParams).
+  if (state.threatsScope === "all") p.set(k("threatsScope"), "all");
   if (state.criteria.size > 0) p.set(k("criteria"), [...state.criteria].join(","));
   if (state.colMatch) p.set(k("colMatch"), state.colMatch);
   if (state.colReasons && state.colReasons.size > 0) p.set(k("colReasons"), [...state.colReasons].join(","));
@@ -802,6 +818,17 @@ export function useFilterParams(paramSuffix: string = "") {
     [syncUrl]
   );
 
+  const setThreatsScope = useCallback(
+    (value: ThreatsScope) => {
+      setState(prev => {
+        const next = { ...prev, threatsScope: value };
+        queueMicrotask(() => syncUrl(next, false));
+        return next;
+      });
+    },
+    [syncUrl]
+  );
+
   const setSelectedCriteria = useCallback(
     (updater: Set<string> | ((prev: Set<string>) => Set<string>)) => {
       setState(prev => {
@@ -1098,6 +1125,7 @@ export function useFilterParams(paramSuffix: string = "") {
         populationTrends: new Set<string>(),
         movementPatterns: new Set<string>(),
         threats: new Set<string>(),
+        threatsScope: "threatened" as ThreatsScope,
         criteria: new Set<string>(),
         colMatch: null,
         colReasons: new Set<string>(),
@@ -1143,6 +1171,7 @@ export function useFilterParams(paramSuffix: string = "") {
         populationTrends: new Set<string>(),
         movementPatterns: new Set<string>(),
         threats: new Set<string>(),
+        threatsScope: "threatened" as ThreatsScope,
         criteria: new Set<string>(),
         colMatch: null,
         colReasons: new Set<string>(),
@@ -1188,6 +1217,7 @@ export function useFilterParams(paramSuffix: string = "") {
     selectedPopulationTrends: state.populationTrends,
     selectedMovementPatterns: state.movementPatterns,
     selectedThreats: state.threats,
+    threatsScope: state.threatsScope,
     selectedCriteria: state.criteria,
     colMatch: state.colMatch,
     selectedColReasons: state.colReasons,
@@ -1234,6 +1264,7 @@ export function useFilterParams(paramSuffix: string = "") {
     setSelectedPopulationTrends,
     setSelectedMovementPatterns,
     setSelectedThreats,
+    setThreatsScope,
     setSelectedCriteria,
     setSelectedHabitat,
     setHabitatBreadth,

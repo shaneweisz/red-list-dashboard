@@ -225,6 +225,19 @@ describe("parseParams", () => {
     expect(result.maxObs).toBe(null);
   });
 
+  // The Threats chart's scope: threatened-only is the DEFAULT (IUCN's threat
+  // coding is only reliable for CR/EN/VU), so the param is only ever present in
+  // the URL for the opt-out — an old link with no param must land on the default.
+  it("defaults threatsScope to threatened", () => {
+    expect(parseParams("").threatsScope).toBe("threatened");
+    expect(parseParams("?threats=11").threatsScope).toBe("threatened");
+  });
+
+  it("parses threatsScope=all, and treats an unrecognised value as the default", () => {
+    expect(parseParams("?threatsScope=all").threatsScope).toBe("all");
+    expect(parseParams("?threatsScope=nonsense").threatsScope).toBe("threatened");
+  });
+
   it("expands a region param into its country codes (no separate region state)", () => {
     const result = parseParams("?region=Sub-Saharan+Africa");
     expect(result.countries.size).toBeGreaterThan(0);
@@ -285,6 +298,16 @@ describe("buildQs", () => {
 
   it("returns empty string for default state", () => {
     expect(buildQs(emptyState)).toBe("");
+  });
+
+  // Only the opt-out is written: "threatened" is the default, so writing it would
+  // put a param in every URL that says nothing, and (worse) a shared link would
+  // pin the scope it happened to have rather than following the default.
+  it("omits threatsScope for the default (threatened) scope, writes it for all", () => {
+    expect(buildQs({ ...emptyState, threats: new Set(["11"]), threatsScope: "threatened" as const }))
+      .not.toContain("threatsScope");
+    expect(buildQs({ ...emptyState, threats: new Set(["11"]), threatsScope: "all" as const }))
+      .toContain("threatsScope=all");
   });
 
   it("includes taxa when set", () => {
@@ -987,6 +1010,7 @@ describe("OWN_PARAM_NAMES stays in sync with buildQs", () => {
       populationTrends: new Set(["Decreasing"]),
       movementPatterns: new Set(["Migratory"]),
       threats: new Set(["Agriculture"]),
+      threatsScope: "all" as const,
       criteria: new Set(["B1"]),
       habitat: new Set(["5.1"]),
       habitatBreadth: "specialist" as const,

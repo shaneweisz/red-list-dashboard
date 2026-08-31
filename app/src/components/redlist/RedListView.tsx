@@ -560,6 +560,9 @@ const SKIP_COUNTRIES = skipSet("countries");
 // refactor changes no number, and now at least visible rather than buried in
 // three separately-drifting copies of the clause list.
 const SKIP_THREATS = skipSet("threats", "endemics", "growthForms");
+
+// CR/EN/VU as a Set, for the Threats chart's "threatened only" scope.
+const THREATENED_SET = new Set<string>(THREATENED_CATEGORIES);
 const SKIP_CRITERIA = skipSet("criteria", "endemics", "growthForms");
 const SKIP_HABITAT = skipSet("habitat", "endemics", "growthForms");
 // The credits chart cross-filters against the other two credit types itself
@@ -1135,6 +1138,7 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
     selectedPopulationTrends, setSelectedPopulationTrends,
     selectedMovementPatterns, setSelectedMovementPatterns,
     selectedThreats, setSelectedThreats,
+    threatsScope, setThreatsScope,
     selectedCriteria, setSelectedCriteria,
     colMatch, setColMatch,
     selectedColReasons, setColReasons,
@@ -1512,6 +1516,21 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
   // (replacing a wall of individual toggle buttons — Breadth is a single-select
   // Specialist/Generalist choice, Exclude minor a single checkbox, Season a
   // multi-select list of all 5 IUCN values).
+  // Threats card's scope dropdown (threatened-only vs all species).
+  const [threatsScopeMenuOpen, setThreatsScopeMenuOpen] = useState(false);
+  const threatsScopeMenuRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!threatsScopeMenuOpen) return;
+    const handler = (e: MouseEvent) => {
+      if (threatsScopeMenuRef.current && !threatsScopeMenuRef.current.contains(e.target as Node)) {
+        setThreatsScopeMenuOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [threatsScopeMenuOpen]);
+
   const [habitatBreadthMenuOpen, setHabitatBreadthMenuOpen] = useState(false);
   const [habitatImportanceMenuOpen, setHabitatImportanceMenuOpen] = useState(false);
   const [habitatSeasonMenuOpen, setHabitatSeasonMenuOpen] = useState(false);
@@ -1922,6 +1941,25 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
     }),
   [selectedHabitat, habitatBreadth, selectedHabitatImportance, selectedHabitatSeasons, selectedHabitatSuitability]);
 
+  // The threat filter, in one place — every chart's cross-filtered count and the
+  // species table itself run this, so they can't disagree about what a selected
+  // threat means. Two parts:
+  //  - the code match itself: prefix-based, so picking a top-level category
+  //    ("11") matches every sub-threat under it ("11.1", "11.4", …);
+  //  - the scope: under the default "threatened" scope a threat selection ALSO
+  //    excludes non-threatened species. IUCN's feedback is that threat coding is
+  //    only reliable for CR/EN/VU assessments, so filtering by a threat shouldn't
+  //    surface species whose threat data isn't trustworthy — and the Threats
+  //    chart's bars (see threatCounts) then count exactly the species that
+  //    clicking them selects. "All species" opts back in to the fuller data.
+  // Inert while nothing is selected: the scope narrows the threat axis, it is
+  // not a standing "threatened only" filter on the whole dashboard.
+  const matchesThreatFilter = useCallback((s: Species): boolean => {
+    if (selectedThreats.size === 0) return true;
+    if (threatsScope === "threatened" && !THREATENED_SET.has(s.category)) return false;
+    return s.threat_codes?.some(tc => Array.from(selectedThreats).some(sel => tc === sel || tc.startsWith(sel + "."))) ?? false;
+  }, [selectedThreats, threatsScope]);
+
   // Species details cache (images, criteria, common names)
   const [speciesDetails, setSpeciesDetails] = useState<Record<string, SpeciesDetails>>({});
   // Lazy assessment-history cache, keyed by sis_taxon_id. The species list no
@@ -2190,7 +2228,7 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
       if (selectedSystems.size > 0 && !s.systems?.some(sys => selectedSystems.has(sys))) return;
       if (selectedPopulationTrends.size > 0 && (!s.population_trend || !selectedPopulationTrends.has(s.population_trend))) return;
       if (selectedMovementPatterns.size > 0 && (!s.movement_pattern || !selectedMovementPatterns.has(s.movement_pattern))) return;
-      if (selectedThreats.size > 0 && !s.threat_codes?.some(tc => Array.from(selectedThreats).some(sel => tc === sel || tc.startsWith(sel + ".")))) return;
+      if (!matchesThreatFilter(s)) return;
       if (selectedCriteria.size > 0 && !parseCriteriaCodes(s.criteria).some(code => Array.from(selectedCriteria).some(sel => code === sel || code.startsWith(sel)))) return;
       if (endemicsOnly && s.countries.length !== 1) return;
       if (selectedGrowthForms.size > 0 && !s.growth_forms?.some(gf => selectedGrowthForms.has(gf))) return;
@@ -2211,7 +2249,7 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
       percent: total > 0 ? Math.round(((counts[code] || 0) / total) * 100) : 0,
       label: `${(counts[code] || 0).toLocaleString()} (${total > 0 ? Math.round(((counts[code] || 0) / total) * 100) : 0}%)`,
     }));
-  }, [taxaFilteredSpecies, selectedCountries, selectedYearRanges, selectedObsRanges, selectedSystems, selectedPopulationTrends, selectedMovementPatterns, selectedThreats, selectedCriteria, matchesHabitatFilter, endemicsOnly, selectedGrowthForms, matchesSearch, matchesAssessorsFilter, matchesReviewersFilter, matchesFacilitatorsFilter, matchesColFilter, matchesObsRangeFilter, selectedAssessmentCounts, matchesAssessmentCountFilter, matchesYearRangeFilter, selectedAssessmentYears, matchesAssessmentYearFilter]);
+  }, [taxaFilteredSpecies, selectedCountries, selectedYearRanges, selectedObsRanges, selectedSystems, selectedPopulationTrends, selectedMovementPatterns, matchesThreatFilter, selectedCriteria, matchesHabitatFilter, endemicsOnly, selectedGrowthForms, matchesSearch, matchesAssessorsFilter, matchesReviewersFilter, matchesFacilitatorsFilter, matchesColFilter, matchesObsRangeFilter, selectedAssessmentCounts, matchesAssessmentCountFilter, matchesYearRangeFilter, selectedAssessmentYears, matchesAssessmentYearFilter]);
 
   // Year chart: apply all filters EXCEPT year range AND outdated (see
   // taxaFilteredSpeciesExceptOutdated above) — buckets align exactly with the
@@ -2242,7 +2280,7 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
     if (!skip.has("systems") && selectedSystems.size > 0 && !s.systems?.some(sys => selectedSystems.has(sys))) return false;
     if (!skip.has("trends") && selectedPopulationTrends.size > 0 && (!s.population_trend || !selectedPopulationTrends.has(s.population_trend))) return false;
     if (!skip.has("movement") && selectedMovementPatterns.size > 0 && (!s.movement_pattern || !selectedMovementPatterns.has(s.movement_pattern))) return false;
-    if (!skip.has("threats") && selectedThreats.size > 0 && !s.threat_codes?.some(tc => Array.from(selectedThreats).some(sel => tc === sel || tc.startsWith(sel + ".")))) return false;
+    if (!skip.has("threats") && !matchesThreatFilter(s)) return false;
     if (!skip.has("criteria") && selectedCriteria.size > 0 && !parseCriteriaCodes(s.criteria).some(code => Array.from(selectedCriteria).some(sel => code === sel || code.startsWith(sel)))) return false;
     if (!skip.has("endemics") && endemicsOnly && s.countries.length !== 1) return false;
     if (!skip.has("growthForms") && selectedGrowthForms.size > 0 && !s.growth_forms?.some(gf => selectedGrowthForms.has(gf))) return false;
@@ -2255,7 +2293,7 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
   }, [matchesSearch, selectedCategories, selectedCountries, selectedYearRanges, matchesYearRangeFilter,
       selectedAssessmentYears, matchesAssessmentYearFilter, selectedObsRanges, matchesObsRangeFilter,
       selectedAssessmentCounts, matchesAssessmentCountFilter, selectedSystems, selectedPopulationTrends,
-      selectedMovementPatterns, selectedThreats, selectedCriteria, endemicsOnly, selectedGrowthForms,
+      selectedMovementPatterns, matchesThreatFilter, selectedCriteria, endemicsOnly, selectedGrowthForms,
       matchesAssessorsFilter, matchesHabitatFilter, matchesReviewersFilter, matchesFacilitatorsFilter,
       matchesColFilter]);
 
@@ -2489,7 +2527,7 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
       if (selectedAssessmentCounts.size > 0 && !matchesAssessmentCountFilter(s.assessment_count, selectedAssessmentCounts)) return;
       if (selectedPopulationTrends.size > 0 && (!s.population_trend || !selectedPopulationTrends.has(s.population_trend))) return;
       if (selectedMovementPatterns.size > 0 && (!s.movement_pattern || !selectedMovementPatterns.has(s.movement_pattern))) return;
-      if (selectedThreats.size > 0 && !s.threat_codes?.some(tc => Array.from(selectedThreats).some(sel => tc === sel || tc.startsWith(sel + ".")))) return;
+      if (!matchesThreatFilter(s)) return;
       if (selectedCriteria.size > 0 && !parseCriteriaCodes(s.criteria).some(code => Array.from(selectedCriteria).some(sel => code === sel || code.startsWith(sel)))) return;
       if (endemicsOnly && s.countries.length !== 1) return;
       if (selectedGrowthForms.size > 0 && !s.growth_forms?.some(gf => selectedGrowthForms.has(gf))) return;
@@ -2503,7 +2541,7 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
       }
     });
     return counts;
-  }, [taxaFilteredSpecies, selectedCategories, selectedCountries, selectedYearRanges, selectedObsRanges, selectedPopulationTrends, selectedMovementPatterns, selectedThreats, selectedCriteria, matchesHabitatFilter, matchesSearch, matchesAssessorsFilter, matchesReviewersFilter, matchesFacilitatorsFilter, matchesColFilter, endemicsOnly, matchesObsRangeFilter, selectedAssessmentCounts, matchesAssessmentCountFilter, matchesYearRangeFilter, selectedGrowthForms, selectedAssessmentYears, matchesAssessmentYearFilter]);
+  }, [taxaFilteredSpecies, selectedCategories, selectedCountries, selectedYearRanges, selectedObsRanges, selectedPopulationTrends, selectedMovementPatterns, matchesThreatFilter, selectedCriteria, matchesHabitatFilter, matchesSearch, matchesAssessorsFilter, matchesReviewersFilter, matchesFacilitatorsFilter, matchesColFilter, endemicsOnly, matchesObsRangeFilter, selectedAssessmentCounts, matchesAssessmentCountFilter, matchesYearRangeFilter, selectedGrowthForms, selectedAssessmentYears, matchesAssessmentYearFilter]);
 
   // Population trend counts: apply all filters EXCEPT population trend
   const populationTrendCounts = useMemo(() => {
@@ -2519,7 +2557,7 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
       if (selectedAssessmentCounts.size > 0 && !matchesAssessmentCountFilter(s.assessment_count, selectedAssessmentCounts)) return;
       if (selectedSystems.size > 0 && !s.systems?.some(sys => selectedSystems.has(sys))) return;
       if (selectedMovementPatterns.size > 0 && (!s.movement_pattern || !selectedMovementPatterns.has(s.movement_pattern))) return;
-      if (selectedThreats.size > 0 && !s.threat_codes?.some(tc => Array.from(selectedThreats).some(sel => tc === sel || tc.startsWith(sel + ".")))) return;
+      if (!matchesThreatFilter(s)) return;
       if (selectedCriteria.size > 0 && !parseCriteriaCodes(s.criteria).some(code => Array.from(selectedCriteria).some(sel => code === sel || code.startsWith(sel)))) return;
       if (endemicsOnly && s.countries.length !== 1) return;
       if (selectedGrowthForms.size > 0 && !s.growth_forms?.some(gf => selectedGrowthForms.has(gf))) return;
@@ -2531,7 +2569,7 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
       counts[s.population_trend] = (counts[s.population_trend] || 0) + 1;
     });
     return counts;
-  }, [taxaFilteredSpecies, selectedCategories, selectedCountries, selectedYearRanges, selectedObsRanges, selectedSystems, selectedMovementPatterns, selectedThreats, selectedCriteria, matchesHabitatFilter, matchesSearch, matchesAssessorsFilter, matchesReviewersFilter, matchesFacilitatorsFilter, matchesColFilter, endemicsOnly, matchesObsRangeFilter, selectedAssessmentCounts, matchesAssessmentCountFilter, matchesYearRangeFilter, selectedGrowthForms, selectedAssessmentYears, matchesAssessmentYearFilter]);
+  }, [taxaFilteredSpecies, selectedCategories, selectedCountries, selectedYearRanges, selectedObsRanges, selectedSystems, selectedMovementPatterns, matchesThreatFilter, selectedCriteria, matchesHabitatFilter, matchesSearch, matchesAssessorsFilter, matchesReviewersFilter, matchesFacilitatorsFilter, matchesColFilter, endemicsOnly, matchesObsRangeFilter, selectedAssessmentCounts, matchesAssessmentCountFilter, matchesYearRangeFilter, selectedGrowthForms, selectedAssessmentYears, matchesAssessmentYearFilter]);
 
   // Movement pattern counts: apply all filters EXCEPT movement pattern
   const movementPatternCounts = useMemo(() => {
@@ -2547,7 +2585,7 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
       if (selectedAssessmentCounts.size > 0 && !matchesAssessmentCountFilter(s.assessment_count, selectedAssessmentCounts)) return;
       if (selectedSystems.size > 0 && !s.systems?.some(sys => selectedSystems.has(sys))) return;
       if (selectedPopulationTrends.size > 0 && (!s.population_trend || !selectedPopulationTrends.has(s.population_trend))) return;
-      if (selectedThreats.size > 0 && !s.threat_codes?.some(tc => Array.from(selectedThreats).some(sel => tc === sel || tc.startsWith(sel + ".")))) return;
+      if (!matchesThreatFilter(s)) return;
       if (selectedCriteria.size > 0 && !parseCriteriaCodes(s.criteria).some(code => Array.from(selectedCriteria).some(sel => code === sel || code.startsWith(sel)))) return;
       if (endemicsOnly && s.countries.length !== 1) return;
       if (selectedGrowthForms.size > 0 && !s.growth_forms?.some(gf => selectedGrowthForms.has(gf))) return;
@@ -2559,18 +2597,25 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
       counts[s.movement_pattern] = (counts[s.movement_pattern] || 0) + 1;
     });
     return counts;
-  }, [taxaFilteredSpecies, selectedCategories, selectedCountries, selectedYearRanges, selectedObsRanges, selectedSystems, selectedPopulationTrends, selectedThreats, selectedCriteria, matchesHabitatFilter, matchesSearch, matchesAssessorsFilter, matchesReviewersFilter, matchesFacilitatorsFilter, matchesColFilter, endemicsOnly, matchesObsRangeFilter, selectedAssessmentCounts, matchesAssessmentCountFilter, matchesYearRangeFilter, selectedGrowthForms, selectedAssessmentYears, matchesAssessmentYearFilter]);
+  }, [taxaFilteredSpecies, selectedCategories, selectedCountries, selectedYearRanges, selectedObsRanges, selectedSystems, selectedPopulationTrends, matchesThreatFilter, selectedCriteria, matchesHabitatFilter, matchesSearch, matchesAssessorsFilter, matchesReviewersFilter, matchesFacilitatorsFilter, matchesColFilter, endemicsOnly, matchesObsRangeFilter, selectedAssessmentCounts, matchesAssessmentCountFilter, matchesYearRangeFilter, selectedGrowthForms, selectedAssessmentYears, matchesAssessmentYearFilter]);
 
   // Threat counts: apply all filters EXCEPT threats (count species per prefix, deduplicated)
   // Threat counts per code, plus the denominator (`threatTotal`) for percentages:
   // every in-view species that passes the same filters, with or without a threat
   // coded. The threat *selection* is intentionally excluded here, so both the
   // counts and the percentage stay stable as threats are clicked.
+  //
+  // The scope is NOT excluded, though: under the default "threatened" scope both
+  // the counts and the denominator are restricted to CR/EN/VU, because IUCN's
+  // feedback is that threat coding on non-threatened assessments isn't reliable
+  // enough to chart. SKIP_THREATS drops the whole threats axis (scope included —
+  // it lives in matchesThreatFilter), so the restriction is re-applied here.
   const { threatCounts, threatTotal } = useMemo(() => {
     const counts: Record<string, number> = {};
     let total = 0;
     taxaFilteredSpecies.forEach(s => {
       if (!matchesFilters(s, SKIP_THREATS)) return;
+      if (threatsScope === "threatened" && !THREATENED_SET.has(s.category)) return;
       total++;
       if (!s.threat_codes?.length) return;
       // Deduplicate: count each prefix at most once per species
@@ -2587,7 +2632,7 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
       }
     });
     return { threatCounts: counts, threatTotal: total };
-  }, [taxaFilteredSpecies, matchesFilters]);
+  }, [taxaFilteredSpecies, matchesFilters, threatsScope]);
 
   // Criteria counts: apply all filters EXCEPT criteria (count species per code — at every
   // depth: letter, number, sub-clause, roman numeral — deduplicated per species) — mirrors
@@ -2767,7 +2812,7 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
       const matchesSystem = selectedSystems.size === 0 || s.systems?.some(sys => selectedSystems.has(sys));
       const matchesTrend = selectedPopulationTrends.size === 0 || (s.population_trend != null && selectedPopulationTrends.has(s.population_trend));
       const matchesMovement = selectedMovementPatterns.size === 0 || (s.movement_pattern != null && selectedMovementPatterns.has(s.movement_pattern));
-      const matchesThreat = selectedThreats.size === 0 || s.threat_codes?.some(tc => Array.from(selectedThreats).some(sel => tc === sel || tc.startsWith(sel + ".")));
+      const matchesThreat = matchesThreatFilter(s);
       const matchesCriteria = selectedCriteria.size === 0 || parseCriteriaCodes(s.criteria).some(code => Array.from(selectedCriteria).some(sel => code === sel || code.startsWith(sel)));
       const matchesHabitat = matchesHabitatFilter(s);
       const matchesEndemic = !endemicsOnly || s.countries.length === 1;
@@ -2817,7 +2862,7 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
     });
 
     return { filteredSpecies: filtered, sortedSpecies: sorted };
-  }, [taxaFilteredSpecies, selectedCategories, selectedCountries, selectedSystems, selectedPopulationTrends, selectedMovementPatterns, selectedThreats, selectedCriteria, matchesHabitatFilter, endemicsOnly, selectedGrowthForms, searchFilter, showOnlyStarred, pinnedSet, pinnedSpecies, sortField, sortDirection, sortField2, sortDirection2, matchesAssessorsFilter, matchesReviewersFilter, matchesFacilitatorsFilter, matchesColFilter, isNewAssessments, matchesObsRangeFilter, matchesAssessmentCountFilter, matchesYearRangeFilter, matchesAssessmentYearFilter, matchesDescribedYearFilter]);
+  }, [taxaFilteredSpecies, selectedCategories, selectedCountries, selectedSystems, selectedPopulationTrends, selectedMovementPatterns, matchesThreatFilter, selectedCriteria, matchesHabitatFilter, endemicsOnly, selectedGrowthForms, searchFilter, showOnlyStarred, pinnedSet, pinnedSpecies, sortField, sortDirection, sortField2, sortDirection2, matchesAssessorsFilter, matchesReviewersFilter, matchesFacilitatorsFilter, matchesColFilter, isNewAssessments, matchesObsRangeFilter, matchesAssessmentCountFilter, matchesYearRangeFilter, matchesAssessmentYearFilter, matchesDescribedYearFilter]);
 
   // Giant aggregates (insects, invertebrates…) are capped at 400k server-side; surface
   // a banner so the list reads as "showing N of M — drill into a sub-group for the rest".
@@ -3874,7 +3919,8 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
   const threatsCard = (() => {
     // Map label→code for reverse lookup from chart clicks
     const threatLabelToCode = new Map(THREAT_CATEGORIES.map(c => [c.label, c.code]));
-    // Bar label: count + share of all in-view species (see threatTotal).
+    // Bar label: count + share of the in-view species the scope covers — under
+    // the default scope that's every in-view THREATENED species (see threatTotal).
     const threatBarLabel = (count: number) =>
       `${count.toLocaleString()} (${threatTotal > 0 ? Math.round((count / threatTotal) * 100) : 0}%)`;
     // Use label as `code` field so it displays on y-axis, sorted by count desc
@@ -3932,8 +3978,55 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
     };
     return (
       <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-3 flex flex-col">
-        <div className="flex items-center justify-between mb-1 min-h-[24px]">
+        <div className="flex items-center justify-between mb-1 min-h-[24px] flex-wrap gap-1">
           <span className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">Threats</span>
+          {/* Scope — which species the threat data is drawn from. Defaults to
+              threatened (CR/EN/VU) on IUCN's own advice that threat coding is
+              only reliable there; "All species" is the opt-out. Highlighted in
+              the default state precisely because it IS narrowing the data: a
+              default that quietly drops species should say so on the card.
+              Mirrors the Habitat card's Breadth dropdown. */}
+          <div className="relative" ref={threatsScopeMenuRef}>
+            <button
+              type="button"
+              onClick={() => setThreatsScopeMenuOpen(prev => !prev)}
+              className={`px-2 py-0.5 text-xs font-semibold rounded transition-colors ${
+                threatsScope === "threatened"
+                  ? "bg-orange-400 text-white shadow-sm"
+                  : "bg-zinc-100 dark:bg-zinc-800 text-zinc-500 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-300"
+              }`}
+              aria-expanded={threatsScopeMenuOpen}
+              title="Which species these threat counts are drawn from"
+            >
+              {threatsScope === "threatened" ? "Threatened only" : "All species"} ▾
+            </button>
+            {threatsScopeMenuOpen && (
+              <div className="absolute right-0 top-full mt-1 z-20 bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-lg shadow-lg py-1 w-72">
+                {([
+                  { value: "threatened" as const, label: "Threatened only", hint: "Critically Endangered, Endangered and Vulnerable assessments" },
+                  { value: "all" as const, label: "All species", hint: "Also count threats coded on non-threatened assessments" },
+                ]).map(({ value, label, hint }) => (
+                  <label
+                    key={value}
+                    className="flex items-start gap-2 px-3 py-1.5 text-xs text-zinc-700 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-700/50 cursor-pointer"
+                  >
+                    <input
+                      type="radio"
+                      name="threats-scope"
+                      checked={threatsScope === value}
+                      onChange={() => { setThreatsScope(value); setThreatsScopeMenuOpen(false); }}
+                      className="mt-0.5 border-zinc-300 dark:border-zinc-600 text-orange-500 focus:ring-orange-400"
+                    />
+                    <span>
+                      {label}
+                      <br />
+                      <span className="text-[10px] text-zinc-400 dark:text-zinc-500">{hint}</span>
+                    </span>
+                  </label>
+                ))}
+              </div>
+            )}
+          </div>
         </div>
         {loading ? (
           <div style={{ height: 200 }} className="flex items-center justify-center"><Spinner /></div>
@@ -4946,7 +5039,7 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
                     if (selectedSystems.size > 0 && !s.systems?.some(sys => selectedSystems.has(sys))) return;
                     if (selectedPopulationTrends.size > 0 && (!s.population_trend || !selectedPopulationTrends.has(s.population_trend))) return;
                     if (selectedMovementPatterns.size > 0 && (!s.movement_pattern || !selectedMovementPatterns.has(s.movement_pattern))) return;
-                    if (selectedThreats.size > 0 && !s.threat_codes?.some(tc => Array.from(selectedThreats).some(sel => tc === sel || tc.startsWith(sel + ".")))) return;
+                    if (!matchesThreatFilter(s)) return;
                     if (selectedCriteria.size > 0 && !parseCriteriaCodes(s.criteria).some(code => Array.from(selectedCriteria).some(sel => code === sel || code.startsWith(sel)))) return;
                     if (endemicsOnly && s.countries.length !== 1) return;
                     if (!matchesAssessorsFilter(s)) return;
@@ -5429,6 +5522,22 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
                 </button>
               );
             })}
+            {/* The threats scope only narrows anything once a threat is picked
+                (see matchesThreatFilter), so it earns a chip exactly then —
+                a permanent chip for a default that isn't filtering would be
+                noise, and no chip at all would hide the fact that the species
+                list has quietly dropped every non-threatened match. × widens to
+                all species rather than clearing the threat itself. */}
+            {selectedThreats.size > 0 && threatsScope === "threatened" && (
+              <button
+                onClick={() => setThreatsScope("all")}
+                title="Threat data is only counted for Critically Endangered, Endangered and Vulnerable species"
+                className="px-3 py-1.5 text-sm font-medium rounded-full bg-rose-100 text-rose-600 dark:bg-rose-900/30 dark:text-rose-400 flex items-center gap-1 hover:opacity-80"
+              >
+                Threatened only
+                <span className="text-sm">×</span>
+              </button>
+            )}
             {Array.from(selectedCriteria).map(code => {
               const label = findCriteriaNode(CRITERIA_CATEGORIES, code)?.label || code;
               return (
