@@ -28,8 +28,7 @@ import { type RedListSpecies } from "@/hooks/useRedListSpeciesQuery";
 import { useSpeciesCache } from "@/contexts/SpeciesCacheContext";
 import { isOutdated, outdatedCutoffDate } from "@/lib/outdated";
 
-import AssessorCandidatesTable from "../AssessorCandidatesTable";
-import ReviewerCandidatesTable from "../ReviewerCandidatesTable";
+import CandidatesTable from "../CandidatesTable";
 import { getLastSearchResult, clearLastSearchResult, type SearchResult } from "../SpeciesSearchBar";
 import { migratePinnedSpecies } from "@/lib/species-row-key";
 
@@ -5887,6 +5886,18 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
                   : null;
                 const details = speciesDetails[s.species_key];
                 const gbifSpeciesKey = s.gbif_species_key || details?.gbifUrl?.split('/').pop() || null;
+                // Suggested Assessors/Reviewers rank people over THIS species' own
+                // lineage (its taxon group down to its genus), not over whatever taxon
+                // is selected — so the ranking is the same wherever you reached the
+                // species from. See getCreditCandidates.
+                const candidateSpecies = {
+                  taxonGroup: s.taxon_group,
+                  scientificName: s.scientific_name,
+                  className: s.class_name,
+                  orderName: s.order_name,
+                  family: s.family,
+                  countries: s.countries,
+                };
                 const isPinned = pinnedSet.has(speciesKey);
                 const isDragging = draggedSpecies === speciesKey;
                 const isDragOver = dragOverSpecies === speciesKey && draggedSpecies !== speciesKey;
@@ -6323,20 +6334,12 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
                           )}
                           {s.category === "NE" && (visitedTabs.has("assessors")) && (
                             <div style={{ display: activeDetailTab === "assessors" ? undefined : "none" }}>
-                              <AssessorCandidatesTable
-                                taxaId={[...selectedSubgroups][0] ?? [...selectedTaxa][0] ?? s.taxon_group}
-                                taxaName={findNode([...selectedSubgroups][0] ?? [...selectedTaxa][0] ?? s.taxon_group)?.name ?? (selectedSubgroups.size > 0 ? dynamicNodeDisplayName([...selectedSubgroups][0]) : undefined) ?? TAXA_BY_ID[[...selectedTaxa][0] ?? s.taxon_group]?.name ?? "Species"}
-                                countries={s.countries}
-                              />
+                              <CandidatesTable role="assessors" species={candidateSpecies} />
                             </div>
                           )}
                           {s.category === "NE" && (visitedTabs.has("reviewers")) && (
                             <div style={{ display: activeDetailTab === "reviewers" ? undefined : "none" }}>
-                              <ReviewerCandidatesTable
-                                taxaId={[...selectedSubgroups][0] ?? [...selectedTaxa][0] ?? s.taxon_group}
-                                taxaName={findNode([...selectedSubgroups][0] ?? [...selectedTaxa][0] ?? s.taxon_group)?.name ?? (selectedSubgroups.size > 0 ? dynamicNodeDisplayName([...selectedSubgroups][0]) : undefined) ?? TAXA_BY_ID[[...selectedTaxa][0] ?? s.taxon_group]?.name ?? "Species"}
-                                countries={s.countries}
-                              />
+                              <CandidatesTable role="reviewers" species={candidateSpecies} />
                             </div>
                           )}
                           </div>

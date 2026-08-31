@@ -12,7 +12,7 @@ vi.mock("./csv", () => ({
 
 import * as fs from "fs";
 import { readCsv } from "./csv";
-import { getAssessorCandidates, getAssessorCandidatesByCountry, getReviewerCandidatesByCountry, getColRevisions, _resetCaches } from "./species-store";
+import { getCreditCandidates, getColRevisions, _resetCaches, type CandidateRank } from "./species-store";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -85,563 +85,204 @@ beforeEach(() => {
 // Tests
 // ---------------------------------------------------------------------------
 
-describe("getAssessorCandidates", () => {
-  it("returns empty array when no assessed species exist", () => {
+/** The target species every test below ranks candidates for, unless overridden. */
+const LION = {
+  scientificName: "Panthera leo",
+  className: "Mammalia",
+  orderName: "Carnivora",
+  family: "Felidae",
+};
+
+function target(group: string, overrides: Partial<typeof LION> = {}) {
+  return { taxonGroup: group, ...LION, ...overrides };
+}
+
+/** Every candidate's counts at one rank, keyed by name. */
+function tiersAt(result: ReturnType<typeof getCreditCandidates>, rank: CandidateRank) {
+  return Object.fromEntries(result.candidates.map((c) => [c.name, c.tiers[rank]]));
+}
+
+describe("getCreditCandidates", () => {
+  it("returns no candidates when nothing has been assessed", () => {
     const group = uniqueGroup();
     setup([]);
-    expect(getAssessorCandidates("Panthera leo", group)).toEqual([]);
+    expect(getCreditCandidates("assessors", target(group), ["ZA"]).candidates).toEqual([]);
   });
 
-  it("returns empty array when species have no assessors", () => {
+  it("returns no candidates when assessed species share no country with the target", () => {
     const group = uniqueGroup();
-    setup([makeRow({ scientific_name: "Panthera tigris" })]);
-    expect(getAssessorCandidates("Panthera leo", group)).toEqual([]);
-  });
-
-  it("skips species with no taxonomy overlap", () => {
-    const group = uniqueGroup();
-    const row = makeRow({
-      scientific_name: "Equus caballus",
-      family: "Equidae",
-      order_name: "Perissodactyla",
-      class_name: "Mammalia",
-    });
+    const row = makeRow({ countries: ["BR"], scientific_name: "Panthera onca" });
     setup([row], {
       [String(row.sis_taxon_id)]: [
-        { id: 1, year: "2020", category: "LC", date: "2020-01-01", assessors: "Dr. Horse", reviewers: null },
+        { id: 1, year: "2020", category: "LC", date: "2020-01-01", assessors: "Dr. Brazil", reviewers: null },
+      ],
+    });
+    expect(getCreditCandidates("assessors", target(group), ["ZA"]).candidates).toEqual([]);
+  });
+
+  // ── rank tiering ──────────────────────────────────────────────────────────
+
+  it("credits a species at the deepest rank it shares with the target", () => {
+    const group = uniqueGroup();
+    const sameGenus = makeRow({ countries: ["ZA"], scientific_name: "Panthera pardus" });
+    const sameFamily = makeRow({ countries: ["ZA"], scientific_name: "Acinonyx jubatus", family: "Felidae" });
+    const sameOrder = makeRow({ countries: ["ZA"], scientific_name: "Canis mesomelas", family: "Canidae" });
+    const sameClassOnly = makeRow({ countries: ["ZA"], scientific_name: "Otomys irroratus", family: "Muridae", order_name: "Rodentia" });
+    const rows = [sameGenus, sameFamily, sameOrder, sameClassOnly];
+    setup(rows, Object.fromEntries(rows.map((r, i) => [String(r.sis_taxon_id), [
+      { id: i, year: "2020", category: "LC", date: "2020-01-01", assessors: "Dr. Everywhere", reviewers: null },
+    ]])));
+
+    const result = getCreditCandidates("assessors", target(group), ["ZA"]);
+    const [candidate] = result.candidates;
+    // Each rank counts everything at or below it: genus 1, family 2, order 3, group 4.
+    expect(candidate.tiers.genus?.total).toBe(1);
+    expect(candidate.tiers.family?.total).toBe(2);
+    expect(candidate.tiers.order?.total).toBe(3);
+    expect(candidate.tiers.group?.total).toBe(4);
+  });
+
+  it("rolls a deeper match up past a rank the row has no value for", () => {
+    const group = uniqueGroup();
+    // Same genus, but this row records no family or order at all — it must still
+    // count toward the target's family and order, not fall out of them.
+    const row = makeRow({ countries: ["ZA"], scientific_name: "Panthera pardus", family: null, order_name: null });
+    setup([row], {
+      [String(row.sis_taxon_id)]: [
+        { id: 1, year: "2020", category: "LC", date: "2020-01-01", assessors: "Dr. Cat", reviewers: null },
       ],
     });
 
-    // No genus/family/order/class overlap at all
-    const result = getAssessorCandidates("Rana temporaria", group, "Ranidae", "Anura", "Amphibia");
-    expect(result).toEqual([]);
+    const tiers = getCreditCandidates("assessors", target(group), ["ZA"]).candidates[0].tiers;
+    expect(tiers.genus?.total).toBe(1);
+    expect(tiers.family?.total).toBe(1);
+    expect(tiers.order?.total).toBe(1);
+    expect(tiers.group?.total).toBe(1);
   });
 
-  it("counts genus matches inclusively (genus also counts as family/order/class)", () => {
+  it("counts a species once per person however many assessments credit them", () => {
     const group = uniqueGroup();
-    const row = makeRow({
-      scientific_name: "Panthera tigris",
-      family: "Felidae",
-      order_name: "Carnivora",
-      class_name: "Mammalia",
-    });
+    const row = makeRow({ countries: ["ZA"], scientific_name: "Panthera pardus" });
     setup([row], {
       [String(row.sis_taxon_id)]: [
-        { id: 1, year: "2020", category: "EN", date: "2020-06-15", assessors: "Dr. Smith", reviewers: null },
+        { id: 1, year: "2008", category: "LC", date: "2008-01-01", assessors: "Dr. Cat", reviewers: null },
+        { id: 2, year: "2016", category: "VU", date: "2016-01-01", assessors: "Dr. Cat", reviewers: null },
+      ],
+    });
+    expect(getCreditCandidates("assessors", target(group), ["ZA"]).candidates[0].tiers.genus?.total).toBe(1);
+  });
+
+  it("matches lineage case-insensitively", () => {
+    const group = uniqueGroup();
+    const row = makeRow({ countries: ["ZA"], scientific_name: "Acinonyx jubatus", family: "FELIDAE" });
+    setup([row], {
+      [String(row.sis_taxon_id)]: [
+        { id: 1, year: "2020", category: "LC", date: "2020-01-01", assessors: "Dr. Cat", reviewers: null },
+      ],
+    });
+    const t = target(group, { family: "felidae" });
+    expect(getCreditCandidates("assessors", t, ["ZA"]).candidates[0].tiers.family?.total).toBe(1);
+  });
+
+  // ── countries and regions ─────────────────────────────────────────────────
+
+  it("separates species in the target's countries from the rest of the rank", () => {
+    const group = uniqueGroup();
+    const here = makeRow({ countries: ["ZA"], scientific_name: "Panthera pardus" });
+    const elsewhere = makeRow({ countries: ["IN"], scientific_name: "Panthera tigris" });
+    setup([here, elsewhere], {
+      [String(here.sis_taxon_id)]: [
+        { id: 1, year: "2020", category: "LC", date: "2020-01-01", assessors: "Dr. Cat", reviewers: null },
+      ],
+      [String(elsewhere.sis_taxon_id)]: [
+        { id: 2, year: "2020", category: "LC", date: "2020-01-01", assessors: "Dr. Cat", reviewers: null },
       ],
     });
 
-    const result = getAssessorCandidates("Panthera leo", group, "Felidae", "Carnivora", "Mammalia");
-    expect(result).toHaveLength(1);
-    expect(result[0].genus).toBe(1);
-    expect(result[0].family).toBe(1);
-    expect(result[0].order).toBe(1);
-    expect(result[0].class).toBe(1);
+    const tiers = getCreditCandidates("assessors", target(group), ["ZA"]).candidates[0].tiers;
+    expect(tiers.genus?.total).toBe(2);
+    expect(tiers.genus?.inRegion).toBe(1);
   });
 
-  it("counts family match inclusively (family also counts as order/class)", () => {
+  it("aggregates per-region and per-country counts within the rank", () => {
     const group = uniqueGroup();
-    const row = makeRow({
-      scientific_name: "Felis catus",
-      family: "Felidae",
-      order_name: "Carnivora",
-      class_name: "Mammalia",
-    });
+    const row = makeRow({ countries: ["ZA", "KE", "BR"], scientific_name: "Panthera pardus" });
     setup([row], {
       [String(row.sis_taxon_id)]: [
-        { id: 1, year: "2021", category: "LC", date: "2021-03-01", assessors: "Dr. Jones", reviewers: null },
+        { id: 1, year: "2020", category: "LC", date: "2020-01-01", assessors: "Dr. Cat", reviewers: null },
       ],
     });
 
-    const result = getAssessorCandidates("Panthera leo", group, "Felidae", "Carnivora", "Mammalia");
-    expect(result).toHaveLength(1);
-    expect(result[0].genus).toBe(0);
-    expect(result[0].family).toBe(1);
-    expect(result[0].order).toBe(1);
-    expect(result[0].class).toBe(1);
+    const tier = getCreditCandidates("assessors", target(group), ["ZA", "KE"]).candidates[0].tiers.genus!;
+    expect(tier.countryCounts).toEqual({ ZA: 1, KE: 1 });
+    // Only the target's own countries are aggregated — BR isn't one of them.
+    expect(Object.values(tier.regionCounts).reduce((a, b) => a + b, 0)).toBe(2);
   });
 
-  it("counts order match inclusively (order also counts as class)", () => {
+  // ── dates ─────────────────────────────────────────────────────────────────
+
+  it("dates a person by their own latest assessment, not the species'", () => {
     const group = uniqueGroup();
-    const row = makeRow({
-      scientific_name: "Canis lupus",
-      family: "Canidae",
-      order_name: "Carnivora",
-      class_name: "Mammalia",
-    });
+    const row = makeRow({ countries: ["ZA"], scientific_name: "Panthera pardus" });
     setup([row], {
       [String(row.sis_taxon_id)]: [
-        { id: 1, year: "2019", category: "LC", date: "2019-05-01", assessors: "Dr. Wolf", reviewers: null },
+        { id: 1, year: "2009", category: "LC", date: "2009-01-01", assessors: "Dr. Old", reviewers: null },
+        { id: 2, year: "2023", category: "VU", date: "2023-01-01", assessors: "Dr. New", reviewers: null },
       ],
     });
 
-    const result = getAssessorCandidates("Panthera leo", group, "Felidae", "Carnivora", "Mammalia");
-    expect(result).toHaveLength(1);
-    expect(result[0].genus).toBe(0);
-    expect(result[0].family).toBe(0);
-    expect(result[0].order).toBe(1);
-    expect(result[0].class).toBe(1);
+    const tiers = tiersAt(getCreditCandidates("assessors", target(group), ["ZA"]), "genus");
+    expect(tiers["Dr. Old"]?.latestDate).toBe("2009-01-01");
+    expect(tiers["Dr. New"]?.latestDate).toBe("2023-01-01");
   });
 
-  it("counts class-only match", () => {
+  it("carries the deepest tier's date up to the broader ranks", () => {
     const group = uniqueGroup();
-    const row = makeRow({
-      scientific_name: "Equus caballus",
-      family: "Equidae",
-      order_name: "Perissodactyla",
-      class_name: "Mammalia",
-    });
-    setup([row], {
-      [String(row.sis_taxon_id)]: [
-        { id: 1, year: "2022", category: "LC", date: "2022-01-01", assessors: "Dr. Horse", reviewers: null },
-      ],
-    });
-
-    const result = getAssessorCandidates("Panthera leo", group, "Felidae", "Carnivora", "Mammalia");
-    expect(result).toHaveLength(1);
-    expect(result[0].genus).toBe(0);
-    expect(result[0].family).toBe(0);
-    expect(result[0].order).toBe(0);
-    expect(result[0].class).toBe(1);
-  });
-
-  it("sorts by genus count first, then family, order, class", () => {
-    const group = uniqueGroup();
-    const genusRow = makeRow({ scientific_name: "Panthera tigris", family: "Felidae", order_name: "Carnivora", class_name: "Mammalia" });
-    const familyRow = makeRow({ scientific_name: "Felis catus", family: "Felidae", order_name: "Carnivora", class_name: "Mammalia" });
-    const orderRow = makeRow({ scientific_name: "Canis lupus", family: "Canidae", order_name: "Carnivora", class_name: "Mammalia" });
-    const classRow = makeRow({ scientific_name: "Equus caballus", family: "Equidae", order_name: "Perissodactyla", class_name: "Mammalia" });
-
-    setup([genusRow, familyRow, orderRow, classRow], {
+    const genusRow = makeRow({ countries: ["ZA"], scientific_name: "Panthera pardus" });
+    const orderRow = makeRow({ countries: ["ZA"], scientific_name: "Canis mesomelas", family: "Canidae" });
+    setup([genusRow, orderRow], {
       [String(genusRow.sis_taxon_id)]: [
-        { id: 1, year: "2018", category: "EN", date: "2018-01-01", assessors: "Genus Expert", reviewers: null },
-      ],
-      [String(familyRow.sis_taxon_id)]: [
-        { id: 2, year: "2022", category: "LC", date: "2022-01-01", assessors: "Family Expert", reviewers: null },
+        { id: 1, year: "2020", category: "LC", date: "2020-01-01", assessors: "Dr. Cat", reviewers: null },
       ],
       [String(orderRow.sis_taxon_id)]: [
-        { id: 3, year: "2023", category: "LC", date: "2023-01-01", assessors: "Order Expert", reviewers: null },
-      ],
-      [String(classRow.sis_taxon_id)]: [
-        { id: 4, year: "2024", category: "LC", date: "2024-01-01", assessors: "Class Expert", reviewers: null },
+        { id: 2, year: "2014", category: "LC", date: "2014-01-01", assessors: "Dr. Cat", reviewers: null },
       ],
     });
 
-    const result = getAssessorCandidates("Panthera leo", group, "Felidae", "Carnivora", "Mammalia");
-    expect(result[0].name).toBe("Genus Expert");
-    expect(result[1].name).toBe("Family Expert");
-    expect(result[2].name).toBe("Order Expert");
-    expect(result[3].name).toBe("Class Expert");
+    const tiers = getCreditCandidates("assessors", target(group), ["ZA"]).candidates[0].tiers;
+    expect(tiers.genus?.latestDate).toBe("2020-01-01");
+    expect(tiers.order?.latestDate).toBe("2020-01-01");
   });
 
-  it("returns all candidates, not just top 3", () => {
+  // ── names ─────────────────────────────────────────────────────────────────
+
+  it("splits a multi-name credit string into one candidate per person", () => {
     const group = uniqueGroup();
-    const rows = Array.from({ length: 5 }, (_, i) =>
-      makeRow({ scientific_name: `Panthera sp${i}`, family: "Felidae", order_name: "Carnivora", class_name: "Mammalia" })
-    );
-    const history: HistoryMap = {};
-    for (const row of rows) {
-      history[String(row.sis_taxon_id)] = [
-        { id: row.sis_taxon_id, year: "2020", category: "VU", date: "2020-01-01", assessors: `Expert ${row.sis_taxon_id}`, reviewers: null },
-      ];
-    }
-    setup(rows, history);
-
-    const result = getAssessorCandidates("Panthera leo", group, "Felidae", "Carnivora", "Mammalia");
-    expect(result).toHaveLength(5);
-  });
-
-  it("breaks genus ties by family count", () => {
-    const group = uniqueGroup();
-    const genusRow = makeRow({ scientific_name: "Panthera tigris", family: "Felidae", order_name: "Carnivora", class_name: "Mammalia" });
-    const familyRow = makeRow({ scientific_name: "Felis catus", family: "Felidae", order_name: "Carnivora", class_name: "Mammalia" });
-
-    setup([genusRow, familyRow], {
-      [String(genusRow.sis_taxon_id)]: [
-        { id: 1, year: "2020", category: "EN", date: "2020-01-01", assessors: "Assessor A", reviewers: null },
-      ],
-      [String(familyRow.sis_taxon_id)]: [
-        // Assessor B has no genus match but a family match — still 0 genus
-        // Assessor A also gets this family match via genus overlap
-        { id: 2, year: "2020", category: "LC", date: "2020-01-01", assessors: "Assessor A & Assessor B", reviewers: null },
-      ],
-    });
-
-    const result = getAssessorCandidates("Panthera leo", group, "Felidae", "Carnivora", "Mammalia");
-    // Assessor A: genus=1, family=2 (genus row + family row)
-    // Assessor B: genus=0, family=1
-    expect(result[0].name).toBe("Assessor A");
-    expect(result[0].genus).toBe(1);
-    expect(result[0].family).toBe(2);
-  });
-
-  it("handles case-insensitive matching for family, order, and class", () => {
-    const group = uniqueGroup();
-    const row = makeRow({ scientific_name: "Felis catus", family: "FELIDAE", order_name: "CARNIVORA", class_name: "MAMMALIA" });
+    const row = makeRow({ countries: ["ZA"], scientific_name: "Panthera pardus" });
     setup([row], {
       [String(row.sis_taxon_id)]: [
-        { id: 1, year: "2020", category: "LC", date: "2020-01-01", assessors: "Dr. Case", reviewers: null },
+        { id: 1, year: "2020", category: "LC", date: "2020-01-01", assessors: "Bauer, H., Packer, C. & Durant, S.", reviewers: null },
       ],
     });
-
-    const result = getAssessorCandidates("Panthera leo", group, "felidae", "carnivora", "mammals");
-    expect(result).toHaveLength(1);
-    expect(result[0].family).toBe(1);
+    const names = getCreditCandidates("assessors", target(group), ["ZA"]).candidates.map((c) => c.name).sort();
+    expect(names).toEqual(["Bauer, H.", "Durant, S.", "Packer, C."]);
   });
 
-  it("skips assessor names shorter than 3 characters", () => {
+  it("drops a credit too short to be a name", () => {
     const group = uniqueGroup();
-    const row = makeRow({ scientific_name: "Panthera tigris" });
+    const row = makeRow({ countries: ["ZA"], scientific_name: "Panthera pardus" });
     setup([row], {
       [String(row.sis_taxon_id)]: [
-        { id: 1, year: "2020", category: "EN", date: "2020-01-01", assessors: "AB & Dr. Valid Name", reviewers: null },
+        { id: 1, year: "2020", category: "LC", date: "2020-01-01", assessors: "Ab", reviewers: null },
       ],
     });
-
-    const result = getAssessorCandidates("Panthera leo", group);
-    const names = result.map((c) => c.name);
-    expect(names).not.toContain("AB");
-    expect(names).toContain("Dr. Valid Name");
-  });
-
-  it("genus match works without family/order/class params", () => {
-    const group = uniqueGroup();
-    const row = makeRow({ scientific_name: "Panthera tigris" });
-    setup([row], {
-      [String(row.sis_taxon_id)]: [
-        { id: 1, year: "2020", category: "EN", date: "2020-06-15", assessors: "Dr. Genus", reviewers: null },
-      ],
-    });
-
-    const result = getAssessorCandidates("Panthera leo", group);
-    expect(result).toHaveLength(1);
-    expect(result[0].genus).toBe(1);
-  });
-
-  it("returns empty when no family/order/class params and genus differs", () => {
-    const group = uniqueGroup();
-    const row = makeRow({ scientific_name: "Felis catus", family: "Felidae", order_name: "Carnivora" });
-    setup([row], {
-      [String(row.sis_taxon_id)]: [
-        { id: 1, year: "2020", category: "LC", date: "2020-01-01", assessors: "Dr. Fallback", reviewers: null },
-      ],
-    });
-
-    // Different genus, no family/order/class provided — no overlap
-    const result = getAssessorCandidates("Canis lupus", group);
-    expect(result).toEqual([]);
-  });
-
-  it("uses assessment date (not year_published) for latestDate", () => {
-    const group = uniqueGroup();
-    const row = makeRow({ scientific_name: "Panthera tigris" });
-    setup([row], {
-      [String(row.sis_taxon_id)]: [
-        { id: 1, year: "2022", category: "EN", date: "2015-05-28", assessors: "Dr. Timeline", reviewers: null },
-        { id: 2, year: "2020", category: "VU", date: "2019-11-01", assessors: "Dr. Timeline", reviewers: null },
-      ],
-    });
-
-    const result = getAssessorCandidates("Panthera leo", group);
-    expect(result).toHaveLength(1);
-    expect(result[0].latestDate).toBe("2019-11-01");
-  });
-
-  it("parses multiple assessors from a single assessment", () => {
-    const group = uniqueGroup();
-    const row = makeRow({ scientific_name: "Panthera tigris" });
-    setup([row], {
-      [String(row.sis_taxon_id)]: [
-        { id: 1, year: "2020", category: "EN", date: "2020-01-01", assessors: "Smith, J.A. & Jones, B.C.", reviewers: null },
-      ],
-    });
-
-    const result = getAssessorCandidates("Panthera leo", group);
-    const names = result.map((c) => c.name);
-    expect(names).toContain("Smith, J.A.");
-    expect(names).toContain("Jones, B.C.");
-  });
-
-  it("genus match works even when row has null family/order/class", () => {
-    const group = uniqueGroup();
-    const row = makeRow({ scientific_name: "Panthera tigris", family: null, order_name: null, class_name: null });
-    setup([row], {
-      [String(row.sis_taxon_id)]: [
-        { id: 1, year: "2020", category: "EN", date: "2020-01-01", assessors: "Genus Only", reviewers: null },
-      ],
-    });
-
-    const result = getAssessorCandidates("Panthera leo", group, null, null, null);
-    expect(result).toHaveLength(1);
-    expect(result[0].genus).toBe(1);
-    // family/order/class should still count via genus inclusivity
-    expect(result[0].family).toBe(1);
-    expect(result[0].order).toBe(1);
-    expect(result[0].class).toBe(1);
-  });
-
-  it("accumulates counts across multiple species for the same assessor", () => {
-    const group = uniqueGroup();
-    const row1 = makeRow({ scientific_name: "Panthera tigris", family: "Felidae", order_name: "Carnivora", class_name: "Mammalia" });
-    const row2 = makeRow({ scientific_name: "Panthera pardus", family: "Felidae", order_name: "Carnivora", class_name: "Mammalia" });
-    const row3 = makeRow({ scientific_name: "Felis catus", family: "Felidae", order_name: "Carnivora", class_name: "Mammalia" });
-
-    setup([row1, row2, row3], {
-      [String(row1.sis_taxon_id)]: [
-        { id: 1, year: "2020", category: "EN", date: "2020-01-01", assessors: "Multi Assessor", reviewers: null },
-      ],
-      [String(row2.sis_taxon_id)]: [
-        { id: 2, year: "2021", category: "VU", date: "2021-01-01", assessors: "Multi Assessor", reviewers: null },
-      ],
-      [String(row3.sis_taxon_id)]: [
-        { id: 3, year: "2022", category: "LC", date: "2022-01-01", assessors: "Multi Assessor", reviewers: null },
-      ],
-    });
-
-    const result = getAssessorCandidates("Panthera leo", group, "Felidae", "Carnivora", "Mammalia");
-    expect(result).toHaveLength(1);
-    expect(result[0].genus).toBe(2);   // tigris + pardus
-    expect(result[0].family).toBe(3);  // tigris + pardus + catus
-    expect(result[0].order).toBe(3);
-    expect(result[0].class).toBe(3);
-    expect(result[0].latestDate).toBe("2022-01-01");
-  });
-});
-
-// ---------------------------------------------------------------------------
-// getAssessorCandidatesByCountry
-// ---------------------------------------------------------------------------
-
-describe("getAssessorCandidatesByCountry", () => {
-  it("returns empty array when no countries provided", () => {
-    const group = uniqueGroup();
-    setup([]);
-    expect(getAssessorCandidatesByCountry([group], [])).toEqual([]);
-  });
-
-  it("returns empty array when no taxon groups provided", () => {
-    expect(getAssessorCandidatesByCountry([], ["ZA"])).toEqual([]);
-  });
-
-  it("returns empty array when no species share countries", () => {
-    const group = uniqueGroup();
-    const row = makeRow({ countries: ["GB"], scientific_name: "Testus one" });
-    setup([row], {
-      [String(row.sis_taxon_id)]: [
-        { id: 1, year: "2020", category: "LC", date: "2020-01-01", assessors: "Dr. UK", reviewers: null },
-      ],
-    });
-    // Search for species in ZA — no overlap
-    expect(getAssessorCandidatesByCountry([group], ["ZA"])).toEqual([]);
-  });
-
-  it("finds assessors for species with overlapping countries", () => {
-    const group = uniqueGroup();
-    const row = makeRow({ countries: ["ZA", "MZ"], scientific_name: "Testus one" });
-    setup([row], {
-      [String(row.sis_taxon_id)]: [
-        { id: 1, year: "2020", category: "LC", date: "2020-06-15", assessors: "Dr. Africa", reviewers: null },
-      ],
-    });
-
-    const result = getAssessorCandidatesByCountry([group], ["ZA"]);
-    expect(result).toHaveLength(1);
-    expect(result[0].name).toBe("Dr. Africa");
-    expect(result[0].totalInRegion).toBe(1);
-    expect(result[0].latestDate).toBe("2020-06-15");
-  });
-
-  it("aggregates region counts from overlapping countries", () => {
-    const group = uniqueGroup();
-    // Species occurs in both Southern Africa (ZA) and Eastern Africa (KE)
-    const row = makeRow({ countries: ["ZA", "KE"], scientific_name: "Testus wide" });
-    setup([row], {
-      [String(row.sis_taxon_id)]: [
-        { id: 1, year: "2021", category: "VU", date: "2021-01-01", assessors: "Dr. Wide", reviewers: null },
-      ],
-    });
-
-    // Target species occurs in both ZA and KE
-    const result = getAssessorCandidatesByCountry([group], ["ZA", "KE"]);
-    expect(result).toHaveLength(1);
-    expect(result[0].regionCounts["Southern Africa"]).toBe(1);
-    expect(result[0].regionCounts["Eastern Africa"]).toBe(1);
-    // Country-level counts should also be present
-    expect(result[0].countryCounts["ZA"]).toBe(1);
-    expect(result[0].countryCounts["KE"]).toBe(1);
-  });
-
-  it("sorts by total count descending", () => {
-    const group = uniqueGroup();
-    const row1 = makeRow({ countries: ["ZA"], scientific_name: "Testus one" });
-    const row2 = makeRow({ countries: ["ZA"], scientific_name: "Testus two" });
-    const row3 = makeRow({ countries: ["ZA"], scientific_name: "Testus three" });
-
-    setup([row1, row2, row3], {
-      [String(row1.sis_taxon_id)]: [
-        { id: 1, year: "2020", category: "LC", date: "2020-01-01", assessors: "Few Assessor", reviewers: null },
-      ],
-      [String(row2.sis_taxon_id)]: [
-        { id: 2, year: "2020", category: "LC", date: "2020-01-01", assessors: "Many Assessor", reviewers: null },
-      ],
-      [String(row3.sis_taxon_id)]: [
-        { id: 3, year: "2020", category: "LC", date: "2020-01-01", assessors: "Many Assessor", reviewers: null },
-      ],
-    });
-
-    const result = getAssessorCandidatesByCountry([group], ["ZA"]);
-    expect(result[0].name).toBe("Many Assessor");
-    expect(result[0].totalInRegion).toBe(2);
-    expect(result[1].name).toBe("Few Assessor");
-    expect(result[1].totalInRegion).toBe(1);
-  });
-
-  it("breaks total ties by latest date", () => {
-    const group = uniqueGroup();
-    const row1 = makeRow({ countries: ["ZA"], scientific_name: "Testus one" });
-    const row2 = makeRow({ countries: ["ZA"], scientific_name: "Testus two" });
-
-    setup([row1, row2], {
-      [String(row1.sis_taxon_id)]: [
-        { id: 1, year: "2018", category: "LC", date: "2018-01-01", assessors: "Old Assessor", reviewers: null },
-      ],
-      [String(row2.sis_taxon_id)]: [
-        { id: 2, year: "2023", category: "LC", date: "2023-01-01", assessors: "New Assessor", reviewers: null },
-      ],
-    });
-
-    const result = getAssessorCandidatesByCountry([group], ["ZA"]);
-    expect(result[0].name).toBe("New Assessor");
-    expect(result[1].name).toBe("Old Assessor");
-  });
-
-  it("searches across multiple taxon groups", () => {
-    const group1 = uniqueGroup();
-    const group2 = uniqueGroup();
-    const row1 = makeRow({ countries: ["ZA"], scientific_name: "Testus one" });
-    const row2 = makeRow({ countries: ["ZA"], scientific_name: "Testus two" });
-
-    // First setup loads for group1
-    setup([row1], {
-      [String(row1.sis_taxon_id)]: [
-        { id: 1, year: "2020", category: "LC", date: "2020-01-01", assessors: "Group1 Expert", reviewers: null },
-      ],
-    });
-    // Call for group1 first to prime its cache
-    const partial = getAssessorCandidatesByCountry([group1], ["ZA"]);
-    expect(partial).toHaveLength(1);
-
-    // Now setup for group2
-    setup([row2], {
-      [String(row2.sis_taxon_id)]: [
-        { id: 2, year: "2021", category: "VU", date: "2021-01-01", assessors: "Group2 Expert", reviewers: null },
-      ],
-    });
-
-    const result = getAssessorCandidatesByCountry([group1, group2], ["ZA"]);
-    const names = result.map((c) => c.name);
-    expect(names).toContain("Group1 Expert");
-    expect(names).toContain("Group2 Expert");
-  });
-
-  it("handles case-insensitive country matching", () => {
-    const group = uniqueGroup();
-    const row = makeRow({ countries: ["za"], scientific_name: "Testus lower" });
-    setup([row], {
-      [String(row.sis_taxon_id)]: [
-        { id: 1, year: "2020", category: "LC", date: "2020-01-01", assessors: "Dr. Case", reviewers: null },
-      ],
-    });
-
-    const result = getAssessorCandidatesByCountry([group], ["ZA"]);
-    expect(result).toHaveLength(1);
-  });
-
-  it("skips assessor names shorter than 3 characters", () => {
-    const group = uniqueGroup();
-    const row = makeRow({ countries: ["ZA"], scientific_name: "Testus one" });
-    setup([row], {
-      [String(row.sis_taxon_id)]: [
-        { id: 1, year: "2020", category: "LC", date: "2020-01-01", assessors: "AB & Dr. Valid", reviewers: null },
-      ],
-    });
-
-    const result = getAssessorCandidatesByCountry([group], ["ZA"]);
-    const names = result.map((c) => c.name);
-    expect(names).not.toContain("AB");
-    expect(names).toContain("Dr. Valid");
-  });
-
-  it("counts unique species, not multiple assessments of the same species", () => {
-    const group = uniqueGroup();
-    const row = makeRow({ countries: ["ZA"], scientific_name: "Testus one" });
-    setup([row], {
-      [String(row.sis_taxon_id)]: [
-        { id: 1, year: "2010", category: "LC", date: "2010-01-01", assessors: "Dr. Repeat", reviewers: null },
-        { id: 2, year: "2015", category: "VU", date: "2015-06-01", assessors: "Dr. Repeat", reviewers: null },
-        { id: 3, year: "2020", category: "EN", date: "2020-03-15", assessors: "Dr. Repeat", reviewers: null },
-      ],
-    });
-
-    const result = getAssessorCandidatesByCountry([group], ["ZA"]);
-    expect(result).toHaveLength(1);
-    expect(result[0].name).toBe("Dr. Repeat");
-    // Should count as 1 species, not 3 assessments
-    expect(result[0].totalInRegion).toBe(1);
-    expect(result[0].regionCounts["Southern Africa"]).toBe(1);
-    // Latest date should still be tracked correctly
-    expect(result[0].latestDate).toBe("2020-03-15");
-  });
-
-  it("tracks totalAll separately from totalInRegion", () => {
-    const group = uniqueGroup();
-    const rowInRegion = makeRow({ countries: ["ZA"], scientific_name: "Testus local" });
-    const rowOutside = makeRow({ countries: ["GB"], scientific_name: "Testus remote" });
-
-    setup([rowInRegion, rowOutside], {
-      [String(rowInRegion.sis_taxon_id)]: [
-        { id: 1, year: "2020", category: "LC", date: "2020-01-01", assessors: "Dr. Both", reviewers: null },
-      ],
-      [String(rowOutside.sis_taxon_id)]: [
-        { id: 2, year: "2021", category: "VU", date: "2021-01-01", assessors: "Dr. Both", reviewers: null },
-      ],
-    });
-
-    const result = getAssessorCandidatesByCountry([group], ["ZA"]);
-    expect(result).toHaveLength(1);
-    expect(result[0].name).toBe("Dr. Both");
-    expect(result[0].totalInRegion).toBe(1);  // Only the ZA species
-    expect(result[0].totalAll).toBe(2);        // Both species
-  });
-
-  it("applies taxonomy filter to narrow scope", () => {
-    const group = uniqueGroup();
-    const beetleRow = makeRow({ countries: ["ZA"], scientific_name: "Beetlus one", order_name: "Coleoptera", class_name: "Insecta" });
-    const mothRow = makeRow({ countries: ["ZA"], scientific_name: "Mothus one", order_name: "Lepidoptera", class_name: "Insecta" });
-
-    setup([beetleRow, mothRow], {
-      [String(beetleRow.sis_taxon_id)]: [
-        { id: 1, year: "2020", category: "LC", date: "2020-01-01", assessors: "Beetle Expert", reviewers: null },
-      ],
-      [String(mothRow.sis_taxon_id)]: [
-        { id: 2, year: "2021", category: "LC", date: "2021-01-01", assessors: "Moth Expert", reviewers: null },
-      ],
-    });
-
-    // Without filter: both assessors appear
-    const allResult = getAssessorCandidatesByCountry([group], ["ZA"]);
-    expect(allResult).toHaveLength(2);
-
-    // With orderNames filter: only beetle assessor
-    const beetleResult = getAssessorCandidatesByCountry([group], ["ZA"], { orderNames: ["coleoptera"] });
-    expect(beetleResult).toHaveLength(1);
-    expect(beetleResult[0].name).toBe("Beetle Expert");
+    expect(getCreditCandidates("assessors", target(group), ["ZA"]).candidates).toEqual([]);
   });
 
   it("strips parenthetical affiliations and merges them under one candidate", () => {
     const group = uniqueGroup();
-    const row1 = makeRow({ countries: ["ZA"], scientific_name: "Testus one" });
-    const row2 = makeRow({ countries: ["ZA"], scientific_name: "Testus two" });
+    const row1 = makeRow({ countries: ["ZA"], scientific_name: "Panthera pardus" });
+    const row2 = makeRow({ countries: ["ZA"], scientific_name: "Panthera tigris" });
     setup([row1, row2], {
       [String(row1.sis_taxon_id)]: [
         { id: 1, year: "2020", category: "LC", date: "2020-01-01", assessors: "Amori, G. (Small Nonvolant Mammal Red List Authority)", reviewers: null },
@@ -651,177 +292,92 @@ describe("getAssessorCandidatesByCountry", () => {
       ],
     });
 
-    const result = getAssessorCandidatesByCountry([group], ["ZA"]);
-    // Both rows credit the same person despite the affiliation label on one
-    expect(result).toHaveLength(1);
-    expect(result[0].name).toBe("Amori, G.");
-    expect(result[0].totalInRegion).toBe(2);
+    const result = getCreditCandidates("assessors", target(group), ["ZA"]);
+    expect(result.candidates).toHaveLength(1);
+    expect(result.candidates[0].name).toBe("Amori, G.");
+    expect(result.candidates[0].tiers.genus?.total).toBe(2);
   });
-});
 
-// ---------------------------------------------------------------------------
-// getReviewerCandidatesByCountry
-// ---------------------------------------------------------------------------
+  // ── roles ─────────────────────────────────────────────────────────────────
 
-describe("getReviewerCandidatesByCountry", () => {
-  it("returns empty array when no countries provided", () => {
+  it("ranks reviewers off the reviewers column, not the assessors one", () => {
     const group = uniqueGroup();
-    setup([]);
-    expect(getReviewerCandidatesByCountry([group], [])).toEqual([]);
-  });
-
-  it("returns empty array when no taxon groups provided", () => {
-    expect(getReviewerCandidatesByCountry([], ["ZA"])).toEqual([]);
-  });
-
-  it("returns empty array when species have only assessors, no reviewers", () => {
-    const group = uniqueGroup();
-    const row = makeRow({ countries: ["ZA"], scientific_name: "Testus one" });
+    const row = makeRow({ countries: ["ZA"], scientific_name: "Panthera pardus" });
     setup([row], {
       [String(row.sis_taxon_id)]: [
-        { id: 1, year: "2020", category: "LC", date: "2020-01-01", assessors: "Dr. Africa", reviewers: null },
+        { id: 1, year: "2020", category: "LC", date: "2020-01-01", assessors: "Dr. Assessor", reviewers: "Dr. Reviewer" },
       ],
     });
-    expect(getReviewerCandidatesByCountry([group], ["ZA"])).toEqual([]);
+
+    expect(getCreditCandidates("assessors", target(group), ["ZA"]).candidates.map((c) => c.name)).toEqual(["Dr. Assessor"]);
+    expect(getCreditCandidates("reviewers", target(group), ["ZA"]).candidates.map((c) => c.name)).toEqual(["Dr. Reviewer"]);
   });
 
-  it("finds reviewers for species with overlapping countries", () => {
+  it("returns no reviewers when species carry assessors only", () => {
     const group = uniqueGroup();
-    const row = makeRow({ countries: ["ZA", "MZ"], scientific_name: "Testus one" });
+    const row = makeRow({ countries: ["ZA"], scientific_name: "Panthera pardus" });
     setup([row], {
       [String(row.sis_taxon_id)]: [
-        { id: 1, year: "2020", category: "LC", date: "2020-06-15", assessors: "Dr. Assessor", reviewers: "Dr. Reviewer" },
+        { id: 1, year: "2020", category: "LC", date: "2020-01-01", assessors: "Dr. Assessor", reviewers: null },
       ],
     });
-
-    const result = getReviewerCandidatesByCountry([group], ["ZA"]);
-    expect(result).toHaveLength(1);
-    expect(result[0].name).toBe("Dr. Reviewer");
-    expect(result[0].totalInRegion).toBe(1);
-    expect(result[0].latestDate).toBe("2020-06-15");
+    expect(getCreditCandidates("reviewers", target(group), ["ZA"]).candidates).toEqual([]);
   });
 
-  it("aggregates region and country counts from overlapping countries", () => {
-    const group = uniqueGroup();
-    const row = makeRow({ countries: ["ZA", "KE"], scientific_name: "Testus wide" });
-    setup([row], {
-      [String(row.sis_taxon_id)]: [
-        { id: 1, year: "2021", category: "VU", date: "2021-01-01", assessors: null, reviewers: "Dr. Wide" },
-      ],
-    });
+  // ── which ranks are offered ───────────────────────────────────────────────
 
-    const result = getReviewerCandidatesByCountry([group], ["ZA", "KE"]);
-    expect(result).toHaveLength(1);
-    expect(result[0].regionCounts["Southern Africa"]).toBe(1);
-    expect(result[0].regionCounts["Eastern Africa"]).toBe(1);
-    expect(result[0].countryCounts["ZA"]).toBe(1);
-    expect(result[0].countryCounts["KE"]).toBe(1);
+  it("offers every rank the target has a value for", () => {
+    const group = uniqueGroup();
+    const rodent = makeRow({ countries: ["ZA"], scientific_name: "Otomys irroratus", order_name: "Rodentia", family: "Muridae" });
+    setup([rodent, makeRow({ countries: ["ZA"], scientific_name: "Panthera leo" })]);
+    // class_name is Mammalia on both rows, so the class rank would just restate
+    // the group and is left out; the rest of the lineage is present.
+    expect(getCreditCandidates("assessors", target(group), ["ZA"]).ranks).toEqual(["group", "order", "family", "genus"]);
   });
 
-  it("counts unique species, not multiple assessments of the same species", () => {
+  it("offers a class rank only when the class is narrower than the group", () => {
     const group = uniqueGroup();
-    const row = makeRow({ countries: ["ZA"], scientific_name: "Testus one" });
-    setup([row], {
-      [String(row.sis_taxon_id)]: [
-        { id: 1, year: "2010", category: "LC", date: "2010-01-01", assessors: null, reviewers: "Dr. Repeat" },
-        { id: 2, year: "2015", category: "VU", date: "2015-06-01", assessors: null, reviewers: "Dr. Repeat" },
-      ],
-    });
-
-    const result = getReviewerCandidatesByCountry([group], ["ZA"]);
-    expect(result).toHaveLength(1);
-    expect(result[0].totalInRegion).toBe(1);
-    expect(result[0].latestDate).toBe("2015-06-01");
+    const mammal = makeRow({ countries: ["ZA"], scientific_name: "Panthera leo", class_name: "Mammalia" });
+    const bird = makeRow({ countries: ["ZA"], scientific_name: "Struthio camelus", class_name: "Aves", order_name: "Struthioniformes", family: "Struthionidae" });
+    setup([mammal, bird]);
+    expect(getCreditCandidates("assessors", target(group), ["ZA"]).ranks).toContain("class");
   });
 
-  it("tracks totalAll separately from totalInRegion", () => {
+  it("omits ranks the target has no lineage value for", () => {
     const group = uniqueGroup();
-    const rowInRegion = makeRow({ countries: ["ZA"], scientific_name: "Testus local" });
-    const rowOutside = makeRow({ countries: ["GB"], scientific_name: "Testus remote" });
-    setup([rowInRegion, rowOutside], {
-      [String(rowInRegion.sis_taxon_id)]: [
-        { id: 1, year: "2020", category: "LC", date: "2020-01-01", assessors: null, reviewers: "Dr. Both" },
-      ],
-      [String(rowOutside.sis_taxon_id)]: [
-        { id: 2, year: "2021", category: "VU", date: "2021-01-01", assessors: null, reviewers: "Dr. Both" },
-      ],
-    });
-
-    const result = getReviewerCandidatesByCountry([group], ["ZA"]);
-    expect(result).toHaveLength(1);
-    expect(result[0].totalInRegion).toBe(1);
-    expect(result[0].totalAll).toBe(2);
+    setup([makeRow({ countries: ["ZA"] })]);
+    const t = { taxonGroup: group, scientificName: "Incertae sedis", className: null, orderName: null, family: null };
+    expect(getCreditCandidates("assessors", t, ["ZA"]).ranks).toEqual(["group", "genus"]);
   });
 
-  it("parses multiple reviewers from a single assessment", () => {
+  // ── which rank the tab opens on ───────────────────────────────────────────
+
+  it("opens on the finest rank with enough people to compare", () => {
     const group = uniqueGroup();
-    const row = makeRow({ countries: ["ZA"], scientific_name: "Testus one" });
-    setup([row], {
-      [String(row.sis_taxon_id)]: [
-        { id: 1, year: "2020", category: "EN", date: "2020-01-01", assessors: null, reviewers: "Smith, J.A. & Jones, B.C." },
+    // Three people share the target's family; only one shares its genus, which is
+    // too thin a list to open on.
+    const genusRow = makeRow({ countries: ["ZA"], scientific_name: "Panthera pardus" });
+    const familyRows = [1, 2, 3].map((n) => makeRow({ countries: ["ZA"], scientific_name: `Felis number${n}`, family: "Felidae" }));
+    setup([genusRow, ...familyRows], {
+      [String(genusRow.sis_taxon_id)]: [
+        { id: 0, year: "2020", category: "LC", date: "2020-01-01", assessors: "Dr. Alone", reviewers: null },
       ],
+      ...Object.fromEntries(familyRows.map((r, i) => [String(r.sis_taxon_id), [
+        { id: i + 1, year: "2020", category: "LC", date: "2020-01-01", assessors: `Dr. Number${i}`, reviewers: null },
+      ]])),
     });
 
-    const names = getReviewerCandidatesByCountry([group], ["ZA"]).map((c) => c.name);
-    expect(names).toContain("Smith, J.A.");
-    expect(names).toContain("Jones, B.C.");
+    expect(getCreditCandidates("assessors", target(group), ["ZA"]).defaultRank).toBe("family");
   });
 
-  // The bug behind the reported broken filter link: a reviewer carries a
-  // "(... Red List Authority)" label in one assessment but not another, so the
-  // affiliated variant produced a separate candidate whose URL didn't match the
-  // species' latest_reviewers. Stripping the affiliation merges them.
-  it("strips parenthetical affiliations and merges them under one candidate", () => {
+  it("falls back to the taxon group when no finer rank has candidates", () => {
     const group = uniqueGroup();
-    const row1 = makeRow({ countries: ["ZA"], scientific_name: "Testus one" });
-    const row2 = makeRow({ countries: ["ZA"], scientific_name: "Testus two" });
-    setup([row1, row2], {
-      [String(row1.sis_taxon_id)]: [
-        { id: 1, year: "2008", category: "LC", date: "2008-01-01", assessors: null, reviewers: "Amori, G. (Small Nonvolant Mammal Red List Authority)" },
-      ],
-      [String(row2.sis_taxon_id)]: [
-        { id: 2, year: "2016", category: "LC", date: "2016-01-01", assessors: null, reviewers: "Amori, G." },
-      ],
-    });
-
-    const result = getReviewerCandidatesByCountry([group], ["ZA"]);
-    expect(result).toHaveLength(1);
-    expect(result[0].name).toBe("Amori, G.");
-    expect(result[0].totalInRegion).toBe(2);
-  });
-
-  it("strips affiliations from each name in a multi-reviewer string", () => {
-    const group = uniqueGroup();
-    const row = makeRow({ countries: ["ZA"], scientific_name: "Testus one" });
-    setup([row], {
-      [String(row.sis_taxon_id)]: [
-        { id: 1, year: "2020", category: "EN", date: "2020-01-01", assessors: null, reviewers: "Amori, G. (Small Nonvolant Mammal Red List Authority) & Schipper, J. (Global Mammal Assessment Team)" },
-      ],
-    });
-
-    const names = getReviewerCandidatesByCountry([group], ["ZA"]).map((c) => c.name);
-    expect(names).toContain("Amori, G.");
-    expect(names).toContain("Schipper, J.");
-    expect(names).not.toContain("Amori, G. (Small Nonvolant Mammal Red List Authority)");
-  });
-
-  it("applies taxonomy filter to narrow scope", () => {
-    const group = uniqueGroup();
-    const beetleRow = makeRow({ countries: ["ZA"], scientific_name: "Beetlus one", order_name: "Coleoptera", class_name: "Insecta" });
-    const mothRow = makeRow({ countries: ["ZA"], scientific_name: "Mothus one", order_name: "Lepidoptera", class_name: "Insecta" });
-    setup([beetleRow, mothRow], {
-      [String(beetleRow.sis_taxon_id)]: [
-        { id: 1, year: "2020", category: "LC", date: "2020-01-01", assessors: null, reviewers: "Beetle Reviewer" },
-      ],
-      [String(mothRow.sis_taxon_id)]: [
-        { id: 2, year: "2021", category: "LC", date: "2021-01-01", assessors: null, reviewers: "Moth Reviewer" },
-      ],
-    });
-
-    expect(getReviewerCandidatesByCountry([group], ["ZA"])).toHaveLength(2);
-    const beetleResult = getReviewerCandidatesByCountry([group], ["ZA"], { orderNames: ["coleoptera"] });
-    expect(beetleResult).toHaveLength(1);
-    expect(beetleResult[0].name).toBe("Beetle Reviewer");
+    const rows = [1, 2, 3].map((n) => makeRow({ countries: ["ZA"], scientific_name: `Otomys number${n}`, order_name: "Rodentia", family: "Muridae" }));
+    setup(rows, Object.fromEntries(rows.map((r, i) => [String(r.sis_taxon_id), [
+      { id: i, year: "2020", category: "LC", date: "2020-01-01", assessors: `Dr. Number${i}`, reviewers: null },
+    ]])));
+    // Nobody has worked on a cat, so only the group-wide ranking has anyone in it.
+    expect(getCreditCandidates("assessors", target(group), ["ZA"]).defaultRank).toBe("group");
   });
 });
 
