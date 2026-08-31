@@ -34,13 +34,13 @@ export interface SearchResult {
   matched_synonym?: string | null;
 }
 
-// A higher-rank taxon (class/order/family) the query matched — pinned above the
-// species hits. Selecting it browses the whole taxon via ?taxa=<taxon>, or — when
-// nodeId resolved server-side — via the curated/dynamic node it corresponds to (see
+// A taxon (class/order/family/genus) the query matched — pinned above the species
+// hits. Selecting it browses the whole taxon via ?taxa=<taxon>, or — when nodeId
+// resolved server-side — via the curated/dynamic node it corresponds to (see
 // selectTaxon), so the taxa-summary table's ancestor-breadcrumb rows populate too.
 interface TaxonSuggestion {
   name: string;
-  rank: "class" | "order" | "family";
+  rank: "class" | "order" | "family" | "genus";
   taxon: string;
   nodeId: string | null;
 }
@@ -190,7 +190,7 @@ export function SpeciesSearchBar() {
     []
   );
 
-  // Browse a whole higher-rank taxon (e.g. Felidae). When suggestTaxa resolved a real
+  // Browse a whole taxon (e.g. Felidae, or the genus Panthera). When suggestTaxa resolved a real
   // node (nodeId) for it — a curated static node, or a well-formed dynamic drilldown
   // id — select it as a display-root + sub-group pair, exactly like clicking through
   // TaxaSummary's own tree would: this is what makes the ancestor-breadcrumb rows
@@ -354,7 +354,9 @@ export function SpeciesSearchBar() {
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h10M4 18h6" />
               </svg>
               <span className="flex-1 min-w-0 text-zinc-900 dark:text-zinc-100">
-                Browse <span className="font-medium">{t.name}</span>
+                {/* Genus names are italicised by taxonomic convention (as the species
+                    hits below already are); class/order/family names are not. */}
+                Browse <span className={`font-medium${t.rank === "genus" ? " italic" : ""}`}>{t.name}</span>
               </span>
               <span className="shrink-0 text-xs font-medium uppercase tracking-wide text-zinc-400 dark:text-zinc-500">
                 {t.rank}

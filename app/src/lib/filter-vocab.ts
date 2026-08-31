@@ -250,10 +250,11 @@ export function resolveTaxa(values: string[]): { ids: string[]; unresolved: stri
       (TAXA_ALIASES[slug] ? toNode(TAXA_ALIASES[slug]) : null) ??
       (TAXA_ALIASES[underscored] ? toNode(TAXA_ALIASES[underscored]) : null);
     if (hit) { ids.add(hit); continue; }
-    // Arbitrary-rank: a single scientific-name word (a class/order/family like
-    // "felidae" or "odonata") isn't a curated node, but the read layer matches it
-    // by rank (resolveWhere). Pass it through lowercased; a non-taxon just yields
-    // zero results. Multi-word values are species names → use `search`, not `taxa`.
+    // Arbitrary-rank: a single scientific-name word (a class/order/family/genus like
+    // "felidae", "odonata" or "panthera") isn't a curated node, but the read layer
+    // matches it by rank (resolveWhere). Pass it through lowercased; a non-taxon just
+    // yields zero results. Multi-word values are species names → use `search`, not
+    // `taxa`.
     if (/^[a-z]+$/i.test(v)) { ids.add(v.toLowerCase()); continue; }
     unresolved.push(raw);
   }

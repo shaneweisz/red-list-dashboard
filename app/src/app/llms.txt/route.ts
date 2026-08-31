@@ -46,8 +46,8 @@ export function GET(req: NextRequest) {
 2. Look up a species: ${base}/browse?search=<name>
 
 \`taxa\` works at ANY taxonomic rank — a curated group (birds, corals), a
-sub-group (sharks-rays, flatworms), or a scientific name for a class/order/family
-(felidae, odonata, carnivora). \`search\` matches scientific OR common names,
+sub-group (sharks-rays, flatworms), or a scientific name for a class/order/family/genus
+(felidae, odonata, carnivora, panthera). \`search\` matches scientific OR common names,
 including synonyms / old names (they resolve to the accepted species).
 
 ## Rules

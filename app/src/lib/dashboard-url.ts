@@ -20,7 +20,7 @@
  *  - taxa are emitted as a single flat token list (`taxa=corals,felidae`); the
  *    dashboard's parseParams expands each token to its display-root + sub-group
  *    (corals → invertebrates + inv-corals) — see taxonomy-utils. A scientific-rank
- *    taxon (`felidae`) has no node and is matched by class/order/family.
+ *    taxon (`felidae`, `panthera`) has no node and is matched by class/order/family/genus.
  *  - `assessors`/`reviewers`/`facilitators`: both surfaces case-insensitively SUBSTRING-match the
  *    name (the dashboard predicate mirrors /browse), so a partial name selects the
  *    same species set in each.

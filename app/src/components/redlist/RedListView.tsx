@@ -1673,15 +1673,18 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
     // skip the parent taxon_id filter, which would otherwise drop them.
     if (selectedTaxa.size > 0 && !selectedTaxa.has("all") && !(isNewAssessments && selectedSubgroups.size > 0)) {
       // Display-root entries (the 8 taxa) match by taxon_id. Any selected taxon
-      // that isn't a taxonomy node — an arbitrary rank like ?taxa=turdidae — is
-      // matched against the species' own class/order/family (#261).
+      // that isn't a taxonomy node — an arbitrary rank like ?taxa=turdidae or
+      // ?taxa=panthera — is matched against the species' own class/order/family/genus
+      // (#261). Genus is derived from the leading word of the scientific name, the
+      // same way the server's resolveWhere does it (no genus column exists).
       const arbitrary = [...selectedTaxa].filter((t) => t !== "all" && !findNode(t)).map((t) => t.toLowerCase());
       filtered = filtered.filter((s) =>
         (s.taxon_id != null && selectedTaxa.has(s.taxon_id)) ||
         (arbitrary.length > 0 && arbitrary.some((v) =>
           (s.class_name ?? "").toLowerCase() === v ||
           (s.order_name ?? "").toLowerCase() === v ||
-          (s.family ?? "").toLowerCase() === v)),
+          (s.family ?? "").toLowerCase() === v ||
+          matchesBreakdownName(s, "genus", v))),
       );
     }
     if (selectedSubgroups.size > 0) {

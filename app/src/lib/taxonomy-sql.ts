@@ -231,6 +231,15 @@ export function canonicalOrderColumnSql(col: string, sciNameCol?: string): strin
   return `coalesce(lower(CASE ${sciCases} ELSE ${aliasExpr} END), '')`;
 }
 
+/** SQL expression for a row's genus. None of the parquets carries a genus column —
+ *  the genus is the first word of the (binomial) scientific name, which is how
+ *  taxonomy-utils.ts's matchesFilter derives it on the client too. Shared with
+ *  species-duckdb.ts's arbitrary-rank resolver and genus suggestions, so all three
+ *  paths agree on what "genus" means without a data rebuild. Not lowercase-safe on
+ *  its own: scientific_name is stored as-is (unlike the pre-lowercased
+ *  class_name/order_name/family), hence the lower(). */
+export const GENUS_SQL = "lower(split_part(scientific_name, ' ', 1))";
+
 export function sqlStrList(vals: string[]): string {
   return vals.map((v) => `'${v.toLowerCase().replace(/'/g, "''")}'`).join(", ");
 }
@@ -253,7 +262,7 @@ export function filterToSql(filter: NodeFilter, nodeId?: string): string {
   const cls = "coalesce(lower(class_name), '')";
   const ord = "coalesce(lower(order_name), '')";
   const fam = "coalesce(lower(family), '')";
-  const genus = "coalesce(lower(split_part(scientific_name, ' ', 1)), '')";
+  const genus = `coalesce(${GENUS_SQL}, '')`;
   const conds: string[] = [`taxon_group IN (${sqlStrList(filter.taxonGroups)})`];
   if (filter.classNames?.length) conds.push(`${cls} IN (${sqlStrList(expandClasses(filter.classNames))})`);
   if (filter.excludeClasses?.length) conds.push(`${cls} NOT IN (${sqlStrList(expandClasses(filter.excludeClasses))})`);
