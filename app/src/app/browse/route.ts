@@ -152,7 +152,7 @@ function resultsHtml(r: BrowseResult): string {
   let summary: string;
   if (r.tooLarge && r.total === 0) {
     summary = `<p class="summary">That group is too large to list at once — ${filterDesc}.</p>
-      <p>Open a narrower sub-group (e.g. a class, order, or family). See <a href="/llms.txt">/llms.txt</a>.</p>`;
+      <p>Open a narrower sub-group (e.g. a class, order, family, or genus). See <a href="/llms.txt">/llms.txt</a>.</p>`;
   } else if (r.total === 0) {
     summary = `<p class="summary"><strong>No species match</strong> — ${filterDesc}.</p>
       <p>Try removing a filter, or see <a href="/llms.txt">/llms.txt</a> for valid values.</p>`;
@@ -186,6 +186,7 @@ const EXAMPLES: { url: string; desc: string }[] = [
   { url: `${BASE}?taxa=corals&threats=climate-change`, desc: "Coral species threatened by climate change" },
   { url: `${BASE}?taxa=mammals`, desc: "All mammals — read stats.outdated_pct for % of assessments needing updating" },
   { url: `${BASE}?taxa=felidae&categories=threatened`, desc: "Threatened cats (arbitrary rank: a family name)" },
+  { url: `${BASE}?taxa=panthera`, desc: "Big cats of the genus Panthera (arbitrary rank: a genus name)" },
   { url: `${BASE}?taxa=amphibians&region=Sub-Saharan+Africa&categories=threatened`, desc: "Threatened amphibians in Sub-Saharan Africa (IUCN region)" },
   { url: `${BASE}?search=tiger`, desc: "Look up a species by name" },
 ];
@@ -215,7 +216,7 @@ function indexHtml(unresolved: string[]): string {
 ${unresolvedBlock(unresolved)}
 <p>Answer questions about IUCN Red List species (with GBIF + Catalogue of Life data) from a single URL. Two ways in:</p>
 <ul>
-<li><strong>Browse a taxon</strong>: <code>?taxa=&lt;name&gt;</code> + optional filters. <code>taxa</code> works at <em>any rank</em> — a group (<code>birds</code>, <code>corals</code>), a sub-group (<code>sharks-rays</code>, <code>flatworms</code>), or a scientific name (<code>felidae</code>, <code>odonata</code>).</li>
+<li><strong>Browse a taxon</strong>: <code>?taxa=&lt;name&gt;</code> + optional filters. <code>taxa</code> works at <em>any rank</em> — a group (<code>birds</code>, <code>corals</code>), a sub-group (<code>sharks-rays</code>, <code>flatworms</code>), or a scientific name down to genus (<code>felidae</code>, <code>odonata</code>, <code>panthera</code>).</li>
 <li><strong>Look up a species</strong>: <code>?search=&lt;name&gt;</code> — scientific or common name, including <em>synonyms / old names</em>.</li>
 </ul>
 <p>Values can be codes <em>or</em> plain-English names. Add <code>&amp;format=json</code> for JSON. Within one filter, comma-separated values are OR; across filters they are AND.</p>

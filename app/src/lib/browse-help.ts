@@ -28,7 +28,7 @@ export function buildVocabulary(): Vocabulary {
     description:
       "Query the Red List dashboard from a URL. Two modes: browse a taxon (taxa=…, with optional filters) or look up a species by name (search=…, synonym-aware). Within one filter, comma-separated values are OR; across filters they are AND.",
     taxa: FEATURED_TAXA.map((id) => ({ id, label: taxonLabel(id) })),
-    taxaNote: "taxa accepts any rank — a curated group (birds, corals), a sub-group (sharks-rays), or a scientific class/order/family name (felidae, odonata).",
+    taxaNote: "taxa accepts any rank — a curated group (birds, corals), a sub-group (sharks-rays), or a scientific class/order/family/genus name (felidae, odonata, panthera).",
     filters: SHARED_FILTER_VOCAB,
     region: IUCN_REGION_ORDER,
     params: {

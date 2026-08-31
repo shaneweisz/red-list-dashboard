@@ -15,8 +15,8 @@ import { DuckDBInstance, type DuckDBConnection } from "@duckdb/node-api";
 import { NODE_INDEX, getTaxonGroupsForNode, getAncestors, stripNodePrefix } from "@/lib/taxonomy-utils";
 import { canonicalizeTaxonId, mapTaxonId } from "@/lib/data/taxonomy-constants";
 import { getTaxaSummary, getColRevisions } from "@/lib/data/species-store";
-import { isDynamicNodeId, dynamicNodeFilter, buildDynamicNodeId, rankOrderFor, isLiveDrilldownNode, type DynamicSegment } from "@/lib/dynamic-taxon";
-import { filterToSql, sqlStrList } from "@/lib/taxonomy-sql";
+import { isDynamicNodeId, dynamicNodeFilter, buildDynamicNodeId, rankOrderFor, isLiveDrilldownNode, type DynamicRank, type DynamicSegment } from "@/lib/dynamic-taxon";
+import { filterToSql, sqlStrList, GENUS_SQL } from "@/lib/taxonomy-sql";
 import { sisRowKey, colRowKey, type SpeciesRowKey } from "@/lib/species-row-key";
 import { COL_DOMESTIC_EXCLUDE_NAMES } from "@/config/col-described-overrides";
 
@@ -123,9 +123,16 @@ export function resolveWhere(taxonId: string): WhereParts {
     const filter = dynamicNodeFilter(id);
     if (filter) return { clauses: [filterToSql(filter)], params: {} };
   }
-  // arbitrary rank (e.g. family=turdidae): match the value at class/order/family
+  // arbitrary rank (e.g. family=turdidae, genus=panthera): match the value at
+  // class/order/family/genus. Genus is the odd one out — none of the three parquets
+  // this predicate runs against (assessed / unassessed / species) carries a genus
+  // column, so it's derived from the first word of scientific_name, exactly as
+  // taxonomy-sql.ts's filterToSql and taxonomy-utils.ts's matchesFilter already do
+  // for a node's `genera` filter (GENUS_SQL is that shared expression). class_name/
+  // order_name/family are pre-lowercased at build time and compare directly;
+  // scientific_name isn't, hence GENUS_SQL's own lower().
   return {
-    clauses: ["(class_name = $arv OR order_name = $arv OR family = $arv)"],
+    clauses: [`(class_name = $arv OR order_name = $arv OR family = $arv OR ${GENUS_SQL} = $arv)`],
     params: { arv: id.toLowerCase() },
   };
 }
@@ -459,8 +466,9 @@ interface Lineage { class_name?: string | null; order_name?: string | null; fami
 //     resolveTaxonSuggestionNode uses, and reach a node that can actually list the species.
 //
 // genus is never enumerated: the species itself is the target, so a genus node buys nothing
-// over its family while being one more level to climb out of — and querySpecies can't filter
-// by genus outside a dynamic id anyway (see resolveWhere's arbitrary-rank branch).
+// over its family while being one more level to climb out of. (That's the only reason left —
+// resolveWhere's arbitrary-rank branch and suggestTaxa both handle genus now; this is a
+// deliberate landing-spot choice, not a capability gap.)
 export function nodeIdForSpecies(taxonGroup: string, lineage: Lineage): string | null {
   const leafRoot = findViewLeafForGroup(taxonGroup);
   if (!leafRoot) return null;
@@ -847,8 +855,10 @@ export async function getSpeciesUnder(taxon: string, limit = 50): Promise<{
 export interface TaxonSuggestion {
   /** Prettified display name, e.g. "Felidae". */
   name: string;
-  /** Rank the query matched at. */
-  rank: "class" | "order" | "family";
+  /** Rank the query matched at — the same four ranks the live drilldown enumerates
+   *  (dynamic-taxon.ts's DynamicRank), so every suggestion names a taxon a user could
+   *  also have reached by clicking down the tree. */
+  rank: DynamicRank;
   /** Lowercased token to pass as ?taxa= (what resolveWhere/querySpecies match on) —
    * kept as the fallback when nodeId can't be resolved. */
   taxon: string;
@@ -881,6 +891,13 @@ function isSscGroupNode(id: string): boolean {
 // nodes — the same node a user reaches by clicking through the default tree, so a search
 // jump to it gets full ancestor breadcrumbs and curated labels for free. Mirrors
 // findViewLeafForGroup's single-dimension-match pattern below.
+//
+// Deliberately NOT extended to genus when genus search was added: every single-genus node
+// in the tree today is an SSC Specialist Group (African Elephant → genera:["loxodonta"],
+// Anoline Lizard → genera:["anolis"], …), which TaxonSuggestion.nodeId must never resolve
+// to. The `f.genera` guard below already skips them; a genus match therefore always takes
+// the dynamic-drilldown path in resolveTaxonSuggestionNode, landing on the same
+// "…~family:felidae~genus:panthera" node a tree drill-down reaches.
 const RANK_VALUE_TO_NODE: Map<string, string> = (() => {
   const m = new Map<string, string>();
   const DIMS = ["classNames", "orderNames", "families"] as const;
@@ -898,8 +915,11 @@ const RANK_VALUE_TO_NODE: Map<string, string> = (() => {
   return m;
 })();
 
-const RANK_TO_COLUMN: Record<TaxonSuggestion["rank"], string> = {
-  class: "class_name", order: "order_name", family: "family",
+// What each rank matches on in assessed/unassessed.parquet. class/order/family are real
+// columns (pre-lowercased at build time); genus has no column of its own and is derived
+// from scientific_name — see GENUS_SQL.
+const RANK_TO_MATCH_SQL: Record<DynamicRank, string> = {
+  class: "class_name", order: "order_name", family: "family", genus: GENUS_SQL,
 };
 
 // Same single-dimension-match search as GROUP_TO_LEAF_NODE above, but prefers a group's
@@ -972,7 +992,7 @@ function findViewLeafForGroup(taxonGroup: string): string | null {
 // warm parquets, LIMIT 1). Falls back to null (old bare ?taxa= browse) only if the root
 // isn't live-drillable at all, or an ancestor rank's lookup comes back empty.
 async function resolveTaxonSuggestionNode(
-  conn: DuckDBConnection, rank: TaxonSuggestion["rank"], value: string, taxonGroup: string,
+  conn: DuckDBConnection, rank: DynamicRank, value: string, taxonGroup: string,
 ): Promise<string | null> {
   const staticHit = RANK_VALUE_TO_NODE.get(`${rank}:${value}`);
   if (staticHit) return staticHit;
@@ -983,67 +1003,105 @@ async function resolveTaxonSuggestionNode(
   if (idx === -1) return null;
   const segments: DynamicSegment[] = [];
   if (idx > 0) {
-    // genus is always last in rankOrderFor's list, and idx points at class/order/family
-    // (suggestTaxa never matches genus), so a rank strictly before idx can never be
-    // "genus" — safe to narrow to TaxonSuggestion["rank"] for the RANK_TO_COLUMN lookup.
-    const priorRanks = order.slice(0, idx) as TaxonSuggestion["rank"][];
-    const cols = priorRanks.map((r) => RANK_TO_COLUMN[r]);
-    const matchCol = RANK_TO_COLUMN[rank];
+    // Aliased positionally (r0, r1, …) rather than read back by column name: genus's
+    // "column" is an expression, not a name, so a raw projection would have nothing
+    // stable to index the result row by. (genus is always last in rankOrderFor's list,
+    // so it can't actually appear among the prior ranks today — the aliases just keep
+    // that from being a load-bearing assumption.)
+    const priorRanks = order.slice(0, idx);
+    const selects = priorRanks.map((r, i) => `${RANK_TO_MATCH_SQL[r]} AS r${i}`).join(", ");
+    const matchSql = RANK_TO_MATCH_SQL[rank];
     const sql = `
-      SELECT ${cols.join(", ")} FROM (
-        SELECT ${cols.join(", ")} FROM '${parquetUri("assessed.parquet")}' WHERE ${matchCol} = $v AND taxon_group = $tg
+      SELECT * FROM (
+        SELECT ${selects} FROM '${parquetUri("assessed.parquet")}' WHERE ${matchSql} = $v AND taxon_group = $tg
         UNION ALL
-        SELECT ${cols.join(", ")} FROM '${parquetUri("unassessed.parquet")}' WHERE ${matchCol} = $v AND taxon_group = $tg
+        SELECT ${selects} FROM '${parquetUri("unassessed.parquet")}' WHERE ${matchSql} = $v AND taxon_group = $tg
       ) LIMIT 1`;
     const rows = (await conn.runAndReadAll(sql, { v: value, tg: taxonGroup })).getRowObjects();
     if (rows.length === 0) return null;
-    for (const r of priorRanks) {
-      const v = rows[0][RANK_TO_COLUMN[r]];
+    priorRanks.forEach((r, i) => {
+      const v = rows[0][`r${i}`];
       // Coalesce a null ancestor rank to "" — the Unclassified bucket for that rank,
       // same convention filterToSql/matchesFilter already use, not an error case.
       segments.push({ rank: r, value: v == null ? "" : String(v).toLowerCase() });
-    }
+    });
   }
   segments.push({ rank, value });
   return buildDynamicNodeId(leafRoot, segments);
 }
 
-// Recognize a higher-rank taxon (class / order / family) the user is typing, so the
-// search bar can offer "Browse Felidae → " above the species hits. Restricted to the
-// three ranks resolveWhere()'s arbitrary-rank branch matches on — genus is excluded
-// because the dashboard query (querySpecies) can't filter by it, so a genus pick would
-// land on an empty view. Prefix-matches the DISTINCT rank names in the assessed ∪
-// unassessed parquets (already warm in the search hot path, name columns pre-lowercased
-// at build time), so it never full-scans species/. A rank with zero assessed and zero
-// GBIF-observed species won't surface — acceptable: those are exactly the taxa a user
-// wouldn't browse to, and the direct species/synonym search still answers by name.
+// Ranks in the order suggestTaxa prefers them, and the priority integer the SQL below
+// dedupes/sorts on. Genus is last for both reasons: it's the finest rank, and (unlike
+// the other three) its name universe is enormous — a two-letter prefix matches thousands
+// of genera, so without an explicit tier it would crowd the higher ranks out of a
+// three-slot dropdown purely on the "shortest name wins" tie-break (typing "chi" would
+// surface a handful of 4-letter genera instead of Chiroptera).
+const SUGGEST_RANKS: DynamicRank[] = ["class", "order", "family", "genus"];
+
+// Recognize a taxon (class / order / family / genus) the user is typing, so the search
+// bar can offer "Browse Felidae → " above the species hits. All four are ranks
+// resolveWhere()'s arbitrary-rank branch matches on AND the live drilldown enumerates,
+// so every suggestion lands on a view that can actually list species. Prefix-matches the
+// DISTINCT rank names in the assessed ∪ unassessed parquets (already warm in the search
+// hot path; class/order/family are pre-lowercased at build time, genus is derived from
+// scientific_name via GENUS_SQL), so it never full-scans species/. A rank with zero
+// assessed and zero GBIF-observed species won't surface — acceptable: those are exactly
+// the taxa a user wouldn't browse to, and the direct species/synonym search still
+// answers by name.
 export async function suggestTaxa(query: string, limit = 3): Promise<TaxonSuggestion[]> {
   if (query.length < 2) return [];
   const conn = await getConn();
   const q = query.toLowerCase();
-  const RANKS: { col: string; rank: TaxonSuggestion["rank"] }[] = [
-    { col: "family", rank: "family" },
-    { col: "order_name", rank: "order" },
-    { col: "class_name", rank: "class" },
-  ];
-  const part = (src: string, col: string, rank: string) =>
-    `SELECT DISTINCT ${col} AS name, '${rank}' AS rank, taxon_group FROM '${parquetUri(src)}'
-     WHERE ${col} IS NOT NULL AND ${col} LIKE $q || '%'`;
-  const parts = RANKS.flatMap(({ col, rank }) =>
-    [part("assessed.parquet", col, rank), part("unassessed.parquet", col, rank)]);
+  const part = (src: string, rank: DynamicRank) => {
+    const match = RANK_TO_MATCH_SQL[rank];
+    // The scientific_name prefix test in the genus branch is redundant-but-cheap: the
+    // genus IS the leading word of the name, so `genus LIKE 'x%'` already implies
+    // `name LIKE 'x%'`. Stating it lets DuckDB reject most rows on a plain prefix
+    // compare before paying for the split_part.
+    const guard = rank === "genus"
+      ? `scientific_name IS NOT NULL AND lower(scientific_name) LIKE $q || '%' AND ${match} LIKE $q || '%'`
+      : `${match} IS NOT NULL AND ${match} LIKE $q || '%'`;
+    return `SELECT DISTINCT ${match} AS name, ${SUGGEST_RANKS.indexOf(rank)} AS rp, taxon_group
+            FROM '${parquetUri(src)}' WHERE ${guard}`;
+  };
+  const parts = SUGGEST_RANKS.flatMap((rank) =>
+    [part("assessed.parquet", rank), part("unassessed.parquet", rank)]);
   const lim = Math.min(Math.max(limit, 1), 10);
-  // Exact match first, then shortest (closest) name, then alphabetical. DISTINCT in the
-  // sub-selects collapses per-file dupes; the outer query dedupes across ranks by name.
+  // Exact match first, then shortest (closest) name, then alphabetical — per tier, so
+  // the JS merge below can hand the genus tier its own reserved slot. DISTINCT in the
+  // sub-selects collapses per-file dupes; the GROUP BY dedupes across ranks by name,
+  // keeping the coarsest rank that name matched at (arg_min on the same priority).
+  // QUALIFY caps each tier at `lim` rows, so a flood of genus prefix matches never has
+  // to be materialized or shipped back.
   const sql = `
-    SELECT name, any_value(rank) AS rank, any_value(taxon_group) AS taxon_group
-    FROM (${parts.join(" UNION ALL ")})
-    GROUP BY name
-    ORDER BY (name = $q) DESC, length(name), name
-    LIMIT ${lim}`;
+    SELECT name, rp, taxon_group FROM (
+      SELECT name, min(rp) AS rp, arg_min(taxon_group, rp) AS taxon_group
+      FROM (${parts.join(" UNION ALL ")})
+      GROUP BY name
+    )
+    QUALIFY row_number() OVER (
+      PARTITION BY rp = ${SUGGEST_RANKS.indexOf("genus")}
+      ORDER BY (name = $q) DESC, length(name), name
+    ) <= ${lim}
+    ORDER BY rp = ${SUGGEST_RANKS.indexOf("genus")}, (name = $q) DESC, length(name), name`;
   const rows = (await conn.runAndReadAll(sql, { q })).getRowObjects();
-  return Promise.all(rows.map(async (r) => {
+
+  // One slot is reserved for the best genus hit whenever there is one — so searching a
+  // genus that shares a prefix with its own family ("urs" → Ursidae + Ursus) shows both,
+  // and neither tier can shut the other out. Genus expands to fill whatever the higher
+  // ranks leave unused (a bare genus query like "panthera" matches nothing else, and
+  // gets the whole dropdown).
+  const higher = rows.filter((r) => Number(r.rp) !== SUGGEST_RANKS.indexOf("genus"));
+  const genus = rows.filter((r) => Number(r.rp) === SUGGEST_RANKS.indexOf("genus"));
+  const genusSlots = genus.length === 0 ? 0 : Math.max(1, lim - higher.length);
+  const chosen = [...higher.slice(0, lim - genusSlots), ...genus.slice(0, genusSlots)];
+  // An exact match is what the user typed — it leads regardless of rank. Array.sort is
+  // stable, so everything else keeps the tier order above.
+  chosen.sort((a, b) => Number(String(b.name) === q) - Number(String(a.name) === q));
+
+  return Promise.all(chosen.map(async (r) => {
     const name = String(r.name);
-    const rank = String(r.rank) as TaxonSuggestion["rank"];
+    const rank = SUGGEST_RANKS[Number(r.rp)];
     return {
       name: name.charAt(0).toUpperCase() + name.slice(1),
       rank,
