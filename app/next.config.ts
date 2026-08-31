@@ -140,9 +140,13 @@ const nextConfig: NextConfig = {
     // Queries backbone.parquet + species_link in R2 (httpfs) — no local data.
     "/api/redlist/synonyms": ["**/data/**"],
     // Reads the Red List / GBIF CSVs (+ mapping) but never the search index or
-    // the R2-only CoL artifacts.
-    "/api/redlist/assessor-candidates-by-country": ["**/data/search-index.json", ...COL_ARTIFACTS],
-    "/api/redlist/reviewer-candidates-by-country": ["**/data/search-index.json", ...COL_ARTIFACTS],
+    // the R2-only CoL artifacts. These keys are ROUTE PATHS, so renaming a route
+    // silently drops its pruning and the function balloons to the whole dataset:
+    // this one was /api/redlist/{assessor,reviewer}-candidates-by-country before
+    // the three credit lines merged behind one endpoint, and the rename alone took
+    // the function from ~80MB to 494MB — over Vercel's 250MB cap — with no local
+    // signal, since app/data/ is only fully populated at build time on Vercel.
+    "/api/redlist/credit-candidates": ["**/data/search-index.json", ...COL_ARTIFACTS],
     // Read the small precomputed summary JSONs by default, or query
     // assessed.parquet in R2 (httpfs) when ?country= is set — same CRITICAL
     // note as /api/redlist/species: keep ALL parquets out, since USE_R2 is
