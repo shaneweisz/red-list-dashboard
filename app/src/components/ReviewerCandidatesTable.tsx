@@ -15,8 +15,17 @@ interface ReviewerCountryCandidate {
 }
 
 interface ReviewerCandidatesTableProps {
+  /** Node the ranking is computed over — always one the static taxonomy tree knows. */
   taxaId: string;
+  /** Display name of that node, e.g. "Mammals". */
   taxaName: string;
+  /**
+   * Display name of the current selection when it is narrower than `taxaId` — a live
+   * drilldown node ("Muridae") the candidate counts can't be narrowed to yet. Shown as
+   * a scope note so the numbers aren't read as being about the narrower group.
+   * See suggestion-scope.ts.
+   */
+  narrowerName?: string;
   countries: string[];
 }
 
@@ -27,6 +36,7 @@ const PAGE_SIZE = 10;
 export default function ReviewerCandidatesTable({
   taxaId,
   taxaName,
+  narrowerName,
   countries,
 }: ReviewerCandidatesTableProps) {
   const [candidates, setCandidates] = useState<ReviewerCountryCandidate[] | null>(null);
@@ -105,6 +115,14 @@ export default function ReviewerCandidatesTable({
 
   const sortIndicator = (field: SortField) => sortBy === field ? " ▼" : "";
 
+  // Live drilldown selections are suggested from their nearest static ancestor
+  // (suggestion-scope.ts), so say which group the ranking is actually over.
+  const scopeNote = narrowerName ? (
+    <div className="text-[11px] text-zinc-400 dark:text-zinc-500">
+      Ranked across all {taxaName} — suggestions aren&apos;t narrowed to {narrowerName} yet.
+    </div>
+  ) : null;
+
   if (loading) {
     return (
       <div className="flex items-center justify-center p-8">
@@ -126,14 +144,16 @@ export default function ReviewerCandidatesTable({
 
   if (!candidates || candidates.length === 0) {
     return (
-      <div className="text-sm text-zinc-400 italic p-4">
-        No reviewer candidates found
+      <div className="p-4 space-y-1">
+        <div className="text-sm text-zinc-400 italic">No reviewer candidates found</div>
+        {scopeNote}
       </div>
     );
   }
 
   return (
     <div className="px-4 pb-3 pt-1">
+      {scopeNote && <div className="mb-2">{scopeNote}</div>}
       <table className="w-full text-xs">
         <thead>
           <tr className="text-left text-zinc-500 dark:text-zinc-400 border-b border-zinc-200 dark:border-zinc-700">

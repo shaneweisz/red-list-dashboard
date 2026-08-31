@@ -381,6 +381,37 @@ export function getTaxonGroupsForNode(nodeId: string): string[] {
   return node.filter.taxonGroups;
 }
 
+/**
+ * The nearest node the STATIC taxonomy tree actually knows, at or above `nodeId`:
+ * the id itself when it's a real node, the root of a live-drilldown id
+ * ("mammals~order:rodentia~family:muridae" → "mammals"), and null for an id the
+ * tree has no place for at all (a bare arbitrary-rank search token like
+ * "turdidae").
+ *
+ * For anything that can only be computed from a node's own static SpeciesFilter —
+ * today the Suggested Assessors / Suggested Reviewers candidate tables, which scan
+ * the per-group Red List CSVs rather than the parquet layer resolveWhere() serves —
+ * this is how a selection degrades to the broader group instead of to nothing.
+ * NODE_INDEX has no entry for a dynamic id, so findNode() returns undefined (→ no
+ * taxonomy filter) and getTaxonGroupsForNode() falls through to treating the whole
+ * id as a taxon-group name, which matches no CSV at all: an empty result, silently.
+ *
+ * Accepts the URL token form too ("flowering_plants~malpighiales"), which carries
+ * neither the pl-/inv-/fu- prefix nor the per-segment rank labels.
+ */
+export function nearestStaticNode(nodeId: string): string | null {
+  const id = canonicalizeTaxonId(nodeId.trim());
+  if (NODE_INDEX.has(id)) return id;
+  const dynamicId = isDynamicNodeId(id) ? (tokenToDynamicId(id) ?? id) : id;
+  // For a dynamic id the ancestor walk yields its shallower dynamic prefixes first
+  // and then the root, so the first NODE_INDEX hit is the deepest static ancestor.
+  // For an unknown non-dynamic id it's empty, and the caller gets null.
+  for (const ancestor of getAncestors(dynamicId)) {
+    if (NODE_INDEX.has(ancestor)) return ancestor;
+  }
+  return null;
+}
+
 // ─── Filter matching ─────────────────────────────────────────────────
 
 /**

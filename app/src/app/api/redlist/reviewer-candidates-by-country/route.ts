@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getReviewerCandidatesByCountry } from "@/lib/data/species-store";
-import { findNode, getTaxonGroupsForNode } from "@/lib/taxonomy-utils";
+import { findNode, getTaxonGroupsForNode, nearestStaticNode } from "@/lib/taxonomy-utils";
 import { CACHE_5M } from "@/lib/cache-headers";
 
 export async function GET(request: NextRequest) {
@@ -16,10 +16,17 @@ export async function GET(request: NextRequest) {
   }
 
   const countries = countriesParam.split(";").filter(Boolean);
-  const groups = getTaxonGroupsForNode(taxaId);
+  // Candidates are counted off the per-group Red List CSVs under a node's own
+  // static filter, which a live-drilldown id ("mammals~order:rodentia") has no
+  // entry for — getTaxonGroupsForNode would treat the whole id as a taxon-group
+  // name and match no CSV, returning an empty list. Suggest from the nearest
+  // static ancestor instead (see suggestion-scope.ts; the client resolves the
+  // same way for its labels, so this is normally already a static id).
+  const scopeId = nearestStaticNode(taxaId) ?? taxaId;
+  const groups = getTaxonGroupsForNode(scopeId);
 
   // Extract taxonomy filter from the node (orderNames, classNames, etc.)
-  const node = findNode(taxaId);
+  const node = findNode(scopeId);
   const filter = node?.filter;
   const taxonomyFilter = filter ? {
     classNames: filter.classNames,
@@ -36,7 +43,7 @@ export async function GET(request: NextRequest) {
 
   try {
     const candidates = getReviewerCandidatesByCountry(groups, countries, taxonomyFilter);
-    return NextResponse.json({ candidates }, { headers: CACHE_5M });
+    return NextResponse.json({ candidates, taxaId: scopeId }, { headers: CACHE_5M });
   } catch (error) {
     console.error("Reviewer candidates by country error:", error);
     const message = error instanceof Error ? error.message : "Unknown error";

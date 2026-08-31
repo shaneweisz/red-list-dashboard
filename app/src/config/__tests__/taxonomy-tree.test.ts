@@ -13,6 +13,7 @@ import {
   speciesMatchesNode,
   getNodeDef,
   getTaxonGroupsForNode,
+  nearestStaticNode,
 } from "@/lib/taxonomy-utils";
 import { TAXONOMY_VIEWS } from "../taxonomy-views";
 import { isLiveDrilldownNode } from "@/lib/dynamic-taxon";
@@ -286,6 +287,43 @@ describe("getTaxonGroupsForNode", () => {
 
   it("returns all 28 groups for 'all'", () => {
     expect(getTaxonGroupsForNode("all").length).toBe(28);
+  });
+});
+
+// nearestStaticNode is what keeps a feature that can only be computed from a
+// node's own static filter (Suggested Assessors/Reviewers) working once a live
+// drilldown selection — which NODE_INDEX has no entry for — is in play.
+describe("nearestStaticNode", () => {
+  it("returns a real node id unchanged", () => {
+    expect(nearestStaticNode("mammals")).toBe("mammals");
+    expect(nearestStaticNode("inv-corals")).toBe("inv-corals");
+  });
+
+  it("canonicalizes a legacy id", () => {
+    expect(nearestStaticNode("mammalia")).toBe("mammals");
+  });
+
+  it("resolves a dynamic drilldown id to its static root, at any depth", () => {
+    expect(nearestStaticNode("mammals~order:rodentia")).toBe("mammals");
+    expect(nearestStaticNode("mammals~order:rodentia~family:muridae")).toBe("mammals");
+    expect(nearestStaticNode("mammals~order:rodentia~family:muridae~genus:mus")).toBe("mammals");
+  });
+
+  it("resolves a prefixed root's dynamic id to the prefixed node, not the flat clone", () => {
+    expect(nearestStaticNode("pl-flowering_plants~order:malpighiales")).toBe("pl-flowering_plants");
+  });
+
+  it("accepts the URL token form (no prefix, no rank labels)", () => {
+    expect(nearestStaticNode("flowering_plants~malpighiales")).toBe("pl-flowering_plants");
+    expect(nearestStaticNode("mammals~rodentia~muridae")).toBe("mammals");
+  });
+
+  it("resolves an Unclassified bucket to its root too", () => {
+    expect(nearestStaticNode("molluscs~class:gastropoda~order:")).toBe("inv-molluscs");
+  });
+
+  it("returns null for an id the tree has no place for", () => {
+    expect(nearestStaticNode("turdidae")).toBeNull();
   });
 });
 

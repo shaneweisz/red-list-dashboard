@@ -16,6 +16,7 @@ import { ALPHA2_TO_NAME } from "@/lib/countries";
 import { CATEGORY_COLORS, TAXA_BY_ID, THREATENED_CATEGORIES } from "@/config/taxa";
 import { speciesMatchesNode, getNodeDef, getViewRootForNode, findNode, matchesBreakdownName, breakdownDisplayName } from "@/lib/taxonomy-utils";
 import { dynamicNodeDisplayName } from "@/lib/dynamic-taxon";
+import { suggestionScope } from "@/lib/suggestion-scope";
 import ReviewerChart from "./ReviewerChart";
 import { REVISION_BARS, visibleBars, barForReason, acceptedNameSentence, GENUS_DIFFERS_REASON, RENAMED_REASON, REVISION_REASON_SHORT, REVISION_REASON_SUMMARY, revisionReasons, matchesRevisionFilter, isFlagged, colUrl, colDatasetUrl, colTaxonUrl, noMatchSentence, splitSummary, lumpSentence, type SplitSummary, newRevisionTally, tallyRevision, barTotal, REVISION_CAVEAT, type ColRevision } from "@/lib/col-revision";
 import type { ColProvenance } from "@/app/api/col/provenance/route";
@@ -5884,6 +5885,11 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
                   : null;
                 const details = speciesDetails[s.species_key];
                 const gbifSpeciesKey = s.gbif_species_key || details?.gbifUrl?.split('/').pop() || null;
+                // Suggested Assessors/Reviewers rank people off the static tree's own
+                // per-node filter, so a live-drilldown selection is suggested from its
+                // nearest static ancestor (and the table says so) rather than coming
+                // back empty — see suggestion-scope.ts.
+                const suggestedScope = suggestionScope([...selectedSubgroups][0] ?? [...selectedTaxa][0], s.taxon_group);
                 const isPinned = pinnedSet.has(speciesKey);
                 const isDragging = draggedSpecies === speciesKey;
                 const isDragOver = dragOverSpecies === speciesKey && draggedSpecies !== speciesKey;
@@ -6321,8 +6327,9 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
                           {s.category === "NE" && (visitedTabs.has("assessors")) && (
                             <div style={{ display: activeDetailTab === "assessors" ? undefined : "none" }}>
                               <AssessorCandidatesTable
-                                taxaId={[...selectedSubgroups][0] ?? [...selectedTaxa][0] ?? s.taxon_group}
-                                taxaName={findNode([...selectedSubgroups][0] ?? [...selectedTaxa][0] ?? s.taxon_group)?.name ?? (selectedSubgroups.size > 0 ? dynamicNodeDisplayName([...selectedSubgroups][0]) : undefined) ?? TAXA_BY_ID[[...selectedTaxa][0] ?? s.taxon_group]?.name ?? "Species"}
+                                taxaId={suggestedScope.taxaId}
+                                taxaName={suggestedScope.taxaName}
+                                narrowerName={suggestedScope.narrowerName}
                                 countries={s.countries}
                               />
                             </div>
@@ -6330,8 +6337,9 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
                           {s.category === "NE" && (visitedTabs.has("reviewers")) && (
                             <div style={{ display: activeDetailTab === "reviewers" ? undefined : "none" }}>
                               <ReviewerCandidatesTable
-                                taxaId={[...selectedSubgroups][0] ?? [...selectedTaxa][0] ?? s.taxon_group}
-                                taxaName={findNode([...selectedSubgroups][0] ?? [...selectedTaxa][0] ?? s.taxon_group)?.name ?? (selectedSubgroups.size > 0 ? dynamicNodeDisplayName([...selectedSubgroups][0]) : undefined) ?? TAXA_BY_ID[[...selectedTaxa][0] ?? s.taxon_group]?.name ?? "Species"}
+                                taxaId={suggestedScope.taxaId}
+                                taxaName={suggestedScope.taxaName}
+                                narrowerName={suggestedScope.narrowerName}
                                 countries={s.countries}
                               />
                             </div>
