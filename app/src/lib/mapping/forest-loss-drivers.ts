@@ -25,13 +25,12 @@
 const VERSION = "v1.13";
 
 /**
- * The canopy-density threshold, which this endpoint requires rather than
- * assumes.
+ * The canopy-density threshold, which this endpoint requires as a parameter.
  *
- * 30% is Global Nature Watch's own default, and here — unlike the
- * unthresholded loss layer — there is no choice to make it match: the tile
- * service takes the parameter or refuses the request. Said in the legend, so
- * the two layers can be compared knowing they are cut differently.
+ * The parameter is required; the value is not forced — the service accepts 10
+ * through 100, and refuses anything under 10. 30% is both the platform's own
+ * default and the cut the tree cover loss layer beside this one now uses, so
+ * the two are the same loss counted the same way and can be read together.
  */
 export const DRIVERS_CANOPY_THRESHOLD = 30;
 
@@ -54,6 +53,16 @@ export const FOREST_LOSS_DRIVERS_PAPER_URL = "https://doi.org/10.1088/1748-9326/
 export const FOREST_LOSS_DRIVERS_URL = "https://globalnaturewatch.org";
 
 export interface LossDriverClass {
+  /**
+   * The value this class has in the raster, for the point query.
+   *
+   * The dataset publishes no values table — its metadata is empty — so these
+   * were derived rather than read off: sampling cell interiors at zoom 10,
+   * where a 1 km cell spans about seven pixels, and pairing each tile colour
+   * with what the point endpoint returns at the same coordinates. All seven
+   * agreed, and they run 1–7 in the order the platform lists them.
+   */
+  code: number;
   /** The class, worded as the platform words it. */
   label: string;
   /** Its colour in the tiles, sampled from them and matched to the palette. */
@@ -72,40 +81,47 @@ export interface LossDriverClass {
  */
 export const FOREST_LOSS_DRIVERS: readonly LossDriverClass[] = [
   {
+    code: 1,
     label: "Permanent agriculture",
     color: "#E39D29",
     description:
       "Long-term, permanent tree cover loss for small- to large-scale agriculture.",
   },
   {
+    code: 2,
     label: "Hard commodities",
     color: "#E58074",
     description: "Loss due to the establishment or expansion of mining or energy infrastructure.",
   },
   {
+    code: 3,
     label: "Shifting cultivation",
     color: "#E9D700",
     description:
       "Small- to medium-scale clearing for temporary cultivation that is later abandoned, followed by regrowth of secondary forest or vegetation.",
   },
   {
+    code: 4,
     label: "Logging",
     color: "#51A44E",
     description:
       "Forest management and logging within managed, natural or semi-natural forests and plantations, often with evidence of regrowth or planting in later years.",
   },
   {
+    code: 5,
     label: "Wildfire",
     color: "#895128",
     description: "Loss from fire, with no evidence of subsequent land-use conversion.",
   },
   {
+    code: 6,
     label: "Settlements and infrastructure",
     color: "#A354A0",
     description:
       "Expansion and intensification of roads, settlements, urban areas or built infrastructure, where it isn't associated with another class.",
   },
   {
+    code: 7,
     label: "Other natural disturbances",
     color: "#3A209A",
     description:
@@ -131,4 +147,4 @@ export const FOREST_LOSS_DRIVERS_ATTRIBUTION =
  * product claims.
  */
 export const FOREST_LOSS_DRIVERS_CAVEAT =
-  `One driver per 1 km cell — the dominant one — so a smaller clearing of a different kind inside a cell is not shown separately. Loss is Hansen/UMD tree cover loss ${FOREST_LOSS_DRIVERS_FIRST_YEAR}–${FOREST_LOSS_DRIVERS_LAST_YEAR}, cut at ${DRIVERS_CANOPY_THRESHOLD}% canopy cover in 2000, so it shows less than the tree cover loss layer beside it, which is unthresholded.`;
+  `One driver per 1 km cell — the dominant one — so a smaller clearing of a different kind inside a cell is not shown separately. Loss is Hansen/UMD tree cover loss ${FOREST_LOSS_DRIVERS_FIRST_YEAR}–${FOREST_LOSS_DRIVERS_LAST_YEAR}, cut at ${DRIVERS_CANOPY_THRESHOLD}% canopy cover in 2000 — the same cut as the tree cover loss layer beside it, so the two agree on what counts as loss.`;

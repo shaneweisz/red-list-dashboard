@@ -6,6 +6,7 @@ import {
   FOREST_LOSS_DRIVERS_CAVEAT,
   FOREST_LOSS_DRIVERS_TILE_URL,
 } from "../forest-loss-drivers";
+import { FOREST_LOSS_CANOPY_THRESHOLD } from "../forest-loss";
 
 describe("the dominant-driver layer", () => {
   it("asks for the version whose tiles carry the seven-class palette", () => {
@@ -30,6 +31,24 @@ describe("the dominant-driver layer", () => {
       expect(driver.color).toMatch(/^#[0-9A-F]{6}$/);
       expect(driver.description.length).toBeGreaterThan(20);
     }
+  });
+
+  it("carries the raster class code the point query answers with", () => {
+    // 1-7 in the order the platform lists them, derived by pairing tile
+    // colours with the point endpoint rather than read off a values table —
+    // the dataset publishes none.
+    expect(FOREST_LOSS_DRIVERS.map((d) => d.code)).toEqual([1, 2, 3, 4, 5, 6, 7]);
+  });
+
+  it("gives every driver its own code", () => {
+    expect(new Set(FOREST_LOSS_DRIVERS.map((d) => d.code)).size).toBe(FOREST_LOSS_DRIVERS.length);
+  });
+
+  it("is cut the same way as the tree cover loss layer beside it", () => {
+    // The two used to disagree — this one thresholded, that one not — which
+    // made them impossible to read against each other.
+    expect(DRIVERS_CANOPY_THRESHOLD).toBe(FOREST_LOSS_CANOPY_THRESHOLD);
+    expect(FOREST_LOSS_DRIVERS_CAVEAT).toContain("the same cut");
   });
 
   it("gives every driver its own colour", () => {

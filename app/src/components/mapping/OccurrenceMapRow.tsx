@@ -88,17 +88,17 @@ import {
 import { loadPins, savePins, type Place, type PinnedPlace } from "@/lib/mapping/geocode";
 import {
   FOREST_LOSS_ATTRIBUTION,
+  FOREST_LOSS_CANOPY_THRESHOLD,
   FOREST_LOSS_CAVEAT,
+  FOREST_LOSS_COLOR,
   FOREST_LOSS_DATASET_URL,
   FOREST_LOSS_FIRST_YEAR,
-  FOREST_LOSS_HUE_ROTATE,
   FOREST_LOSS_LAST_YEAR,
   FOREST_LOSS_MAX_ZOOM,
-  FOREST_LOSS_RAMP,
   FOREST_LOSS_SOURCE_NOTE,
   FOREST_LOSS_THRESHOLD_NOTE,
-  FOREST_LOSS_TILE_URL,
   FOREST_LOSS_URL,
+  forestLossTileUrl,
 } from "@/lib/mapping/forest-loss";
 import {
   DRIVERS_CANOPY_THRESHOLD,
@@ -112,6 +112,13 @@ import {
   FOREST_LOSS_DRIVERS_TILE_URL,
   FOREST_LOSS_DRIVERS_URL,
 } from "@/lib/mapping/forest-loss-drivers";
+import { hasForestAnswer, queryForestPoint, type ForestPoint } from "@/lib/mapping/forest-point-query";
+
+/** The years the loss layer can be narrowed to, for the range control. */
+const FOREST_LOSS_YEARS = Array.from(
+  { length: FOREST_LOSS_LAST_YEAR - FOREST_LOSS_FIRST_YEAR + 1 },
+  (_, i) => FOREST_LOSS_FIRST_YEAR + i
+);
 import {
   HABITAT_ATTRIBUTION,
   HABITAT_LEGEND,
@@ -809,6 +816,19 @@ export default function OccurrenceMapRow({
   // regardless of whether occurrences are being filtered by it.
   const [showProtectedAreas, setShowProtectedAreas] = useState(false);
   const [showForestLoss, setShowForestLoss] = useState(false);
+  /**
+   * The years of loss to draw, which the tiles are cut to server-side.
+   *
+   * This replaced a colour ramp. The rendered tiles are one pink whatever year
+   * the loss happened in, so the year can't be read off the map any more — but
+   * it can be asked for, and the question an assessor actually has is a range:
+   * what has gone since the assessment, or since the last one. Narrowing to
+   * that is a better answer than estimating where a colour sat on a gradient.
+   */
+  const [lossYears, setLossYears] = useState<[number, number]>([
+    FOREST_LOSS_FIRST_YEAR,
+    FOREST_LOSS_LAST_YEAR,
+  ]);
   /** What the loss was for — the 1 km dominant-driver classification. */
   const [showLossDrivers, setShowLossDrivers] = useState(false);
   const [showHabitat, setShowHabitat] = useState(false);
@@ -944,6 +964,7 @@ export default function OccurrenceMapRow({
   const pointQueryId = useRef(0);
   /** Discards a habitat lookup that a later click has already superseded. */
   const habitatQueryId = useRef(0);
+  const forestQueryId = useRef(0);
   /** Copied-to-clipboard acknowledgement, cleared on a timer. */
   const [copiedPoint, setCopiedPoint] = useState(false);
   /**
@@ -2515,6 +2536,25 @@ export default function OccurrenceMapRow({
           setClickedHabitat({ habitat: null, loading: false, panelId });
         });
     }
+    // Same bargain again for the forest layers, and the one that most needed
+    // it: a 1 km driver cell is a colour with no name on it until you click.
+    // Asked of the rasters rather than the picture of them, and answered as
+    // three parts — what the loss was for, when, and how wooded the ground was
+    // before it — because the last is what keeps the first two honest.
+    if (showLossDrivers || showForestLoss) {
+      const { lng, lat } = e.lngLat;
+      const query = ++forestQueryId.current;
+      setClickedForest({ point: null, loading: true, panelId, lng, lat });
+      queryForestPoint(lng, lat)
+        .then((point) => {
+          if (query !== forestQueryId.current) return;
+          setClickedForest({ point, loading: false, panelId, lng, lat });
+        })
+        .catch(() => {
+          if (query !== forestQueryId.current) return;
+          setClickedForest({ point: null, loading: false, panelId, lng, lat });
+        });
+    }
     // With the overlay on, a plain click asks what protects this spot — the
     // shapes are right there, so clicking one should answer for it. Everything
     // else about a location is on the right button.
@@ -2549,6 +2589,8 @@ export default function OccurrenceMapRow({
       })
       .catch(() => undefined);
   }, [
+    showForestLoss,
+    showLossDrivers,
     measure,
     showProtectedAreas,
     showEcoregions,
@@ -2979,6 +3021,24 @@ export default function OccurrenceMapRow({
     panelId: string;
   } | null>(null);
 
+  /**
+   * What the forest rasters say under the last left click.
+   *
+   * The drivers layer is the reason this exists: it is a raster, so there is
+   * no feature to hit-test and no way to click a cell and be told what it is.
+   * Reading the colour under the cursor would be the easy version and a
+   * dishonest one — the renderer blends at cell edges, so a click near a
+   * boundary would name a class that isn't stored there. The platform serves
+   * the rasters themselves at a point, so the answer comes from the data.
+   */
+  const [clickedForest, setClickedForest] = useState<{
+    point: ForestPoint | null;
+    loading: boolean;
+    panelId: string;
+    lng: number;
+    lat: number;
+  } | null>(null);
+
   /** The ecoregion clicked on the map, outlined and named until dismissed. */
   const [selectedEcoregion, setSelectedEcoregion] = useState<{
     properties: EcoregionProperties;
@@ -3305,17 +3365,24 @@ export default function OccurrenceMapRow({
                   records rather than over them. */}
               {showForestLoss && (
                 <Source
+                  // The year range is baked into the tile URL, so a change of
+                  // range is a different source rather than a repaint of this
+                  // one — keyed so it is torn down and rebuilt instead of
+                  // holding the tiles it already fetched.
+                  key={`forest-loss-${lossYears[0]}-${lossYears[1]}`}
                   id={`forest-loss-${panelId}`}
                   type="raster"
-                  tiles={[FOREST_LOSS_TILE_URL]}
+                  tiles={[forestLossTileUrl(lossYears[0], lossYears[1])]}
                   tileSize={256}
                   maxzoom={FOREST_LOSS_MAX_ZOOM}
                   attribution={FOREST_LOSS_ATTRIBUTION}
                 >
+                  {/* No hue rotation any more: these tiles are already the
+                      pink the old ramp was rotated into. */}
                   <Layer
                     id={`forest-loss-layer-${panelId}`}
                     type="raster"
-                    paint={{ "raster-opacity": 0.85, "raster-hue-rotate": FOREST_LOSS_HUE_ROTATE }}
+                    paint={{ "raster-opacity": 0.85 }}
                   />
                 </Source>
               )}
@@ -4201,13 +4268,62 @@ export default function OccurrenceMapRow({
                       <span className="truncate">Tree cover loss</span>
                       <span className="text-[9px] text-zinc-400">{forestLossNotesOpen ? "▾" : "▸"}</span>
                     </button>
+                    {/* One swatch, not a ramp: the tiles are a single colour
+                        whatever year the loss is from. The years beside it are
+                        the range being drawn, and changing them refetches. */}
                     <span className="flex items-center gap-1 shrink-0 text-[9px] tabular-nums text-zinc-400">
-                      {FOREST_LOSS_FIRST_YEAR}
                       <span
-                        className="h-2.5 w-10 rounded-sm"
-                        style={{ background: `linear-gradient(to right, ${FOREST_LOSS_RAMP[0]}, ${FOREST_LOSS_RAMP[1]})` }}
+                        className="h-2.5 w-4 rounded-sm"
+                        style={{ background: FOREST_LOSS_COLOR }}
+                        title={`Loss between ${lossYears[0]} and ${lossYears[1]}`}
                       />
-                      {FOREST_LOSS_LAST_YEAR}
+                      <select
+                        value={lossYears[0]}
+                        onChange={(e) =>
+                          setLossYears(([, end]) => {
+                            const start = Number(e.target.value);
+                            return [start, Math.max(start, end)];
+                          })
+                        }
+                        title="Show loss from this year onwards — set it to the year of the last assessment to see what has gone since."
+                        aria-label="First year of loss to show"
+                        className="bg-transparent tabular-nums hover:text-zinc-600 dark:hover:text-zinc-300 cursor-pointer"
+                      >
+                        {FOREST_LOSS_YEARS.filter((y) => y <= lossYears[1]).map((y) => (
+                          <option key={y} value={y}>
+                            {y}
+                          </option>
+                        ))}
+                      </select>
+                      <span>–</span>
+                      <select
+                        value={lossYears[1]}
+                        onChange={(e) =>
+                          setLossYears(([start]) => {
+                            const end = Number(e.target.value);
+                            return [Math.min(start, end), end];
+                          })
+                        }
+                        title="Show loss up to and including this year."
+                        aria-label="Last year of loss to show"
+                        className="bg-transparent tabular-nums hover:text-zinc-600 dark:hover:text-zinc-300 cursor-pointer"
+                      >
+                        {FOREST_LOSS_YEARS.filter((y) => y >= lossYears[0]).map((y) => (
+                          <option key={y} value={y}>
+                            {y}
+                          </option>
+                        ))}
+                      </select>
+                      {(lossYears[0] !== FOREST_LOSS_FIRST_YEAR ||
+                        lossYears[1] !== FOREST_LOSS_LAST_YEAR) && (
+                        <button
+                          onClick={() => setLossYears([FOREST_LOSS_FIRST_YEAR, FOREST_LOSS_LAST_YEAR])}
+                          title="Back to the whole series"
+                          className="hover:text-zinc-600 dark:hover:text-zinc-300"
+                        >
+                          ↺
+                        </button>
+                      )}
                     </span>
                     <a
                       href={FOREST_LOSS_DATASET_URL}
@@ -5529,7 +5645,11 @@ export default function OccurrenceMapRow({
     const eco =
       showEcoregions && selectedEcoregion?.panelId === panelId ? selectedEcoregion : null;
     const hab = showHabitat && clickedHabitat?.panelId === panelId ? clickedHabitat : null;
-    if (!areasHere && !eco && !hab) return null;
+    const forest =
+      (showLossDrivers || showForestLoss) && clickedForest?.panelId === panelId
+        ? clickedForest
+        : null;
+    if (!areasHere && !eco && !hab && !forest) return null;
 
     // The extent of everything being highlighted, so the callout can sit
     // outside it. Habitat has no shape — it's a raster read at a point — so on
@@ -5550,7 +5670,8 @@ export default function OccurrenceMapRow({
           : [position[0], position[1], position[0], position[1]];
       }
     }
-    const at = areasHere ?? eco ?? { lng: pointQuery?.lng ?? 0, lat: pointQuery?.lat ?? 0 };
+    const at =
+      areasHere ?? eco ?? forest ?? { lng: pointQuery?.lng ?? 0, lat: pointQuery?.lat ?? 0 };
 
     return (
       <MapShapeCallout bounds={bounds} lng={at.lng} lat={at.lat}>
@@ -5665,8 +5786,88 @@ export default function OccurrenceMapRow({
             )}
           </div>
         )}
-        {eco && (
+        {forest && (
           <div className={areasHere || hab ? "pt-1.5 border-t border-zinc-100 dark:border-zinc-700" : ""}>
+            <div className="flex items-baseline gap-1 pb-0.5">
+              <span className="text-[9px] uppercase tracking-wide text-zinc-400 dark:text-zinc-500">
+                Forest
+              </span>
+              <button
+                onClick={() => setClickedForest(null)}
+                title="Close"
+                className="ml-auto text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300"
+              >
+                <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+            {forest.loading ? (
+              <span className="text-zinc-400">Reading the rasters…</span>
+            ) : forest.point == null || !hasForestAnswer(forest.point) ? (
+              <span className="text-zinc-400">No tree cover loss recorded here.</span>
+            ) : (
+              <div className="space-y-0.5">
+                {forest.point.driver && (
+                  <div className="flex items-start gap-1.5">
+                    <span
+                      className="w-2.5 h-2.5 rounded-sm shrink-0 translate-y-1"
+                      style={{ background: forest.point.driver.color }}
+                    />
+                    <div className="min-w-0">
+                      <span className="font-medium text-zinc-600 dark:text-zinc-300">
+                        {forest.point.driver.label}
+                      </span>
+                      <div className="text-zinc-500 dark:text-zinc-400">
+                        {forest.point.driver.description}
+                      </div>
+                    </div>
+                  </div>
+                )}
+                <div className="text-zinc-500 dark:text-zinc-400 tabular-nums">
+                  {[
+                    forest.point.lossYear ? `Loss detected ${forest.point.lossYear}` : null,
+                    forest.point.canopyPercent != null
+                      ? `${forest.point.canopyPercent}% canopy in 2000`
+                      : null,
+                  ]
+                    .filter(Boolean)
+                    .join(" · ")}
+                </div>
+                {/* The point endpoint takes no canopy threshold, so it can
+                    answer for ground the layers themselves leave blank. Better
+                    said than quietly contradicting what's drawn. */}
+                {forest.point.belowThreshold && (
+                  <div className="text-zinc-400">
+                    Below the {FOREST_LOSS_CANOPY_THRESHOLD}% canopy threshold the layers are drawn
+                    at, so this cell isn&apos;t shaded on the map.
+                  </div>
+                )}
+                {/* The two rasters are different sizes — loss is 30 m, the
+                    driver is 1 km — so a spot can sit in a cell with a driver
+                    without having lost anything itself. Left unsaid, the
+                    missing year reads as a gap in the data rather than as the
+                    answer it is. */}
+                {forest.point.driver && !forest.point.lossYear && (
+                  <div className="text-zinc-400">
+                    No loss at this exact spot: the driver is for the 1 km cell around it, where
+                    the loss it was measured from is mapped at 30 m.
+                  </div>
+                )}
+                {/* The dominance caveat, where it is actually being over-read:
+                    on a single cell someone just clicked. */}
+                {forest.point.driver && (
+                  <div className="text-zinc-400">
+                    The dominant driver for this 1 km cell — smaller clearings of another kind
+                    inside it aren&apos;t shown.
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        )}
+        {eco && (
+          <div className={areasHere || hab || forest ? "pt-1.5 border-t border-zinc-100 dark:border-zinc-700" : ""}>
             <div className="flex items-baseline gap-1 pb-0.5">
               <span className="text-[9px] uppercase tracking-wide text-zinc-400 dark:text-zinc-500">
                 Ecoregion
@@ -5847,7 +6048,7 @@ export default function OccurrenceMapRow({
       </label>
       <label
         className="flex items-center gap-2 px-2 py-0.5 text-[11px] hover:bg-zinc-50 dark:hover:bg-zinc-700 cursor-pointer"
-        title={`${FOREST_LOSS_SOURCE_NOTE} Coloured by year of loss, ${FOREST_LOSS_FIRST_YEAR}\u2013${FOREST_LOSS_LAST_YEAR}. ${FOREST_LOSS_CAVEAT} ${FOREST_LOSS_THRESHOLD_NOTE}`}
+        title={`${FOREST_LOSS_SOURCE_NOTE} Showing ${lossYears[0]}\u2013${lossYears[1]}; narrow the years in the legend. ${FOREST_LOSS_CAVEAT} ${FOREST_LOSS_THRESHOLD_NOTE} Click the map with this on to read the loss year and canopy cover at a point.`}
       >
         <input
           type="checkbox"
