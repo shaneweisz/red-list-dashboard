@@ -23,6 +23,7 @@ import { CATEGORY_COLORS, normalizeCategory } from "@/config/taxa";
 import { FaInfoCircle } from "react-icons/fa";
 import booleanPointInPolygon from "@turf/boolean-point-in-polygon";
 import type { Feature, Polygon, MultiPolygon } from "geojson";
+import YearRangeSlider from "@/components/mapping/YearRangeSlider";
 import MapGeoreferenceEditor from "./MapGeoreferenceEditor";
 import type { OccurrenceFeature as OccurrenceFeatureType } from "./OccurrenceListTable";
 // The table's own labels, so a basis of record is worded the same wherever it
@@ -111,14 +112,10 @@ import {
   FOREST_LOSS_DRIVERS_PAPER_URL,
   FOREST_LOSS_DRIVERS_TILE_URL,
   FOREST_LOSS_DRIVERS_URL,
+  type LossDriverClass,
 } from "@/lib/mapping/forest-loss-drivers";
 import { hasForestAnswer, queryForestPoint, type ForestPoint } from "@/lib/mapping/forest-point-query";
 
-/** The years the loss layer can be narrowed to, for the range control. */
-const FOREST_LOSS_YEARS = Array.from(
-  { length: FOREST_LOSS_LAST_YEAR - FOREST_LOSS_FIRST_YEAR + 1 },
-  (_, i) => FOREST_LOSS_FIRST_YEAR + i
-);
 import {
   HABITAT_ATTRIBUTION,
   HABITAT_LEGEND,
@@ -737,6 +734,36 @@ function FlagMark({ marks }: { marks: string }) {
           className="absolute left-3 bottom-3 z-[1000] block w-max max-w-[220px] rounded-md bg-zinc-900/95 dark:bg-zinc-700 px-1.5 py-1 text-[10px] leading-snug text-white shadow-lg"
         >
           {marks}
+        </span>
+      )}
+    </span>
+  );
+}
+
+/**
+ * One driver's colour in the legend, with its name on hover.
+ *
+ * The same bubble FlagMark uses, for the same reason: these sit over the map,
+ * where a native `title` never appears at all. A 10px square makes it worse —
+ * the tooltip needs the pointer held still on a target smaller than the
+ * pointer, so drifting along the row of seven cancels it every time. The
+ * cursor promised something to read and nothing was ever shown.
+ */
+function DriverSwatch({ driver }: { driver: LossDriverClass }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <span
+      onMouseEnter={() => setOpen(true)}
+      onMouseLeave={() => setOpen(false)}
+      className="relative block h-2.5 w-2.5 rounded-sm cursor-help"
+      style={{ background: driver.color }}
+    >
+      {/* Opens rightward: the legend sits against the map's left edge, so a
+          bubble anchored the other way runs off the side of the screen. */}
+      {open && (
+        <span className="absolute bottom-4 left-0 z-[1000] block w-max max-w-[240px] rounded-md bg-zinc-900/95 dark:bg-zinc-700 px-1.5 py-1 text-[10px] leading-snug text-white shadow-lg">
+          <span className="font-medium">{driver.label}</span>
+          <span className="block text-zinc-300">{driver.description}</span>
         </span>
       )}
     </span>
@@ -4269,61 +4296,14 @@ export default function OccurrenceMapRow({
                       <span className="text-[9px] text-zinc-400">{forestLossNotesOpen ? "▾" : "▸"}</span>
                     </button>
                     {/* One swatch, not a ramp: the tiles are a single colour
-                        whatever year the loss is from. The years beside it are
-                        the range being drawn, and changing them refetches. */}
+                        whatever year the loss is from. The years are set on
+                        the track below, where a range can be dragged. */}
                     <span className="flex items-center gap-1 shrink-0 text-[9px] tabular-nums text-zinc-400">
                       <span
                         className="h-2.5 w-4 rounded-sm"
                         style={{ background: FOREST_LOSS_COLOR }}
                         title={`Loss between ${lossYears[0]} and ${lossYears[1]}`}
                       />
-                      <select
-                        value={lossYears[0]}
-                        onChange={(e) =>
-                          setLossYears(([, end]) => {
-                            const start = Number(e.target.value);
-                            return [start, Math.max(start, end)];
-                          })
-                        }
-                        title="Show loss from this year onwards — set it to the year of the last assessment to see what has gone since."
-                        aria-label="First year of loss to show"
-                        className="bg-transparent tabular-nums hover:text-zinc-600 dark:hover:text-zinc-300 cursor-pointer"
-                      >
-                        {FOREST_LOSS_YEARS.filter((y) => y <= lossYears[1]).map((y) => (
-                          <option key={y} value={y}>
-                            {y}
-                          </option>
-                        ))}
-                      </select>
-                      <span>–</span>
-                      <select
-                        value={lossYears[1]}
-                        onChange={(e) =>
-                          setLossYears(([start]) => {
-                            const end = Number(e.target.value);
-                            return [Math.min(start, end), end];
-                          })
-                        }
-                        title="Show loss up to and including this year."
-                        aria-label="Last year of loss to show"
-                        className="bg-transparent tabular-nums hover:text-zinc-600 dark:hover:text-zinc-300 cursor-pointer"
-                      >
-                        {FOREST_LOSS_YEARS.filter((y) => y >= lossYears[0]).map((y) => (
-                          <option key={y} value={y}>
-                            {y}
-                          </option>
-                        ))}
-                      </select>
-                      {(lossYears[0] !== FOREST_LOSS_FIRST_YEAR ||
-                        lossYears[1] !== FOREST_LOSS_LAST_YEAR) && (
-                        <button
-                          onClick={() => setLossYears([FOREST_LOSS_FIRST_YEAR, FOREST_LOSS_LAST_YEAR])}
-                          title="Back to the whole series"
-                          className="hover:text-zinc-600 dark:hover:text-zinc-300"
-                        >
-                          ↺
-                        </button>
-                      )}
                     </span>
                     <a
                       href={FOREST_LOSS_DATASET_URL}
@@ -4335,6 +4315,17 @@ export default function OccurrenceMapRow({
                       <FaInfoCircle className="w-3 h-3" />
                     </a>
                   </div>
+                  {/* Always out, not behind the disclosure: narrowing the
+                      years is the thing you do with this layer, not a note
+                      about it. */}
+                  <YearRangeSlider
+                    min={FOREST_LOSS_FIRST_YEAR}
+                    max={FOREST_LOSS_LAST_YEAR}
+                    value={lossYears}
+                    onChange={setLossYears}
+                    color={FOREST_LOSS_COLOR}
+                    label="Years of tree cover loss to show"
+                  />
                   {forestLossNotesOpen && (
                     <div className="px-2 pb-1 pl-3 text-[10px] leading-snug text-zinc-500 dark:text-zinc-400 max-w-md">
                       <div>
@@ -4362,12 +4353,7 @@ export default function OccurrenceMapRow({
                         the map. Opened, each one says what it covers. */}
                     <span className="flex items-center gap-0.5 shrink-0">
                       {FOREST_LOSS_DRIVERS.map((driver) => (
-                        <span
-                          key={driver.label}
-                          title={`${driver.label} — ${driver.description}`}
-                          className="h-2.5 w-2.5 rounded-sm cursor-help"
-                          style={{ background: driver.color }}
-                        />
+                        <DriverSwatch key={driver.label} driver={driver} />
                       ))}
                     </span>
                     <a
