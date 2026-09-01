@@ -5794,58 +5794,49 @@ export default function OccurrenceMapRow({
               <span className="text-zinc-400">No tree cover loss recorded here.</span>
             ) : (
               <div className="space-y-0.5">
+                {/* The class, and nothing else about it. What each driver
+                    covers is a sentence long and lives in the legend, a
+                    hover away on the same swatch — repeating it here made a
+                    two-line answer into a paragraph. */}
                 {forest.point.driver && (
-                  <div className="flex items-start gap-1.5">
+                  <div className="flex items-center gap-1.5">
                     <span
-                      className="w-2.5 h-2.5 rounded-sm shrink-0 translate-y-1"
+                      className="w-2.5 h-2.5 rounded-sm shrink-0"
                       style={{ background: forest.point.driver.color }}
                     />
-                    <div className="min-w-0">
-                      <span className="font-medium text-zinc-600 dark:text-zinc-300">
-                        {forest.point.driver.label}
-                      </span>
-                      <div className="text-zinc-500 dark:text-zinc-400">
-                        {forest.point.driver.description}
-                      </div>
-                    </div>
+                    <span className="font-medium text-zinc-600 dark:text-zinc-300">
+                      {forest.point.driver.label}
+                    </span>
                   </div>
                 )}
                 <div className="text-zinc-500 dark:text-zinc-400 tabular-nums">
                   {[
-                    forest.point.lossYear ? `Loss detected ${forest.point.lossYear}` : null,
+                    forest.point.lossYear ? `Loss ${forest.point.lossYear}` : null,
                     forest.point.canopyPercent != null
-                      ? `${forest.point.canopyPercent}% canopy in 2000`
+                      ? `${forest.point.canopyPercent}% canopy 2000`
                       : null,
                   ]
                     .filter(Boolean)
                     .join(" · ")}
                 </div>
-                {/* The point endpoint takes no canopy threshold, so it can
-                    answer for ground the layers themselves leave blank. Better
-                    said than quietly contradicting what's drawn. */}
-                {forest.point.belowThreshold && (
-                  <div className="text-zinc-400">
-                    Below the {FOREST_LOSS_CANOPY_THRESHOLD}% canopy threshold the layers are drawn
-                    at, so this cell isn&apos;t shaded on the map.
-                  </div>
-                )}
-                {/* The two rasters are different sizes — loss is 30 m, the
-                    driver is 1 km — so a spot can sit in a cell with a driver
-                    without having lost anything itself. Left unsaid, the
-                    missing year reads as a gap in the data rather than as the
-                    answer it is. */}
-                {forest.point.driver && !forest.point.lossYear && (
-                  <div className="text-zinc-400">
-                    No loss at this exact spot: the driver is for the 1 km cell around it, where
-                    the loss it was measured from is mapped at 30 m.
-                  </div>
-                )}
-                {/* The dominance caveat, where it is actually being over-read:
-                    on a single cell someone just clicked. */}
+                {/* The three qualifiers as one line.
+                    All of them still need saying — a driver is the dominant
+                    one for a 1 km cell, the point query answers for ground
+                    the layers leave blank, and the loss it was measured from
+                    is 30 m so a spot can sit in a cell without having lost
+                    anything. As three sentences they were most of the card,
+                    and a caveat that long stops being read. */}
                 {forest.point.driver && (
                   <div className="text-zinc-400">
-                    The dominant driver for this 1 km cell — smaller clearings of another kind
-                    inside it aren&apos;t shown.
+                    {[
+                      "Dominant driver, 1 km cell",
+                      forest.point.lossYear ? null : "no loss at this 30 m pixel",
+                      forest.point.belowThreshold
+                        ? `below the ${FOREST_LOSS_CANOPY_THRESHOLD}% canopy cut, so not shaded`
+                        : null,
+                    ]
+                      .filter(Boolean)
+                      .join(" · ")}
                   </div>
                 )}
               </div>
