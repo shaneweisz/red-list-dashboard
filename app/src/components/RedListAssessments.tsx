@@ -10,6 +10,13 @@ interface PreviousAssessment {
   category: string;
   assessors?: string | null;
   reviewers?: string | null;
+  /**
+   * The individuals behind an organisational assessor — every bird assessment
+   * credits "BirdLife International", so the assessor line names no person and
+   * the facilitator line is the only one that does. Optional because it is
+   * absent from history written before the field existed, not just unset.
+   */
+  facilitators?: string | null;
 }
 
 interface AssessmentDetail {
@@ -572,7 +579,7 @@ function AssessmentDetailView({
   assessment,
 }: {
   detail: AssessmentDetail;
-  assessment: { year: string; assessment_id: number; category: string; assessors?: string | null; reviewers?: string | null };
+  assessment: PreviousAssessment;
 }) {
   const catCode = getCategoryCode(detail.red_list_category) !== "?" ? getCategoryCode(detail.red_list_category) : assessment.category;
   const trendText = getTrendText(detail.population_trend);
@@ -637,11 +644,12 @@ function AssessmentDetailView({
         )}
       </div>
 
-      {/* Assessors & Reviewers */}
-      {(assessment.assessors || assessment.reviewers) && (
+      {/* Assessors, Reviewers & Facilitators */}
+      {(assessment.assessors || assessment.reviewers || assessment.facilitators) && (
         <div className="text-xs text-zinc-500 dark:text-zinc-400 space-y-0.5">
           {assessment.assessors && <div><span className="font-medium">Assessors:</span> {assessment.assessors}</div>}
           {assessment.reviewers && <div><span className="font-medium">Reviewers:</span> {assessment.reviewers}</div>}
+          {assessment.facilitators && <div><span className="font-medium">Facilitators:</span> {assessment.facilitators}</div>}
         </div>
       )}
 
