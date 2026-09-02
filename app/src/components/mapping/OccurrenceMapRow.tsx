@@ -25,6 +25,7 @@ import booleanPointInPolygon from "@turf/boolean-point-in-polygon";
 import type { Feature, Polygon, MultiPolygon } from "geojson";
 import YearRangeSlider from "@/components/mapping/YearRangeSlider";
 import ListZoomControl, { LIST_ZOOM_DEFAULT } from "@/components/mapping/ListZoomControl";
+import CompilerDialog from "@/components/mapping/CompilerDialog";
 import MapGeoreferenceEditor from "./MapGeoreferenceEditor";
 import type { OccurrenceFeature as OccurrenceFeatureType } from "./OccurrenceListTable";
 // The table's own labels, so a basis of record is worded the same wherever it
@@ -5515,9 +5516,18 @@ export default function OccurrenceMapRow({
     [includedOccurrences, georeferences, assessorDates]
   );
 
-  const saveAsPointFile = useCallback(() => {
+  /**
+   * Open before writing, so the file's one un-derivable column gets filled.
+   * Everything else in it comes from the records; the compiler is a person.
+   */
+  const [compilerPrompt, setCompilerPrompt] = useState(false);
+
+  const saveAsPointFile = useCallback((compiler: string) => {
     if (exportablePoints.length === 0) return;
-    const csv = buildIucnPointFileCsv(exportablePoints, { yearCompiled: new Date().getFullYear() });
+    const csv = buildIucnPointFileCsv(exportablePoints, {
+      compiler,
+      yearCompiled: new Date().getFullYear(),
+    });
     const name = (scientificName || "records").replace(/[^A-Za-z0-9]+/g, "_").toLowerCase();
     const url = URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8" }));
     const link = document.createElement("a");
@@ -6419,6 +6429,17 @@ export default function OccurrenceMapRow({
           onRemove={removePointFile}
           scientificName={scientificName}
           onClose={() => setPointFileOpen(false)}
+        />
+      )}
+      {compilerPrompt && (
+        <CompilerDialog
+          count={exportablePoints.length}
+          scientificName={scientificName}
+          onSave={(compiler) => {
+            setCompilerPrompt(false);
+            saveAsPointFile(compiler);
+          }}
+          onClose={() => setCompilerPrompt(false)}
         />
       )}
       {pendingExclusion && (
@@ -7573,7 +7594,7 @@ export default function OccurrenceMapRow({
                     // list offers to save one.
                     listTab === "gbif" ? (
                       <button
-                        onClick={saveAsPointFile}
+                        onClick={() => setCompilerPrompt(true)}
                         disabled={exportablePoints.length === 0}
                         title={`Save the ${exportablePoints.length.toLocaleString()} counted records that have a position as an IUCN point file (CSV)`}
                         className="p-1 rounded border border-zinc-300 dark:border-zinc-600 text-zinc-500 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800 disabled:opacity-40 disabled:hover:bg-transparent transition-colors"
