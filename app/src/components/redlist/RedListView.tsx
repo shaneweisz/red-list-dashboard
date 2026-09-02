@@ -3232,8 +3232,8 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
   }, [selectedSpeciesKey, paginatedSpecies, speciesDetails]);
 
   // Lazily fetch the full assessment history for the open species (the list
-  // carries only the latest assessors/reviewers; the history array is fetched
-  // here on demand for the Red List Assessments tab).
+  // carries only the latest assessors/reviewers/facilitators; the history array is
+  // fetched here on demand for the Red List Assessments tab).
   useEffect(() => {
     if (!selectedSpeciesKey) return;
     const s = paginatedSpecies.find((sp) => sp.species_key === selectedSpeciesKey);
@@ -6355,7 +6355,7 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
                                 currentAssessmentId={s.assessment_id ?? 0}
                                 currentCategory={s.category}
                                 currentAssessmentDate={s.assessment_date}
-                                previousAssessments={((s.sis_taxon_id ? assessmentHistory[s.sis_taxon_id] : null) ?? s.previous_assessments ?? []).map((a) => ({ year: a.year, assessment_id: a.id, category: a.category, assessors: a.assessors, reviewers: a.reviewers }))}
+                                previousAssessments={((s.sis_taxon_id ? assessmentHistory[s.sis_taxon_id] : null) ?? s.previous_assessments ?? []).map((a) => ({ year: a.year, assessment_id: a.id, category: a.category, assessors: a.assessors, reviewers: a.reviewers, facilitators: a.facilitators }))}
                                 speciesUrl={`https://www.iucnredlist.org/species/${s.sis_taxon_id}/${s.assessment_id}`}
                               />
                             </div>
