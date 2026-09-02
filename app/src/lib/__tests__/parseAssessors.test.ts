@@ -1,5 +1,7 @@
 import { describe, it, expect } from "vitest";
-import { parseAssessors, parseInstitutions } from "../parseAssessors";
+import fs from "fs";
+import path from "path";
+import { parseAssessors, parseInstitutions, COMMA_BEARING_INSTITUTIONS } from "../parseAssessors";
 
 describe("parseAssessors", () => {
   it("returns empty array for null/undefined/empty", () => {
@@ -115,7 +117,7 @@ describe("parseInstitutions", () => {
     expect(parseInstitutions("  ")).toEqual([]);
   });
 
-  it("keeps a comma inside an organisation name whole", () => {
+  it("keeps a comma that belongs to the organisation's own name", () => {
     // parseAssessors would split this into "Royal Botanic Gardens" + "Kew",
     // inventing an institution that does not exist. This is the whole reason
     // institutions get their own parser.
@@ -123,24 +125,85 @@ describe("parseInstitutions", () => {
     expect(parseAssessors("Royal Botanic Gardens, Kew")).toHaveLength(2);
   });
 
-  it("splits two institutions on the ampersand separator", () => {
+  it("splits on the ampersand", () => {
     expect(parseInstitutions("Centro Nacional de Conservação da Flora (CNCFlora) & Botanic Gardens Conservation International"))
       .toEqual(["Centro Nacional de Conservação da Flora (CNCFlora)", "Botanic Gardens Conservation International"]);
   });
 
-  // Documented limit, pinned so a future "fix" has to be a deliberate one: a
-  // comma-separated line stays whole, because the same string uses ", " both
-  // inside a name and between names. See parseInstitutions' KNOWN LIMIT note.
-  it("does NOT split a comma-separated line, since the separator is ambiguous", () => {
-    expect(parseInstitutions("Royal Botanic Gardens, Kew, Botanic Gardens Conservation International"))
-      .toEqual(["Royal Botanic Gardens, Kew, Botanic Gardens Conservation International"]);
-  });
-
-  it("keeps a parenthetical acronym attached to its organisation", () => {
+  // The line is an ordinary English list, so a comma separates too. Missing this
+  // left every line of 3+ institutions as one pseudo-institution — and since the
+  // CNCFlora + Brazil RLA pair ALSO appears " & "-joined on its own, the same two
+  // organisations were counted both as a pair and separately.
+  it("splits a comma-joined list, ampersand before the last item", () => {
     expect(parseInstitutions("Centro Nacional de Conservação da Flora (CNCFlora), IUCN SSC Brazil Plant Red List Authority & Botanic Gardens Conservation International"))
       .toEqual([
-        "Centro Nacional de Conservação da Flora (CNCFlora), IUCN SSC Brazil Plant Red List Authority",
+        "Centro Nacional de Conservação da Flora (CNCFlora)",
+        "IUCN SSC Brazil Plant Red List Authority",
         "Botanic Gardens Conservation International",
       ]);
   });
+
+  it("splits a list whose first item carries its own comma", () => {
+    expect(parseInstitutions("Royal Botanic Gardens, Kew, Botanic Gardens Conservation International"))
+      .toEqual(["Royal Botanic Gardens, Kew", "Botanic Gardens Conservation International"]);
+  });
+
+  // A real credit line: one university, whose parenthetical department name
+  // contains both a comma and an ampersand.
+  it("ignores separators inside brackets", () => {
+    const uni = "Addis Ababa University (National Herbarium of Ethiopia, Department of Plant Biology & Biodiversity Management)";
+    expect(parseInstitutions(uni)).toEqual([uni]);
+    expect(parseInstitutions(`Royal Botanic Gardens, Kew, ${uni}, Ethiopian Biodiversity Institute & Gullele Botanic Garden`))
+      .toEqual([
+        "Royal Botanic Gardens, Kew",
+        uni,
+        "Ethiopian Biodiversity Institute",
+        "Gullele Botanic Garden",
+      ]);
+  });
+
+  // The protected list is derived from the corpus, so it has to stay true to it:
+  // a name belongs there if it appears as a COMPLETE institution (a whole credit
+  // line, or the piece after the final " & ") while containing ", ". If a sync
+  // introduces a seventh such name, splitting it would invent institutions —
+  // this fails rather than letting that ship silently.
+  const ASSESSED = path.join(process.cwd(), "data", "assessed.parquet");
+  const dataIt = fs.existsSync(ASSESSED) ? it : it.skip;
+  dataIt("COMMA_BEARING_INSTITUTIONS still matches what the data contains", async () => {
+    const { DuckDBInstance } = await import("@duckdb/node-api");
+    const conn = await (await DuckDBInstance.create(":memory:")).connect();
+    const rows = (await conn.runAndReadAll(
+      `SELECT DISTINCT latest_institutions AS s FROM '${ASSESSED}' WHERE latest_institutions IS NOT NULL`,
+    )).getRowObjects();
+
+    const complete = new Set<string>();
+    for (const r of rows) {
+      const parts = String(r.s).split(" & ");
+      complete.add(parts[parts.length - 1].trim());
+      if (parts.length === 1) complete.add(String(r.s).trim());
+    }
+    const derived = [...complete].filter((x) => x.includes(", ")).sort();
+    expect(derived).toEqual([...COMMA_BEARING_INSTITUTIONS].sort());
+  }, 60_000);
+
+  // Whatever the line, no parsed institution may still hold a top-level
+  // separator — that would mean two organisations counted as one.
+  dataIt("leaves no unsplit separator in any real credit line", async () => {
+    const { DuckDBInstance } = await import("@duckdb/node-api");
+    const conn = await (await DuckDBInstance.create(":memory:")).connect();
+    const rows = (await conn.runAndReadAll(
+      `SELECT DISTINCT latest_institutions AS s FROM '${ASSESSED}' WHERE latest_institutions IS NOT NULL`,
+    )).getRowObjects();
+
+    const leftovers = new Set<string>();
+    for (const r of rows) {
+      for (const inst of parseInstitutions(String(r.s))) {
+        const bracketless = inst.replace(/\([^)]*\)/g, "");
+        if (/,\s|\s&\s/.test(bracketless) && !COMMA_BEARING_INSTITUTIONS.includes(inst)) {
+          leftovers.add(inst);
+        }
+      }
+    }
+    expect([...leftovers]).toEqual([]);
+  }, 60_000);
 });

@@ -5543,7 +5543,7 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
               </svg>
             </div>
-            {(selectedTaxa.size > 0 || selectedSubgroups.size > 0 || selectedCategories.size > 0 || selectedYearRanges.size > 0 || selectedAssessmentYears.size > 0 || selectedDescribedYears.size > 0 || selectedObsRanges.size > 0 || selectedAssessmentCounts.size > 0 || selectedCountries.size > 0 || selectedSystems.size > 0 || endemicsOnly || selectedGrowthForms.size > 0 || selectedPopulationTrends.size > 0 || selectedMovementPatterns.size > 0 || selectedThreats.size > 0 || selectedCriteria.size > 0 || selectedHabitat.size > 0 || habitatBreadth || colMatch || selectedColReasons.size > 0 || habitatImportanceActive || habitatSeasonsActive || habitatSuitabilityActive || selectedAssessors.size > 0 || selectedReviewers.size > 0 || selectedFacilitators.size > 0 || showOnlyStarred || exactFilters.outdated || exactFilters.minObs != null || exactFilters.maxObs != null || exactFilters.minAssessmentYear != null || exactFilters.maxAssessmentYear != null || exactFilters.minDescribedYear != null || exactFilters.maxDescribedYear != null) && (
+            {(selectedTaxa.size > 0 || selectedSubgroups.size > 0 || selectedCategories.size > 0 || selectedYearRanges.size > 0 || selectedAssessmentYears.size > 0 || selectedDescribedYears.size > 0 || selectedObsRanges.size > 0 || selectedAssessmentCounts.size > 0 || selectedCountries.size > 0 || selectedSystems.size > 0 || endemicsOnly || selectedGrowthForms.size > 0 || selectedPopulationTrends.size > 0 || selectedMovementPatterns.size > 0 || selectedThreats.size > 0 || selectedCriteria.size > 0 || selectedHabitat.size > 0 || habitatBreadth || colMatch || selectedColReasons.size > 0 || habitatImportanceActive || habitatSeasonsActive || habitatSuitabilityActive || selectedAssessors.size > 0 || selectedReviewers.size > 0 || selectedFacilitators.size > 0 || selectedContributors.size > 0 || selectedInstitutions.size > 0 || showOnlyStarred || exactFilters.outdated || exactFilters.minObs != null || exactFilters.maxObs != null || exactFilters.minAssessmentYear != null || exactFilters.maxAssessmentYear != null || exactFilters.minDescribedYear != null || exactFilters.maxDescribedYear != null) && (
               <button
                 onClick={() => {
                   clearAllFiltersAndTaxa();
@@ -5938,6 +5938,32 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
               >
                 {name} <span className="text-[10px] opacity-60">(facilitator)</span>
                 <span className="text-sm">×</span>
+              </button>
+            ))}
+            {!isNewAssessments && Array.from(selectedContributors).map(name => (
+              <button
+                key={`c-${name}`}
+                onClick={() => setSelectedContributors(prev => { const next = new Set(prev); next.delete(name); return next; })}
+                className="px-3 py-1.5 text-sm font-medium rounded-full bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400 flex items-center gap-1 hover:opacity-80"
+              >
+                {name} <span className="text-[10px] opacity-60">(contributor)</span>
+                <span className="text-sm">×</span>
+              </button>
+            ))}
+            {/* Institution names run far longer than the person-name pills above
+                ("Centro Nacional de Conservação da Flora (CNCFlora)"), so this one
+                truncates rather than pushing the whole row off screen; the full
+                name stays available on hover. */}
+            {!isNewAssessments && Array.from(selectedInstitutions).map(name => (
+              <button
+                key={`i-${name}`}
+                onClick={() => setSelectedInstitutions(prev => { const next = new Set(prev); next.delete(name); return next; })}
+                title={name}
+                className="px-3 py-1.5 text-sm font-medium rounded-full bg-sky-100 text-sky-700 dark:bg-sky-900/30 dark:text-sky-400 flex items-center gap-1 hover:opacity-80 max-w-[22rem]"
+              >
+                <span className="truncate">{name}</span>
+                <span className="text-[10px] opacity-60 shrink-0">(institution)</span>
+                <span className="text-sm shrink-0">×</span>
               </button>
             ))}
             {/* Exact URL-only filters (typically arrive via an agent/MCP dashboard
@@ -6550,7 +6576,7 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
                                 currentAssessmentId={s.assessment_id ?? 0}
                                 currentCategory={s.category}
                                 currentAssessmentDate={s.assessment_date}
-                                previousAssessments={((s.sis_taxon_id ? assessmentHistory[s.sis_taxon_id] : null) ?? s.previous_assessments ?? []).map((a) => ({ year: a.year, assessment_id: a.id, category: a.category, assessors: a.assessors, reviewers: a.reviewers, facilitators: a.facilitators }))}
+                                previousAssessments={((s.sis_taxon_id ? assessmentHistory[s.sis_taxon_id] : null) ?? s.previous_assessments ?? []).map((a) => ({ year: a.year, assessment_id: a.id, category: a.category, assessors: a.assessors, reviewers: a.reviewers, facilitators: a.facilitators, contributors: a.contributors, institutions: a.institutions }))}
                                 speciesUrl={`https://www.iucnredlist.org/species/${s.sis_taxon_id}/${s.assessment_id}`}
                               />
                             </div>

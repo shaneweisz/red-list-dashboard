@@ -17,6 +17,10 @@ interface PreviousAssessment {
    * absent from history written before the field existed, not just unset.
    */
   facilitators?: string | null;
+  /** Credited for data or expertise without being assessor or reviewer. */
+  contributors?: string | null;
+  /** The organisation(s) behind the assessment. */
+  institutions?: string | null;
 }
 
 interface AssessmentDetail {
@@ -644,12 +648,19 @@ function AssessmentDetailView({
         )}
       </div>
 
-      {/* Assessors, Reviewers & Facilitators */}
-      {(assessment.assessors || assessment.reviewers || assessment.facilitators) && (
+      {/* Assessment credits, in the Red List's own billing order: who made the
+          call, who checked it, then who else was involved. Each line is dropped
+          when empty rather than shown as blank — contributors and institutions
+          are absent on most assessments (67% and 81%), so printing empty labels
+          would add three rows of nothing to the common case. */}
+      {(assessment.assessors || assessment.reviewers || assessment.facilitators
+        || assessment.contributors || assessment.institutions) && (
         <div className="text-xs text-zinc-500 dark:text-zinc-400 space-y-0.5">
           {assessment.assessors && <div><span className="font-medium">Assessors:</span> {assessment.assessors}</div>}
           {assessment.reviewers && <div><span className="font-medium">Reviewers:</span> {assessment.reviewers}</div>}
           {assessment.facilitators && <div><span className="font-medium">Facilitators:</span> {assessment.facilitators}</div>}
+          {assessment.contributors && <div><span className="font-medium">Contributors:</span> {assessment.contributors}</div>}
+          {assessment.institutions && <div><span className="font-medium">Institutions:</span> {assessment.institutions}</div>}
         </div>
       )}
 
