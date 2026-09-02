@@ -6314,6 +6314,12 @@ export default function OccurrenceMapRow({
             onChange={() => setShowMyGeoreferences((v) => !v)}
             className="w-3 h-3 rounded accent-violet-600 shrink-0"
           />
+          {/* The colour the markers are actually drawn in, so the row is a key
+              rather than a label. */}
+          <span
+            className="w-2.5 h-2.5 rounded-full shrink-0 border-[1.5px] border-white shadow-sm"
+            style={{ background: "#7c3aed" }}
+          />
           <span className="flex-1 min-w-0 text-zinc-700 dark:text-zinc-200 truncate">
             Your georeferences
           </span>
@@ -6370,6 +6376,14 @@ export default function OccurrenceMapRow({
           checked={showGbif}
           onChange={() => setShowGbif((v) => !v)}
           className="w-3 h-3 rounded accent-blue-500 shrink-0"
+        />
+        {/* One circle, in the green the recent end of the scale draws — the
+            points themselves run a ramp, and the ramp is on the right of this
+            row where there is room to label both ends. This is here so every
+            row in the panel is led by the thing it draws. */}
+        <span
+          className="w-2.5 h-2.5 rounded-full shrink-0"
+          style={{ background: "#4ade80", border: "1.5px solid #16a34a" }}
         />
         <span className="shrink-0 text-zinc-700 dark:text-zinc-200">GBIF points</span>
         {/* The colour key on the same row as the name it belongs to, which is
