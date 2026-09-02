@@ -1,7 +1,7 @@
 /**
- * build-name-index: one name-sorted index over every name the search fast path can
- * match, so a typeahead prefix query prunes to a row group or two instead of scanning
- * both species parquets end to end.
+ * build-search-index: the two name-sorted indexes the search bar reads — one over
+ * species names, one over higher-rank taxon names — so a typeahead prefix query prunes
+ * to a row group or two instead of scanning both species parquets end to end.
  *
  * assessed.parquet and unassessed.parquet are written ORDER BY class_name, order_name,
  * family (they're browse-ordered, which is what the species LISTS want), so a name
@@ -32,15 +32,31 @@
  * are reached solely when nothing here matches, and they already have their own answer:
  * synonym-index.parquet is name-sorted, and species-duckdb primes both at warm-up.
  *
- * Input: data/assessed.parquet, data/unassessed.parquet, data/species_link.parquet.
- * Output: data/name-index.parquet.
+ * The second output, rank-index.parquet, is the same idea for the "Browse Felidae →"
+ * suggestions: the DISTINCT class/order/family/genus names, pre-aggregated to ONE ROW
+ * PER NAME and sorted, so suggestTaxa is a pruned range read rather than eight DISTINCT
+ * scans of both parquets. Pre-aggregating here rather than at query time is also what
+ * makes the answer deterministic — see the comment on the struct min below.
  *
- *   npx tsx scripts/build-name-index.ts
+ * Input: data/assessed.parquet, data/unassessed.parquet, data/species_link.parquet.
+ * Output: data/name-index.parquet, data/rank-index.parquet.
+ *
+ *   npx tsx scripts/build-search-index.ts
  */
 import * as fs from "fs";
 import * as path from "path";
-import { DuckDBInstance } from "@duckdb/node-api";
+import { DuckDBInstance, type DuckDBConnection } from "@duckdb/node-api";
 import { loadEnvFiles, DATA_DIR } from "./utils";
+
+/** Ranks in the order suggestTaxa prefers them; the index is the priority it sorts on.
+ *  Mirrors SUGGEST_RANKS in src/lib/data/species-duckdb.ts — keep the two in step. */
+const SUGGEST_RANKS = ["class", "order", "family", "genus"] as const;
+
+/** What each rank matches on. Mirrors RANK_TO_MATCH_SQL in species-duckdb.ts. */
+const RANK_TO_MATCH_SQL: Record<(typeof SUGGEST_RANKS)[number], string> = {
+  class: "class_name", order: "order_name", family: "family",
+  genus: "lower(split_part(scientific_name, ' ', 1))",
+};
 
 /** Ranking tiers, mirrored by searchSpecies' ORDER BY. Keep the two in step. */
 export const NAME_KIND = { scientific: 0, common: 1, epithet: 2, commonWord: 3 } as const;
@@ -51,7 +67,7 @@ export async function run(opts: { dataDir?: string } = {}): Promise<void> {
   const unassessed = path.join(dir, "unassessed.parquet");
   const link = path.join(dir, "species_link.parquet");
   for (const f of [assessed, unassessed, link]) {
-    if (!fs.existsSync(f)) throw new Error(`build-name-index: ${f} not found (run build-parquet + build-matching first)`);
+    if (!fs.existsSync(f)) throw new Error(`build-search-index: ${f} not found (run build-parquet + build-matching first)`);
   }
   const out = path.join(dir, "name-index.parquet");
 
@@ -125,9 +141,56 @@ export async function run(opts: { dataDir?: string } = {}): Promise<void> {
   const bytes = fs.statSync(out).size;
   console.log(`Wrote ${Number(n.n).toLocaleString()} name rows (${Number(n.d).toLocaleString()} distinct names, ` +
     `${(bytes / 1048576).toFixed(1)} MB) → ${out}`);
+
+  await buildRankIndex(conn, dir);
 }
 
-const isDirectRun = process.argv[1]?.endsWith("build-name-index.ts") || process.argv[1]?.endsWith("build-name-index.js");
+/**
+ * rank-index.parquet: the class/order/family/genus names the search bar offers as
+ * "Browse Felidae →", one row per NAME, sorted by it.
+ *
+ * Pre-aggregated here rather than grouped at query time, which does two things:
+ *
+ *  1. suggestTaxa becomes a prefix-range read of a ~2MB file instead of eight DISTINCT
+ *     scans of both species parquets — so, like name-index.parquet, it's fast on a cold
+ *     container with nothing materialized.
+ *
+ *  2. It fixes a real nondeterminism. A name can occur in several taxon groups (the
+ *     genus "×" is in mosses AND flowering plants), and the old query resolved that with
+ *     arg_min(taxon_group, rp), whose tie-break among equal rp is arbitrary — parallel
+ *     aggregation order, so it genuinely varied BETWEEN RUNS on identical data: two
+ *     identical searches could offer to browse the same name in different taxa. Taking
+ *     min() of a STRUCT instead compares field by field, in declaration order — coarsest
+ *     rank, then alphabetically first taxon group — so the winner is total and stable.
+ *     The lineage columns ride along in the same struct, which keeps them consistent
+ *     with the group that won (and saves resolveTaxonSuggestionNode its own lookup).
+ */
+async function buildRankIndex(conn: DuckDBConnection, dir: string): Promise<void> {
+  const out = path.join(dir, "rank-index.parquet");
+  const part = (src: string) => SUGGEST_RANKS.map((rank, rp) => `
+    SELECT ${RANK_TO_MATCH_SQL[rank]} AS name, ${rp} AS rp, taxon_group, class_name, order_name, family
+    FROM read_parquet('${path.join(dir, src)}')
+    WHERE ${rank === "genus" ? "scientific_name IS NOT NULL" : `${RANK_TO_MATCH_SQL[rank]} IS NOT NULL`}`
+  ).join(" UNION ALL ");
+
+  await conn.run(`
+    COPY (
+      SELECT name, (min(s)).rp AS rp, (min(s)).tg AS taxon_group,
+             (min(s)).cls AS class_name, (min(s)).ord AS order_name, (min(s)).fam AS family
+      FROM (
+        SELECT name, {'rp': rp, 'tg': taxon_group, 'cls': class_name, 'ord': order_name, 'fam': family} AS s
+        FROM (${part("assessed.parquet")} UNION ALL ${part("unassessed.parquet")})
+      )
+      WHERE name <> ''
+      GROUP BY name
+      ORDER BY name
+    ) TO '${out}' (FORMAT parquet, COMPRESSION ZSTD, ROW_GROUP_SIZE 20000)`);
+
+  const rows = await (await conn.run(`SELECT count(*) n FROM read_parquet('${out}')`)).getRowObjects();
+  console.log(`Wrote ${Number(rows[0].n).toLocaleString()} rank names (${(fs.statSync(out).size / 1048576).toFixed(1)} MB) → ${out}`);
+}
+
+const isDirectRun = process.argv[1]?.endsWith("build-search-index.ts") || process.argv[1]?.endsWith("build-search-index.js");
 if (isDirectRun) {
   loadEnvFiles();
   run().catch((e) => { console.error(e); process.exit(1); });

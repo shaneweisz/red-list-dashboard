@@ -1155,6 +1155,10 @@ function findViewLeafForGroup(taxonGroup: string): string | null {
 // isn't live-drillable at all, or an ancestor rank's lookup comes back empty.
 async function resolveTaxonSuggestionNode(
   conn: DuckDBConnection, rank: DynamicRank, value: string, taxonGroup: string,
+  // The representative row's lineage when the suggestion came from rank-index.parquet,
+  // which bakes it in at build time (chosen by the same struct min that picks the taxon
+  // group, so the two always agree). null on the fallback path, which looks it up below.
+  lineage: Lineage | null,
 ): Promise<string | null> {
   const staticHit = RANK_VALUE_TO_NODE.get(`${rank}:${value}`);
   if (staticHit) return staticHit;
@@ -1165,26 +1169,34 @@ async function resolveTaxonSuggestionNode(
   if (idx === -1) return null;
   const segments: DynamicSegment[] = [];
   if (idx > 0) {
-    // Aliased positionally (r0, r1, …) rather than read back by column name: genus's
-    // "column" is an expression, not a name, so a raw projection would have nothing
-    // stable to index the result row by. (genus is always last in rankOrderFor's list,
-    // so it can't actually appear among the prior ranks today — the aliases just keep
-    // that from being a load-bearing assumption.)
     const priorRanks = order.slice(0, idx);
-    const selects = priorRanks.map((r, i) => `${RANK_TO_MATCH_SQL[r]} AS r${i}`).join(", ");
-    const matchSql = RANK_TO_MATCH_SQL[rank];
-    // Reads the materialized search index (which carries scientific_name and all three
-    // lineage columns, so every RANK_TO_MATCH_SQL expression resolves against it) rather
-    // than the parquets: this runs once per suggestion, so on the parquet path a single
-    // search paid up to three more unpruned R2 scans on top of the two it already had.
-    const sql = `SELECT ${selects} FROM ${await searchSource(conn)}
-      WHERE ${matchSql} = $v AND taxon_group = $tg LIMIT 1`;
-    const rows = (await conn.runAndReadAll(sql, { v: value, tg: taxonGroup })).getRowObjects();
-    if (rows.length === 0) return null;
+    // genus is always last in rankOrderFor's list, so it can't actually appear among the
+    // prior ranks today; mapping it to null rather than assuming that keeps the lookup
+    // from being a load-bearing assumption.
+    const fromLineage = (r: DynamicRank) =>
+      r === "class" ? lineage?.class_name : r === "order" ? lineage?.order_name : r === "family" ? lineage?.family : null;
+
+    let values: (string | null | undefined)[];
+    if (lineage) {
+      values = priorRanks.map(fromLineage);
+    } else {
+      // Fallback path only. Aliased positionally (r0, r1, …) rather than read back by
+      // column name: genus's "column" is an expression, not a name, so a raw projection
+      // would have nothing stable to index the result row by. Reads the materialized
+      // search index rather than the parquets — this runs once per suggestion, so on the
+      // parquet path a single search paid up to three more unpruned R2 scans.
+      const selects = priorRanks.map((r, i) => `${RANK_TO_MATCH_SQL[r]} AS r${i}`).join(", ");
+      const matchSql = RANK_TO_MATCH_SQL[rank];
+      const sql = `SELECT ${selects} FROM ${await searchSource(conn)}
+        WHERE ${matchSql} = $v AND taxon_group = $tg LIMIT 1`;
+      const rows = (await conn.runAndReadAll(sql, { v: value, tg: taxonGroup })).getRowObjects();
+      if (rows.length === 0) return null;
+      values = priorRanks.map((_, i) => rows[0][`r${i}`] as string | null);
+    }
     priorRanks.forEach((r, i) => {
-      const v = rows[0][`r${i}`];
       // Coalesce a null ancestor rank to "" — the Unclassified bucket for that rank,
       // same convention filterToSql/matchesFilter already use, not an error case.
+      const v = values[i];
       segments.push({ rank: r, value: v == null ? "" : String(v).toLowerCase() });
     });
   }
@@ -1215,25 +1227,45 @@ export async function suggestTaxa(query: string, limit = 3): Promise<TaxonSugges
   const conn = await getConn();
   const q = query.toLowerCase();
   const lim = Math.min(Math.max(limit, 1), 10);
+  const genusRp = SUGGEST_RANKS.indexOf("genus");
   // Exact match first, then shortest (closest) name, then alphabetical — per tier, so
-  // the JS merge below can hand the genus tier its own reserved slot. rank_idx already
-  // holds DISTINCT (name, rank, group) triples; the GROUP BY dedupes across ranks by
-  // name, keeping the coarsest rank that name matched at (arg_min on the same priority).
-  // QUALIFY caps each tier at `lim` rows, so a flood of genus prefix matches never has
-  // to be materialized or shipped back.
-  const sql = `
-    SELECT name, rp, taxon_group FROM (
-      SELECT name, min(rp) AS rp, arg_min(taxon_group, rp) AS taxon_group
-      FROM ${await rankSource(conn)}
-      WHERE name LIKE $q || '%'
-      GROUP BY name
-    )
-    QUALIFY row_number() OVER (
-      PARTITION BY rp = ${SUGGEST_RANKS.indexOf("genus")}
-      ORDER BY (name = $q) DESC, length(name), name
-    ) <= ${lim}
-    ORDER BY rp = ${SUGGEST_RANKS.indexOf("genus")}, (name = $q) DESC, length(name), name`;
-  const rows = (await conn.runAndReadAll(sql, { q })).getRowObjects();
+  // the JS merge below can hand the genus tier its own reserved slot. QUALIFY caps each
+  // tier at `lim` rows, so a flood of genus prefix matches never has to be materialized
+  // or shipped back.
+  const order = `(name = $q) DESC, length(name), name`;
+  const tail = `
+    QUALIFY row_number() OVER (PARTITION BY rp = ${genusRp} ORDER BY ${order}) <= ${lim}
+    ORDER BY rp = ${genusRp}, ${order}`;
+
+  // rank-index.parquet is one row per name, sorted by it, so this is a pruned range read
+  // of a ~1MB file — no GROUP BY, and no materialized table needed, which is what makes
+  // the taxon half of the dropdown fast on a cold container too. It also carries the
+  // lineage resolveTaxonSuggestionNode would otherwise have to look up per suggestion.
+  // Falls back to the scanned/materialized rank names when the sync predates the index.
+  let rows: Record<string, unknown>[] | null = null;
+  try {
+    rows = (await conn.runAndReadAll(
+      `SELECT name, rp, taxon_group, class_name, order_name, family, true AS has_lineage
+       FROM read_parquet('${parquetUri("rank-index.parquet")}')
+       WHERE name >= $q AND name < $q || chr(1114111)${tail}`, { q })).getRowObjects();
+  } catch { /* not in this sync prefix — fall through */ }
+
+  if (!rows) {
+    // Same answer the pre-aggregation above bakes in, computed on the fly: min() of a
+    // STRUCT compares field by field in declaration order, so the coarsest rank wins and
+    // an equal-rank tie goes to the alphabetically first taxon group. The arg_min(
+    // taxon_group, rp) this replaced left that tie to parallel aggregation order, which
+    // varied BETWEEN RUNS on identical data — the genus "×" is in both mosses and
+    // flowering plants, and two identical searches could offer to browse it in either.
+    rows = (await conn.runAndReadAll(
+      `SELECT name, rp, taxon_group, NULL AS class_name, NULL AS order_name, NULL AS family,
+              false AS has_lineage FROM (
+         SELECT name, (min(s)).rp AS rp, (min(s)).tg AS taxon_group
+         FROM (SELECT name, {'rp': rp, 'tg': taxon_group} AS s
+               FROM ${await rankSource(conn)} WHERE name LIKE $q || '%')
+         GROUP BY name
+       )${tail}`, { q })).getRowObjects();
+  }
 
   // One slot is reserved for the best genus hit whenever there is one — so searching a
   // genus that shares a prefix with its own family ("urs" → Ursidae + Ursus) shows both,
@@ -1255,7 +1287,11 @@ export async function suggestTaxa(query: string, limit = 3): Promise<TaxonSugges
       name: name.charAt(0).toUpperCase() + name.slice(1),
       rank,
       taxon: name,
-      nodeId: await resolveTaxonSuggestionNode(conn, rank, name, String(r.taxon_group)),
+      // rank-index.parquet rows carry the lineage; fallback rows don't and pass null, so
+      // the lookup still runs. Flagged explicitly rather than inferred from the columns
+      // being null — a taxon with no class/order/family at all is a real, indexed row.
+      nodeId: await resolveTaxonSuggestionNode(conn, rank, name, String(r.taxon_group),
+        r.has_lineage ? { class_name: str(r.class_name), order_name: str(r.order_name), family: str(r.family) } : null),
     };
   }));
 }
