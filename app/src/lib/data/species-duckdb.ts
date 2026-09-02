@@ -559,8 +559,8 @@ const searchProj = (src: string, assessed: boolean) => `
 
 // One DISTINCT (name, rank-priority, taxon_group) triple per rank value, which is all
 // suggestTaxa's prefix match needs — 116k rows, a rounding error next to search_idx.
-// Mirrors the per-file DISTINCT the old inline query did, so the GROUP BY/arg_min that
-// consumes it sees exactly the same input rows.
+// Only reached when rank-index.parquet isn't in the sync prefix; the aggregation that
+// consumes it then reproduces what that file bakes in at build time.
 const rankProj = (src: string) => SUGGEST_RANKS.map((rank, rp) => `
   SELECT DISTINCT ${RANK_TO_MATCH_SQL[rank]} AS name, ${rp} AS rp, taxon_group
   FROM '${parquetUri(src)}'
@@ -652,7 +652,7 @@ function dedupeByRowKey(hits: SearchResult[]): SearchResult[] {
   return hits.filter((r) => !r.species_key || bestByKey.get(r.species_key) === r);
 }
 
-// Tier 0: prefix hits from the name-sorted index (scripts/build-name-index.ts).
+// Tier 0: prefix hits from the name-sorted index (scripts/build-search-index.ts).
 //
 // name-index.parquet is one row per searchable name — scientific name, common name,
 // epithet, and each word of a multi-word common name — sorted by that name, so this
@@ -663,8 +663,7 @@ function dedupeByRowKey(hits: SearchResult[]): SearchResult[] {
 // This is what makes a *cold* container fast: unlike the substring tier below it needs
 // no materialized table, so it answers in ~10ms whether or not warm-up has finished.
 //
-// Ranking reproduces the substring tier's, in the terms the index stores: exact common
-// name > common-name prefix > scientific prefix > epithet > common-name word.
+// Ranking is the substring tier's ORDER BY verbatim — see the comment on it below.
 //
 // Returns [] (never throws) when the index isn't in this sync prefix — an older sync
 // still searches, just via the tiers below.
