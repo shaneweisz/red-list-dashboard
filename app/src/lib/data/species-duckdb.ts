@@ -601,14 +601,113 @@ async function rankSource(conn: DuckDBConnection): Promise<string> {
   }
 }
 
+/** A search hit's parquet/temp-table row → the shape the dropdown renders. */
+function toSearchResult(r: Record<string, unknown>, colIdOverride: string | null): SearchResult {
+  const tg = String(r.taxon_group);
+  const lineage = { class_name: str(r.class_name), order_name: str(r.order_name), family: str(r.family) };
+  // assessed.parquet's id column IS the SIS taxon id; unassessed.parquet's is an
+  // internal build-time key that never leaves the pipeline (see build-parquet).
+  const sisTaxonId = r.assessed ? Number(r.id) : null;
+  const colId = r.assessed ? null : colIdOverride;
+  // Both views browse via the top-level taxon, plus the sub-group node the species
+  // itself sits in — see nodeIdForSpecies.
+  return {
+    species_key: sisTaxonId != null ? sisRowKey(sisTaxonId) : colId ? colRowKey(colId) : null,
+    sis_taxon_id: sisTaxonId,
+    col_id: colId,
+    scientific_name: String(r.scientific_name ?? ""),
+    common_name: (r.common_name as string) ?? null,
+    taxon_id: mapTaxonId(tg),
+    taxon_group: tg,
+    category: String(r.category ?? ""),
+    gbif_species_key: str(r.gbif_species_key),
+    gbif_occurrence_count: num(r.gbif_occurrence_count),
+    assessment_id: num(r.assessment_id),
+    assessment_date: (r.assessment_date as string) ?? null,
+    countries: splitList(r.countries),
+    ...lineage,
+    node_id: nodeIdForSpecies(tg, lineage),
+  };
+}
+
+// One entry per species, in the order the hits arrived. unassessed.parquet is one row per
+// GBIF species key, and CoL lumps some of those: 3,756 col_ids carry more than one key, so
+// a name like Abutilon halophilum matched twice (keys VLWL9 and 8N4F) and listed twice in
+// the dropdown — two rows that now resolve to the same species and would select the same
+// table row. The NE list already shows one row per col_id (ne_gbif_by_col groups by it), so
+// collapsing here is what makes search agree with the list it selects into. Keep the
+// best-observed key of the group, which is the most useful one to preview from; ties keep
+// the first, which is the better-ranked one. The name index adds a second way to arrive at
+// the same species (a hit on its scientific name AND its epithet, say), and this collapses
+// that too. Null keys are never collapsed — those species have no shared identity to merge on.
+function dedupeByRowKey(hits: SearchResult[]): SearchResult[] {
+  const bestByKey = new Map<string, SearchResult>();
+  for (const r of hits) {
+    if (!r.species_key) continue;
+    const prev = bestByKey.get(r.species_key);
+    if (!prev || (r.gbif_occurrence_count ?? -1) > (prev.gbif_occurrence_count ?? -1)) {
+      bestByKey.set(r.species_key, r);
+    }
+  }
+  return hits.filter((r) => !r.species_key || bestByKey.get(r.species_key) === r);
+}
+
+// Tier 0: prefix hits from the name-sorted index (scripts/build-name-index.ts).
+//
+// name-index.parquet is one row per searchable name — scientific name, common name,
+// epithet, and each word of a multi-word common name — sorted by that name, so this
+// range predicate prunes to the row group or two the prefix falls in (~1MB read of a
+// ~97MB file) instead of scanning both species parquets whole. It carries the full
+// SearchResult payload including col_id, so a hit needs no second read of any kind.
+//
+// This is what makes a *cold* container fast: unlike the substring tier below it needs
+// no materialized table, so it answers in ~10ms whether or not warm-up has finished.
+//
+// Ranking reproduces the substring tier's, in the terms the index stores: exact common
+// name > common-name prefix > scientific prefix > epithet > common-name word.
+//
+// Returns [] (never throws) when the index isn't in this sync prefix — an older sync
+// still searches, just via the tiers below.
+async function prefixSearch(conn: DuckDBConnection, q: string, lim: number): Promise<SearchResult[]> {
+  try {
+    const rows = (await conn.runAndReadAll(
+      `SELECT * FROM read_parquet('${parquetUri("name-index.parquet")}')
+       WHERE name_lo >= $q AND name_lo < $q || chr(1114111)
+       -- Character-for-character the substring tier's ORDER BY, evaluated against the
+       -- same two names (the index carries both), so a hit ranks exactly where it would
+       -- have. Not a tier ladder over name_kind: these are three INDEPENDENT booleans,
+       -- and the third one reorders inside the second — a species matching on both its
+       -- common and scientific name outranks one matching only its common name. Ranking
+       -- off name_kind instead put Elephant Trunk Snake above Elephant's Foot for
+       -- "elephant", which is the old order inverted.
+       ORDER BY (lower(common_name) = $q) DESC,
+                (lower(common_name) LIKE $q || '%') DESC,
+                (lower(scientific_name) LIKE $q || '%') DESC,
+                lower(scientific_name)
+       -- Over-fetched: several name rows can collapse to one species below.
+       LIMIT ${lim * 3 + 5}`, { q })).getRowObjects();
+    return dedupeByRowKey(rows.map((r) => toSearchResult(r, str(r.col_id)))).slice(0, lim);
+  } catch {
+    return [];
+  }
+}
+
 // Substring search over the materialized index above (which replaced the in-memory
 // search-index.json, then the per-request parquet scan). Ranking mirrors the old JSON
 // path: exact common-name > common-name prefix > scientific prefix > alpha.
-// Falls back to the CoL universe (species/) only when the fast path is sparse — see below.
+//
+// Tiered, cheapest first, each tier gated on every tier above it finding nothing at all:
+// prefix hits (one pruned range read) → substring hits (the in-memory index) → the CoL
+// universe (species/) → synonyms. The gate is what keeps a precise query like "Panthera
+// leo" from ever touching the heavy tiers.
 export async function searchSpecies(query: string, limit = 10): Promise<SearchResult[]> {
   if (query.length < 2) return [];
   const conn = await getConn();
   const lim = Math.min(Math.max(limit, 1), 50);
+
+  const prefixHits = await prefixSearch(conn, query.toLowerCase(), lim);
+  if (prefixHits.length > 0) return prefixHits;
+
   // sn_lo/cn_lo are lowercased once at build time, so the match is a plain LIKE against
   // an already-lowercased $q rather than a per-row ILIKE case-fold.
   const sql = `
@@ -625,60 +724,14 @@ export async function searchSpecies(query: string, limit = 10): Promise<SearchRe
   // NE list keys its rows on — resolved for the whole page of hits in one lookup.
   const neKeys = rows.filter((r) => !r.assessed).map((r) => str(r.gbif_species_key)).filter((k): k is string => !!k);
   const colIdByGbifKey = await colIdsForGbifKeys(conn, neKeys);
-  const hits: SearchResult[] = rows.map((r) => {
-    const tg = String(r.taxon_group);
-    const cat = String(r.category ?? "");
-    const lineage = { class_name: str(r.class_name), order_name: str(r.order_name), family: str(r.family) };
-    // assessed.parquet's id column IS the SIS taxon id; unassessed.parquet's is an
-    // internal build-time key that never leaves the pipeline (see build-parquet).
-    const sisTaxonId = r.assessed ? Number(r.id) : null;
-    const colId = r.assessed ? null : (colIdByGbifKey.get(str(r.gbif_species_key) ?? "") ?? null);
-    // Both views browse via the top-level taxon, plus the sub-group node the species
-    // itself sits in — see nodeIdForSpecies.
-    return {
-      species_key: sisTaxonId != null ? sisRowKey(sisTaxonId) : colId ? colRowKey(colId) : null,
-      sis_taxon_id: sisTaxonId,
-      col_id: colId,
-      scientific_name: String(r.scientific_name ?? ""),
-      common_name: (r.common_name as string) ?? null,
-      taxon_id: mapTaxonId(tg),
-      taxon_group: tg,
-      category: cat,
-      gbif_species_key: str(r.gbif_species_key),
-      gbif_occurrence_count: num(r.gbif_occurrence_count),
-      assessment_id: num(r.assessment_id),
-      assessment_date: (r.assessment_date as string) ?? null,
-      countries: splitList(r.countries),
-      ...lineage,
-      node_id: nodeIdForSpecies(tg, lineage),
-    };
-  });
+  const fast = dedupeByRowKey(rows.map((r) =>
+    toSearchResult(r, colIdByGbifKey.get(str(r.gbif_species_key) ?? "") ?? null)));
 
-  // One entry per species. unassessed.parquet is one row per GBIF species key, and CoL
-  // lumps some of those: 3,756 col_ids carry more than one key, so a name like Abutilon
-  // halophilum matched twice (keys VLWL9 and 8N4F) and listed twice in the dropdown —
-  // two rows that now resolve to the same species and would select the same table row.
-  // The NE list already shows one row per col_id (ne_gbif_by_col groups by it), so
-  // collapsing here is what makes search agree with the list it selects into. Keep the
-  // best-observed key of the group, which is the most useful one to preview from.
-  // Null keys are never collapsed — those species have no shared identity to merge on.
-  const bestByKey = new Map<string, SearchResult>();
-  for (const r of hits) {
-    if (!r.species_key) continue;
-    const prev = bestByKey.get(r.species_key);
-    if (!prev || (r.gbif_occurrence_count ?? -1) > (prev.gbif_occurrence_count ?? -1)) {
-      bestByKey.set(r.species_key, r);
-    }
-  }
-  const fast: SearchResult[] = hits.filter((r) => !r.species_key || bestByKey.get(r.species_key) === r);
-
-  // Return as soon as the direct search (assessed ∪ unassessed, ~16MB) finds anything.
-  // The CoL-only and synonym tiers below each full-scan a large parquet over R2 (species/
-  // ~36MB, synonym-index ~77MB) with no pruning — ~10s on a cold function. They exist to
-  // *answer* queries the direct search can't (an old/synonym name, or a CoL-only species),
-  // not to pad results, so only run them when the direct search came up empty. A precise
-  // hit like "Panthera leo" returns here after one cheap scan instead of falling through
-  // both heavy tiers.
+  // Return as soon as the direct search finds anything. The CoL-only and synonym tiers
+  // below each full-scan a large parquet over R2 (species/ ~36MB, synonym-index ~82MB)
+  // with no pruning — 13.7s measured on a cold function. They exist to *answer* queries
+  // the direct search can't (an old/synonym name, or a CoL-only species), not to pad
+  // results, so only run them when everything above came up empty.
   if (fast.length > 0) return fast;
 
   // CoL-only fallback: universe species (species/) that are neither IUCN-assessed nor
