@@ -90,7 +90,7 @@ export const OWN_PARAM_NAMES = [
   "categories", "years", "assessmentYears", "describedYears", "obsRanges", "assessmentCounts",
   "systems", "trends", "movement", "threats", "threatsScope", "criteria", "habitat", "habitatBreadth",
   "habitatImportance", "habitatSeasons", "habitatSuitability", "bd", "endemics", "growthForms",
-  "colMatch", "colReasons",
+  "colMatch", "colReasons", "colScope",
   "assessors", "reviewers", "facilitators", "contributors", "institutions",
   "search", "outdated", "minObs", "maxObs",
   "minAssessmentYear", "maxAssessmentYear", "minDescribedYear", "maxDescribedYear",
@@ -104,6 +104,19 @@ export const OWN_PARAM_NAMES = [
  * explicit opt-in to the fuller, patchier data.
  */
 export type ThreatsScope = "threatened" | "all";
+
+/**
+ * Which assessments the "Taxonomic differences from Catalogue of Life" chart
+ * (and a flagged/clean/reason selection made from it) covers.
+ *
+ * A taxonomic difference is only actionable where the assessment is old enough
+ * to be up for renewal — a species assessed last year was scoped by assessors
+ * who could already see the current checklist, so CoL disagreeing with them is
+ * a difference of opinion, not a backlog item. So "outdated" (the same >10-year
+ * set the Outdated toggle selects) is the default, and "all" is the explicit
+ * opt-in to every assessment.
+ */
+export type ColScope = "outdated" | "all";
 
 /** Columns the species table can be sorted by. */
 export type SortField = "year" | "category" | "totalGbif" | "newGbif" | "pctNewGbif" | "describedYear";
@@ -288,6 +301,11 @@ export function parseParams(search: string, suffix: string = "") {
     colReasons: p.get(k("colReasons"))
       ? new Set(p.get(k("colReasons"))!.split(",").filter(Boolean))
       : new Set<string>(),
+    // Which assessments the CoL-difference axis covers. Stale assessments are
+    // where a taxonomic difference is actionable, so "outdated" is the DEFAULT
+    // and the param is only written to the URL for the opt-out ("all").
+    // Absent/unrecognised therefore means outdated.
+    colScope: (p.get(k("colScope")) === "all" ? "all" : "outdated") as ColScope,
     habitat: p.get(k("habitat"))
       ? new Set(p.get(k("habitat"))!.split(",").filter(Boolean))
       : new Set<string>(),
@@ -386,6 +404,7 @@ export function buildQs(state: {
   criteria: Set<string>;
   colMatch?: "flagged" | "clean" | null;
   colReasons?: Set<string>;
+  colScope?: ColScope;
   habitat: Set<string>;
   habitatBreadth: "specialist" | "generalist" | null;
   habitatImportance: Set<string>;
@@ -445,6 +464,8 @@ export function buildQs(state: {
   if (state.criteria.size > 0) p.set(k("criteria"), [...state.criteria].join(","));
   if (state.colMatch) p.set(k("colMatch"), state.colMatch);
   if (state.colReasons && state.colReasons.size > 0) p.set(k("colReasons"), [...state.colReasons].join(","));
+  // Only the opt-out is written — "outdated" is the default (see parseParams).
+  if (state.colScope === "all") p.set(k("colScope"), "all");
   if (state.habitat.size > 0) p.set(k("habitat"), [...state.habitat].join(","));
   if (state.habitatBreadth) p.set(k("habitatBreadth"), state.habitatBreadth);
   if (!setEqualsArray(state.habitatImportance, ALL_HABITAT_IMPORTANCE)) p.set(k("habitatImportance"), [...state.habitatImportance].join(","));
@@ -890,6 +911,17 @@ export function useFilterParams(paramSuffix: string = "") {
     [syncUrl]
   );
 
+  const setColScope = useCallback(
+    (value: ColScope) => {
+      setState(prev => {
+        const next = { ...prev, colScope: value };
+        queueMicrotask(() => syncUrl(next, false));
+        return next;
+      });
+    },
+    [syncUrl]
+  );
+
   const setSelectedHabitat = useCallback(
     (updater: Set<string> | ((prev: Set<string>) => Set<string>)) => {
       setState(prev => {
@@ -1176,6 +1208,7 @@ export function useFilterParams(paramSuffix: string = "") {
         criteria: new Set<string>(),
         colMatch: null,
         colReasons: new Set<string>(),
+        colScope: "outdated" as ColScope,
         habitat: new Set<string>(),
         habitatBreadth: null,
         habitatImportance: new Set<string>(ALL_HABITAT_IMPORTANCE),
@@ -1224,6 +1257,7 @@ export function useFilterParams(paramSuffix: string = "") {
         criteria: new Set<string>(),
         colMatch: null,
         colReasons: new Set<string>(),
+        colScope: "outdated" as ColScope,
         habitat: new Set<string>(),
         habitatBreadth: null,
         habitatImportance: new Set<string>(ALL_HABITAT_IMPORTANCE),
@@ -1272,6 +1306,7 @@ export function useFilterParams(paramSuffix: string = "") {
     selectedCriteria: state.criteria,
     colMatch: state.colMatch,
     selectedColReasons: state.colReasons,
+    colScope: state.colScope,
     selectedHabitat: state.habitat,
     habitatBreadth: state.habitatBreadth,
     selectedHabitatImportance: state.habitatImportance,
@@ -1298,6 +1333,7 @@ export function useFilterParams(paramSuffix: string = "") {
 
     setColMatch,
     setColReasons,
+    setColScope,
     setViewMode,
     setLayoutMode,
     navigateToTaxonSubgroup,

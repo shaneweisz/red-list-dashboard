@@ -549,14 +549,14 @@ export interface AssessmentHistoryEntry {
    * so it carries more bytes than the assessors line despite a third of the
    * coverage. Parsed with the same parseAssessors heuristic as the rest.
    */
-  contributors: string | null;
+  contributors?: string | null;
   /**
    * Institutions (credit type 5) — the organisation(s) behind the assessment
    * (BirdLife International, BGCI, Kew, NatureServe, …). Populated on ~19% of
    * latest assessments and, unlike the person-name credits, effectively an
    * enumerable vocabulary: 155 distinct values across the whole Red List.
    */
-  institutions: string | null;
+  institutions?: string | null;
 }
 
 export type AssessmentHistoryMap = Record<string, AssessmentHistoryEntry[]>;
@@ -617,6 +617,15 @@ export async function fetchAssessmentHistory(
         ? new Date(row.assessment_date).toISOString().split("T")[0]
         : null;
 
+      // Contributors and institutions are OMITTED when absent rather than written
+      // as explicit nulls. They are the two sparsest credit lines (null on 77% and
+      // 85% of assessments), and these history files are bundled whole into the
+      // /api/redlist/credit-candidates serverless function: writing
+      // `"contributors":null,"institutions":null` on all 326,468 entries added
+      // 11.2 MB of nothing and pushed that function past Vercel's 250 MB cap.
+      // Every reader already treats the key as optional — build-parquet coalesces
+      // with `?? null`, exactly as it does for `criteria` and `facilitators` on
+      // files written before those fields existed.
       existing.push({
         id: Number(row.assessment_id),
         year: yearPublished,
@@ -626,8 +635,8 @@ export async function fetchAssessmentHistory(
         assessors: row.assessors || null,
         reviewers: row.reviewers || null,
         facilitators: row.facilitators || null,
-        contributors: row.contributors || null,
-        institutions: row.institutions || null,
+        ...(row.contributors ? { contributors: row.contributors } : {}),
+        ...(row.institutions ? { institutions: row.institutions } : {}),
       });
     }
   }

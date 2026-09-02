@@ -247,6 +247,9 @@ export async function run(): Promise<void> {
         Record<string, Array<{ id: number; year: string; category: string; date: string | null; criteria?: string | null; assessors: string | null; reviewers: string | null; facilitators?: string | null; contributors?: string | null; institutions?: string | null }>>;
       for (const [sis, arr] of Object.entries(data)) {
         arr.forEach((x, seq) => ws.write(JSON.stringify({ sis_taxon_id: Number(sis), seq, id: x.id, year: x.year, category: x.category, date: x.date, criteria: x.criteria ?? null, assessors: x.assessors, reviewers: x.reviewers, facilitators: x.facilitators ?? null, contributors: x.contributors ?? null, institutions: x.institutions ?? null }) + "\n"));
+        // (this NDJSON is a scratch file read straight back by read_json below,
+        // so nulls here cost nothing — unlike the history/*.json artifact, which
+        // ships in a serverless function; see fetchAssessmentHistory.)
       }
     }
   }

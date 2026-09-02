@@ -238,6 +238,19 @@ describe("parseParams", () => {
     expect(parseParams("?threatsScope=nonsense").threatsScope).toBe("threatened");
   });
 
+  // The CoL differences chart's scope: >10-year-old assessments are the
+  // DEFAULT (that's where a taxonomic difference is due to be acted on), so
+  // the param is only ever present in the URL for the opt-out.
+  it("defaults colScope to outdated", () => {
+    expect(parseParams("").colScope).toBe("outdated");
+    expect(parseParams("?colMatch=flagged").colScope).toBe("outdated");
+  });
+
+  it("parses colScope=all, and treats an unrecognised value as the default", () => {
+    expect(parseParams("?colScope=all").colScope).toBe("all");
+    expect(parseParams("?colScope=nonsense").colScope).toBe("outdated");
+  });
+
   it("expands a region param into its country codes (no separate region state)", () => {
     const result = parseParams("?region=Sub-Saharan+Africa");
     expect(result.countries.size).toBeGreaterThan(0);
@@ -310,6 +323,13 @@ describe("buildQs", () => {
       .not.toContain("threatsScope");
     expect(buildQs({ ...emptyState, threats: new Set(["11"]), threatsScope: "all" as const }))
       .toContain("threatsScope=all");
+  });
+
+  it("omits colScope for the default (outdated) scope, writes it for all", () => {
+    expect(buildQs({ ...emptyState, colMatch: "flagged" as const, colScope: "outdated" as const }))
+      .not.toContain("colScope");
+    expect(buildQs({ ...emptyState, colMatch: "flagged" as const, colScope: "all" as const }))
+      .toContain("colScope=all");
   });
 
   it("includes taxa when set", () => {
@@ -1038,6 +1058,9 @@ describe("OWN_PARAM_NAMES stays in sync with buildQs", () => {
       threats: new Set(["Agriculture"]),
       threatsScope: "all" as const,
       criteria: new Set(["B1"]),
+      colMatch: "flagged" as const,
+      colReasons: new Set(["unmatched"]),
+      colScope: "all" as const,
       habitat: new Set(["5.1"]),
       habitatBreadth: "specialist" as const,
       habitatImportance: new Set(["Major"]),
