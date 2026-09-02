@@ -67,6 +67,40 @@ describe("runBrowseQuery", () => {
     const r = await runBrowseQuery({ taxa: ["corals"], region: ["Europe"] });
     expect(r.total).toBe(1);
   });
+  it("filters on contributor and on institution", async () => {
+    const plants = [
+      row({ species_key: "sis-1", scientific_name: "Aloe alpha", taxon_group: "flowering_plants", class_name: "magnoliopsida", order_name: "asparagales", family: "asphodelaceae",
+            latest_contributors: "Roberts, D., Hines, H. & Meyer, E.", latest_institutions: "Royal Botanic Gardens, Kew" }),
+      row({ species_key: "sis-2", scientific_name: "Aloe beta", taxon_group: "flowering_plants", class_name: "magnoliopsida", order_name: "asparagales", family: "asphodelaceae",
+            latest_contributors: "Clarke, J.", latest_institutions: "NatureServe" }),
+    ];
+
+    querySpecies.mockResolvedValue({ species: plants, truncated: false, tooLarge: false, neTotal: null });
+    const byContributor = await runBrowseQuery({ taxa: ["flowering_plants"], contributors: ["Hines"] });
+    expect(byContributor.total).toBe(1);
+    expect(byContributor.species[0].scientific_name).toBe("Aloe alpha");
+    expect(byContributor.interpreted).toContain("Contributor: Hines");
+
+    querySpecies.mockResolvedValue({ species: plants, truncated: false, tooLarge: false, neTotal: null });
+    const byInstitution = await runBrowseQuery({ taxa: ["flowering_plants"], institutions: ["Kew"] });
+    expect(byInstitution.total).toBe(1);
+    expect(byInstitution.species[0].scientific_name).toBe("Aloe alpha");
+    expect(byInstitution.interpreted).toContain("Institution: Kew");
+  });
+
+  // Institutions are split on " & " only, so a comma inside one organisation
+  // name never becomes a second institution — searching the tail of such a name
+  // still has to match the row it belongs to.
+  it("matches an institution whose name contains a comma", async () => {
+    const plants = [
+      row({ species_key: "sis-1", scientific_name: "Aloe alpha", taxon_group: "flowering_plants", class_name: "magnoliopsida", order_name: "asparagales", family: "asphodelaceae",
+            latest_institutions: "Royal Botanic Gardens, Kew & Botanic Gardens Conservation International" }),
+    ];
+    querySpecies.mockResolvedValue({ species: plants, truncated: false, tooLarge: false, neTotal: null });
+    const res = await runBrowseQuery({ taxa: ["flowering_plants"], institutions: ["Royal Botanic Gardens, Kew"] });
+    expect(res.total).toBe(1);
+  });
+
   // The BirdLife case the facilitator filter exists for: every bird assessment
   // credits the organisation as assessor, so only the facilitator names a person.
   it("filters on facilitator, which assessor cannot reach for org-credited assessments", async () => {

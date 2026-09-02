@@ -91,7 +91,8 @@ export const OWN_PARAM_NAMES = [
   "systems", "trends", "movement", "threats", "threatsScope", "criteria", "habitat", "habitatBreadth",
   "habitatImportance", "habitatSeasons", "habitatSuitability", "bd", "endemics", "growthForms",
   "colMatch", "colReasons",
-  "assessors", "reviewers", "facilitators", "search", "outdated", "minObs", "maxObs",
+  "assessors", "reviewers", "facilitators", "contributors", "institutions",
+  "search", "outdated", "minObs", "maxObs",
   "minAssessmentYear", "maxAssessmentYear", "minDescribedYear", "maxDescribedYear",
   "species", "tab", "sort", "dir", "sort2", "dir2", "mapview", "mapsort", "mapdir",
 ];
@@ -327,6 +328,12 @@ export function parseParams(search: string, suffix: string = "") {
     facilitators: p.get(k("facilitators"))
       ? new Set(p.get(k("facilitators"))!.split("|").filter(Boolean))
       : new Set<string>(),
+    contributors: p.get(k("contributors"))
+      ? new Set(p.get(k("contributors"))!.split("|").filter(Boolean))
+      : new Set<string>(),
+    institutions: p.get(k("institutions"))
+      ? new Set(p.get(k("institutions"))!.split("|").filter(Boolean))
+      : new Set<string>(),
     search: p.get(k("search")) || "",
     // Exact URL-only base filters (see ExactFilters).
     outdated: (p.get(k("outdated")) === "yes" ? "yes" : p.get(k("outdated")) === "no" ? "no" : null) as "yes" | "no" | null,
@@ -391,6 +398,10 @@ export function buildQs(state: {
   reviewers: Set<string>;
   /** Facilitator names — the individuals behind an organisational assessor. */
   facilitators: Set<string>;
+  /** Contributor names — everyone credited without being assessor or reviewer. */
+  contributors: Set<string>;
+  /** Institution names — the organisation(s) behind the assessment. */
+  institutions: Set<string>;
   search: string;
   outdated?: "yes" | "no" | null;
   minObs?: number | null;
@@ -450,6 +461,8 @@ export function buildQs(state: {
   if (state.assessors.size > 0) p.set(k("assessors"), [...state.assessors].join("|"));
   if (state.reviewers.size > 0) p.set(k("reviewers"), [...state.reviewers].join("|"));
   if (state.facilitators.size > 0) p.set(k("facilitators"), [...state.facilitators].join("|"));
+  if (state.contributors.size > 0) p.set(k("contributors"), [...state.contributors].join("|"));
+  if (state.institutions.size > 0) p.set(k("institutions"), [...state.institutions].join("|"));
   if (state.search) p.set(k("search"), state.search);
   if (state.outdated) p.set(k("outdated"), state.outdated);
   if (state.minObs != null) p.set(k("minObs"), String(state.minObs));
@@ -1006,6 +1019,30 @@ export function useFilterParams(paramSuffix: string = "") {
     [syncUrl]
   );
 
+  const setSelectedContributors = useCallback(
+    (updater: Set<string> | ((prev: Set<string>) => Set<string>)) => {
+      setState(prev => {
+        const nextContributors = typeof updater === "function" ? updater(prev.contributors) : updater;
+        const next = { ...prev, contributors: nextContributors };
+        queueMicrotask(() => syncUrl(next, false));
+        return next;
+      });
+    },
+    [syncUrl]
+  );
+
+  const setSelectedInstitutions = useCallback(
+    (updater: Set<string> | ((prev: Set<string>) => Set<string>)) => {
+      setState(prev => {
+        const nextInstitutions = typeof updater === "function" ? updater(prev.institutions) : updater;
+        const next = { ...prev, institutions: nextInstitutions };
+        queueMicrotask(() => syncUrl(next, false));
+        return next;
+      });
+    },
+    [syncUrl]
+  );
+
   const setSearchFilter = useCallback(
     (value: string) => {
       setState(prev => {
@@ -1150,6 +1187,8 @@ export function useFilterParams(paramSuffix: string = "") {
         assessors: new Set<string>(),
         reviewers: new Set<string>(),
         facilitators: new Set<string>(),
+        contributors: new Set<string>(),
+        institutions: new Set<string>(),
         search: "",
         ...EMPTY_EXACT_FILTERS,
         sortField: null,
@@ -1196,6 +1235,8 @@ export function useFilterParams(paramSuffix: string = "") {
         assessors: new Set<string>(),
         reviewers: new Set<string>(),
         facilitators: new Set<string>(),
+        contributors: new Set<string>(),
+        institutions: new Set<string>(),
         search: "",
         ...EMPTY_EXACT_FILTERS,
         sortField: null,
@@ -1242,6 +1283,8 @@ export function useFilterParams(paramSuffix: string = "") {
     selectedAssessors: state.assessors,
     selectedReviewers: state.reviewers,
     selectedFacilitators: state.facilitators,
+    selectedContributors: state.contributors,
+    selectedInstitutions: state.institutions,
     searchFilter: state.search,
     exactFilters,
     setExactFilters,
@@ -1287,6 +1330,8 @@ export function useFilterParams(paramSuffix: string = "") {
     setSelectedAssessors,
     setSelectedReviewers,
     setSelectedFacilitators,
+    setSelectedContributors,
+    setSelectedInstitutions,
     setSearchFilter,
     setSort,
     setSort2,

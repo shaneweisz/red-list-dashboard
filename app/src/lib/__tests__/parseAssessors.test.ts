@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { parseAssessors } from "../parseAssessors";
+import { parseAssessors, parseInstitutions } from "../parseAssessors";
 
 describe("parseAssessors", () => {
   it("returns empty array for null/undefined/empty", () => {
@@ -105,5 +105,42 @@ describe("parseAssessors", () => {
       "Racey, P.A. (Chiroptera Red List Authority)",
       "Stuart, S.N. (Global Mammal Assessment Team)",
     ]);
+  });
+});
+
+describe("parseInstitutions", () => {
+  it("returns [] for empty input", () => {
+    expect(parseInstitutions(null)).toEqual([]);
+    expect(parseInstitutions(undefined)).toEqual([]);
+    expect(parseInstitutions("  ")).toEqual([]);
+  });
+
+  it("keeps a comma inside an organisation name whole", () => {
+    // parseAssessors would split this into "Royal Botanic Gardens" + "Kew",
+    // inventing an institution that does not exist. This is the whole reason
+    // institutions get their own parser.
+    expect(parseInstitutions("Royal Botanic Gardens, Kew")).toEqual(["Royal Botanic Gardens, Kew"]);
+    expect(parseAssessors("Royal Botanic Gardens, Kew")).toHaveLength(2);
+  });
+
+  it("splits two institutions on the ampersand separator", () => {
+    expect(parseInstitutions("Centro Nacional de Conservação da Flora (CNCFlora) & Botanic Gardens Conservation International"))
+      .toEqual(["Centro Nacional de Conservação da Flora (CNCFlora)", "Botanic Gardens Conservation International"]);
+  });
+
+  // Documented limit, pinned so a future "fix" has to be a deliberate one: a
+  // comma-separated line stays whole, because the same string uses ", " both
+  // inside a name and between names. See parseInstitutions' KNOWN LIMIT note.
+  it("does NOT split a comma-separated line, since the separator is ambiguous", () => {
+    expect(parseInstitutions("Royal Botanic Gardens, Kew, Botanic Gardens Conservation International"))
+      .toEqual(["Royal Botanic Gardens, Kew, Botanic Gardens Conservation International"]);
+  });
+
+  it("keeps a parenthetical acronym attached to its organisation", () => {
+    expect(parseInstitutions("Centro Nacional de Conservação da Flora (CNCFlora), IUCN SSC Brazil Plant Red List Authority & Botanic Gardens Conservation International"))
+      .toEqual([
+        "Centro Nacional de Conservação da Flora (CNCFlora), IUCN SSC Brazil Plant Red List Authority",
+        "Botanic Gardens Conservation International",
+      ]);
   });
 });

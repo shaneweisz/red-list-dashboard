@@ -79,6 +79,10 @@ assessors / reviewers: name of the latest-assessment assessor/reviewer (substrin
 facilitators: name of the latest-assessment facilitator (substring, e.g. facilitators=Rutherford) — the person who ran
   the assessment where the credited assessor is an organisation. Bird assessments are all assessed by "BirdLife
   International", so facilitators is the only way to find the individual who worked on one.
+contributors: name of a latest-assessment contributor (substring, e.g. contributors=Hines) — credited for data or
+  expertise without being assessor or reviewer.
+institutions: latest-assessment institution (substring, e.g. institutions=Kew) — the organisation behind the
+  assessment, e.g. BirdLife International, Botanic Gardens Conservation International, NatureServe.
 search:  scientific or common name (incl. synonyms)
 outdated: yes | no  (assessment more than 10 years old)
 minObs / maxObs: GBIF occurrence-count bounds

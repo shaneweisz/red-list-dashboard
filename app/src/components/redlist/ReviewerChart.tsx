@@ -9,21 +9,33 @@ const FilterBarChart = dynamic(
 );
 
 type ChartEntry = { code: string; count: number; label: string };
-type ViewMode = "assessors" | "reviewers" | "facilitators";
+export type ViewMode = "assessors" | "reviewers" | "facilitators" | "contributors" | "institutions";
 
-/** Tab order, label and bar colour for each credit type the chart can show. */
-const MODES: ReadonlyArray<{ mode: ViewMode; label: string; color: string }> = [
+/** Menu order, label and bar colour for each credit type the chart can show. */
+export const MODES: ReadonlyArray<{ mode: ViewMode; label: string; color: string }> = [
   { mode: "assessors", label: "Assessors", color: "#8b5cf6" },
   { mode: "reviewers", label: "Reviewers", color: "#818cf8" },
   // Facilitators: the individuals behind an organisational assessor (all bird
   // assessments are assessed by "BirdLife International").
   { mode: "facilitators", label: "Facilitators", color: "#2dd4bf" },
+  // Contributors: credited without being assessor or reviewer — by far the
+  // longest credit line (~8.5 names per assessment against ~2 for the others).
+  { mode: "contributors", label: "Contributors", color: "#f59e0b" },
+  // Institutions: the organisation(s) behind the assessment. Only ~155 distinct
+  // values Red-List-wide, so this one is short enough to page through.
+  { mode: "institutions", label: "Institutions", color: "#38bdf8" },
 ];
 
+const MODE_LABEL: Record<ViewMode, string> =
+  Object.fromEntries(MODES.map((m) => [m.mode, m.label])) as Record<ViewMode, string>;
+
 interface AssessorChartProps {
-  allAssessors: ChartEntry[];
-  allReviewers: ChartEntry[];
-  allFacilitators: ChartEntry[];
+  /**
+   * Counts for the ACTIVE mode only. The parent builds one chart, not five —
+   * each one is a full pass over the filtered species (parsing every credit
+   * name), and only the selected mode is ever on screen.
+   */
+  data: ChartEntry[];
   /** The selected items for the currently active tab */
   selectedItems: Set<string>;
   onBarClick: (data: { payload?: { code?: string } }, event: React.MouseEvent) => void;
@@ -42,9 +54,7 @@ interface AssessorChartProps {
 const PAGE_SIZE = 10;
 
 export default function AssessorChart({
-  allAssessors,
-  allReviewers,
-  allFacilitators,
+  data,
   selectedItems,
   onBarClick,
   onRangeSelect,
@@ -59,14 +69,16 @@ export default function AssessorChart({
   const [page, setPage] = useState(0);
   const [searchPage, setSearchPage] = useState(0);
 
-  const byMode: Record<ViewMode, ChartEntry[]> = {
-    assessors: allAssessors,
-    reviewers: allReviewers,
-    facilitators: allFacilitators,
-  };
-  const activeData = byMode[viewMode];
-  const activeLabel = viewMode;
+  const activeData = data;
+  const activeLabel = MODE_LABEL[viewMode].toLowerCase();
   const activeColor = MODES.find(m => m.mode === viewMode)!.color;
+  // Person names ("Rutherford, C.A.") fit the default axis; organisation names
+  // ("Botanic Gardens Conservation International") do not, and at the person-name
+  // width every institution truncates to an ellipsis, making the axis unreadable.
+  // Give that one mode a wider axis and a longer cap.
+  const isInstitutions = viewMode === "institutions";
+  const yAxisWidth = isInstitutions ? 230 : 150;
+  const yAxisTickMaxLength = isInstitutions ? 36 : 22;
 
   // Global max for consistent bar scaling across pages
   const globalMax = activeData.length > 0 ? activeData[0].count : 0;
@@ -103,21 +115,32 @@ export default function AssessorChart({
     <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-3 flex flex-col">
       <div className="flex items-center gap-2 mb-1.5">
         {showToggle ? (
-          /* Toggle between Assessors, Reviewers and Facilitators */
-          <div className="inline-flex rounded-md bg-zinc-100 dark:bg-zinc-800 p-0.5 shrink-0">
-            {MODES.map(({ mode, label }) => (
-              <button
-                key={mode}
-                onClick={() => handleViewModeChange(mode)}
-                className={`px-2 py-0.5 text-xs font-semibold rounded transition-colors ${
-                  viewMode === mode
-                    ? "bg-white dark:bg-zinc-700 text-zinc-900 dark:text-zinc-100 shadow-sm"
-                    : "text-zinc-500 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-300"
-                }`}
-              >
-                {label}
-              </button>
-            ))}
+          /* Credit-type picker. A segmented control fitted three modes beside the
+             search box; at five it no longer fits, so this is a select. The dot
+             carries the bar colour so the chart below is recognisably the same
+             thing you just picked. */
+          <div className="relative shrink-0 flex items-center gap-1.5">
+            <span
+              aria-hidden
+              className="w-2 h-2 rounded-full shrink-0"
+              style={{ backgroundColor: activeColor }}
+            />
+            <select
+              value={viewMode}
+              onChange={(e) => handleViewModeChange(e.target.value as ViewMode)}
+              aria-label="Credit type"
+              className="appearance-none pl-1.5 pr-5 py-0.5 text-xs font-semibold rounded bg-zinc-100 dark:bg-zinc-800 text-zinc-900 dark:text-zinc-100 border border-transparent hover:border-zinc-300 dark:hover:border-zinc-600 focus:outline-none focus:ring-1 focus:ring-red-500 cursor-pointer"
+            >
+              {MODES.map(({ mode, label }) => (
+                <option key={mode} value={mode}>{label}</option>
+              ))}
+            </select>
+            <svg
+              className="absolute right-1 top-1/2 -translate-y-1/2 w-3 h-3 text-zinc-400 pointer-events-none"
+              fill="none" stroke="currentColor" viewBox="0 0 24 24"
+            >
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+            </svg>
           </div>
         ) : (
           <span className="text-sm font-semibold text-zinc-900 dark:text-zinc-100 shrink-0">{title}</span>
@@ -197,18 +220,23 @@ export default function AssessorChart({
           </div>
         ) : paginated.length > 0 ? (
           <FilterBarChart
+            // Remount when the axis geometry changes: recharts lays the Y axis
+            // out once and ignores a later width prop on the same instance, so
+            // without this the institutions axis keeps the person-name width and
+            // its longer labels run under the bars.
+            key={isInstitutions ? "institutions" : "names"}
             data={paginated}
             dataKey="code"
             selectedItems={selectedItems}
             onBarClick={onBarClick}
             onRangeSelect={onRangeSelect}
             barColor={activeColor}
-            yAxisWidth={150}
+            yAxisWidth={yAxisWidth}
             leftMargin={-30}
             rightMargin={55}
             xAxisMax={globalMax}
             labelFormatter={(name) => name}
-            yAxisTickMaxLength={22}
+            yAxisTickMaxLength={yAxisTickMaxLength}
           />
         ) : (
           <span className="text-xs text-zinc-400">No {activeLabel} data</span>

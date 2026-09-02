@@ -60,3 +60,33 @@ export function parseAssessors(raw: string | null | undefined): string[] {
 
   return names.filter(Boolean).map(n => CANONICAL_NAMES[n] ?? n);
 }
+
+/**
+ * Parse an Institutions credit line into individual organisations.
+ *
+ * These are organisation names, not "Lastname, Initials" — parseAssessors'
+ * comma heuristic would cut "Royal Botanic Gardens, Kew" in half, and a name
+ * like "Centro Nacional de Conservação da Flora (CNCFlora)" has none of the
+ * shape it looks for. Only " & " actually separates two institutions on one
+ * assessment, so that is the only thing split on.
+ *
+ * Shared by the dashboard filter and the /browse + MCP filter so a link built
+ * on one surface selects the same species on the other.
+ *
+ * KNOWN LIMIT: a minority of lines (33 distinct strings) separate institutions
+ * with ", " instead of " & ", and those are not split — because the separator is
+ * genuinely ambiguous. "Royal Botanic Gardens, Kew, Botanic Gardens Conservation
+ * International" uses ", " BOTH inside an organisation name and between two of
+ * them, and nothing in the string says which is which. Splitting on commas would
+ * invent "Kew" as an institution on the thousands of rows that name Kew properly;
+ * not splitting leaves those few as one long compound entry in the chart. The
+ * filter itself is unaffected either way: it substring-matches, so searching
+ * "Kew" still finds them. This is why the chart's count for an institution can
+ * read slightly below the filtered species total (10,664 vs 10,704 for BGCI in
+ * flowering plants) — the compound rows match the filter without being counted
+ * under the bare name.
+ */
+export function parseInstitutions(raw: string | null | undefined): string[] {
+  if (!raw || !raw.trim()) return [];
+  return raw.split(" & ").map((x) => x.trim()).filter(Boolean);
+}

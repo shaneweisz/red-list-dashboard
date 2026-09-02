@@ -33,10 +33,9 @@ export interface RedListSpecies {
   gbif_species_key: string | null;
   gbif_occurrence_count: number | null;
   gbif_observations_after_assessment_year: number | null;
-  // Latest assessment's assessors/reviewers/facilitators, inline in the species
-  // list (drives the assessor/reviewer/facilitator filter). The full history
-  // array is fetched lazily into previous_assessments when a detail panel opens
-  // — empty in the list response.
+  // Latest assessment's credits, inline in the species list (drives the credit
+  // filters). The full history array is fetched lazily into previous_assessments
+  // when a detail panel opens — empty in the list response.
   latest_assessors: string | null;
   latest_reviewers: string | null;
   /**
@@ -47,7 +46,19 @@ export interface RedListSpecies {
    * credit no facilitator at all.
    */
   latest_facilitators: string | null;
-  previous_assessments: { id: number; year: string; category: string; date: string | null; criteria: string | null; assessors: string | null; reviewers: string | null; facilitators: string | null }[];
+  /**
+   * RedListContributors — credited for supplying data or expertise without being
+   * assessor or reviewer. The longest of the credit lines (~8.5 names per
+   * assessment), null on the ~67% that credit no contributor.
+   */
+  latest_contributors: string | null;
+  /**
+   * Institutions — the organisation(s) behind the assessment. Organisation names,
+   * not "Lastname, Initials", so they are split on " & " alone rather than by
+   * parseAssessors. null on the ~81% that credit no institution.
+   */
+  latest_institutions: string | null;
+  previous_assessments: { id: number; year: string; category: string; date: string | null; criteria: string | null; assessors: string | null; reviewers: string | null; facilitators: string | null; contributors: string | null; institutions: string | null }[];
   systems: string[];
   growth_forms: string[];
   movement_pattern: string | null;

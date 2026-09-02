@@ -36,6 +36,8 @@ export function buildVocabulary(): Vocabulary {
       assessors: "latest-assessment assessor name (substring match, e.g. Smith).",
       reviewers: "latest-assessment reviewer name (substring match).",
       facilitators: "latest-assessment facilitator name (substring match) — the person behind an organisational assessor, e.g. bird assessments are all assessed by BirdLife International.",
+      contributors: "latest-assessment contributor name (substring match) — credited for data or expertise without being assessor or reviewer.",
+      institutions: "latest-assessment institution (substring match) — the organisation behind the assessment, e.g. BirdLife International, Royal Botanic Gardens Kew, NatureServe.",
       outdated: "yes | no (assessment >10 years old).",
       search: "free-text scientific or common name (incl. synonyms / old names).",
       minObs: "min GBIF occurrence count (e.g. 100).",

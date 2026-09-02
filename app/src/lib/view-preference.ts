@@ -31,7 +31,7 @@ const PREFIX = "rld:view-pref:";
 export type ViewPreferenceKey =
   /** Years chart: "range" buckets vs specific "year" columns. */
   | "yearsChartMode"
-  /** Credit chart tab: assessors | reviewers | facilitators. */
+  /** Credit chart mode: assessors | reviewers | facilitators | contributors | institutions. */
   | "creditChartMode"
   /** Suggested Experts tab: assessors | reviewers | facilitators. */
   | "candidateRole"
