@@ -452,12 +452,22 @@ function DateCellEditor({
 
 function CoordinateCellEditor({
   initial,
+  initialRadius,
   initialNote,
   onCommit,
   onCommitNote,
   onClear,
 }: {
   initial: string;
+  /**
+   * The uncertainty radius, edited here rather than only in its own column.
+   *
+   * A position and how far it could be out are one answer given in two parts —
+   * you settle them together, looking at the same locality text — so having to
+   * commit the coordinates, find the next cell along and open that too made a
+   * single decision into two errands.
+   */
+  initialRadius: string;
   initialNote: string;
   onCommit: (
     edit: { lat: number; lon: number; uncertainty?: number; note?: string } | null
@@ -474,12 +484,21 @@ function CoordinateCellEditor({
   onClear?: () => void;
 }) {
   const [text, setText] = useState(initial);
+  const [radius, setRadius] = useState(initialRadius);
   const [note, setNote] = useState(initialNote);
   const parsed = parseCoordinateEntry(text);
   const empty = text.trim() === "";
+  const typedRadius = radius.trim() === "" ? null : Number(radius);
+  const radiusValid = typedRadius == null || (Number.isFinite(typedRadius) && typedRadius > 0);
   const commit = () => {
     if (parsed) {
-      onCommit({ ...parsed, note: note.trim() });
+      onCommit({
+        ...parsed,
+        // A third number in the position box still wins, as it does in the
+        // map's own editor: typing it there is the more deliberate act.
+        uncertainty: parsed.uncertainty ?? (radiusValid ? (typedRadius ?? undefined) : undefined),
+        note: note.trim(),
+      });
       return;
     }
     if (note.trim() !== initialNote.trim()) onCommitNote(note);
@@ -520,6 +539,31 @@ function CoordinateCellEditor({
           clear
         </button>
       )}
+      </div>
+      {/* Below the position, in the order the two are settled. */}
+      <div className="flex items-center gap-1">
+        <span className="text-[10px] text-zinc-400 dark:text-zinc-500">±</span>
+        <input
+          value={radius}
+          onChange={(e) => setRadius(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") { e.preventDefault(); commit(); }
+            if (e.key === "Escape") { e.preventDefault(); onCommit(null); }
+          }}
+          onBlur={(e) => {
+            if ((e.relatedTarget as HTMLElement | null)?.closest("[data-cell-editor]")) return;
+            commit();
+          }}
+          placeholder="metres"
+          title="How far the true position could be from this one, in metres. A locality is an area; the radius is what says how big."
+          aria-label="Uncertainty radius in metres"
+          className={`w-16 rounded border bg-white dark:bg-zinc-900 px-1 py-0.5 text-[11px] text-right tabular-nums ${
+            radiusValid
+              ? "border-zinc-300 dark:border-zinc-600 text-zinc-700 dark:text-zinc-200"
+              : "border-red-400 text-red-600 dark:text-red-400"
+          }`}
+        />
+        <span className="text-[10px] text-zinc-400 dark:text-zinc-500">m</span>
       </div>
       {/* How you read the locality, in your words. A georeference is an
           interpretation, and the next person to open this — including you in
@@ -1312,6 +1356,9 @@ export default function OccurrenceListTable({
             return (
               <CoordinateCellEditor
                 initialNote={localityNotes?.[p.gbifID]?.text ?? mine?.georeferenceRemarks ?? ""}
+                initialRadius={String(
+                  mine?.coordinateUncertaintyInMeters ?? p.coordinateUncertaintyInMeters ?? ""
+                )}
                 initial={
                   mine
                     ? `${mine.decimalLatitude}, ${mine.decimalLongitude}`

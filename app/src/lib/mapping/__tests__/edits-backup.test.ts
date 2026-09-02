@@ -87,10 +87,24 @@ describe("the saved-work file", () => {
     expect(summariseBackup(withFile)).toContain("2 imported points");
   });
 
-  it("names the file after the species and the day", () => {
+  it("names the file after the species and the moment it was saved", () => {
     expect(backupFileName("Dioscorea biplicata", "2026-08-27T09:30:00.000Z")).toBe(
-      "dioscorea_biplicata_dashboard_work_2026-08-27.json"
+      "dioscorea_biplicata_dashboard_work_2026-08-27T09-30-00Z.json"
     );
+  });
+
+  it("keeps two saves in one day apart, and in order", () => {
+    // The whole point: a date-only name collided on the second save of a
+    // sitting and left the browser to invent "(1)".
+    const morning = backupFileName("Dioscorea biplicata", "2026-08-27T09:30:00.000Z");
+    const evening = backupFileName("Dioscorea biplicata", "2026-08-27T18:05:42.000Z");
+    expect(morning).not.toBe(evening);
+    // Lexicographic order is chronological order, so a file listing sorts right.
+    expect([evening, morning].sort()).toEqual([morning, evening]);
+  });
+
+  it("carries no character a filesystem would refuse", () => {
+    expect(backupFileName("Dioscorea biplicata", "2026-08-27T09:30:00.000Z")).not.toMatch(/[:*?"<>|]/);
   });
 });
 

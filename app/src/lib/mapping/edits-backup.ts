@@ -108,8 +108,22 @@ export function readEditsBackup(
   };
 }
 
-/** What to call the file: the species, and the day it was saved. */
+/**
+ * What to call the file: the species, and the moment it was saved.
+ *
+ * To the second, not the day. Saving twice in one sitting is the normal case —
+ * it is the habit the button is there to encourage — and a name carrying only
+ * the date made every save after the first collide, leaving the browser to
+ * disambiguate them as "(1)", "(2)". Those sort by neither time nor content,
+ * so picking the right one to restore from meant opening them.
+ *
+ * Colons are punctuation a filename can't portably carry, so the time is
+ * hyphenated: the same shape this repo already stamps its data syncs with
+ * (2026-08-25T15-40-40Z), which sorts lexicographically into chronological
+ * order.
+ */
 export function backupFileName(scientificName: string | undefined, savedAt: string): string {
   const name = (scientificName || "species").replace(/[^A-Za-z0-9]+/g, "_").toLowerCase();
-  return `${name}_dashboard_work_${savedAt.slice(0, 10)}.json`;
+  const stamp = savedAt.slice(0, 19).replace(/:/g, "-");
+  return `${name}_dashboard_work_${stamp}Z.json`;
 }

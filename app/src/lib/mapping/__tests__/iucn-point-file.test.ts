@@ -373,6 +373,53 @@ describe("buildIucnPointFileCsv", () => {
     recordedBy: "C. Vélez",
   };
 
+  /** The `year` column of every written row, in the order they were written. */
+  const yearsOf = (csv: string) => {
+    const [header, ...rows] = csv.trim().split("\n");
+    const i = header.split(",").indexOf("event_year");
+    return rows.map((r) => r.split(",")[i]);
+  };
+
+  it("writes the points oldest first, whatever order they came in", () => {
+    const csv = buildIucnPointFileCsv([
+      { ...record, gbifID: 1, year: 2011 },
+      { ...record, gbifID: 2, year: 1963 },
+      { ...record, gbifID: 3, year: 1995 },
+    ]);
+    expect(yearsOf(csv)).toEqual(["1963", "1995", "2011"]);
+  });
+
+  it("dates a record from its eventDate where it has no year of its own", () => {
+    const csv = buildIucnPointFileCsv([
+      { ...record, gbifID: 1, year: undefined, eventDate: "2004-06-01" },
+      { ...record, gbifID: 2, year: 1974 },
+    ]);
+    expect(yearsOf(csv)).toEqual(["1974", "2004"]);
+  });
+
+  it("puts the undated last — they aren't the oldest, they're unplaceable", () => {
+    const csv = buildIucnPointFileCsv([
+      { ...record, gbifID: 1, year: undefined, eventDate: undefined },
+      { ...record, gbifID: 2, year: 1988 },
+    ]);
+    expect(yearsOf(csv)).toEqual(["1988", ""]);
+  });
+
+  it("keeps records of the same year in the order they arrived", () => {
+    const csv = buildIucnPointFileCsv([
+      { ...record, gbifID: 7, year: 1990, catalogNumber: "first" },
+      { ...record, gbifID: 8, year: 1990, catalogNumber: "second" },
+    ]);
+    const order = csv.trim().split("\n").slice(1).map((r) => (r.includes("first") ? "first" : "second"));
+    expect(order).toEqual(["first", "second"]);
+  });
+
+  it("leaves the caller's array alone", () => {
+    const input = [{ ...record, year: 2011 }, { ...record, year: 1963 }];
+    buildIucnPointFileCsv(input);
+    expect(input.map((r) => r.year)).toEqual([2011, 1963]);
+  });
+
   it("writes the IUCN columns, in the order the importer reads them", () => {
     const csv = buildIucnPointFileCsv([record]);
     const [header, row] = csv.trim().split("\n");

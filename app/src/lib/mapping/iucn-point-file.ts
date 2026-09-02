@@ -532,15 +532,41 @@ function csvField(value: string): string {
  * since the file otherwise gives no sign of which points GBIF located and which
  * a person did.
  */
+/**
+ * The year a record is filed under: its own, or the one its date starts with.
+ *
+ * Shared by the sort and the row it writes, so the order can't disagree with
+ * the column it claims to be ordered by.
+ */
+function pointYear(r: ExportableRecord): number | null {
+  if (r.year != null) return r.year;
+  if (!r.eventDate) return null;
+  const parsed = Number(r.eventDate.slice(0, 4));
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
 export function buildIucnPointFileCsv(
   records: ExportableRecord[],
   options: { compiler?: string; yearCompiled?: number } = {}
 ): string {
   const lines = [IUCN_POINT_FILE_COLUMNS.join(",")];
-  for (const r of records) {
+  // Oldest first. A point file is read as a history of where the species has
+  // been seen, and the question asked of it — has it been found recently where
+  // it used to be? — is a chronological one, which the table's own sort order
+  // (whatever the assessor last clicked) has no reason to match. Undated
+  // records go last: they aren't the oldest, they're unplaceable in the
+  // sequence. Sort is stable, so their original order survives.
+  const ordered = [...records].sort((a, b) => {
+    const ya = pointYear(a);
+    const yb = pointYear(b);
+    if (ya == null) return yb == null ? 0 : 1;
+    if (yb == null) return -1;
+    return ya - yb;
+  });
+  for (const r of ordered) {
     const lat = r.latitude.toFixed(6);
     const lon = r.longitude.toFixed(6);
-    const year = r.year ?? (r.eventDate ? Number(r.eventDate.slice(0, 4)) : null);
+    const year = pointYear(r);
     const values: Record<string, string> = {
       sci_name: r.species ?? "",
       presence: "1",
