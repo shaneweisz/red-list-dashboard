@@ -875,6 +875,21 @@ export default function OccurrenceMapRow({
   // occurrence filter above: shading which countries a source considers native,
   // regardless of whether occurrences are being filtered by it.
   const [showProtectedAreas, setShowProtectedAreas] = useState(false);
+  /**
+   * Whether UNEP-WCMC's service is answering.
+   *
+   * It goes down, and when it does the layer fails silently in the worst
+   * possible way: the tiles 500, nothing is drawn, and a click returns no
+   * areas — which is indistinguishable from "nothing here is protected". On an
+   * assessment that is a wrong answer, not a missing one, so the row says the
+   * source is unreachable instead of letting the blank map speak for it.
+   *
+   * Observed 2026-09-02: the whole ArcGIS host answered every request, its own
+   * service directory included, with "The ArcGIS Web Adaptor has been
+   * configured with SSL/HTTPS. Please enable SSL/HTTPS for your ArcGIS Server
+   * site." — their misconfiguration, nothing to do with the caller.
+   */
+  const [protectedAreasDown, setProtectedAreasDown] = useState(false);
   const [showForestLoss, setShowForestLoss] = useState(false);
   /**
    * The years of loss to draw, which the tiles are cut to server-side.
@@ -2652,7 +2667,11 @@ export default function OccurrenceMapRow({
           highlight: 0,
         });
       })
-      .catch(() => undefined);
+      .catch(() => {
+        // Only the current query speaks for the service: an aborted one says
+        // nothing about whether it is up.
+        if (query === pointQueryId.current) setProtectedAreasDown(true);
+      });
   }, [
     showForestLoss,
     showLossDrivers,
@@ -3293,6 +3312,14 @@ export default function OccurrenceMapRow({
             <MapGL
               ref={panelId === "main" || panelId === "before" || !splitView ? mapRef : undefined}
               {...mapProps}
+              // A tile that won't load is the earliest signal a source is down,
+              // and the only one for a layer nobody has clicked yet. MapLibre
+              // reports these per source, so it costs nothing to name the one
+              // whose absence would otherwise be read as an answer.
+              onError={(e) => {
+                const sourceId = (e as unknown as { sourceId?: string }).sourceId;
+                if (sourceId?.startsWith("wdpa-")) setProtectedAreasDown(true);
+              }}
               style={{ width: "100%", height: "100%" }}
               mapStyle={BASEMAP_STYLES[basemap].style}
               interactiveLayerIds={[`occ-circles-${panelId}`, `georef-point-${panelId}`]}
@@ -6039,10 +6066,22 @@ export default function OccurrenceMapRow({
           onChange={() => {
             setShowProtectedAreas((v) => !v);
             setPointQuery(null);
+            // A fresh attempt: the service may have come back since.
+            setProtectedAreasDown(false);
           }}
           className="w-3 h-3 rounded accent-emerald-500 shrink-0"
         />
         <span className="flex-1 min-w-0 text-zinc-700 dark:text-zinc-200">Protected areas</span>
+        {/* Said where the layer is switched on, because the blank map it
+            leaves behind reads as "nothing here is protected". */}
+        {protectedAreasDown && (
+          <span
+            title="UNEP-WCMC's map service isn't answering, so this layer can't be drawn and clicking the map won't name any sites. A blank map here doesn't mean the area is unprotected. Their outage, not yours — try again later."
+            className="shrink-0 cursor-help text-[10px] text-amber-600 dark:text-amber-500"
+          >
+            source unavailable
+          </span>
+        )}
         <SourceCitation
           href="https://www.protectedplanet.net"
           cite="WDPA"
