@@ -24,6 +24,7 @@ import { FaInfoCircle } from "react-icons/fa";
 import booleanPointInPolygon from "@turf/boolean-point-in-polygon";
 import type { Feature, Polygon, MultiPolygon } from "geojson";
 import YearRangeSlider from "@/components/mapping/YearRangeSlider";
+import ListZoomControl, { LIST_ZOOM_DEFAULT } from "@/components/mapping/ListZoomControl";
 import MapGeoreferenceEditor from "./MapGeoreferenceEditor";
 import type { OccurrenceFeature as OccurrenceFeatureType } from "./OccurrenceListTable";
 // The table's own labels, so a basis of record is worded the same wherever it
@@ -555,9 +556,11 @@ const GBIF_BASIS_OF_RECORD: Record<string, string> = {
 // How many additional records to fetch per "Load more" click on a Basis of Record row.
 const BASIS_OF_RECORD_LOAD_MORE_BATCH = 200;
 
-// Two thirds of the fullscreen height to the map, and the bounds the divider
-// can be dragged between — enough map to stay a map, enough list to stay a list.
-const FULLSCREEN_DEFAULT_MAP_PCT = 66;
+// An even split between the map and the list, and the bounds the divider can
+// be dragged between — enough map to stay a map, enough list to stay a list.
+// Even rather than map-weighted: side by side, the list is a sixteen-column
+// reference table, and the half it was getting cut it off mid-record.
+const FULLSCREEN_DEFAULT_MAP_PCT = 50;
 const FULLSCREEN_MIN_MAP_PCT = 20;
 const FULLSCREEN_MAX_MAP_PCT = 85;
 
@@ -1107,11 +1110,16 @@ export default function OccurrenceMapRow({
   /**
    * How much of the table's own size it's drawn at.
    *
-   * Two thirds by default. The columns are what the table is for, and at full
-   * size beside the map it showed a third of them; the type is small but it is
-   * a reference table, read by scanning rather than by reading.
+   * Its own size, and adjustable to any percentage from the control beside the
+   * tabs. It used to open at two thirds to fit more columns beside the map,
+   * which bought columns at the cost of legibility on every screen — including
+   * the ones with room to spare. The even split does that job better, and
+   * anyone who wants the columns back can shrink it.
+   *
+   * Not remembered between reloads, unlike the column and sort preferences
+   * beside it — worth doing if it turns out to be set once and left.
    */
-  const [listZoom, setListZoom] = useState(0.67);
+  const [listZoom, setListZoom] = useState(LIST_ZOOM_DEFAULT);
 
   // Fullscreen — map above, record list below, and nothing else on the page —
   // is a route of its own (/mapping/<key>), so it can be linked, shared,
@@ -7525,29 +7533,7 @@ export default function OccurrenceMapRow({
                       <span className="tabular-nums text-[10px] text-zinc-400">{tab.count.toLocaleString()}</span>
                     </button>
                   ))}
-                  <div className="ml-auto flex items-center gap-0.5 pr-1">
-                    <button
-                      onClick={() => setListZoom((z) => Math.max(0.4, Math.round((z - 0.1) * 100) / 100))}
-                      title="Smaller — fit more of the table on the screen"
-                      className="px-1 py-0.5 rounded text-zinc-500 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-zinc-800"
-                    >
-                      −
-                    </button>
-                    <button
-                      onClick={() => setListZoom(0.67)}
-                      title="Back to two thirds"
-                      className="tabular-nums text-[10px] text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300 w-8"
-                    >
-                      {Math.round(listZoom * 100)}%
-                    </button>
-                    <button
-                      onClick={() => setListZoom((z) => Math.min(1.5, Math.round((z + 0.1) * 100) / 100))}
-                      title="Bigger"
-                      className="px-1 py-0.5 rounded text-zinc-500 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-zinc-800"
-                    >
-                      +
-                    </button>
-                  </div>
+                  <ListZoomControl zoom={listZoom} onChange={setListZoom} />
                 </div>
                 {pointFile && pointFileComparison && listTab === "file" ? (
                   <PointFileTable
