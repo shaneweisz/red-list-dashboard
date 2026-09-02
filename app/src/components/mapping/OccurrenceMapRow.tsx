@@ -88,7 +88,7 @@ import {
   computeEoo,
   formatAreaKm2,
 } from "@/lib/mapping/range-metrics";
-import { loadPins, savePins, type Place, type PinnedPlace } from "@/lib/mapping/geocode";
+import { type Place, type PinnedPlace } from "@/lib/mapping/geocode";
 import {
   FOREST_LOSS_ATTRIBUTION,
   FOREST_LOSS_CANOPY_THRESHOLD,
@@ -1071,28 +1071,48 @@ export default function OccurrenceMapRow({
    * at once is how you see whether they agree with each other and with the
    * records, which is the judgement being made.
    */
-  const [pinnedPlaces, setPinnedPlaces] = useState<PinnedPlace[]>(() => loadPins(speciesKey));
+  const [georefMessage, setGeorefMessage] = useState<{ kind: "ok" | "error"; text: string } | null>(null);
+  const {
+    georeferences,
+    exclusions,
+    dates: assessorDates,
+    notes: assessorNotes,
+    pins,
+    commit: commitEdits,
+    undo: undoEdit,
+    redo: redoEdit,
+    jumpBack: jumpBackEdits,
+    canUndo,
+    canRedo,
+    undoLabel,
+    redoLabel,
+    history: editHistory,
+  } = useAssessorEdits(speciesKey, {
+    onStorageError: () =>
+      setGeorefMessage({
+        kind: "error",
+        text: "Couldn't save to this browser's storage — export before you close the tab.",
+      }),
+  });
+  const pinnedPlaces = pins;
+  /**
+   * Pins go through the same commit every other edit does.
+   *
+   * They were their own state with their own effect writing them to storage,
+   * which meant the one edit undo couldn't reach was the one naming a place no
+   * gazetteer knows. Deleting a pin was as unrecoverable as deleting a
+   * georeference and had no way back.
+   */
+  const setPinnedPlaces = useCallback(
+    (update: (prev: PinnedPlace[]) => PinnedPlace[], label: string) => {
+      commitEdits({ pins: update(pins) }, label);
+    },
+    [commitEdits, pins]
+  );
   /** The label being typed in the right-click panel, before the pin exists. */
   const [newPinLabel, setNewPinLabel] = useState("");
   /** A pin whose label is being renamed in place. */
   const [renamingPin, setRenamingPin] = useState<string | null>(null);
-  /**
-   * A different species is a different set of pins, read during render rather
-   * than in an effect — the same reason the assessor's edits are: an effect
-   * would paint one frame of the last species' pins over this species' map.
-   */
-  const [pinsLoadedFor, setPinsLoadedFor] = useState(speciesKey);
-  if (pinsLoadedFor !== speciesKey) {
-    setPinsLoadedFor(speciesKey);
-    setPinnedPlaces(loadPins(speciesKey));
-  }
-  // Kept between sessions: a pin dropped by hand names something no gazetteer
-  // knows, so a reload that dropped it lost work that can't be searched for
-  // again.
-  useEffect(() => {
-    savePins(speciesKey, pinnedPlaces);
-  }, [speciesKey, pinnedPlaces]);
-
   /**
    * Drops a pin where you right-clicked.
    *
@@ -1119,15 +1139,18 @@ export default function OccurrenceMapRow({
           lng,
         },
       ];
-    });
-  }, []);
+    }, `Pin ${label.trim() || "a place"}`);
+  }, [setPinnedPlaces]);
   /** The candidate under the pointer in the results list, marked but not flown
    *  to — you're deciding which one to commit to, and moving the camera for
    *  each one you glance at would lose the records you're comparing against. */
   const [previewPlace, setPreviewPlace] = useState<Place | null>(null);
 
   const goToPlace = useCallback((place: Place) => {
-    setPinnedPlaces((prev) => (prev.some((p) => p.id === place.id) ? prev : [...prev, place]));
+    setPinnedPlaces(
+      (prev) => (prev.some((p) => p.id === place.id) ? prev : [...prev, place]),
+      `Pin ${place.name}`
+    );
     const map = mapRef.current;
     if (!map) return;
     // A named area gets its extent; a point gets a zoom close enough to read
@@ -1142,7 +1165,7 @@ export default function OccurrenceMapRow({
     } else {
       map.flyTo({ center: [place.lng, place.lat], zoom: Math.max(map.getZoom(), 11), duration: 900 });
     }
-  }, []);
+  }, [setPinnedPlaces]);
   const [showPowoRangeOverlay, setShowPowoRangeOverlay] = useState(false);
   const [showIucnRangeOverlay, setShowIucnRangeOverlay] = useState(false);
   // Whether the current hover started on the map — the list scrolls to meet a
@@ -1215,6 +1238,9 @@ export default function OccurrenceMapRow({
    */
   const [showMyGeoreferences, setShowMyGeoreferences] = useState(true);
   const [showPointFile, setShowPointFile] = useState(true);
+  /** Whether the hand-dropped pins are drawn. They are notes to yourself, and
+   *  a map you are reading the records off is sometimes better without them. */
+  const [showPins, setShowPins] = useState(true);
   /** Whether struck-out records stay on the map, greyed, or come off it. */
   const [showExcludedOnMap, setShowExcludedOnMap] = useState(true);
 
@@ -1517,28 +1543,6 @@ export default function OccurrenceMapRow({
    * which is also the only thing that persists, so nothing can change the data
    * without becoming undoable.
    */
-  const [georefMessage, setGeorefMessage] = useState<{ kind: "ok" | "error"; text: string } | null>(null);
-  const {
-    georeferences,
-    exclusions,
-    dates: assessorDates,
-    notes: assessorNotes,
-    commit: commitEdits,
-    undo: undoEdit,
-    redo: redoEdit,
-    jumpBack: jumpBackEdits,
-    canUndo,
-    canRedo,
-    undoLabel,
-    redoLabel,
-    history: editHistory,
-  } = useAssessorEdits(speciesKey, {
-    onStorageError: () =>
-      setGeorefMessage({
-        kind: "error",
-        text: "Couldn't save to this browser's storage — export before you close the tab.",
-      }),
-  });
   const [historyOpen, setHistoryOpen] = useState(false);
 
   /** A dragged georeference waiting to be confirmed or put back. */
@@ -3816,7 +3820,7 @@ export default function OccurrenceMapRow({
                   description, and there is none to read outside fullscreen —
                   where they were furniture on a map answering a different
                   question. They keep their place in storage either way. */}
-              {fullscreen && pinnedPlaces.map((place) => (
+              {fullscreen && showPins && pinnedPlaces.map((place) => (
                 <MapLibreMarker key={place.id} longitude={place.lng} latitude={place.lat} anchor="bottom">
                   <div className="flex flex-col items-center -mb-1">
                     {!place.nameHidden && (
@@ -3836,8 +3840,9 @@ export default function OccurrenceMapRow({
                           onBlur={(e) => {
                             const name = e.currentTarget.value.trim();
                             if (name) {
-                              setPinnedPlaces((prev) =>
-                                prev.map((p) => (p.id === place.id ? { ...p, name } : p))
+                              setPinnedPlaces(
+                                (prev) => prev.map((p) => (p.id === place.id ? { ...p, name } : p)),
+                                `Rename pin to ${name}`
                               );
                             }
                             setRenamingPin(null);
@@ -3856,7 +3861,12 @@ export default function OccurrenceMapRow({
                       {/* Each pin is dismissed on its own, so several can stand
                           at once and none goes away by accident. */}
                       <button
-                        onClick={() => setPinnedPlaces((prev) => prev.filter((p) => p.id !== place.id))}
+                        onClick={() =>
+                          setPinnedPlaces(
+                            (prev) => prev.filter((p) => p.id !== place.id),
+                            `Remove pin ${place.name}`
+                          )
+                        }
                         title="Remove this pin"
                         className="shrink-0 -mr-0.5 px-0.5 text-white/70 hover:text-white"
                       >
@@ -3872,8 +3882,10 @@ export default function OccurrenceMapRow({
                         know which pin is which. */}
                     <button
                       onClick={() =>
-                        setPinnedPlaces((prev) =>
-                          prev.map((p) => (p.id === place.id ? { ...p, nameHidden: !p.nameHidden } : p))
+                        setPinnedPlaces(
+                          (prev) =>
+                            prev.map((p) => (p.id === place.id ? { ...p, nameHidden: !p.nameHidden } : p)),
+                          place.nameHidden ? `Show pin ${place.name}` : `Hide pin ${place.name}`
                         )
                       }
                       title={place.nameHidden ? `Show this pin's name — ${place.name}` : "Hide this pin's name"}
@@ -5321,9 +5333,10 @@ export default function OccurrenceMapRow({
    * Puts a file back, as one undoable edit.
    *
    * Restoring is itself an edit — if the file turns out to be the wrong one,
-   * or older than you thought, undo takes you back to what was here. The point
-   * file and the pins are set separately: neither is in the document the
-   * history is kept over, so undo doesn't reach them. The dialog counts both
+   * or older than you thought, undo takes you back to what was here. The pins
+   * ride in the same commit as the rest, since they are part of the document
+   * now. The point file is still set separately: it isn't in the document the
+   * history is kept over, so undo doesn't reach it. The dialog counts it
    * before it asks, so nothing goes quietly.
    */
   const applyRestore = useCallback(
@@ -5334,11 +5347,11 @@ export default function OccurrenceMapRow({
           exclusions: backup.exclusions,
           dates: backup.dates,
           notes: backup.notes ?? {},
+          pins: backup.pins ?? [],
         },
         `restore the work saved ${backup.savedAt.slice(0, 10)}`
       );
       if (backup.pointFile) importPointFile(backup.pointFile);
-      if (backup.pins?.length) setPinnedPlaces(backup.pins);
       setPendingRestore(null);
     },
     [commitEdits, importPointFile]
@@ -6309,6 +6322,26 @@ export default function OccurrenceMapRow({
           </span>
         </label>
       )}
+      {fullscreen && pinnedPlaces.length > 0 && (
+        <label className="flex items-center gap-1.5 px-2 py-0.5 hover:bg-zinc-50 dark:hover:bg-zinc-700 cursor-pointer text-[11px]">
+          <input
+            type="checkbox"
+            checked={showPins}
+            onChange={() => setShowPins((v) => !v)}
+            className="w-3 h-3 rounded accent-zinc-700 shrink-0"
+          />
+          {/* The glyph they're drawn as, so the row names what's on the map. */}
+          <svg className="w-3 h-3 shrink-0 text-zinc-900 dark:text-zinc-200" viewBox="0 0 24 24" fill="currentColor">
+            <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5A2.5 2.5 0 1 1 12 6a2.5 2.5 0 0 1 0 5.5z" />
+          </svg>
+          <span className="flex-1 min-w-0 text-zinc-700 dark:text-zinc-200 truncate">
+            Pinned localities
+          </span>
+          <span className="tabular-nums text-[10px] text-zinc-400">
+            {pinnedPlaces.length.toLocaleString()}
+          </span>
+        </label>
+      )}
       {fullscreen && pointFile && (
         <label className="flex items-center gap-1.5 px-2 py-0.5 hover:bg-zinc-50 dark:hover:bg-zinc-700 cursor-pointer text-[11px]">
           <input
@@ -6375,7 +6408,7 @@ export default function OccurrenceMapRow({
             className="w-2.5 h-2.5 rounded-full shrink-0 border-[1.5px]"
             style={{ background: "transparent", borderColor: "#6b7280", opacity: 0.85 }}
           />
-          <span className="flex-1 min-w-0 text-zinc-500 dark:text-zinc-400 truncate">Excluded</span>
+          <span className="flex-1 min-w-0 text-zinc-500 dark:text-zinc-400 truncate">Excluded points</span>
           <span className="tabular-nums text-[10px] text-zinc-400">
             {struckOutCount.toLocaleString()}
           </span>

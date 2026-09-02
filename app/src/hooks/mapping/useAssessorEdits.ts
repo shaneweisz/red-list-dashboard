@@ -14,6 +14,7 @@ import {
   undoLabel as undoLabelOf,
   type History,
 } from "@/lib/mapping/edit-history";
+import { loadPins, savePins, type PinnedPlace } from "@/lib/mapping/geocode";
 import {
   loadDates,
   loadExclusions,
@@ -37,6 +38,15 @@ export interface AssessorEdits {
   dates: Record<number, AssessorDate>;
   /** How the assessor reads a locality, with or without a position for it. */
   notes: Record<number, LocalityNote>;
+  /**
+   * Places pinned on the map by hand.
+   *
+   * In the document rather than beside it, so undo reaches them. A pin names
+   * somewhere no gazetteer knows — "the ridge the 1987 collections came from" —
+   * which makes deleting one exactly as costly a mistake as deleting a
+   * georeference, and it was the only such edit with no way back.
+   */
+  pins: PinnedPlace[];
 }
 
 /**
@@ -60,6 +70,7 @@ export function useAssessorEdits(
     exclusions: loadExclusions(key),
     dates: loadDates(key),
     notes: loadNotes(key),
+    pins: loadPins(key),
   });
 
   const [history, setHistory] = useState<History<AssessorEdits>>(() => initHistory(load(speciesKey)));
@@ -90,7 +101,9 @@ export function useAssessorEdits(
       const savedExclusions = saveExclusions(speciesKey, edits.exclusions);
       const savedDates = saveDates(speciesKey, edits.dates ?? {});
       const savedNotes = saveNotes(speciesKey, edits.notes ?? {});
-      if (!savedGeoreferences || !savedExclusions || !savedDates || !savedNotes) onStorageError.current?.();
+      const savedPins = savePins(speciesKey, edits.pins ?? []);
+      if (!savedGeoreferences || !savedExclusions || !savedDates || !savedNotes || !savedPins)
+        onStorageError.current?.();
     },
     [speciesKey]
   );
@@ -168,6 +181,7 @@ export function useAssessorEdits(
     exclusions: history.present.state.exclusions,
     dates: history.present.state.dates ?? {},
     notes: history.present.state.notes ?? {},
+    pins: history.present.state.pins ?? [],
     commit,
     undo,
     redo,
