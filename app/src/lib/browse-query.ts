@@ -15,7 +15,7 @@ import { findNode, speciesMatchesNode } from "@/lib/taxonomy-utils";
 import { matchesSpeciesFilter, type SpeciesFilterCriteria, type FilterableSpecies } from "@/lib/species-filter";
 import { applySharedFilters, type SharedFilterInput } from "@/lib/shared-filters";
 import type { RedListSpecies } from "@/hooks/useRedListSpeciesQuery";
-import { parseAssessors } from "@/lib/parseAssessors";
+import { parseAssessors, parseInstitutions } from "@/lib/parseAssessors";
 import { resolveRegions } from "@/lib/regions";
 import { CATEGORY_ORDER } from "@/config/taxa";
 import {
@@ -38,6 +38,8 @@ export interface BrowseInput extends SharedFilterInput {
   assessors?: string[];
   reviewers?: string[];
   facilitators?: string[];
+  contributors?: string[];
+  institutions?: string[];
   minObs?: number;
   maxObs?: number;
   minAssessmentYear?: number;
@@ -84,6 +86,8 @@ type Row = FilterableSpecies & {
   latest_assessors?: string | null;
   latest_reviewers?: string | null;
   latest_facilitators?: string | null;
+  latest_contributors?: string | null;
+  latest_institutions?: string | null;
   described_year?: number | null;
   matched_synonym?: string | null;
 };
@@ -98,7 +102,8 @@ function searchHitToRow(h: SearchResult): Row {
     population_trend: null, movement_pattern: null, threat_codes: null,
     growth_forms: null, scientific_name: h.scientific_name, common_name: h.common_name,
     gbif_occurrence_count: null, assessment_date: h.assessment_date, taxon_group: h.taxon_group,
-    latest_assessors: null, latest_reviewers: null, latest_facilitators: null, described_year: null,
+    latest_assessors: null, latest_reviewers: null, latest_facilitators: null,
+    latest_contributors: null, latest_institutions: null, described_year: null,
     matched_synonym: h.matched_synonym ?? null,
   };
 }
@@ -114,6 +119,8 @@ export async function runBrowseQuery(input: BrowseInput): Promise<BrowseResult> 
   const assessors = arr(input.assessors);
   const reviewers = arr(input.reviewers);
   const facilitators = arr(input.facilitators);
+  const contributors = arr(input.contributors);
+  const institutions = arr(input.institutions);
   const search = (input.search ?? "").trim();
   const { outdated = null, minObs, maxObs, minAssessmentYear, maxAssessmentYear, minDescribedYear, maxDescribedYear } = input;
 
@@ -170,6 +177,14 @@ export async function runBrowseQuery(input: BrowseInput): Promise<BrowseResult> 
       const q = facilitators.map((a) => a.toLowerCase());
       matched = matched.filter((r) => parseAssessors(r.latest_facilitators).some((a) => q.some((x) => a.toLowerCase().includes(x))));
     }
+    if (contributors.length) {
+      const q = contributors.map((a) => a.toLowerCase());
+      matched = matched.filter((r) => parseAssessors(r.latest_contributors).some((a) => q.some((x) => a.toLowerCase().includes(x))));
+    }
+    if (institutions.length) {
+      const q = institutions.map((a) => a.toLowerCase());
+      matched = matched.filter((r) => parseInstitutions(r.latest_institutions).some((a) => q.some((x) => a.toLowerCase().includes(x))));
+    }
     if (minDescribedYear != null || maxDescribedYear != null) {
       matched = matched.filter((r) => r.described_year != null
         && (minDescribedYear == null || r.described_year >= minDescribedYear)
@@ -205,6 +220,8 @@ export async function runBrowseQuery(input: BrowseInput): Promise<BrowseResult> 
   if (assessors.length) interpreted.push(`Assessor: ${assessors.join(", ")}`);
   if (reviewers.length) interpreted.push(`Reviewer: ${reviewers.join(", ")}`);
   if (facilitators.length) interpreted.push(`Facilitator: ${facilitators.join(", ")}`);
+  if (contributors.length) interpreted.push(`Contributor: ${contributors.join(", ")}`);
+  if (institutions.length) interpreted.push(`Institution: ${institutions.join(", ")}`);
   if (minObs != null) interpreted.push(`GBIF observations ≥ ${minObs.toLocaleString()}`);
   if (maxObs != null) interpreted.push(`GBIF observations ≤ ${maxObs.toLocaleString()}`);
   if (minAssessmentYear != null) interpreted.push(`Assessed in or after ${minAssessmentYear}`);

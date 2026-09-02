@@ -56,6 +56,8 @@ export async function GET(req: NextRequest) {
     assessors: parseList(sp, "assessors"),
     reviewers: parseList(sp, "reviewers"),
     facilitators: parseList(sp, "facilitators"),
+    contributors: parseList(sp, "contributors"),
+    institutions: parseList(sp, "institutions"),
     minObs: intParam("minObs"), maxObs: intParam("maxObs"),
     minAssessmentYear: intParam("minAssessmentYear"), maxAssessmentYear: intParam("maxAssessmentYear"),
     minDescribedYear: intParam("minDescribedYear"), maxDescribedYear: intParam("maxDescribedYear"),

@@ -5,9 +5,10 @@
  * faithfully mirroring matchesFilter (incl. the order_name→class_name fallback).
  *
  * Species lists (assessed, optional NE union) + arbitrary-rank filtering. The
- * list carries denormalized latest_assessors/latest_reviewers/latest_facilitators but NOT the full
- * history array — that's fetched lazily per species (getAssessmentHistory) when
- * a detail panel opens. Search / summaries land in later steps.
+ * list carries the denormalized latest_* credit columns (assessors, reviewers,
+ * facilitators, contributors, institutions) but NOT the full history array —
+ * that's fetched lazily per species (getAssessmentHistory) when a detail panel
+ * opens. Search / summaries land in later steps.
  */
 import * as fs from "fs";
 import * as path from "path";
@@ -148,7 +149,7 @@ export function resolveWhere(taxonId: string): WhereParts {
 export interface PreviousAssessment {
   id: number; year: string; category: string;
   date: string | null; criteria: string | null; assessors: string | null; reviewers: string | null;
-  facilitators: string | null;
+  facilitators: string | null; contributors: string | null; institutions: string | null;
 }
 
 const ASSESSED_SELECT = `
@@ -157,6 +158,7 @@ const ASSESSED_SELECT = `
   taxon_group, gbif_species_key, gbif_occurrence_count, gbif_observations_after_assessment_year,
   systems, growth_forms, movement_pattern, possibly_extinct, possibly_extinct_in_the_wild,
   criteria, threat_codes, habitat_codes, latest_assessors, latest_reviewers, latest_facilitators,
+  latest_contributors, latest_institutions,
   assessment_count`;
 
 const splitList = (s: unknown): string[] => (typeof s === "string" && s ? s.split(";").filter(Boolean) : []);
@@ -202,12 +204,13 @@ export function toSpeciesRow(r: Record<string, unknown>) {
     gbif_species_key: str(r.gbif_species_key),
     gbif_occurrence_count: num(r.gbif_occurrence_count),
     gbif_observations_after_assessment_year: num(r.gbif_observations_after_assessment_year),
-    // Latest (most recent) assessment's assessors/reviewers/facilitators,
-    // denormalized into assessed.parquet — the list view's assessor/reviewer/
-    // facilitator filter reads these.
+    // Latest (most recent) assessment's credits, denormalized into
+    // assessed.parquet — the list view's credit filters read these.
     latest_assessors: (r.latest_assessors as string) ?? null,
     latest_reviewers: (r.latest_reviewers as string) ?? null,
     latest_facilitators: (r.latest_facilitators as string) ?? null,
+    latest_contributors: (r.latest_contributors as string) ?? null,
+    latest_institutions: (r.latest_institutions as string) ?? null,
     // Full history is fetched lazily (getAssessmentHistory) when a detail panel
     // opens; the species list no longer carries it (≈40% smaller payload).
     previous_assessments: [] as PreviousAssessment[],
@@ -303,7 +306,7 @@ export async function querySpecies(opts: {
     }
   }
 
-  // No history join — the list carries only the latest assessors/reviewers/facilitators
+  // No history join — the list carries only the latest credits
   // (denormalized columns). The full per-species history array is fetched lazily
   // via getAssessmentHistory when a detail panel opens. This reads a single file
   // and drops ≈40% of the payload (history was ~half the bytes for large taxa).
@@ -808,6 +811,8 @@ export async function getAssessmentHistory(sisTaxonId: number): Promise<Previous
     assessors: (pa.assessors as string) ?? null,
     reviewers: (pa.reviewers as string) ?? null,
     facilitators: (pa.facilitators as string) ?? null,
+    contributors: (pa.contributors as string) ?? null,
+    institutions: (pa.institutions as string) ?? null,
   }));
 }
 

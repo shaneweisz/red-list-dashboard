@@ -541,6 +541,22 @@ export interface AssessmentHistoryEntry {
    * taxa it is populated on ~38% of latest assessments.
    */
   facilitators: string | null;
+  /**
+   * RedListContributors (credit type 3) — everyone who supplied data or expertise
+   * without being credited as assessor or reviewer (workshop participants, data
+   * providers). Populated on ~33% of latest assessments, but by far the longest
+   * of the credit strings: ~8.5 names per assessment against ~2 for the others,
+   * so it carries more bytes than the assessors line despite a third of the
+   * coverage. Parsed with the same parseAssessors heuristic as the rest.
+   */
+  contributors?: string | null;
+  /**
+   * Institutions (credit type 5) — the organisation(s) behind the assessment
+   * (BirdLife International, BGCI, Kew, NatureServe, …). Populated on ~19% of
+   * latest assessments and, unlike the person-name credits, effectively an
+   * enumerable vocabulary: 155 distinct values across the whole Red List.
+   */
+  institutions?: string | null;
 }
 
 export type AssessmentHistoryMap = Record<string, AssessmentHistoryEntry[]>;
@@ -562,7 +578,9 @@ export async function fetchAssessmentHistory(
         a.criteria,
         ac_assessors.supplementary_fields->>'full' as assessors,
         ac_reviewers.supplementary_fields->>'full' as reviewers,
-        ac_facilitators.supplementary_fields->>'full' as facilitators
+        ac_facilitators.supplementary_fields->>'full' as facilitators,
+        ac_contributors.supplementary_fields->>'full' as contributors,
+        ac_institutions.supplementary_fields->>'full' as institutions
       FROM taxons t
       JOIN assessments a ON a.taxon_id = t.id
       JOIN assessment_scopes ascope ON ascope.assessment_id = a.id
@@ -570,6 +588,8 @@ export async function fetchAssessmentHistory(
       LEFT JOIN assessment_credits ac_assessors ON ac_assessors.assessment_id = a.id AND ac_assessors.credit_type_id = 1
       LEFT JOIN assessment_credits ac_reviewers ON ac_reviewers.assessment_id = a.id AND ac_reviewers.credit_type_id = 2
       LEFT JOIN assessment_credits ac_facilitators ON ac_facilitators.assessment_id = a.id AND ac_facilitators.credit_type_id = 4
+      LEFT JOIN assessment_credits ac_contributors ON ac_contributors.assessment_id = a.id AND ac_contributors.credit_type_id = 3
+      LEFT JOIN assessment_credits ac_institutions ON ac_institutions.assessment_id = a.id AND ac_institutions.credit_type_id = 5
       WHERE t.${query.filterColumn} = ANY($1)
         AND t.latest = true
         AND a.suppress = false
@@ -597,6 +617,15 @@ export async function fetchAssessmentHistory(
         ? new Date(row.assessment_date).toISOString().split("T")[0]
         : null;
 
+      // Contributors and institutions are OMITTED when absent rather than written
+      // as explicit nulls. They are the two sparsest credit lines (null on 77% and
+      // 85% of assessments), and these history files are bundled whole into the
+      // /api/redlist/credit-candidates serverless function: writing
+      // `"contributors":null,"institutions":null` on all 326,468 entries added
+      // 11.2 MB of nothing and pushed that function past Vercel's 250 MB cap.
+      // Every reader already treats the key as optional — build-parquet coalesces
+      // with `?? null`, exactly as it does for `criteria` and `facilitators` on
+      // files written before those fields existed.
       existing.push({
         id: Number(row.assessment_id),
         year: yearPublished,
@@ -606,6 +635,8 @@ export async function fetchAssessmentHistory(
         assessors: row.assessors || null,
         reviewers: row.reviewers || null,
         facilitators: row.facilitators || null,
+        ...(row.contributors ? { contributors: row.contributors } : {}),
+        ...(row.institutions ? { institutions: row.institutions } : {}),
       });
     }
   }

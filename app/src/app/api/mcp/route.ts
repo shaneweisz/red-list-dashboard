@@ -55,6 +55,8 @@ const FILTERS = {
   assessors: z.array(z.string()).optional().describe("Latest-assessment assessor name (substring match)."),
   reviewers: z.array(z.string()).optional().describe("Latest-assessment reviewer name (substring match)."),
   facilitators: z.array(z.string()).optional().describe("Latest-assessment facilitator name (substring match). The individual who ran the assessment when the credited assessor is an organisation — e.g. every bird assessment is assessed by 'BirdLife International', and only the facilitator names a person."),
+  contributors: z.array(z.string()).optional().describe("Latest-assessment contributor name (substring match). Credited for supplying data or expertise without being assessor or reviewer — workshop participants, data providers."),
+  institutions: z.array(z.string()).optional().describe("Latest-assessment institution (substring match). The organisation behind the assessment, e.g. 'BirdLife International', 'Royal Botanic Gardens, Kew', 'Botanic Gardens Conservation International', 'NatureServe'."),
   outdated: z.enum(["yes", "no"]).optional().describe("Assessment older than 10 years."),
   minObs: z.number().optional(), maxObs: z.number().optional(),
   minAssessmentYear: z.number().optional(), maxAssessmentYear: z.number().optional(),

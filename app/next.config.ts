@@ -146,7 +146,22 @@ const nextConfig: NextConfig = {
     // the three credit lines merged behind one endpoint, and the rename alone took
     // the function from ~80MB to 494MB — over Vercel's 250MB cap — with no local
     // signal, since app/data/ is only fully populated at build time on Vercel.
-    "/api/redlist/credit-candidates": ["**/data/search-index.json", ...COL_ARTIFACTS],
+    // It reads exactly two things — data/redlist/<group>.csv and
+    // data/redlist/history/<group>.json (loadRedlistForGroup +
+    // loadHistoryForGroup) — and never opens a parquet or touches DuckDB, so
+    // everything else in data/ was dead weight. It had been pruned only of the
+    // search index and the CoL artifacts, which left it ~236MB: close enough to
+    // the 250MB cap that adding two credit fields to the history files (+23MB)
+    // tipped it to 258.86MB and failed the deploy. Pruning to what it actually
+    // opens drops it well clear, so the next sync's growth has somewhere to go.
+    "/api/redlist/credit-candidates": [
+      "**/data/search-index.json",
+      "**/data/*.parquet",
+      "**/data/gbif/**",
+      "**/data/overlays/**",
+      "**/data/mapping.csv",
+      ...COL_ARTIFACTS,
+    ],
     // Read the small precomputed summary JSONs by default, or query
     // assessed.parquet in R2 (httpfs) when ?country= is set — same CRITICAL
     // note as /api/redlist/species: keep ALL parquets out, since USE_R2 is

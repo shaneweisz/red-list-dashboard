@@ -19,7 +19,7 @@ import { dynamicNodeDisplayName } from "@/lib/dynamic-taxon";
 import ReviewerChart from "./ReviewerChart";
 import { REVISION_BARS, visibleBars, barForReason, acceptedNameSentence, GENUS_DIFFERS_REASON, RENAMED_REASON, REVISION_REASON_SHORT, REVISION_REASON_SUMMARY, revisionReasons, matchesRevisionFilter, isFlagged, colUrl, colDatasetUrl, colTaxonUrl, noMatchSentence, splitSummary, lumpSentence, type SplitSummary, newRevisionTally, tallyRevision, barTotal, REVISION_CAVEAT, type ColRevision } from "@/lib/col-revision";
 import type { ColProvenance } from "@/app/api/col/provenance/route";
-import { parseAssessors } from "@/lib/parseAssessors";
+import { parseAssessors, parseInstitutions } from "@/lib/parseAssessors";
 import { iucnRegionCountries, matchingRegions } from "@/lib/regions";
 import { useFilterParams, type SortField, type MapViewMode } from "@/hooks/useFilterParams";
 import { readViewPreference, writeViewPreference } from "@/lib/view-preference";
@@ -379,7 +379,7 @@ const HABITAT_SEASON_OPTIONS: { value: string; short: string }[] = [
 // Allowed values for the remembered view toggles — passed to readViewPreference
 // so a stale or hand-edited localStorage value can never reach a component.
 const YEARS_CHART_MODES = ["range", "year"] as const;
-const CREDIT_CHART_MODES = ["assessors", "reviewers", "facilitators"] as const;
+const CREDIT_CHART_MODES = ["assessors", "reviewers", "facilitators", "contributors", "institutions"] as const;
 const MAP_VIEW_MODES = ["map", "list"] as const;
 type CreditChartMode = (typeof CREDIT_CHART_MODES)[number];
 
@@ -494,6 +494,8 @@ function previewFromSearchResult(r: SearchResult): RedListSpecies | null {
     latest_assessors: null,
     latest_reviewers: null,
     latest_facilitators: null,
+    latest_contributors: null,
+    latest_institutions: null,
     previous_assessments: [],
     systems: [],
     growth_forms: [],
@@ -557,7 +559,7 @@ type FilterAxis =
   | "search" | "categories" | "countries" | "years" | "assessmentYears" | "obs"
   | "assessmentCounts" | "systems" | "trends" | "movement" | "threats" | "criteria"
   | "habitat" | "endemics" | "growthForms" | "assessors" | "reviewers" | "facilitators"
-  | "revision";
+  | "contributors" | "institutions" | "revision";
 
 const skipSet = (...axes: FilterAxis[]): ReadonlySet<FilterAxis> => new Set(axes);
 
@@ -576,9 +578,9 @@ const SKIP_THREATS = skipSet("threats", "endemics", "growthForms");
 const THREATENED_SET = new Set<string>(THREATENED_CATEGORIES);
 const SKIP_CRITERIA = skipSet("criteria", "endemics", "growthForms");
 const SKIP_HABITAT = skipSet("habitat", "endemics", "growthForms");
-// The credits chart cross-filters against the other two credit types itself
-// (see buildCreditChart), so it skips all three here.
-const SKIP_CREDITS = skipSet("assessors", "reviewers", "facilitators");
+// The credits chart cross-filters against the OTHER credit types itself (see
+// buildCreditChart), so it skips all five here.
+const SKIP_CREDITS = skipSet("assessors", "reviewers", "facilitators", "contributors", "institutions");
 // The revision chart's own two axes are one filter (matchesColFilter). It
 // inherits the same endemics/growth-form blind spot as the three above, having
 // been written from the Criteria chart's clause list.
@@ -1164,6 +1166,8 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
     selectedGrowthForms, setSelectedGrowthForms,
     selectedAssessors, setSelectedAssessors,
     selectedFacilitators, setSelectedFacilitators,
+    selectedContributors, setSelectedContributors,
+    selectedInstitutions, setSelectedInstitutions,
     sortField2, sortDirection2, setSort2,
     selectedReviewers, setSelectedReviewers,
     searchFilter, setSearchFilter,
@@ -1299,13 +1303,15 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
     setSelectedAssessors(new Set());
     setSelectedReviewers(new Set());
     setSelectedFacilitators(new Set());
+    setSelectedContributors(new Set());
+    setSelectedInstitutions(new Set());
     setSort(null, "desc");
     setShowOnlyStarred(false);
     // Clear "all" taxa selection when switching to new-assessments (NE dataset too large for "all")
     if (viewMode === "new-assessments") {
       setSelectedTaxa(prev => prev.has("all") ? new Set<string>() : prev);
     }
-  }, [viewMode, setSelectedTaxa, setSelectedCategories, setSelectedYearRanges, setSelectedAssessmentYears, setSelectedDescribedYears, setSelectedCountries, setSelectedObsRanges, setSelectedAssessmentCounts, setSelectedSystems, setSelectedPopulationTrends, setSelectedMovementPatterns, setSelectedThreats, setSelectedCriteria, setSelectedHabitat, setHabitatBreadth, setSelectedHabitatImportance, setSelectedHabitatSeasons, setSelectedHabitatSuitability, setEndemicsOnly, setSelectedGrowthForms, setSelectedAssessors, setSelectedReviewers, setSelectedFacilitators, setSort]);
+  }, [viewMode, setSelectedTaxa, setSelectedCategories, setSelectedYearRanges, setSelectedAssessmentYears, setSelectedDescribedYears, setSelectedCountries, setSelectedObsRanges, setSelectedAssessmentCounts, setSelectedSystems, setSelectedPopulationTrends, setSelectedMovementPatterns, setSelectedThreats, setSelectedCriteria, setSelectedHabitat, setHabitatBreadth, setSelectedHabitatImportance, setSelectedHabitatSeasons, setSelectedHabitatSuitability, setEndemicsOnly, setSelectedGrowthForms, setSelectedAssessors, setSelectedReviewers, setSelectedFacilitators, setSelectedContributors, setSelectedInstitutions, setSort]);
 
   // Taxon toggle handler (used by TaxaSummary)
   // Regular click: select only that taxon (or deselect if already sole selection)
@@ -1892,10 +1898,10 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
     return buckets.has(describedYearBucket(year));
   }, [selectedDescribedYears, describedYearBucket]);
 
-  // Assessors/reviewers/facilitators from the latest assessment. These are
-  // denormalized inline on the species list (latest_assessors/latest_reviewers/
-  // latest_facilitators) so the filters work without the full history array
-  // (which is fetched lazily for the detail panel).
+  // Credits from the latest assessment. These are denormalized inline on the
+  // species list (latest_assessors/latest_reviewers/latest_facilitators/
+  // latest_contributors/latest_institutions) so the filters work without the
+  // full history array (which is fetched lazily for the detail panel).
   const getSpeciesAssessors = useCallback((s: Species): string[] => {
     return parseAssessors(s.latest_assessors);
   }, []);
@@ -1909,6 +1915,19 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
   // assessor filter cannot pick out one person's work — the facilitator can.
   const getSpeciesFacilitators = useCallback((s: Species): string[] => {
     return parseAssessors(s.latest_facilitators);
+  }, []);
+
+  // Contributors are credited without being assessor or reviewer — workshop
+  // participants, data providers. The longest of the credit lines by a distance
+  // (~8.5 names per assessment), so this is the costliest getter to run.
+  const getSpeciesContributors = useCallback((s: Species): string[] => {
+    return parseAssessors(s.latest_contributors);
+  }, []);
+
+  // Institutions are organisations, not people — see parseInstitutions, which
+  // the /browse + MCP filter shares so both surfaces split a line the same way.
+  const getSpeciesInstitutions = useCallback((s: Species): string[] => {
+    return parseInstitutions(s.latest_institutions);
   }, []);
 
   // Track which view is active in the years-since-assessed chart ("range" buckets vs specific year).
@@ -1977,6 +1996,19 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
     return getSpeciesFacilitators(s).some(f => { const fl = f.toLowerCase(); return sels.some(x => fl.includes(x)); });
   }, [selectedFacilitators, getSpeciesFacilitators]);
 
+  // Helper to check if species matches the contributors filter (substring, as above).
+  const matchesContributorsFilter = useCallback((s: Species): boolean => {
+    if (selectedContributors.size === 0) return true;
+    const sels = [...selectedContributors].map(x => x.toLowerCase());
+    return getSpeciesContributors(s).some(c => { const cl = c.toLowerCase(); return sels.some(x => cl.includes(x)); });
+  }, [selectedContributors, getSpeciesContributors]);
+
+  // Helper to check if species matches the institutions filter (substring, as above).
+  const matchesInstitutionsFilter = useCallback((s: Species): boolean => {
+    if (selectedInstitutions.size === 0) return true;
+    const sels = [...selectedInstitutions].map(x => x.toLowerCase());
+    return getSpeciesInstitutions(s).some(i => { const il = i.toLowerCase(); return sels.some(x => il.includes(x)); });
+  }, [selectedInstitutions, getSpeciesInstitutions]);
   // Does this species fall inside the CoL card's scope? Under the default
   // "outdated" scope only assessments more than 10 years old do — exactly the
   // set the dashboard's Needs Updating toggle selects, deliberately the same
@@ -2323,6 +2355,8 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
       if (!matchesHabitatFilter(s)) return;
       if (!matchesReviewersFilter(s)) return;
       if (!matchesFacilitatorsFilter(s)) return;
+      if (!matchesContributorsFilter(s)) return;
+      if (!matchesInstitutionsFilter(s)) return;
       if (!matchesColFilter(s)) return;
       counts[s.category] = (counts[s.category] || 0) + 1;
     });
@@ -2336,7 +2370,7 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
       percent: total > 0 ? Math.round(((counts[code] || 0) / total) * 100) : 0,
       label: `${(counts[code] || 0).toLocaleString()} (${total > 0 ? Math.round(((counts[code] || 0) / total) * 100) : 0}%)`,
     }));
-  }, [taxaFilteredSpecies, selectedCountries, selectedYearRanges, selectedObsRanges, selectedSystems, selectedPopulationTrends, selectedMovementPatterns, matchesThreatFilter, selectedCriteria, matchesHabitatFilter, endemicsOnly, selectedGrowthForms, matchesSearch, matchesAssessorsFilter, matchesReviewersFilter, matchesFacilitatorsFilter, matchesColFilter, matchesObsRangeFilter, selectedAssessmentCounts, matchesAssessmentCountFilter, matchesYearRangeFilter, selectedAssessmentYears, matchesAssessmentYearFilter]);
+  }, [taxaFilteredSpecies, selectedCountries, selectedYearRanges, selectedObsRanges, selectedSystems, selectedPopulationTrends, selectedMovementPatterns, matchesThreatFilter, selectedCriteria, matchesHabitatFilter, endemicsOnly, selectedGrowthForms, matchesSearch, matchesAssessorsFilter, matchesReviewersFilter, matchesFacilitatorsFilter, matchesContributorsFilter, matchesInstitutionsFilter, matchesColFilter, matchesObsRangeFilter, selectedAssessmentCounts, matchesAssessmentCountFilter, matchesYearRangeFilter, selectedAssessmentYears, matchesAssessmentYearFilter]);
 
   // Year chart: apply all filters EXCEPT year range AND outdated (see
   // taxaFilteredSpeciesExceptOutdated above) — buckets align exactly with the
@@ -2375,6 +2409,8 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
     if (!skip.has("habitat") && !matchesHabitatFilter(s)) return false;
     if (!skip.has("reviewers") && !matchesReviewersFilter(s)) return false;
     if (!skip.has("facilitators") && !matchesFacilitatorsFilter(s)) return false;
+    if (!skip.has("contributors") && !matchesContributorsFilter(s)) return false;
+    if (!skip.has("institutions") && !matchesInstitutionsFilter(s)) return false;
     if (!skip.has("revision") && !matchesColFilter(s)) return false;
     return true;
   }, [matchesSearch, selectedCategories, selectedCountries, selectedYearRanges, matchesYearRangeFilter,
@@ -2382,7 +2418,7 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
       selectedAssessmentCounts, matchesAssessmentCountFilter, selectedSystems, selectedPopulationTrends,
       selectedMovementPatterns, matchesThreatFilter, selectedCriteria, endemicsOnly, selectedGrowthForms,
       matchesAssessorsFilter, matchesHabitatFilter, matchesReviewersFilter, matchesFacilitatorsFilter,
-      matchesColFilter]);
+      matchesContributorsFilter, matchesInstitutionsFilter, matchesColFilter]);
 
   // isOutdated() threshold (>10 years) so the Outdated toggle mutes rather than
   // zeroes out the buckets that don't match.
@@ -2622,13 +2658,15 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
       if (!matchesHabitatFilter(s)) return;
       if (!matchesReviewersFilter(s)) return;
       if (!matchesFacilitatorsFilter(s)) return;
+      if (!matchesContributorsFilter(s)) return;
+      if (!matchesInstitutionsFilter(s)) return;
       if (!matchesColFilter(s)) return;
       for (const sys of s.systems ?? []) {
         if (sys in counts) counts[sys]++;
       }
     });
     return counts;
-  }, [taxaFilteredSpecies, selectedCategories, selectedCountries, selectedYearRanges, selectedObsRanges, selectedPopulationTrends, selectedMovementPatterns, matchesThreatFilter, selectedCriteria, matchesHabitatFilter, matchesSearch, matchesAssessorsFilter, matchesReviewersFilter, matchesFacilitatorsFilter, matchesColFilter, endemicsOnly, matchesObsRangeFilter, selectedAssessmentCounts, matchesAssessmentCountFilter, matchesYearRangeFilter, selectedGrowthForms, selectedAssessmentYears, matchesAssessmentYearFilter]);
+  }, [taxaFilteredSpecies, selectedCategories, selectedCountries, selectedYearRanges, selectedObsRanges, selectedPopulationTrends, selectedMovementPatterns, matchesThreatFilter, selectedCriteria, matchesHabitatFilter, matchesSearch, matchesAssessorsFilter, matchesReviewersFilter, matchesFacilitatorsFilter, matchesContributorsFilter, matchesInstitutionsFilter, matchesColFilter, endemicsOnly, matchesObsRangeFilter, selectedAssessmentCounts, matchesAssessmentCountFilter, matchesYearRangeFilter, selectedGrowthForms, selectedAssessmentYears, matchesAssessmentYearFilter]);
 
   // Population trend counts: apply all filters EXCEPT population trend
   const populationTrendCounts = useMemo(() => {
@@ -2652,11 +2690,13 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
       if (!matchesHabitatFilter(s)) return;
       if (!matchesReviewersFilter(s)) return;
       if (!matchesFacilitatorsFilter(s)) return;
+      if (!matchesContributorsFilter(s)) return;
+      if (!matchesInstitutionsFilter(s)) return;
       if (!matchesColFilter(s)) return;
       counts[s.population_trend] = (counts[s.population_trend] || 0) + 1;
     });
     return counts;
-  }, [taxaFilteredSpecies, selectedCategories, selectedCountries, selectedYearRanges, selectedObsRanges, selectedSystems, selectedMovementPatterns, matchesThreatFilter, selectedCriteria, matchesHabitatFilter, matchesSearch, matchesAssessorsFilter, matchesReviewersFilter, matchesFacilitatorsFilter, matchesColFilter, endemicsOnly, matchesObsRangeFilter, selectedAssessmentCounts, matchesAssessmentCountFilter, matchesYearRangeFilter, selectedGrowthForms, selectedAssessmentYears, matchesAssessmentYearFilter]);
+  }, [taxaFilteredSpecies, selectedCategories, selectedCountries, selectedYearRanges, selectedObsRanges, selectedSystems, selectedMovementPatterns, matchesThreatFilter, selectedCriteria, matchesHabitatFilter, matchesSearch, matchesAssessorsFilter, matchesReviewersFilter, matchesFacilitatorsFilter, matchesContributorsFilter, matchesInstitutionsFilter, matchesColFilter, endemicsOnly, matchesObsRangeFilter, selectedAssessmentCounts, matchesAssessmentCountFilter, matchesYearRangeFilter, selectedGrowthForms, selectedAssessmentYears, matchesAssessmentYearFilter]);
 
   // Movement pattern counts: apply all filters EXCEPT movement pattern
   const movementPatternCounts = useMemo(() => {
@@ -2680,11 +2720,13 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
       if (!matchesHabitatFilter(s)) return;
       if (!matchesReviewersFilter(s)) return;
       if (!matchesFacilitatorsFilter(s)) return;
+      if (!matchesContributorsFilter(s)) return;
+      if (!matchesInstitutionsFilter(s)) return;
       if (!matchesColFilter(s)) return;
       counts[s.movement_pattern] = (counts[s.movement_pattern] || 0) + 1;
     });
     return counts;
-  }, [taxaFilteredSpecies, selectedCategories, selectedCountries, selectedYearRanges, selectedObsRanges, selectedSystems, selectedPopulationTrends, matchesThreatFilter, selectedCriteria, matchesHabitatFilter, matchesSearch, matchesAssessorsFilter, matchesReviewersFilter, matchesFacilitatorsFilter, matchesColFilter, endemicsOnly, matchesObsRangeFilter, selectedAssessmentCounts, matchesAssessmentCountFilter, matchesYearRangeFilter, selectedGrowthForms, selectedAssessmentYears, matchesAssessmentYearFilter]);
+  }, [taxaFilteredSpecies, selectedCategories, selectedCountries, selectedYearRanges, selectedObsRanges, selectedSystems, selectedPopulationTrends, matchesThreatFilter, selectedCriteria, matchesHabitatFilter, matchesSearch, matchesAssessorsFilter, matchesReviewersFilter, matchesFacilitatorsFilter, matchesContributorsFilter, matchesInstitutionsFilter, matchesColFilter, endemicsOnly, matchesObsRangeFilter, selectedAssessmentCounts, matchesAssessmentCountFilter, matchesYearRangeFilter, selectedGrowthForms, selectedAssessmentYears, matchesAssessmentYearFilter]);
 
   // Threat counts: apply all filters EXCEPT threats (count species per prefix, deduplicated)
   // Threat counts per code, plus the denominator (`threatTotal`) for percentages:
@@ -2837,14 +2879,13 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
     setSelectedCountries(countries);
   }, [setSelectedCountries]);
 
-  // Assessor / reviewer / facilitator charts all count names over the same
-  // filtered species set: every active filter EXCEPT the credit filter the chart
-  // itself drives, so clicking a bar narrows the table without emptying the chart
-  // you clicked in. Shared here rather than copied per chart — the three differ
-  // only in which names they pull and which credit filter they leave out.
-  // Every filter EXCEPT the three credit ones, for the assessors/reviewers/
-  // facilitators chart — which cross-filters against the other two credits
-  // separately (see buildCreditChart).
+  // The credit chart counts names over the same filtered species set whichever
+  // credit type is selected: every active filter EXCEPT the credit filter the
+  // chart itself drives, so clicking a bar narrows the table without emptying the
+  // chart you clicked in. Shared here rather than copied per credit type — they
+  // differ only in which names they pull and which credit filter they leave out.
+  // Every filter EXCEPT the five credit ones, for the credit chart — which
+  // cross-filters against the other four credits separately (see buildCreditChart).
   //
   // This restates the same clause list the per-chart memos above run inline, and
   // that duplication is a live trap: the taxonomic-revision filter was added to
@@ -2880,17 +2921,28 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
       }));
   }, [taxaFilteredSpecies, matchesNonCreditFilters]);
 
-  const assessorChartData = useMemo(
-    () => buildCreditChart(getSpeciesAssessors, [matchesReviewersFilter, matchesFacilitatorsFilter]),
-    [buildCreditChart, getSpeciesAssessors, matchesReviewersFilter, matchesFacilitatorsFilter]);
-
-  const reviewerChartData = useMemo(
-    () => buildCreditChart(getSpeciesReviewers, [matchesAssessorsFilter, matchesFacilitatorsFilter]),
-    [buildCreditChart, getSpeciesReviewers, matchesAssessorsFilter, matchesFacilitatorsFilter]);
-
-  const facilitatorChartData = useMemo(
-    () => buildCreditChart(getSpeciesFacilitators, [matchesAssessorsFilter, matchesReviewersFilter]),
-    [buildCreditChart, getSpeciesFacilitators, matchesAssessorsFilter, matchesReviewersFilter]);
+  // Only the SELECTED credit type is counted. Each pass walks every filtered
+  // species and parses every name on the line, and contributors alone average
+  // ~8.5 names per assessment — building all five up front to render one would
+  // cost five times over on every filter change. Building the visible one is a
+  // single pass, so five credit types now cost less than the three eager memos
+  // this replaced.
+  const creditChartData = useMemo(() => {
+    switch (assessorReviewerMode) {
+      case "assessors":
+        return buildCreditChart(getSpeciesAssessors, [matchesReviewersFilter, matchesFacilitatorsFilter, matchesContributorsFilter, matchesInstitutionsFilter]);
+      case "reviewers":
+        return buildCreditChart(getSpeciesReviewers, [matchesAssessorsFilter, matchesFacilitatorsFilter, matchesContributorsFilter, matchesInstitutionsFilter]);
+      case "facilitators":
+        return buildCreditChart(getSpeciesFacilitators, [matchesAssessorsFilter, matchesReviewersFilter, matchesContributorsFilter, matchesInstitutionsFilter]);
+      case "contributors":
+        return buildCreditChart(getSpeciesContributors, [matchesAssessorsFilter, matchesReviewersFilter, matchesFacilitatorsFilter, matchesInstitutionsFilter]);
+      case "institutions":
+        return buildCreditChart(getSpeciesInstitutions, [matchesAssessorsFilter, matchesReviewersFilter, matchesFacilitatorsFilter, matchesContributorsFilter]);
+    }
+  }, [assessorReviewerMode, buildCreditChart,
+      getSpeciesAssessors, getSpeciesReviewers, getSpeciesFacilitators, getSpeciesContributors, getSpeciesInstitutions,
+      matchesAssessorsFilter, matchesReviewersFilter, matchesFacilitatorsFilter, matchesContributorsFilter, matchesInstitutionsFilter]);
 
   // ── Client-side filtering and sorting ──────────────────────────────
   const { filteredSpecies, sortedSpecies } = useMemo(() => {
@@ -2917,9 +2969,11 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
       const matchesAssessor = matchesAssessorsFilter(s);
       const matchesReviewer = matchesReviewersFilter(s);
       const matchesFacilitator = matchesFacilitatorsFilter(s);
+      const matchesContributor = matchesContributorsFilter(s);
+      const matchesInstitution = matchesInstitutionsFilter(s);
       const matchesCol = matchesColFilter(s);
       const matchesStarred = !showOnlyStarred || pinnedSet.has(s.species_key);
-      return matchesCategory && matchesYear && matchesDescribed && matchesObs && matchesAssessmentCount && matchesCountry && matchesSystem && matchesTrend && matchesMovement && matchesThreat && matchesCriteria && matchesHabitat && matchesEndemic && matchesGrowth && matchesSearch && matchesAssessor && matchesReviewer && matchesFacilitator && matchesCol && matchesStarred;
+      return matchesCategory && matchesYear && matchesDescribed && matchesObs && matchesAssessmentCount && matchesCountry && matchesSystem && matchesTrend && matchesMovement && matchesThreat && matchesCriteria && matchesHabitat && matchesEndemic && matchesGrowth && matchesSearch && matchesAssessor && matchesReviewer && matchesFacilitator && matchesContributor && matchesInstitution && matchesCol && matchesStarred;
     });
 
     const sorted = [...filtered].sort((a, b) => {
@@ -2955,7 +3009,7 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
     });
 
     return { filteredSpecies: filtered, sortedSpecies: sorted };
-  }, [taxaFilteredSpecies, selectedCategories, selectedCountries, selectedSystems, selectedPopulationTrends, selectedMovementPatterns, matchesThreatFilter, selectedCriteria, matchesHabitatFilter, endemicsOnly, selectedGrowthForms, searchFilter, showOnlyStarred, pinnedSet, pinnedSpecies, sortField, sortDirection, sortField2, sortDirection2, matchesAssessorsFilter, matchesReviewersFilter, matchesFacilitatorsFilter, matchesColFilter, isNewAssessments, matchesObsRangeFilter, matchesAssessmentCountFilter, matchesYearRangeFilter, matchesAssessmentYearFilter, matchesDescribedYearFilter]);
+  }, [taxaFilteredSpecies, selectedCategories, selectedCountries, selectedSystems, selectedPopulationTrends, selectedMovementPatterns, matchesThreatFilter, selectedCriteria, matchesHabitatFilter, endemicsOnly, selectedGrowthForms, searchFilter, showOnlyStarred, pinnedSet, pinnedSpecies, sortField, sortDirection, sortField2, sortDirection2, matchesAssessorsFilter, matchesReviewersFilter, matchesFacilitatorsFilter, matchesContributorsFilter, matchesInstitutionsFilter, matchesColFilter, isNewAssessments, matchesObsRangeFilter, matchesAssessmentCountFilter, matchesYearRangeFilter, matchesAssessmentYearFilter, matchesDescribedYearFilter]);
 
   // Giant aggregates (insects, invertebrates…) are capped at 400k server-side; surface
   // a banner so the list reads as "showing N of M — drill into a sub-group for the rest".
@@ -3015,6 +3069,8 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
   const singleSpeciesAssessors = useMemo(() => singleSpecies ? getSpeciesAssessors(singleSpecies) : [], [singleSpecies, getSpeciesAssessors]);
   const singleSpeciesReviewers = useMemo(() => singleSpecies ? getSpeciesReviewers(singleSpecies) : [], [singleSpecies, getSpeciesReviewers]);
   const singleSpeciesFacilitators = useMemo(() => singleSpecies ? getSpeciesFacilitators(singleSpecies) : [], [singleSpecies, getSpeciesFacilitators]);
+  const singleSpeciesContributors = useMemo(() => singleSpecies ? getSpeciesContributors(singleSpecies) : [], [singleSpecies, getSpeciesContributors]);
+  const singleSpeciesInstitutions = useMemo(() => singleSpecies ? getSpeciesInstitutions(singleSpecies) : [], [singleSpecies, getSpeciesInstitutions]);
 
   // Helper to get country display name
   const getCountryName = (code: string) => ALPHA2_TO_NAME[code] || code;
@@ -3525,14 +3581,18 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
     });
   }, []);
 
-  // Which selection the credit chart drives, keyed by its active tab — so the
-  // chart's selected pills, bar clicks and search toggles all follow the tab
-  // without a chain of ternaries at each of the three call sites.
+  // Which selection the credit chart drives, keyed by its active mode — so the
+  // chart's selected pills, bar clicks and search toggles all follow the mode
+  // without a chain of ternaries at each of the call sites.
   const creditSelection = useMemo(() => ({
     assessors: { selected: selectedAssessors, setter: setSelectedAssessors },
     reviewers: { selected: selectedReviewers, setter: setSelectedReviewers },
     facilitators: { selected: selectedFacilitators, setter: setSelectedFacilitators },
-  }), [selectedAssessors, setSelectedAssessors, selectedReviewers, setSelectedReviewers, selectedFacilitators, setSelectedFacilitators]);
+    contributors: { selected: selectedContributors, setter: setSelectedContributors },
+    institutions: { selected: selectedInstitutions, setter: setSelectedInstitutions },
+  }), [selectedAssessors, setSelectedAssessors, selectedReviewers, setSelectedReviewers,
+       selectedFacilitators, setSelectedFacilitators, selectedContributors, setSelectedContributors,
+       selectedInstitutions, setSelectedInstitutions]);
 
   // Handle assessor/reviewer bar click
   const makeAssessorClick = useCallback((setter: SetSelection) => (data: { payload?: { code?: string } }, event: React.MouseEvent) => {
@@ -3606,6 +3666,8 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
     && selectedAssessors.size === 0
     && selectedReviewers.size === 0
     && selectedFacilitators.size === 0
+    && selectedContributors.size === 0
+    && selectedInstitutions.size === 0
     && !endemicsOnly
     && !searchFilter
     && !showOnlyStarred;
@@ -5109,25 +5171,32 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
               confusing, so this reverts to plain click-to-expand instead. */}
           {!isNewAssessments && (
             <>
-                {/* Country alongside Assessors/Reviewers/Facilitators. */}
+                {/* Country alongside the assessment credits. */}
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                   {countryMapCard}
                   {isSingleSpecies && singleSpecies ? (() => {
-                    // Facilitators are absent on ~62% of latest assessments — the
-                    // field is only filled when the credited assessor is an
-                    // organisation — so "Facilitators / None listed" is the common
-                    // case, not the exception. Drop the card rather than spend a
-                    // third of the row saying nothing. Assessors and Reviewers keep
-                    // theirs: empty there is genuinely notable.
+                    // Facilitators are absent on ~62% of latest assessments, and
+                    // contributors (~67%) and institutions (~81%) more often still —
+                    // each is only filled in particular circumstances — so
+                    // "Contributors / None listed" is the common case, not the
+                    // exception. Drop those cards rather than spend the row saying
+                    // nothing. Assessors and Reviewers keep theirs: empty there is
+                    // genuinely notable.
                     const cards = [
                       { title: "Assessors", names: singleSpeciesAssessors },
                       { title: "Reviewers", names: singleSpeciesReviewers },
                       ...(singleSpeciesFacilitators.length > 0
                         ? [{ title: "Facilitators", names: singleSpeciesFacilitators }]
                         : []),
+                      ...(singleSpeciesContributors.length > 0
+                        ? [{ title: "Contributors", names: singleSpeciesContributors }]
+                        : []),
+                      ...(singleSpeciesInstitutions.length > 0
+                        ? [{ title: "Institutions", names: singleSpeciesInstitutions }]
+                        : []),
                     ];
                     return (
-                    <div className={`grid grid-cols-1 gap-3 ${cards.length === 3 ? "sm:grid-cols-3" : "sm:grid-cols-2"}`}>
+                    <div className={`grid grid-cols-1 gap-3 ${cards.length >= 3 ? "sm:grid-cols-3" : "sm:grid-cols-2"}`}>
                       {cards.map(({ title, names }) => (
                         <div key={title} className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-3 flex flex-col">
                           <div className="flex items-center justify-between mb-1">
@@ -5150,9 +5219,7 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
                     );
                   })() : (
                     <ReviewerChart
-                      allAssessors={assessorChartData}
-                      allReviewers={reviewerChartData}
-                      allFacilitators={facilitatorChartData}
+                      data={creditChartData}
                       viewMode={assessorReviewerMode}
                       onViewModeChange={changeCreditChartMode}
                       selectedItems={creditSelection[assessorReviewerMode].selected}
@@ -5172,9 +5239,9 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
                   </svg>
                   More Filters
-                  {(selectedGrowthForms.size + selectedHabitat.size + (habitatBreadth ? 1 : 0) + (habitatImportanceActive ? 1 : 0) + (habitatSeasonsActive ? 1 : 0) + (habitatSuitabilityActive ? 1 : 0) + selectedAssessmentCounts.size + selectedSystems.size + selectedMovementPatterns.size + selectedPopulationTrends.size + selectedCriteria.size + selectedAssessors.size + selectedReviewers.size + selectedFacilitators.size > 0) && (
+                  {(selectedGrowthForms.size + selectedHabitat.size + (habitatBreadth ? 1 : 0) + (habitatImportanceActive ? 1 : 0) + (habitatSeasonsActive ? 1 : 0) + (habitatSuitabilityActive ? 1 : 0) + selectedAssessmentCounts.size + selectedSystems.size + selectedMovementPatterns.size + selectedPopulationTrends.size + selectedCriteria.size + selectedAssessors.size + selectedReviewers.size + selectedFacilitators.size + selectedContributors.size + selectedInstitutions.size > 0) && (
                     <span className="ml-1 px-1.5 py-0.5 text-[10px] rounded-full bg-zinc-200 dark:bg-zinc-700 text-zinc-600 dark:text-zinc-300">
-                      {selectedGrowthForms.size + selectedHabitat.size + (habitatBreadth ? 1 : 0) + (habitatImportanceActive ? 1 : 0) + (habitatSeasonsActive ? 1 : 0) + (habitatSuitabilityActive ? 1 : 0) + selectedAssessmentCounts.size + selectedSystems.size + selectedMovementPatterns.size + selectedPopulationTrends.size + selectedCriteria.size + selectedAssessors.size + selectedReviewers.size + selectedFacilitators.size} active
+                      {selectedGrowthForms.size + selectedHabitat.size + (habitatBreadth ? 1 : 0) + (habitatImportanceActive ? 1 : 0) + (habitatSeasonsActive ? 1 : 0) + (habitatSuitabilityActive ? 1 : 0) + selectedAssessmentCounts.size + selectedSystems.size + selectedMovementPatterns.size + selectedPopulationTrends.size + selectedCriteria.size + selectedAssessors.size + selectedReviewers.size + selectedFacilitators.size + selectedContributors.size + selectedInstitutions.size} active
                     </span>
                   )}
                 </button>
@@ -5214,6 +5281,8 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
                     if (!matchesHabitatFilter(s)) return;
                     if (!matchesReviewersFilter(s)) return;
                     if (!matchesFacilitatorsFilter(s)) return;
+                    if (!matchesContributorsFilter(s)) return;
+                    if (!matchesInstitutionsFilter(s)) return;
       if (!matchesColFilter(s)) return;
                     for (const gf of s.growth_forms) {
                       gfCounts[gf] = (gfCounts[gf] || 0) + 1;
@@ -5474,7 +5543,7 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
               </svg>
             </div>
-            {(selectedTaxa.size > 0 || selectedSubgroups.size > 0 || selectedCategories.size > 0 || selectedYearRanges.size > 0 || selectedAssessmentYears.size > 0 || selectedDescribedYears.size > 0 || selectedObsRanges.size > 0 || selectedAssessmentCounts.size > 0 || selectedCountries.size > 0 || selectedSystems.size > 0 || endemicsOnly || selectedGrowthForms.size > 0 || selectedPopulationTrends.size > 0 || selectedMovementPatterns.size > 0 || selectedThreats.size > 0 || selectedCriteria.size > 0 || selectedHabitat.size > 0 || habitatBreadth || colMatch || selectedColReasons.size > 0 || habitatImportanceActive || habitatSeasonsActive || habitatSuitabilityActive || selectedAssessors.size > 0 || selectedReviewers.size > 0 || selectedFacilitators.size > 0 || showOnlyStarred || exactFilters.outdated || exactFilters.minObs != null || exactFilters.maxObs != null || exactFilters.minAssessmentYear != null || exactFilters.maxAssessmentYear != null || exactFilters.minDescribedYear != null || exactFilters.maxDescribedYear != null) && (
+            {(selectedTaxa.size > 0 || selectedSubgroups.size > 0 || selectedCategories.size > 0 || selectedYearRanges.size > 0 || selectedAssessmentYears.size > 0 || selectedDescribedYears.size > 0 || selectedObsRanges.size > 0 || selectedAssessmentCounts.size > 0 || selectedCountries.size > 0 || selectedSystems.size > 0 || endemicsOnly || selectedGrowthForms.size > 0 || selectedPopulationTrends.size > 0 || selectedMovementPatterns.size > 0 || selectedThreats.size > 0 || selectedCriteria.size > 0 || selectedHabitat.size > 0 || habitatBreadth || colMatch || selectedColReasons.size > 0 || habitatImportanceActive || habitatSeasonsActive || habitatSuitabilityActive || selectedAssessors.size > 0 || selectedReviewers.size > 0 || selectedFacilitators.size > 0 || selectedContributors.size > 0 || selectedInstitutions.size > 0 || showOnlyStarred || exactFilters.outdated || exactFilters.minObs != null || exactFilters.maxObs != null || exactFilters.minAssessmentYear != null || exactFilters.maxAssessmentYear != null || exactFilters.minDescribedYear != null || exactFilters.maxDescribedYear != null) && (
               <button
                 onClick={() => {
                   clearAllFiltersAndTaxa();
@@ -5869,6 +5938,32 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
               >
                 {name} <span className="text-[10px] opacity-60">(facilitator)</span>
                 <span className="text-sm">×</span>
+              </button>
+            ))}
+            {!isNewAssessments && Array.from(selectedContributors).map(name => (
+              <button
+                key={`c-${name}`}
+                onClick={() => setSelectedContributors(prev => { const next = new Set(prev); next.delete(name); return next; })}
+                className="px-3 py-1.5 text-sm font-medium rounded-full bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400 flex items-center gap-1 hover:opacity-80"
+              >
+                {name} <span className="text-[10px] opacity-60">(contributor)</span>
+                <span className="text-sm">×</span>
+              </button>
+            ))}
+            {/* Institution names run far longer than the person-name pills above
+                ("Centro Nacional de Conservação da Flora (CNCFlora)"), so this one
+                truncates rather than pushing the whole row off screen; the full
+                name stays available on hover. */}
+            {!isNewAssessments && Array.from(selectedInstitutions).map(name => (
+              <button
+                key={`i-${name}`}
+                onClick={() => setSelectedInstitutions(prev => { const next = new Set(prev); next.delete(name); return next; })}
+                title={name}
+                className="px-3 py-1.5 text-sm font-medium rounded-full bg-sky-100 text-sky-700 dark:bg-sky-900/30 dark:text-sky-400 flex items-center gap-1 hover:opacity-80 max-w-[22rem]"
+              >
+                <span className="truncate">{name}</span>
+                <span className="text-[10px] opacity-60 shrink-0">(institution)</span>
+                <span className="text-sm shrink-0">×</span>
               </button>
             ))}
             {/* Exact URL-only filters (typically arrive via an agent/MCP dashboard
@@ -6481,7 +6576,7 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
                                 currentAssessmentId={s.assessment_id ?? 0}
                                 currentCategory={s.category}
                                 currentAssessmentDate={s.assessment_date}
-                                previousAssessments={((s.sis_taxon_id ? assessmentHistory[s.sis_taxon_id] : null) ?? s.previous_assessments ?? []).map((a) => ({ year: a.year, assessment_id: a.id, category: a.category, assessors: a.assessors, reviewers: a.reviewers, facilitators: a.facilitators }))}
+                                previousAssessments={((s.sis_taxon_id ? assessmentHistory[s.sis_taxon_id] : null) ?? s.previous_assessments ?? []).map((a) => ({ year: a.year, assessment_id: a.id, category: a.category, assessors: a.assessors, reviewers: a.reviewers, facilitators: a.facilitators, contributors: a.contributors, institutions: a.institutions }))}
                                 speciesUrl={`https://www.iucnredlist.org/species/${s.sis_taxon_id}/${s.assessment_id}`}
                               />
                             </div>

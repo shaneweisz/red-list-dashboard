@@ -289,6 +289,8 @@ describe("buildQs", () => {
     assessors: new Set<string>(),
     reviewers: new Set<string>(),
     facilitators: new Set<string>(),
+    contributors: new Set<string>(),
+    institutions: new Set<string>(),
     search: "",
     subgroups: new Set<string>(),
     sortField: null as "year" | "category" | "totalGbif" | "newGbif" | "pctNewGbif" | null,
@@ -456,6 +458,16 @@ describe("buildQs", () => {
 
   // Facilitator names carry commas ("Rutherford, C.A."), so the multi-select
   // delimiter is a pipe — same as assessors/reviewers.
+  it("round-trips contributors and institutions through the pipe-delimited param", () => {
+    const qs = buildQs({ ...emptyState, contributors: new Set(["Hines, H."]), institutions: new Set(["Royal Botanic Gardens, Kew", "NatureServe"]) });
+    const p = new URLSearchParams(qs);
+    expect(p.get("contributors")).toBe("Hines, H.");
+    // Pipe-delimited, so a comma inside an institution name survives the round trip.
+    expect(p.get("institutions")).toBe("Royal Botanic Gardens, Kew|NatureServe");
+    expect([...parseParams(qs).contributors]).toEqual(["Hines, H."]);
+    expect([...parseParams(qs).institutions]).toEqual(["Royal Botanic Gardens, Kew", "NatureServe"]);
+  });
+
   it("round-trips facilitators through the pipe-delimited param", () => {
     const qs = buildQs({ ...emptyState, facilitators: new Set(["Rutherford, C.A.", "Hermes, C."]) });
     expect(new URLSearchParams(qs).get("facilitators")).toBe("Rutherford, C.A.|Hermes, C.");
@@ -584,6 +596,8 @@ describe("parseParams ↔ buildQs round-trip", () => {
       assessors: new Set<string>(),
       reviewers: new Set<string>(),
       facilitators: new Set<string>(),
+      contributors: new Set<string>(),
+      institutions: new Set<string>(),
       search: "shrew",
       sortField: "category" as const,
       sortDirection: "asc" as const,
@@ -633,6 +647,8 @@ describe("parseParams ↔ buildQs round-trip", () => {
       assessors: new Set<string>(),
       reviewers: new Set<string>(),
       facilitators: new Set<string>(),
+      contributors: new Set<string>(),
+      institutions: new Set<string>(),
       search: "",
       sortField: null as "year" | "category" | "totalGbif" | "newGbif" | "pctNewGbif" | null,
     sortField2: null as "year" | "category" | "totalGbif" | "newGbif" | "pctNewGbif" | null,
@@ -675,6 +691,8 @@ describe("parseParams ↔ buildQs round-trip", () => {
     assessors: new Set<string>(),
     reviewers: new Set<string>(),
     facilitators: new Set<string>(),
+    contributors: new Set<string>(),
+    institutions: new Set<string>(),
     search: "",
     sortField: null as "year" | "category" | "totalGbif" | "newGbif" | "pctNewGbif" | null,
     sortField2: null as "year" | "category" | "totalGbif" | "newGbif" | "pctNewGbif" | null,
@@ -787,6 +805,8 @@ describe("parseParams ↔ buildQs round-trip", () => {
       assessors: new Set<string>(),
       reviewers: new Set<string>(),
       facilitators: new Set<string>(),
+      contributors: new Set<string>(),
+      institutions: new Set<string>(),
       search: "",
       sortField: null as "year" | "category" | "totalGbif" | "newGbif" | "pctNewGbif" | null,
     sortField2: null as "year" | "category" | "totalGbif" | "newGbif" | "pctNewGbif" | null,
@@ -829,6 +849,8 @@ describe("parseParams ↔ buildQs round-trip", () => {
       assessors: new Set<string>(),
       reviewers: new Set<string>(),
       facilitators: new Set<string>(),
+      contributors: new Set<string>(),
+      institutions: new Set<string>(),
       search: "",
       sortField: null as "year" | "category" | "totalGbif" | "newGbif" | "pctNewGbif" | null,
     sortField2: null as "year" | "category" | "totalGbif" | "newGbif" | "pctNewGbif" | null,
@@ -870,6 +892,8 @@ describe("parseParams ↔ buildQs round-trip", () => {
       assessors: new Set<string>(),
       reviewers: new Set<string>(),
       facilitators: new Set<string>(),
+      contributors: new Set<string>(),
+      institutions: new Set<string>(),
       search: "",
       sortField: "newGbif" as const,
       sortDirection: "desc" as const,
@@ -911,6 +935,8 @@ describe("param suffixing (compare mode)", () => {
     assessors: new Set<string>(),
     reviewers: new Set<string>(),
     facilitators: new Set<string>(),
+    contributors: new Set<string>(),
+    institutions: new Set<string>(),
     search: "",
     subgroups: new Set<string>(),
     sortField: null as "year" | "category" | "totalGbif" | "newGbif" | "pctNewGbif" | "describedYear" | null,
@@ -1046,6 +1072,8 @@ describe("OWN_PARAM_NAMES stays in sync with buildQs", () => {
       assessors: new Set(["Someone"]),
       reviewers: new Set(["Someone Else"]),
       facilitators: new Set<string>(),
+      contributors: new Set<string>(),
+      institutions: new Set<string>(),
       search: "shrew",
       outdated: "yes" as const,
       minObs: 1,

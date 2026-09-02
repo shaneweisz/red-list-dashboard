@@ -73,6 +73,12 @@ describe("browseInputToDashboardQuery", () => {
     expect(p.get("maxDescribedYear")).toBe("2000");
   });
 
+  it("joins contributors/institutions with the dashboard's pipe delimiter", () => {
+    const p = params({ taxa: ["mammals"], contributors: ["Hines"], institutions: ["Royal Botanic Gardens, Kew", "NatureServe"] });
+    expect(p.get("contributors")).toBe("Hines");
+    expect(p.get("institutions")).toBe("Royal Botanic Gardens, Kew|NatureServe");
+  });
+
   it("joins assessors/reviewers/facilitators with the dashboard's pipe delimiter", () => {
     const p = params({ taxa: ["mammals"], assessors: ["Smith"], reviewers: ["Jones"], facilitators: ["Rutherford"] });
     expect(p.get("assessors")).toBe("Smith");
