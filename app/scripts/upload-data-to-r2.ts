@@ -35,11 +35,29 @@ import { loadEnvFiles, SyncLogger, DATA_DIR, mapConcurrent } from "./utils";
 const UPLOAD_CONCURRENCY = 16;
 const LATEST_SYNC_FILE = path.join(__dirname, "..", "latest-sync.txt");
 
-// Legacy artifacts to leave out of new syncs. search-index.json (~95MB) backed the old
-// in-memory search; live search now queries Parquet over R2 (searchSpecies in
-// species-duckdb.ts) and nothing reads the JSON. Excluding it here stops it propagating
-// (fetch → data/ → re-upload) into future syncs. Relative-to-DATA_DIR, forward-slashed.
-const EXCLUDE_FROM_SYNC = new Set(["search-index.json"]);
+// Files to leave out of new syncs, relative-to-DATA_DIR and forward-slashed.
+//
+// search-index.json (~95MB) is a legacy artifact: it backed the old in-memory
+// search, live search now queries Parquet over R2 (searchSpecies in
+// species-duckdb.ts), and nothing reads the JSON. Excluding it stops it
+// propagating (fetch → data/ → re-upload) into future syncs.
+//
+// col-revisions.json is excluded for the opposite reason — it is current, and
+// the REPO owns it. Every other tracked data/ file is dual git-tracked and
+// R2-published, where R2 wins at build time because fetch-data-from-r2
+// overwrites the committed copy. That is right for the others: they are numbers,
+// and stale numbers are merely stale.
+//
+// This one carries the card's REASON CODES, which have to match the vocabulary
+// in src/lib/col-revision.ts that reads them. Publish it and the two can ship
+// apart: renaming genus_moved -> genus_differs in code would leave R2 serving
+// data that still says genus_moved, and the bar would silently empty until the
+// next sync. Coupled vocabulary has to travel with the code that reads it.
+//
+// It does not go stale: the weekly workflow runs Phase 13a and commits the
+// regenerated file alongside latest-sync.txt, so a sync still refreshes it —
+// through git, where the diff is reviewable, rather than around it.
+const EXCLUDE_FROM_SYNC = new Set(["search-index.json", "col-revisions.json"]);
 
 function getR2Client(): S3Client {
   const accountId = process.env.R2_ACCOUNT_ID;

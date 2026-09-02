@@ -41,6 +41,15 @@ describe("browseInputToDashboardQuery", () => {
     expect(params({ taxa: ["corals"], threats: ["climate-change"] }).get("threats")).toBe("11");
   });
 
+  // The dashboard's Threats chart scopes itself (and a threat selection) to
+  // threatened species by default; /browse and MCP don't, so a link carrying
+  // threats has to opt out or it would show a strictly smaller set than the
+  // answer it was generated from.
+  it("opts out of the dashboard's threatened-only threat scope", () => {
+    expect(params({ taxa: ["corals"], threats: ["climate-change"] }).get("threatsScope")).toBe("all");
+    expect(params({ taxa: ["corals"] }).has("threatsScope")).toBe(false);
+  });
+
   it("expands a region into countries (lossless) and emits no region param", () => {
     const p = params({ taxa: ["amphibians"], region: ["Sub-Saharan Africa"] });
     expect(p.has("region")).toBe(false);
@@ -64,10 +73,11 @@ describe("browseInputToDashboardQuery", () => {
     expect(p.get("maxDescribedYear")).toBe("2000");
   });
 
-  it("joins assessors/reviewers with the dashboard's pipe delimiter", () => {
-    const p = params({ taxa: ["mammals"], assessors: ["Smith"], reviewers: ["Jones"] });
+  it("joins assessors/reviewers/facilitators with the dashboard's pipe delimiter", () => {
+    const p = params({ taxa: ["mammals"], assessors: ["Smith"], reviewers: ["Jones"], facilitators: ["Rutherford"] });
     expect(p.get("assessors")).toBe("Smith");
     expect(p.get("reviewers")).toBe("Jones");
+    expect(p.get("facilitators")).toBe("Rutherford");
   });
 
   it("emits systems / trends", () => {

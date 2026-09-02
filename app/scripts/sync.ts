@@ -17,6 +17,8 @@
  *   Phase 11: build-synonym-index   (→ synonym-index.parquet, search)
  *   Phase 12: build-col-taxon-ids   (taxonomy tree + backbone.parquet → src/config/col-taxon-ids.json, committed to git)
  *   Phase 13: build-taxa-summary    (CSVs + CoL artifacts → taxa-summary.json, incl. col counts)
+ *   Phase 13a: build-col-revisions  (CoL artifacts → col-revisions.json, the dashboard-wide
+ *                                    "possible taxonomic revision" flag)
  *   Phase 13b: check-sync-regressions (diff per-group numbers against the live sync)
  *   Phase 14: upload-range-maps     (IUCN DB → R2, skips existing; skipped by --skip-redlist)
  *   Phase 15: upload-aoh-maps       (STAR GeoTIFFs → R2, skips existing; skipped by --skip-redlist)
@@ -52,10 +54,11 @@ import { run as fetchGbifNewCounts } from "./fetch-gbif-new-counts";
 import { run as fetchLumpedOwnCounts } from "./fetch-lumped-own-counts";
 import { run as fetchGbifCountryData } from "./fetch-gbif-country-data";
 import { run as buildTaxaSummary } from "./build-taxa-summary";
+import { run as buildColRevisions } from "./build-col-revisions";
 import { run as checkSyncRegressions } from "./check-sync-regressions";
 import { run as buildSpeciesParquet } from "./build-parquet";
-import { run as fetchColXr, resolveXrDataset, currentReleaseOnDisk, writeReleaseMetadata } from "./fetch-col-xr";
-import { run as fetchColChecklist } from "./fetch-col-checklist";
+import { run as fetchColXr, resolveXrDataset, currentReleaseOnDisk, currentChecklistOnDisk, writeReleaseMetadata } from "./fetch-col-xr";
+import { run as fetchColChecklist, resolveChecklistDataset } from "./fetch-col-checklist";
 import { run as buildBackbone } from "./build-backbone";
 import { run as deriveGbifTaxonKeys } from "./derive-gbif-taxon-keys";
 import { run as buildMatching } from "./build-matching";
@@ -83,6 +86,9 @@ async function main() {
   const logger = new SyncLogger("sync");
   let coldpDir: string | null = null;
   let checklistTsv: string | null = null;
+  // Resolved before the download and written into the pin after a successful
+  // build, so a failed run can't leave the pin claiming a checklist we never used.
+  let checklistInfo: Awaited<ReturnType<typeof resolveChecklistDataset>> | null = null;
 
   try {
     logger.log("sync_start", { taxa: taxaFilter ?? "all", skipRedlist });
@@ -114,14 +120,29 @@ async function main() {
       // notification for this; the id is the only signal.
       const wantRelease = (await resolveXrDataset()).key;
       const haveRelease = currentReleaseOnDisk();
-      const releaseMoved = wantRelease !== haveRelease;
+      // The CURATED checklist moves independently of the XR — `3LR` was COL26.6 in
+      // June and COL26.8 by late August, while GBIF's XR pin had not moved at all.
+      // build-backbone stamps in_checklist / checklist_parent_id / checklist_name
+      // from it, and those carry claims the UI shows beside links to its pages, so
+      // gating solely on the XR would leave a rename displaying the old accepted
+      // name next to a link to the page that now disagrees. Checked before the
+      // download, since it is one metadata call against a 2 GB fetch.
+      checklistInfo = await resolveChecklistDataset();
+      const haveChecklist = currentChecklistOnDisk();
+      const xrMoved = wantRelease !== haveRelease;
+      const checklistMoved = checklistInfo.issued !== haveChecklist;
+      const releaseMoved = xrMoved || checklistMoved;
 
       if (!releaseMoved && fs.existsSync(path.join(DATA_DIR, "backbone.parquet"))) {
-        console.log(`\nPhases 2-4 (CoL backbone): skipped — GBIF still indexes release ${wantRelease}, already built.`);
+        console.log(`\nPhases 2-4 (CoL backbone): skipped — GBIF still indexes release ${wantRelease} and the curated checklist is still ${checklistInfo.alias}, already built.`);
       } else {
-        if (haveRelease) {
+        if (haveRelease && xrMoved) {
           console.log(`\nGBIF's indexed CoL release moved: ${haveRelease} → ${wantRelease}.`);
           console.log("Species keys are renumbered between releases, so the backbone is rebuilt.");
+        }
+        if (checklistMoved) {
+          console.log(`\nCurated checklist moved: ${haveChecklist ?? "(unpinned)"} → ${checklistInfo.issued} (${checklistInfo.alias}).`);
+          console.log("in_checklist / checklist_parent_id / checklist_name come from it, so the backbone is rebuilt.");
         }
         console.log("\nPhase 2: fetch-col-xr (CoL XR ColDP → NameUsage.tsv + Reference.tsv + VernacularName.tsv)");
         console.log("═".repeat(60));
@@ -172,7 +193,7 @@ async function main() {
         // test above reads. Writing it any earlier lets a failure in between
         // leave a pin claiming to be current while the keys are not — and since
         // the skip then fires, the phase that would fix them never runs again.
-        writeReleaseMetadata(coldp.xrDataset);
+        writeReleaseMetadata(coldp.xrDataset, checklistInfo ?? undefined);
       }
 
     } else {
@@ -251,6 +272,14 @@ async function main() {
     console.log("═".repeat(60));
     await buildTaxaSummary();
 
+    // Phase 13a: the same no-1:1-CoL-match diagnostic Phase 13 computes per SSC
+    // group, run once unscoped so the main dashboard can flag and filter by it,
+    // plus the split signal from the same split_candidates table. Reads the same
+    // CoL artifacts, so it belongs here rather than earlier.
+    console.log("\nPhase 13a: build-col-revisions");
+    console.log("═".repeat(60));
+    await buildColRevisions();
+
     // A taxonomy migration moves numbers everywhere, which makes it exactly the
     // situation where a group quietly collapsing hides in the noise. Reported
     // rather than fatal — deciding whether a move is the intended one needs a
@@ -277,8 +306,18 @@ async function main() {
       // print "corals lost 45% of their occurrences", exit 0, upload, and open a
       // PR whose body said only "review the diff". The workflow puts this file
       // into that PR body.
-      const { regressions } = await checkSyncRegressions();
-      const summary = regressions.length === 0
+      const { regressions, drifts } = await checkSyncRegressions();
+      const driftLines = drifts.length === 0 ? [] : [
+        "",
+        "Systematic drift (each group moved the same way, below the per-group threshold):",
+        "",
+        ...drifts.map(
+          (d) =>
+            `- ${d.metric}: ${d.before.toLocaleString()} → ${d.after.toLocaleString()} ` +
+            `(${(d.pctChange * 100).toFixed(2)}%, down in ${d.groupsDown} groups, up in ${d.groupsUp})`
+        ),
+      ];
+      const summary = (regressions.length === 0
         ? "No material per-group regressions against the live sync."
         : [
             `${regressions.length} material regression(s) against the live sync:`,
@@ -288,7 +327,7 @@ async function main() {
                 `- ${r.taxonGroup} — ${r.metric}: ${r.before.toLocaleString()} → ` +
                 `${r.after.toLocaleString()} (${(r.pctChange * 100).toFixed(1)}%)`
             ),
-          ].join("\n");
+          ].join("\n")) + driftLines.join("\n");
       fs.writeFileSync(path.join(DATA_DIR, "..", "sync-regressions.md"), summary + "\n");
     } catch (err) {
       regressionCheckError = err instanceof Error ? err : new Error(String(err));

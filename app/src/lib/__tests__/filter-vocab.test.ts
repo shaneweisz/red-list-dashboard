@@ -48,9 +48,10 @@ describe("resolveTaxa", () => {
   });
   it("treats 'all' as unresolved; passes single-word scientific names through as arbitrary-rank ids", () => {
     expect(resolveTaxa(["all"]).ids).toEqual([]);
-    // a class/order/family with no curated node resolves to an arbitrary-rank id
+    // a class/order/family/genus with no curated node resolves to an arbitrary-rank id
     // (matched by rank in the read layer; a non-taxon just yields zero results).
     expect(resolveTaxa(["felidae"]).ids).toEqual(["felidae"]);
+    expect(resolveTaxa(["panthera"]).ids).toEqual(["panthera"]);
     // multi-word / punctuated values aren't taxa (species names go to `search`).
     expect(resolveTaxa(["not a taxon"]).unresolved).toEqual(["not a taxon"]);
   });

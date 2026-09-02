@@ -46,8 +46,8 @@ export function GET(req: NextRequest) {
 2. Look up a species: ${base}/browse?search=<name>
 
 \`taxa\` works at ANY taxonomic rank — a curated group (birds, corals), a
-sub-group (sharks-rays, flatworms), or a scientific name for a class/order/family
-(felidae, odonata, carnivora). \`search\` matches scientific OR common names,
+sub-group (sharks-rays, flatworms), or a scientific name for a class/order/family/genus
+(felidae, odonata, carnivora, panthera). \`search\` matches scientific OR common names,
 including synonyms / old names (they resolve to the accepted species).
 
 ## Rules
@@ -76,6 +76,9 @@ ${filters}
 countries: ISO alpha-2 code or name (e.g. IN or India)
 region (IUCN region — expands to its countries): ${IUCN_REGION_ORDER.join(", ")}
 assessors / reviewers: name of the latest-assessment assessor/reviewer (substring, e.g. assessors=Smith)
+facilitators: name of the latest-assessment facilitator (substring, e.g. facilitators=Rutherford) — the person who ran
+  the assessment where the credited assessor is an organisation. Bird assessments are all assessed by "BirdLife
+  International", so facilitators is the only way to find the individual who worked on one.
 search:  scientific or common name (incl. synonyms)
 outdated: yes | no  (assessment more than 10 years old)
 minObs / maxObs: GBIF occurrence-count bounds
@@ -86,7 +89,7 @@ minDescribedYear / maxDescribedYear: year-described bounds (NE species)
 - ${base}/browse?taxa=corals&threats=climate-change
     Coral species threatened by climate change
 - ${base}/browse?taxa=mammals
-    All mammals — read stats.outdated_pct for % of outdated assessments
+    All mammals — read stats.outdated_pct for % of assessments needing updating
 - ${base}/browse?taxa=felidae&categories=threatened
     Threatened cats (arbitrary rank: a family name)
 - ${base}/browse?taxa=amphibians&region=Sub-Saharan+Africa&categories=threatened

@@ -28,13 +28,14 @@ export function buildVocabulary(): Vocabulary {
     description:
       "Query the Red List dashboard from a URL. Two modes: browse a taxon (taxa=…, with optional filters) or look up a species by name (search=…, synonym-aware). Within one filter, comma-separated values are OR; across filters they are AND.",
     taxa: FEATURED_TAXA.map((id) => ({ id, label: taxonLabel(id) })),
-    taxaNote: "taxa accepts any rank — a curated group (birds, corals), a sub-group (sharks-rays), or a scientific class/order/family name (felidae, odonata).",
+    taxaNote: "taxa accepts any rank — a curated group (birds, corals), a sub-group (sharks-rays), or a scientific class/order/family/genus name (felidae, odonata, panthera).",
     filters: SHARED_FILTER_VOCAB,
     region: IUCN_REGION_ORDER,
     params: {
       countries: "ISO code or name.",
       assessors: "latest-assessment assessor name (substring match, e.g. Smith).",
       reviewers: "latest-assessment reviewer name (substring match).",
+      facilitators: "latest-assessment facilitator name (substring match) — the person behind an organisational assessor, e.g. bird assessments are all assessed by BirdLife International.",
       outdated: "yes | no (assessment >10 years old).",
       search: "free-text scientific or common name (incl. synonyms / old names).",
       minObs: "min GBIF occurrence count (e.g. 100).",

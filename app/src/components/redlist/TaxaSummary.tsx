@@ -20,29 +20,14 @@ import { isLiveDrilldownNode, nextDynamicRank, isDynamicNodeId, dynamicNodeDispl
 import type { RedListSpecies } from "@/hooks/useRedListSpeciesQuery";
 import { prettifyQs } from "@/lib/query-string";
 import { sisRowKey } from "@/lib/species-row-key";
+// Reason labels are shared with the main dashboard's taxonomic-revision flag —
+// see lib/col-revision.ts (both surfaces must explain a reason the same way).
+import { noMatchSentence } from "@/lib/col-revision";
 
 // See scripts/build-taxa-summary.ts's classifyNoMatch for what each reason means.
 // Modular/additive on top of colBreakdown[].noMatchIds — safe to drop independently
 // of the count-only CoL Match / No CoL Match mechanism it rides alongside.
-type NoMatchDetail = { id: number; name: string; reason: string; detail?: string; detailId?: number };
-const NO_MATCH_REASON_LABEL: Record<string, string> = {
-  no_link: "not yet matched to any Catalogue of Life name",
-  missing_from_backbone: "its Catalogue of Life match isn't in the current backbone",
-  infraspecific: "Catalogue of Life doesn't recognize this as a distinct species — it's currently classified as part of",
-  provisional: "matched to a Catalogue of Life name that's only provisionally accepted, not yet fully accepted",
-  lumped: "Catalogue of Life treats this as the same species as",
-  not_in_base: "not yet in Catalogue of Life's curated checklist",
-  // Usually a species-boundary disagreement, not a data error: e.g. Equus ferus
-  // (wild horse) — CoL treats it and Equus przewalskii (Przewalski's horse) as two
-  // separate species, one of them (the true wild tarpan) extinct; this IUCN
-  // assessment lumps them as one species, which is why IUCN doesn't call it
-  // Extinct/Extinct in the Wild even though CoL's own record for this exact name
-  // is flagged extinct. Verified case-by-case, not assumed — see the CoL/IUCN
-  // record comparison in this file's git history (2026-07-21) if this needs
-  // re-checking for a different species.
-  extinct_unconfirmed: "Catalogue of Life's record for this exact name is flagged extinct, but this IUCN assessment (a living-species category) isn't Extinct/Extinct in the Wild — usually because the two databases draw the species boundary differently here (e.g. IUCN's assessment covers a broader concept that includes a still-living population Catalogue of Life treats as its own separate species)",
-  classified_elsewhere: "Catalogue of Life classifies this under a different name here",
-};
+type NoMatchDetail = { id: number; name: string; reason: string; detail?: string; detailId?: number; detailColId?: string; colId?: string; colName?: string };
 
 // See scripts/build-taxa-summary.ts's SPLIT_CANDIDATES_SQL for the mechanism and its
 // caveats — a name-pattern heuristic (former-subspecies synonym → promoted species),
@@ -190,7 +175,7 @@ const getAssessedBarColor = (percent: number) =>
 const getOutdatedBarColor = (percent: number) =>
   percent < 20 ? "#22c55e" : percent <= 50 ? "#f97316" : "#ef4444";
 
-// Info icon for the "# Outdated" header. This column's counts come from the
+// Info icon for the "# Needs Updating" header. This column's counts come from the
 // static data/taxa-summary.json build artifact (see README § Data Sync
 // Pipeline), computed as of the last data sync — not live, unlike the rest
 // of the dashboard — so the tooltip states that sync date directly rather
@@ -234,7 +219,7 @@ const flexTdClasses = `${cellPad} ${colDivider} whitespace-nowrap w-0`;
 const flexThClasses = `${cellPad} ${colDivider} text-left text-sm font-bold text-zinc-600 dark:text-zinc-300 whitespace-nowrap w-0`;
 // Bar-column headers (Assessed / Outdated / Unassessed / Not Evaluated) are allowed
 // to wrap: their cells already carry a bar min-width, so a long single-line header
-// (e.g. "# Outdated (>10 yrs old)") would otherwise force the column wider than
+// (e.g. "# Needs Updating (>10 yrs old)") would otherwise force the column wider than
 // it needs to be and push the table into horizontal overflow.
 const centeredThClasses = `${cellPad} ${colDivider} text-center text-sm font-bold text-zinc-600 dark:text-zinc-300 w-0`;
 // "# Described Species" is the widest single-line header after the taxon name
@@ -260,7 +245,7 @@ const COLUMN_LABELS: Record<ColumnId, string> = {
   described: "# Described Species",
   colDescribed: "# Described Species (CoL)",
   assessed: "# Red List Assessed",
-  outdated: "# Outdated (>10 yrs old)",
+  outdated: "# Needs Updating (>10 yrs old)",
   breakdown: "Conservation Status Breakdown",
   gbifUnassessed: "# Unassessed, 1+ GBIF Obs",
   colNe: "# Not Evaluated",
@@ -686,26 +671,29 @@ function SpeciesListPanel({
                       )}
                     </td>
                     <td className="py-1 pr-2 text-zinc-300">
-                      {detail && (
-                        <>
-                          {NO_MATCH_REASON_LABEL[detail.reason] ?? detail.reason}
-                          {detail.detail && (
-                            detail.detailId != null ? (
-                              <>
-                                {" "}
+                      {detail && (() => {
+                        // Subject-free framing: the Name column beside this one
+                        // already says which species it is (see noMatchSentence).
+                        const sentence = noMatchSentence(detail, null);
+                        return (
+                          <>
+                            {sentence.before}
+                            {sentence.detail && (
+                              detail.detailId != null ? (
                                 <a
                                   href={speciesHref(nodeId, sisRowKey(detail.detailId), "reassessments")}
                                   target="_blank"
                                   rel="noopener noreferrer"
                                   className="text-blue-300 hover:text-blue-200 underline"
                                 >
-                                  {detail.detail}
+                                  {sentence.detail}
                                 </a>
-                              </>
-                            ) : ` ${detail.detail}`
-                          )}
-                        </>
-                      )}
+                              ) : sentence.detail
+                            )}
+                            {sentence.after}
+                          </>
+                        );
+                      })()}
                       {split && (
                         <span
                           title="Heuristic: Catalogue of Life still records this name as a former subspecies of the linked species — not a confirmed taxonomic changelog."
@@ -2602,14 +2590,14 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
                 (inline-flex forces it to stay unwrapped) — shortened here,
                 same info still available via the plain-mode header. */}
             {countryStyleColumns ? (
-              "# Outdated"
+              "# Needs Updating"
             ) : (
-              <span className="inline-flex items-center gap-1"># Outdated (&gt;10 yrs old) <OutdatedInfoIcon /></span>
+              <span className="inline-flex items-center gap-1"># Needs Updating (&gt;10 yrs old) <OutdatedInfoIcon /></span>
             )}
           </th>
         )}
         {countryStyleColumns && (
-          <th className={numericThNoDividerClasses}>% Outdated</th>
+          <th className={numericThNoDividerClasses}>% Needs Updating</th>
         )}
         {isVisible("gbifUnassessed") && (
           <th className={centeredThClasses}># Unassessed, 1+ GBIF Obs</th>
@@ -3210,7 +3198,7 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
     {perTaxa.length > 0 && selectedTaxa.size === 0 && (
       <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1.5 mt-1.5">
         <span className="hidden sm:inline pl-3 md:pl-4 text-sm text-zinc-400 dark:text-zinc-500">
-          {countryMode ? "Click a country to view its species, Cmd/Ctrl+click to multi-select." : "Click to filter, use charts and search to explore species. Cmd/Ctrl+click to multi-select."}
+          {countryMode ? "Click a country to view its species, Cmd/Ctrl+click to multi-select." : "Click to filter, use charts and search to explore species. Cmd/Ctrl+click to multi-select, Shift+drag across a chart to select a range."}
         </span>
         <span className="inline-flex items-center gap-1.5 ml-auto pr-3 sm:pr-0">
           {/* Assessed/Not Evaluated toggle used to be paired here too, but it's

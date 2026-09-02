@@ -3,7 +3,8 @@
 import React, { useState, useMemo, useRef, useEffect } from "react";
 import { createPortal } from "react-dom";
 import { FaFilter } from "react-icons/fa";
-import { ALPHA2_TO_NAME, type CountryStats } from "./WorldMap";
+import { type CountryStats } from "./WorldMap";
+import { ALPHA2_TO_NAME } from "@/lib/countries";
 import { iucnRegionCountries } from "@/lib/regions";
 
 type SortKey = "name" | "species" | "outdated" | "percentOutdated";
@@ -39,9 +40,10 @@ interface CountryStatsListProps {
   onCountrySelect: (countryCode: string, countryName: string, event: React.MouseEvent) => void;
   speciesLabel?: string;
   showOutdatedMode?: boolean;
-  // Narrows rows to one IUCN region's countries — same scope the map already
-  // implies via its blue region highlight (see WorldMap's activeRegion).
-  regionFilter?: string | null;
+  // Narrows rows to the selected IUCN regions' countries — same scope the map
+  // already implies via its blue region highlight (see WorldMap's activeRegions).
+  // Empty means no region narrowing.
+  regionsFilter?: string[];
   // Controlled sort (falls back to local state when omitted) so a sorted list
   // view is a shareable URL — see WorldMap's mapSortKey/mapSortDirection.
   sortKey?: SortKey;
@@ -49,7 +51,7 @@ interface CountryStatsListProps {
   onSortChange?: (key: SortKey, dir: SortDir) => void;
 }
 
-const PAGE_SIZE = 15;
+const PAGE_SIZE = 10;
 
 function percentOutdatedOf(species: number, outdated: number): number {
   return species > 0 ? (outdated / species) * 100 : 0;
@@ -127,13 +129,17 @@ function FilterIconButton({
  * list than read a map (requested alongside the country-view landing page, but
  * useful independently of it — see WorldMap.tsx's Map/List toggle).
  */
+// Stable empty default: an inline [] would be a fresh array every render and
+// would bust the regionCodes memo below on each one.
+const EMPTY_REGIONS: string[] = [];
+
 export default function CountryStatsList({
   stats,
   selectedCountries,
   onCountrySelect,
   speciesLabel = "# Assessed",
   showOutdatedMode = true,
-  regionFilter = null,
+  regionsFilter = EMPTY_REGIONS,
   sortKey: controlledSortKey,
   sortDir: controlledSortDir,
   onSortChange,
@@ -189,8 +195,10 @@ export default function CountryStatsList({
   }, [openFilterKey]);
 
   const regionCodes = useMemo(
-    () => (regionFilter ? new Set(iucnRegionCountries(regionFilter)) : null),
-    [regionFilter]
+    () => (regionsFilter.length
+      ? new Set(regionsFilter.flatMap((r) => iucnRegionCountries(r)))
+      : null),
+    [regionsFilter]
   );
 
   const rows = useMemo(() => {
@@ -225,7 +233,7 @@ export default function CountryStatsList({
   // alternative to an effect that just resets state) via a second piece of
   // state, not a ref — this project's lint rules disallow mutating a ref
   // during render.
-  const resetKey = `${sortKey}|${sortDir}|${regionFilter ?? ""}|${filteredRows.length}|${speciesFilter.min}|${speciesFilter.max}|${outdatedFilter.min}|${outdatedFilter.max}|${percentOutdatedFilter.min}|${percentOutdatedFilter.max}`;
+  const resetKey = `${sortKey}|${sortDir}|${regionsFilter.join(",")}|${filteredRows.length}|${speciesFilter.min}|${speciesFilter.max}|${outdatedFilter.min}|${outdatedFilter.max}|${percentOutdatedFilter.min}|${percentOutdatedFilter.max}`;
   const [prevResetKey, setPrevResetKey] = useState(resetKey);
   if (prevResetKey !== resetKey) {
     setPrevResetKey(resetKey);
@@ -294,7 +302,7 @@ export default function CountryStatsList({
               />
               {showOutdatedMode && (
                 <SortHeader
-                  label="# Outdated"
+                  label="# Needs Updating"
                   active={sortKey === "outdated"}
                   dir={sortDir}
                   widthClass="w-[22%]"
@@ -310,7 +318,7 @@ export default function CountryStatsList({
               )}
               {showOutdatedMode && (
                 <SortHeader
-                  label="% Outdated"
+                  label="% Needs Updating"
                   active={sortKey === "percentOutdated"}
                   dir={sortDir}
                   widthClass="w-[22%]"

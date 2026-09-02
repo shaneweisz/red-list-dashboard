@@ -9,6 +9,13 @@ import * as fs from "fs";
 import * as path from "path";
 import { readCsv } from "./csv";
 import { countryToRegion } from "../regions";
+import type { ColRevision } from "../col-revision";
+import type { NoMatchReason, NoMatchDetail } from "./col-breakdown";
+import {
+  CANDIDATE_RANKS,
+  type CandidateRank, type CandidateResult, type CandidateTier,
+  type CreditCandidate, type CreditRole, type TargetLineage,
+} from "@/lib/credit-candidates";
 
 // =============================================================================
 // PATHS
@@ -20,6 +27,7 @@ const TAXA_SUMMARY_PATH = path.join(DATA_DIR, "taxa-summary.json");
 const TABLE1A_CHILDREN_SUMMARIES_PATH = path.join(DATA_DIR, "table1a-children-summaries.json");
 const SSC_GROUP_CHILDREN_SUMMARIES_PATH = path.join(DATA_DIR, "ssc-group-children-summaries.json");
 const COUNTRY_STATS_PATH = path.join(DATA_DIR, "country-stats.json");
+const COL_REVISIONS_PATH = path.join(DATA_DIR, "col-revisions.json");
 
 // =============================================================================
 // TYPES
@@ -56,6 +64,17 @@ export interface PreviousAssessment {
   date: string | null;
   assessors: string | null;
   reviewers: string | null;
+  /**
+   * The individuals behind an organisational assessor — every bird assessment
+   * credits "BirdLife International", so the assessor line can't identify a
+   * person and the facilitator line is the only one that can.
+   *
+   * Optional because it is optional in the FILES, not just the type: history
+   * JSON written before fetch-redlist-species started emitting the field has no
+   * such key (same story as `criteria` — see build-parquet.ts, which reads these
+   * same files and coalesces both).
+   */
+  facilitators?: string | null;
 }
 
 export interface TaxaSummaryRow {
@@ -113,6 +132,7 @@ const historyCache = new Map<string, HistoryMap>();
 let taxaSummaryCache: TaxaSummaryRow[] | null = null;
 let nodeChildrenSummariesCache: Record<string, NodeSummary[]> | null = null;
 let countryStatsCache: Record<string, { species: number; outdated: number }> | null = null;
+let colRevisionsCache: Map<number, ColRevision> | null = null;
 
 /** @internal Reset all module-level caches (for tests only). */
 export function _resetCaches(): void {
@@ -121,6 +141,7 @@ export function _resetCaches(): void {
   taxaSummaryCache = null;
   nodeChildrenSummariesCache = null;
   countryStatsCache = null;
+  colRevisionsCache = null;
 }
 
 function loadRedlistForGroup(group: string): RedlistRow[] {
@@ -192,192 +213,81 @@ export function getCountryStats(): Record<string, { species: number; outdated: n
   return countryStatsCache;
 }
 
-// =============================================================================
-// ASSESSOR CANDIDATES
-// =============================================================================
-
-export type TaxonomyLevel = "genus" | "family" | "order" | "class";
-
-export interface AssessorCandidate {
-  name: string;
-  genus: number;
-  family: number;
-  order: number;
-  class: number;
-  latestDate: string;
-}
-
 /**
- * Find assessor candidates for an NE species by looking at assessed species
- * in the same taxon group. Counts how many species each assessor has assessed
- * at each taxonomy level (genus/family/order/class). A genus match also counts
- * as family, order, and class. Returns all assessors sorted by genus count,
- * then family, order, class.
+ * sis_taxon_id → the taxonomic-difference flag, for the ~6% of
+ * assessed species carrying one (data/col-revisions.json, built by
+ * scripts/build-col-revisions.ts). Two independent signals share the entry: no
+ * clean 1:1 Catalogue of Life match, and species CoL has likely split out of
+ * this one — see lib/col-revision.
+ *
+ * Stamped onto every assessed species row (species-duckdb.ts) so the dashboard
+ * can flag inline and filter by reason without a second round trip.
+ *
+ * Returns an empty map when the file is absent — a sync predating the script
+ * still serves species, just with every row unflagged, rather than 500ing.
  */
-export function getAssessorCandidates(
-  scientificName: string,
-  taxonGroup: string,
-  family?: string | null,
-  orderName?: string | null,
-  className?: string | null,
-): AssessorCandidate[] {
-  const genus = scientificName.split(" ")[0]?.toLowerCase() ?? "";
-  const familyLc = family?.toLowerCase() ?? "";
-  const orderLc = orderName?.toLowerCase() ?? "";
-  const classLc = className?.toLowerCase() ?? "";
-
-  const redlistRows = loadRedlistForGroup(taxonGroup);
-  const historyMap = loadHistoryForGroup(taxonGroup);
-
-  interface AssessorStats {
-    genus: number;
-    family: number;
-    order: number;
-    class: number;
-    latestDate: string;
-  }
-  const assessorMap = new Map<string, AssessorStats>();
-
-  for (const row of redlistRows) {
-    const rowGenus = row.scientific_name.split(" ")[0]?.toLowerCase() ?? "";
-    const isGenus = genus !== "" && rowGenus === genus;
-    const isFamily = familyLc !== "" && row.family?.toLowerCase() === familyLc;
-    const isOrder = orderLc !== "" && row.order_name?.toLowerCase() === orderLc;
-    const isClass = classLc !== "" && row.class_name?.toLowerCase() === classLc;
-
-    // Skip rows with no taxonomy overlap at all
-    if (!isGenus && !isFamily && !isOrder && !isClass) continue;
-
-    const assessments = historyMap[String(row.sis_taxon_id)] ?? [];
-    const allAssessments = assessments.length > 0 ? assessments : [{
-      id: row.assessment_id,
-      year: row.year_published,
-      category: row.category,
-      date: row.assessment_date,
-      assessors: null as string | null,
-      reviewers: null as string | null,
-    }];
-
-    for (const assessment of allAssessments) {
-      if (!assessment.assessors) continue;
-
-      const date = assessment.date ?? "";
-      const names = parseAssessorNames(assessment.assessors);
-      for (const name of names) {
-        const normalizedName = name.trim();
-        if (!normalizedName || normalizedName.length < 3) continue;
-
-        let stats = assessorMap.get(normalizedName);
-        if (!stats) {
-          stats = { genus: 0, family: 0, order: 0, class: 0, latestDate: "" };
-          assessorMap.set(normalizedName, stats);
-        }
-
-        // Count inclusively: a genus match also counts as family/order/class
-        if (isGenus) stats.genus++;
-        if (isFamily || isGenus) stats.family++;
-        if (isOrder || isFamily || isGenus) stats.order++;
-        if (isClass || isOrder || isFamily || isGenus) stats.class++;
-        if (date > stats.latestDate) stats.latestDate = date;
-      }
+export function getColRevisions(): Map<number, ColRevision> {
+  if (colRevisionsCache) return colRevisionsCache;
+  const out = new Map<number, ColRevision>();
+  if (fs.existsSync(COL_REVISIONS_PATH)) {
+    // Short-keyed on disk (r/d/i/dc/k/c/n/s/lw/ln, absent fields omitted) — one entry per
+    // flagged species, so the shipped file stays small. See build-col-revisions.
+    const file = JSON.parse(fs.readFileSync(COL_REVISIONS_PATH, "utf-8")) as {
+      species: Record<string, { r?: string; d?: string; i?: number; dc?: string; c?: string; n?: string; k?: string;
+        s?: [string, string, string, string][]; lw?: [string, string, string][]; ln?: string;
+        an?: string; ac?: string; gd?: 1 }>;
+    };
+    for (const [id, e] of Object.entries(file.species ?? {})) {
+      out.set(Number(id), {
+        ...(e.r != null ? { reason: e.r } : {}),
+        ...(e.d != null ? { detail: e.d } : {}),
+        ...(e.i != null ? { detailId: e.i } : {}),
+        ...(e.dc != null ? { detailColId: e.dc } : {}),
+        ...(e.k != null ? { rank: e.k } : {}),
+        ...(e.c != null ? { colId: e.c } : {}),
+        ...(e.n != null ? { colName: e.n } : {}),
+        // [name, col_id, previous name, previous col_id] on disk; an empty
+        // string means CoL has nothing we can link to, so the UI renders that
+        // part as plain text (or omits it).
+        ...(e.lw?.length ? {
+          lumpedWith: e.lw.map(([name, colId, category]) => ({
+            name,
+            ...(colId ? { colId } : {}),
+            ...(category ? { category } : {}),
+          })),
+        } : {}),
+        ...(e.ln != null ? { lumpedUnder: e.ln } : {}),
+        ...(e.an != null ? { acceptedName: e.an } : {}),
+        ...(e.ac != null ? { acceptedColId: e.ac } : {}),
+        ...(e.gd ? { genusDiffers: true } : {}),
+        ...(e.s?.length ? {
+          splitInto: e.s.map(([name, colId, prevName, prevColId]) => ({
+            name,
+            ...(colId ? { colId } : {}),
+            ...(prevName ? { previousName: prevName } : {}),
+            ...(prevColId ? { previousColId: prevColId } : {}),
+          })),
+        } : {}),
+      });
     }
   }
-
-  return [...assessorMap.entries()]
-    .map(([name, stats]) => ({
-      name,
-      genus: stats.genus,
-      family: stats.family,
-      order: stats.order,
-      class: stats.class,
-      latestDate: stats.latestDate,
-    }))
-    .sort((a, b) => {
-      if (a.genus !== b.genus) return b.genus - a.genus;
-      if (a.family !== b.family) return b.family - a.family;
-      if (a.order !== b.order) return b.order - a.order;
-      if (a.class !== b.class) return b.class - a.class;
-      return b.latestDate.localeCompare(a.latestDate);
-    });
+  colRevisionsCache = out;
+  return out;
 }
 
-export interface AssessorCountryCandidate {
-  name: string;
-  /** Per-region species counts (aggregated from the target species' countries) */
-  regionCounts: Record<string, number>;
-  /** Per-country species counts (country codes from the target species) */
-  countryCounts: Record<string, number>;
-  /** Species assessed in this taxonomy scope with country overlap */
-  totalInRegion: number;
-  /** Total species assessed in this taxonomy scope (regardless of country) */
-  totalAll: number;
-  latestDate: string;
-}
+// =============================================================================
+// SUGGESTED ASSESSOR / REVIEWER CANDIDATES
+// =============================================================================
 
-/** Optional taxonomy filter (orderNames, classNames, etc.) applied on top of taxonGroups */
-interface TaxonomyFilter {
-  classNames?: string[];
-  orderNames?: string[];
-  families?: string[];
-  excludeClasses?: string[];
-  excludeOrders?: string[];
-  excludeFamilies?: string[];
-  genera?: string[];
-  excludeGenera?: string[];
-  speciesNames?: string[];
-  excludeSpeciesNames?: string[];
-  extraSpeciesNames?: string[];
-}
+// Vocabulary and result shapes live in lib/credit-candidates.ts, which the client
+// imports as values too (this module reaches for `fs` and can't be bundled there).
+// Re-exported so callers that want both the query and its types have one import.
+export type {
+  CreditRole, CandidateRank, TargetLineage, CandidateTier, CreditCandidate, CandidateResult,
+} from "@/lib/credit-candidates";
 
-/** Check if a redlist row passes the taxonomy filter */
-function matchesTaxonomyFilter(
-  row: { class_name: string | null; order_name: string | null; family: string | null; scientific_name?: string | null },
-  filter: TaxonomyFilter,
-): boolean {
-  // extraSpeciesNames: mirrors matchesFilter's OR escape hatch (taxonomy-utils.ts) —
-  // species included regardless of every other clause below.
-  if (filter.extraSpeciesNames?.length) {
-    const name = (row.scientific_name ?? "").trim().toLowerCase();
-    if (filter.extraSpeciesNames.includes(name)) return true;
-  }
-  if (filter.classNames && filter.classNames.length > 0) {
-    const cls = (row.class_name ?? "").toLowerCase();
-    if (!filter.classNames.includes(cls)) return false;
-  }
-  if (filter.excludeClasses && filter.excludeClasses.length > 0) {
-    const cls = (row.class_name ?? "").toLowerCase();
-    if (cls && filter.excludeClasses.includes(cls)) return false;
-  }
-  if (filter.orderNames && filter.orderNames.length > 0) {
-    const ord = (row.order_name ?? "").toLowerCase();
-    const cls = (row.class_name ?? "").toLowerCase();
-    if (!filter.orderNames.includes(ord) && !(ord === "" && filter.orderNames.includes(cls))) return false;
-  }
-  if (filter.excludeOrders && filter.excludeOrders.length > 0) {
-    const ord = (row.order_name ?? "").toLowerCase();
-    const cls = (row.class_name ?? "").toLowerCase();
-    if (filter.excludeOrders.includes(ord) || (ord === "" && filter.excludeOrders.includes(cls))) return false;
-  }
-  if (filter.families && filter.families.length > 0) {
-    const fam = (row.family ?? "").toLowerCase();
-    if (!filter.families.includes(fam)) return false;
-  }
-  if (filter.excludeFamilies && filter.excludeFamilies.length > 0) {
-    const fam = (row.family ?? "").toLowerCase();
-    if (fam && filter.excludeFamilies.includes(fam)) return false;
-  }
-  if (filter.genera?.length || filter.excludeGenera?.length) {
-    const genus = (row.scientific_name ?? "").trim().split(/\s+/)[0]?.toLowerCase() ?? "";
-    if (filter.genera && filter.genera.length > 0 && !filter.genera.includes(genus)) return false;
-    if (filter.excludeGenera && filter.excludeGenera.length > 0 && genus && filter.excludeGenera.includes(genus)) return false;
-  }
-  if (filter.speciesNames?.length || filter.excludeSpeciesNames?.length) {
-    const name = (row.scientific_name ?? "").trim().toLowerCase();
-    if (filter.speciesNames && filter.speciesNames.length > 0 && !filter.speciesNames.includes(name)) return false;
-    if (filter.excludeSpeciesNames && filter.excludeSpeciesNames.length > 0 && name && filter.excludeSpeciesNames.includes(name)) return false;
-  }
-  return true;
-}
+/** Below this many candidates a rank is too thin to open on (but still offered). */
+const MIN_CANDIDATES_FOR_DEFAULT = 3;
 
 /**
  * Strip trailing parenthetical affiliations from an assessor/reviewer name.
@@ -392,231 +302,164 @@ function stripAffiliation(name: string): string {
   return name.replace(/\s*\([^)]*\)/g, "").trim();
 }
 
-/**
- * Find assessor candidates for an NE species by looking at assessed species
- * in the given taxon groups that share at least one country with the target species.
- * Accepts multiple groups so a taxa like "plantae" can search across all plant groups.
- * Applies an optional taxonomy filter (e.g. orderNames for beetles) to narrow scope.
- * Aggregates counts by UN M49 sub-region for cleaner visualisation.
- */
-export function getAssessorCandidatesByCountry(
-  taxonGroups: string[],
-  countries: string[],
-  taxonomyFilter?: TaxonomyFilter,
-): AssessorCountryCandidate[] {
-  if (countries.length === 0 || taxonGroups.length === 0) return [];
+const lc = (v: string | null | undefined): string => (v ?? "").trim().toLowerCase();
+const genusOf = (scientificName: string | null | undefined): string =>
+  lc(scientificName).split(/\s+/)[0] ?? "";
 
-  const countrySet = new Set(countries.map((c) => c.toUpperCase()));
-
-  const assessorMap = new Map<string, { regionCounts: Record<string, number>; countryCounts: Record<string, number>; totalInRegion: number; totalAll: number; latestDate: string; seenSpeciesRegion: Set<number>; seenSpeciesAll: Set<number> }>();
-
-  for (const taxonGroup of taxonGroups) {
-    const redlistRows = loadRedlistForGroup(taxonGroup);
-    const historyMap = loadHistoryForGroup(taxonGroup);
-
-    for (const row of redlistRows) {
-      // Apply taxonomy filter (e.g. only coleoptera for beetles)
-      if (taxonomyFilter && !matchesTaxonomyFilter(row, taxonomyFilter)) continue;
-
-      // Find which of the target countries this species occurs in
-      const overlapping = row.countries.filter((c) => countrySet.has(c.toUpperCase()));
-      const hasCountryOverlap = overlapping.length > 0;
-
-      // Map overlapping countries to their regions (deduplicate per-species)
-      const regions = hasCountryOverlap
-        ? new Set(overlapping.map((c) => countryToRegion(c)))
-        : new Set<string>();
-
-      const assessments = historyMap[String(row.sis_taxon_id)] ?? [];
-      const allAssessments = assessments.length > 0 ? assessments : [{
-        id: row.assessment_id,
-        year: row.year_published,
-        category: row.category,
-        date: row.assessment_date,
-        assessors: null as string | null,
-        reviewers: null as string | null,
-      }];
-
-      // Collect unique assessor names across all assessments for this species
-      const speciesAssessors = new Set<string>();
-      let latestDate = "";
-      for (const assessment of allAssessments) {
-        if (!assessment.assessors) continue;
-        const date = assessment.date ?? "";
-        if (date > latestDate) latestDate = date;
-        for (const name of parseAssessorNames(assessment.assessors)) {
-          const normalizedName = stripAffiliation(name);
-          if (normalizedName && normalizedName.length >= 3) {
-            speciesAssessors.add(normalizedName);
-          }
-        }
-      }
-
-      // Credit each assessor once per species
-      for (const normalizedName of speciesAssessors) {
-        let stats = assessorMap.get(normalizedName);
-        if (!stats) {
-          stats = { regionCounts: {}, countryCounts: {}, totalInRegion: 0, totalAll: 0, latestDate: "", seenSpeciesRegion: new Set(), seenSpeciesAll: new Set() };
-          assessorMap.set(normalizedName, stats);
-        }
-
-        // Always count for totalAll
-        if (!stats.seenSpeciesAll.has(row.sis_taxon_id)) {
-          stats.seenSpeciesAll.add(row.sis_taxon_id);
-          stats.totalAll++;
-        }
-
-        // Count for region overlap
-        if (hasCountryOverlap && !stats.seenSpeciesRegion.has(row.sis_taxon_id)) {
-          stats.seenSpeciesRegion.add(row.sis_taxon_id);
-          stats.totalInRegion++;
-          for (const region of regions) {
-            stats.regionCounts[region] = (stats.regionCounts[region] ?? 0) + 1;
-          }
-          for (const c of overlapping) {
-            const code = c.toUpperCase();
-            stats.countryCounts[code] = (stats.countryCounts[code] ?? 0) + 1;
-          }
-        }
-        if (latestDate > stats.latestDate) stats.latestDate = latestDate;
-      }
-    }
-  }
-
-  return [...assessorMap.entries()]
-    .filter(([, stats]) => stats.totalInRegion > 0)
-    .map(([name, stats]) => ({
-      name,
-      regionCounts: stats.regionCounts,
-      countryCounts: stats.countryCounts,
-      totalInRegion: stats.totalInRegion,
-      totalAll: stats.totalAll,
-      latestDate: stats.latestDate,
-    }))
-    .sort((a, b) => {
-      if (a.totalInRegion !== b.totalInRegion) return b.totalInRegion - a.totalInRegion;
-      return b.latestDate.localeCompare(a.latestDate);
-    });
+function emptyTier(): CandidateTier {
+  return { total: 0, inRegion: 0, regionCounts: {}, countryCounts: {}, latestDate: "" };
 }
 
-export interface ReviewerCountryCandidate {
-  name: string;
-  /** Per-region species counts (aggregated from the target species' countries) */
-  regionCounts: Record<string, number>;
-  /** Per-country species counts (country codes from the target species) */
-  countryCounts: Record<string, number>;
-  /** Species reviewed in this taxonomy scope with country overlap */
-  totalInRegion: number;
-  /** Total species reviewed in this taxonomy scope (regardless of country) */
-  totalAll: number;
-  latestDate: string;
+/** Fold `from` into `into` — used to roll narrow tiers up into broader ones. */
+function mergeTier(into: CandidateTier, from: CandidateTier): void {
+  into.total += from.total;
+  into.inRegion += from.inRegion;
+  for (const [k, v] of Object.entries(from.regionCounts)) into.regionCounts[k] = (into.regionCounts[k] ?? 0) + v;
+  for (const [k, v] of Object.entries(from.countryCounts)) into.countryCounts[k] = (into.countryCounts[k] ?? 0) + v;
+  if (from.latestDate > into.latestDate) into.latestDate = from.latestDate;
 }
 
 /**
- * Find reviewer candidates for an NE species by looking at assessed species
- * in the given taxon groups that share at least one country with the target species.
- * Accepts multiple groups so a taxa like "plantae" can search across all plant groups.
- * Applies an optional taxonomy filter (e.g. orderNames for beetles) to narrow scope.
- * Aggregates counts by UN M49 sub-region for cleaner visualisation.
+ * Rank the people who have already assessed (or reviewed) species near a target
+ * species, at every granularity from its whole taxon group down to its genus.
+ *
+ * One pass: each assessed row is credited at the DEEPEST rank it shares with the
+ * target (a same-genus species counts as genus, a same-family one as family, …),
+ * and the tiers are then rolled up so each rank includes everything below it —
+ * the same "a genus match also counts as family/order/class" rule the original
+ * per-rank query used, but it survives a null order_name or family on the way up
+ * (a genus match with no family recorded still counts toward family and above).
  */
-export function getReviewerCandidatesByCountry(
-  taxonGroups: string[],
+export function getCreditCandidates(
+  role: CreditRole,
+  target: TargetLineage,
   countries: string[],
-  taxonomyFilter?: TaxonomyFilter,
-): ReviewerCountryCandidate[] {
-  if (countries.length === 0 || taxonGroups.length === 0) return [];
-
+): CandidateResult {
   const countrySet = new Set(countries.map((c) => c.toUpperCase()));
+  const genus = genusOf(target.scientificName);
+  const familyLc = lc(target.family);
+  const orderLc = lc(target.orderName);
+  const classLc = lc(target.className);
 
-  const reviewerMap = new Map<string, { regionCounts: Record<string, number>; countryCounts: Record<string, number>; totalInRegion: number; totalAll: number; latestDate: string; seenSpeciesRegion: Set<number>; seenSpeciesAll: Set<number> }>();
+  const redlistRows = loadRedlistForGroup(target.taxonGroup);
+  const historyMap = loadHistoryForGroup(target.taxonGroup);
 
-  for (const taxonGroup of taxonGroups) {
-    const redlistRows = loadRedlistForGroup(taxonGroup);
-    const historyMap = loadHistoryForGroup(taxonGroup);
+  // name -> rank -> tier, holding ONLY rows whose deepest match is that rank
+  // until the roll-up below.
+  const byName = new Map<string, Partial<Record<CandidateRank, CandidateTier>>>();
+  // Rows in this species' own class, used to drop a class rank that just restates
+  // the group (Mammalia is every mammal, so offering it would be a second "group").
+  let rowsInClass = 0;
 
-    for (const row of redlistRows) {
-      // Apply taxonomy filter (e.g. only coleoptera for beetles)
-      if (taxonomyFilter && !matchesTaxonomyFilter(row, taxonomyFilter)) continue;
+  for (const row of redlistRows) {
+    const rowGenus = genusOf(row.scientific_name);
+    const isGenus = genus !== "" && rowGenus === genus;
+    const isFamily = familyLc !== "" && lc(row.family) === familyLc;
+    const isOrder = orderLc !== "" && lc(row.order_name) === orderLc;
+    const isClass = classLc !== "" && lc(row.class_name) === classLc;
+    if (isClass) rowsInClass++;
 
-      // Find which of the target countries this species occurs in
-      const overlapping = row.countries.filter((c) => countrySet.has(c.toUpperCase()));
-      const hasCountryOverlap = overlapping.length > 0;
+    // Deepest rank this row shares with the target. Every row in the CSV is at
+    // least "group", so there is no "no overlap, skip" case.
+    const rank: CandidateRank = isGenus ? "genus" : isFamily ? "family" : isOrder ? "order" : isClass ? "class" : "group";
 
-      // Map overlapping countries to their regions (deduplicate per-species)
-      const regions = hasCountryOverlap
-        ? new Set(overlapping.map((c) => countryToRegion(c)))
-        : new Set<string>();
+    const overlapping = row.countries.filter((c) => countrySet.has(c.toUpperCase()));
+    const hasCountryOverlap = overlapping.length > 0;
+    const regions = new Set(overlapping.map((c) => countryToRegion(c)));
 
-      const assessments = historyMap[String(row.sis_taxon_id)] ?? [];
-      const allAssessments = assessments.length > 0 ? assessments : [{
-        id: row.assessment_id,
-        year: row.year_published,
-        category: row.category,
-        date: row.assessment_date,
-        assessors: null as string | null,
-        reviewers: null as string | null,
-      }];
+    const assessments = historyMap[String(row.sis_taxon_id)] ?? [];
+    const allAssessments = assessments.length > 0 ? assessments : [{
+      id: row.assessment_id,
+      year: row.year_published,
+      category: row.category,
+      date: row.assessment_date,
+      // The per-group CSV carries no credit columns at all, so a species with no
+      // history file contributes nobody, whichever role is asked for.
+      assessors: null as string | null,
+      reviewers: null as string | null,
+      facilitators: null as string | null,
+    }];
 
-      // Collect unique reviewer names across all assessments for this species
-      const speciesReviewers = new Set<string>();
-      let latestDate = "";
-      for (const assessment of allAssessments) {
-        if (!assessment.reviewers) continue;
-        const date = assessment.date ?? "";
-        if (date > latestDate) latestDate = date;
-        for (const name of parseAssessorNames(assessment.reviewers)) {
-          const normalizedName = stripAffiliation(name);
-          if (normalizedName && normalizedName.length >= 3) {
-            speciesReviewers.add(normalizedName);
-          }
+    // Credit each person once per species, dated by the most recent assessment
+    // OF THIS SPECIES that person is actually on.
+    const dateByName = new Map<string, string>();
+    for (const assessment of allAssessments) {
+      const credited = role === "assessors" ? assessment.assessors
+        : role === "reviewers" ? assessment.reviewers
+        : assessment.facilitators ?? null;
+      if (!credited) continue;
+      const date = assessment.date ?? "";
+      for (const name of parseAssessorNames(credited)) {
+        const normalizedName = stripAffiliation(name);
+        if (!normalizedName || normalizedName.length < 3) continue;
+        if (date > (dateByName.get(normalizedName) ?? "")) dateByName.set(normalizedName, date);
+      }
+    }
+
+    for (const [name, date] of dateByName) {
+      let tiers = byName.get(name);
+      if (!tiers) { tiers = {}; byName.set(name, tiers); }
+      const tier = (tiers[rank] ??= emptyTier());
+
+      tier.total++;
+      if (hasCountryOverlap) {
+        tier.inRegion++;
+        for (const region of regions) tier.regionCounts[region] = (tier.regionCounts[region] ?? 0) + 1;
+        for (const c of overlapping) {
+          const code = c.toUpperCase();
+          tier.countryCounts[code] = (tier.countryCounts[code] ?? 0) + 1;
         }
       }
-
-      // Credit each reviewer once per species
-      for (const normalizedName of speciesReviewers) {
-        let stats = reviewerMap.get(normalizedName);
-        if (!stats) {
-          stats = { regionCounts: {}, countryCounts: {}, totalInRegion: 0, totalAll: 0, latestDate: "", seenSpeciesRegion: new Set(), seenSpeciesAll: new Set() };
-          reviewerMap.set(normalizedName, stats);
-        }
-
-        // Always count for totalAll
-        if (!stats.seenSpeciesAll.has(row.sis_taxon_id)) {
-          stats.seenSpeciesAll.add(row.sis_taxon_id);
-          stats.totalAll++;
-        }
-
-        // Count for region overlap
-        if (hasCountryOverlap && !stats.seenSpeciesRegion.has(row.sis_taxon_id)) {
-          stats.seenSpeciesRegion.add(row.sis_taxon_id);
-          stats.totalInRegion++;
-          for (const region of regions) {
-            stats.regionCounts[region] = (stats.regionCounts[region] ?? 0) + 1;
-          }
-          for (const c of overlapping) {
-            const code = c.toUpperCase();
-            stats.countryCounts[code] = (stats.countryCounts[code] ?? 0) + 1;
-          }
-        }
-        if (latestDate > stats.latestDate) stats.latestDate = latestDate;
-      }
+      if (date > tier.latestDate) tier.latestDate = date;
     }
   }
 
-  return [...reviewerMap.entries()]
-    .filter(([, stats]) => stats.totalInRegion > 0)
-    .map(([name, stats]) => ({
-      name,
-      regionCounts: stats.regionCounts,
-      countryCounts: stats.countryCounts,
-      totalInRegion: stats.totalInRegion,
-      totalAll: stats.totalAll,
-      latestDate: stats.latestDate,
-    }))
-    .sort((a, b) => {
-      if (a.totalInRegion !== b.totalInRegion) return b.totalInRegion - a.totalInRegion;
-      return b.latestDate.localeCompare(a.latestDate);
-    });
+  // Which granularities to offer. Ranks the species has no value for can't be
+  // asked about at all, and a class that spans the whole group is just "group"
+  // under another name.
+  const ranks: CandidateRank[] = ["group"];
+  if (classLc !== "" && rowsInClass < redlistRows.length) ranks.push("class");
+  if (orderLc !== "") ranks.push("order");
+  if (familyLc !== "") ranks.push("family");
+  if (genus !== "") ranks.push("genus");
+
+  // Roll narrow tiers up into broader ones, so each offered rank counts
+  // everything at or below it.
+  const candidates: CreditCandidate[] = [];
+  for (const [name, raw] of byName) {
+    const tiers: Partial<Record<CandidateRank, CandidateTier>> = {};
+    let carried: CandidateTier | null = null;
+    for (const rank of [...CANDIDATE_RANKS].reverse()) {
+      const own = raw[rank];
+      if (!own && !carried) continue;
+      const tier = own ?? emptyTier();
+      if (carried) mergeTier(tier, carried);
+      // Deeper ranks that aren't offered still roll up; they just aren't listed.
+      if (ranks.includes(rank)) tiers[rank] = tier;
+      carried = tier;
+    }
+    // Someone with no country overlap anywhere in the group is not a candidate —
+    // the ranking is "who works on species like this, where this species lives".
+    if ((tiers.group?.inRegion ?? 0) > 0) candidates.push({ name, tiers });
+  }
+
+  // Open on the finest granularity that still has enough people to compare.
+  let defaultRank: CandidateRank = "group";
+  for (const rank of ranks) {
+    const n = candidates.filter((c) => (c.tiers[rank]?.inRegion ?? 0) > 0).length;
+    if (n >= MIN_CANDIDATES_FOR_DEFAULT) defaultRank = rank;
+  }
+
+  candidates.sort((a, b) => {
+    const at = a.tiers[defaultRank], bt = b.tiers[defaultRank];
+    const diff = (bt?.inRegion ?? 0) - (at?.inRegion ?? 0);
+    if (diff !== 0) return diff;
+    const totalDiff = (bt?.total ?? 0) - (at?.total ?? 0);
+    if (totalDiff !== 0) return totalDiff;
+    return (bt?.latestDate ?? "").localeCompare(at?.latestDate ?? "");
+  });
+
+  return { candidates, ranks, defaultRank };
 }
 
 /**
@@ -687,14 +530,11 @@ export interface NodeSummary {
 // See scripts/build-taxa-summary.ts's classifyNoMatch for what each reason means and
 // how it's derived. Modular/additive on top of noMatchIds — safe to ignore or drop
 // without touching the count-only CoL Match / No CoL Match mechanism.
-export type NoMatchReason = "no_link" | "missing_from_backbone" | "infraspecific" | "provisional" | "lumped" | "not_in_base" | "extinct_unconfirmed" | "classified_elsewhere";
-export interface NoMatchDetail {
-  id: number;
-  name: string;
-  reason: NoMatchReason;
-  detail?: string;
-  detailId?: number;
-}
+// Re-exported from lib/data/col-breakdown, which is where classifyNoMatch
+// actually produces these — this file used to declare its own structurally
+// identical copy, and adding a reason there (synonym_of) silently failed to
+// typecheck here until both were edited. One declaration, no drift.
+export type { NoMatchReason, NoMatchDetail };
 
 // Heuristic "split from" flag for Not Evaluated species — see
 // scripts/build-taxa-summary.ts's SPLIT_CANDIDATES_SQL for the mechanism and its

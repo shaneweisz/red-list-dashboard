@@ -11,29 +11,35 @@ import CitesSummary from "../CitesSummary";
 import WikipediaSummary from "../WikipediaSummary";
 import EolSummary from "../EolSummary";
 import TaxaIcon from "../TaxaIcon";
-import { ALPHA2_TO_NAME, type CountryStats } from "../WorldMap";
+import { type CountryStats } from "../WorldMap";
+import { ALPHA2_TO_NAME } from "@/lib/countries";
 import { CATEGORY_COLORS, TAXA_BY_ID, THREATENED_CATEGORIES } from "@/config/taxa";
 import { speciesMatchesNode, getNodeDef, getViewRootForNode, findNode, matchesBreakdownName, breakdownDisplayName } from "@/lib/taxonomy-utils";
 import { dynamicNodeDisplayName } from "@/lib/dynamic-taxon";
 import ReviewerChart from "./ReviewerChart";
+import { REVISION_BARS, visibleBars, barForReason, acceptedNameSentence, GENUS_DIFFERS_REASON, RENAMED_REASON, REVISION_REASON_SHORT, REVISION_REASON_SUMMARY, revisionReasons, matchesRevisionFilter, isFlagged, colUrl, colDatasetUrl, colTaxonUrl, noMatchSentence, splitSummary, lumpSentence, type SplitSummary, newRevisionTally, tallyRevision, barTotal, REVISION_CAVEAT, type ColRevision } from "@/lib/col-revision";
+import type { ColProvenance } from "@/app/api/col/provenance/route";
 import { parseAssessors } from "@/lib/parseAssessors";
-import { iucnRegionCountries, countryToIucnRegion } from "@/lib/regions";
-import { useFilterParams } from "@/hooks/useFilterParams";
+import { iucnRegionCountries, matchingRegions } from "@/lib/regions";
+import { useFilterParams, type SortField, type MapViewMode } from "@/hooks/useFilterParams";
 import { HABITAT_CATEGORIES } from "@/lib/habitat-classification";
+import { readViewPreference, writeViewPreference } from "@/lib/view-preference";
 import { parseHabitatEntries, matchesHabitatFilter as matchesHabitatCriteria, coarseKnownCategories, isRestrictiveSelection, ALL_HABITAT_SEASONS, ALL_HABITAT_IMPORTANCE, ALL_HABITAT_SUITABILITY } from "@/lib/habitat-filter";
 import { type RedListSpecies } from "@/hooks/useRedListSpeciesQuery";
 import { useSpeciesCache } from "@/contexts/SpeciesCacheContext";
 import { isOutdated, outdatedCutoffDate } from "@/lib/outdated";
 
-import AssessorCandidatesTable from "../AssessorCandidatesTable";
-import ReviewerCandidatesTable from "../ReviewerCandidatesTable";
+import CandidatesTable from "../CandidatesTable";
+import { CREDIT_ROLES, type CreditRole } from "@/lib/credit-candidates";
 import { getLastSearchResult, clearLastSearchResult, type SearchResult } from "../SpeciesSearchBar";
 import { migratePinnedSpecies } from "@/lib/species-row-key";
 
 // Species list is served by the DuckDB/Parquet-backed /api/redlist/species route.
 const SPECIES_API = "/api/redlist/species";
 
-type DetailTab = "gbif" | "literature" | "redlist" | "wikipedia" | "cites" | "assessors" | "reviewers" | "col" | "eol";
+type DetailTab = "gbif" | "literature" | "redlist" | "wikipedia" | "cites" | "candidates" | "col" | "eol";
+/** Tab names that appear in shared links but are no longer tabs of their own. */
+type LegacyDetailTab = DetailTab | "assessors" | "reviewers";
 
 // Encyclopedia of Life tab is hidden for now. The tab, its panel and the
 // /api/eol routes are all still here — flip this back to true to bring it back.
@@ -41,10 +47,19 @@ const SHOW_EOL_TAB = false;
 
 // A ?tab=eol link (or a stale one) shouldn't strand the user on a tab with no
 // button in the bar, so fall back to the default tab while EoL is hidden.
-function visibleTab(tab: DetailTab | null | undefined): DetailTab {
+function visibleTab(tab: LegacyDetailTab | null | undefined): DetailTab {
   if (!tab) return "gbif";
+  // The Suggested Assessors and Suggested Reviewers tabs merged into one tab with
+  // a credit-line toggle; a link naming either still opens it (on that role — see
+  // roleFromLegacyTab).
+  if (tab === "assessors" || tab === "reviewers") return "candidates";
   if (tab === "eol" && !SHOW_EOL_TAB) return "gbif";
   return tab;
+}
+
+/** The credit line a legacy ?tab= asked for, so such a link lands where it meant to. */
+function roleFromLegacyTab(tab: LegacyDetailTab | null | undefined): CreditRole | null {
+  return tab === "assessors" || tab === "reviewers" ? tab : null;
 }
 
 // Dynamically import OccurrenceMapRow to avoid SSR issues with Leaflet
@@ -303,6 +318,52 @@ const HABITAT_SEASON_OPTIONS: { value: string; short: string }[] = [
 
 // Importance dropdown options — same checkbox-multi-select shape as season,
 // covering all 3 possible parseHabitatEntries().importance values.
+// Allowed values for the remembered view toggles — passed to readViewPreference
+// so a stale or hand-edited localStorage value can never reach a component.
+const YEARS_CHART_MODES = ["range", "year"] as const;
+const CREDIT_CHART_MODES = ["assessors", "reviewers", "facilitators"] as const;
+const MAP_VIEW_MODES = ["map", "list"] as const;
+type CreditChartMode = (typeof CREDIT_CHART_MODES)[number];
+
+const CATEGORY_ORDER: Record<string, number> = {
+  EX: 0, EW: 1, CR: 2, EN: 3, VU: 4, NT: 5, LC: 6, DD: 7, NE: 8,
+};
+
+/**
+ * Ascending comparison of two species on one sortable column.
+ *
+ * Shared by the primary and the user-chosen secondary sort so "sort by X then
+ * within that by Y" orders on Y exactly the way sorting by Y alone would.
+ * Direction is applied by the caller (negating this) rather than passed in, so
+ * the two levels can carry independent directions.
+ *
+ * Missing values compare as -1 throughout, which parks them at the bottom under
+ * the desc default — matching how the table reads "no data" as "least".
+ */
+function compareBy(field: SortField, a: Species, b: Species): number {
+  switch (field) {
+    case "year": {
+      const dateA = a.assessment_date ? new Date(a.assessment_date).getTime() : 0;
+      const dateB = b.assessment_date ? new Date(b.assessment_date).getTime() : 0;
+      return dateA - dateB;
+    }
+    case "category":
+      return (CATEGORY_ORDER[a.category] ?? 99) - (CATEGORY_ORDER[b.category] ?? 99);
+    case "totalGbif":
+      return (a.gbif_occurrence_count ?? -1) - (b.gbif_occurrence_count ?? -1);
+    case "newGbif":
+      return (a.gbif_observations_after_assessment_year ?? -1) - (b.gbif_observations_after_assessment_year ?? -1);
+    case "pctNewGbif": {
+      const pct = (s: Species) =>
+        (s.gbif_occurrence_count && s.gbif_occurrence_count > 0 && s.gbif_observations_after_assessment_year != null)
+          ? s.gbif_observations_after_assessment_year / s.gbif_occurrence_count : -1;
+      return pct(a) - pct(b);
+    }
+    case "describedYear":
+      return (a.described_year ?? -1) - (b.described_year ?? -1);
+  }
+}
+
 const HABITAT_IMPORTANCE_OPTIONS: { value: string; short: string }[] = [
   { value: "Major", short: "Major" },
   { value: "Not major", short: "Minor" },
@@ -374,6 +435,7 @@ function previewFromSearchResult(r: SearchResult): RedListSpecies | null {
     gbif_observations_after_assessment_year: null,
     latest_assessors: null,
     latest_reviewers: null,
+    latest_facilitators: null,
     previous_assessments: [],
     systems: [],
     growth_forms: [],
@@ -427,6 +489,42 @@ function DebouncedSearchInput({
     />
   );
 }
+
+/**
+ * The filter axes a cross-filter chart can opt out of — see matchesFilters.
+ * Naming follows the URL params where they exist, so a skip set reads against
+ * the address bar.
+ */
+type FilterAxis =
+  | "search" | "categories" | "countries" | "years" | "assessmentYears" | "obs"
+  | "assessmentCounts" | "systems" | "trends" | "movement" | "threats" | "criteria"
+  | "habitat" | "endemics" | "growthForms" | "assessors" | "reviewers" | "facilitators"
+  | "revision";
+
+const skipSet = (...axes: FilterAxis[]): ReadonlySet<FilterAxis> => new Set(axes);
+
+// A chart's own axis, so its bars keep showing what clicking them would select.
+const SKIP_YEARS = skipSet("years", "assessmentYears");
+const SKIP_OBS = skipSet("obs");
+const SKIP_ASSESSMENT_COUNTS = skipSet("assessmentCounts");
+const SKIP_COUNTRIES = skipSet("countries");
+// Threats, Criteria and Habitat additionally ignore the endemics and growth-form
+// toggles. That is inherited behaviour, not a principle — preserved here so this
+// refactor changes no number, and now at least visible rather than buried in
+// three separately-drifting copies of the clause list.
+const SKIP_THREATS = skipSet("threats", "endemics", "growthForms");
+
+// CR/EN/VU as a Set, for the Threats chart's "threatened only" scope.
+const THREATENED_SET = new Set<string>(THREATENED_CATEGORIES);
+const SKIP_CRITERIA = skipSet("criteria", "endemics", "growthForms");
+const SKIP_HABITAT = skipSet("habitat", "endemics", "growthForms");
+// The credits chart cross-filters against the other two credit types itself
+// (see buildCreditChart), so it skips all three here.
+const SKIP_CREDITS = skipSet("assessors", "reviewers", "facilitators");
+// The revision chart's own two axes are one filter (matchesColFilter). It
+// inherits the same endemics/growth-form blind spot as the three above, having
+// been written from the Criteria chart's clause list.
+const SKIP_REVISION = skipSet("revision", "endemics", "growthForms");
 
 // Explain IUCN Red List criteria codes
 // See: https://www.iucnredlist.org/resources/categories-and-criteria
@@ -495,6 +593,368 @@ function HoverTooltip({ children, text }: { children: React.ReactNode; text: str
         document.body
       )}
     </span>
+  );
+}
+
+
+// A HoverTooltip you can move the pointer INTO — so its content can be read at
+// leisure, selected and copied, and so links inside it are clickable. HoverTooltip closes the moment the pointer
+// leaves the trigger, which makes the gap between trigger and panel
+// uncrossable; this keeps the panel open while the pointer is over either, with
+// a short grace period covering the transit. Separate from HoverTooltip rather
+// than replacing it: this one costs a timer and a second set of handlers per
+// instance, and the ~40 plain tooltips (icons, badges, column headers) hold
+// nothing worth selecting.
+/** How long the panel will wait for `prepare` before opening regardless. Long
+ *  enough for a warm ChecklistBank call (~90ms) plus slack, short enough that a
+ *  slow or dead one never holds the tooltip hostage. */
+const PREPARE_MAX_WAIT_MS = 400;
+
+function SelectableHoverTooltip({ children, content, prepare }: {
+  children: React.ReactNode;
+  content: React.ReactNode;
+  /** Warm anything the panel needs before it opens, so nothing lands late and
+   *  reflows it. Bounded by PREPARE_MAX_WAIT_MS; failure is not a blocker. */
+  prepare?: () => Promise<unknown>;
+}) {
+  const [isOpen, setIsOpen] = useState(false);
+  const [position, setPosition] = useState({ top: 0, left: 0, maxHeight: 0 });
+  const triggerRef = useRef<HTMLSpanElement>(null);
+  const closeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Bumped on every enter/leave so a resolving prepare() from an earlier hover
+  // can't open a panel the pointer has already left.
+  const hoverToken = useRef(0);
+
+  const open = () => {
+    if (closeTimer.current) clearTimeout(closeTimer.current);
+    if (triggerRef.current) {
+      const rect = triggerRef.current.getBoundingClientRect();
+      // The panel grows upward from the trigger, so its ceiling is the room above
+      // it. Paging keeps content bounded, but a full page opened from a row near
+      // the top of the viewport can still outgrow that — clamp so it can never
+      // render off-screen.
+      setPosition({ top: rect.top - 6, left: rect.left + rect.width / 2, maxHeight: Math.max(140, rect.top - 16) });
+    }
+    setIsOpen(true);
+  };
+
+  const enter = () => {
+    const token = ++hoverToken.current;
+    if (!prepare || isOpen) { open(); return; }
+    // Position now (the trigger's box is what it is), but hold the reveal until
+    // the panel's content is settled — otherwise the provenance block lands a
+    // beat later and shoves everything taller under the pointer.
+    let done = false;
+    const reveal = () => {
+      if (done || hoverToken.current !== token) return;
+      done = true;
+      open();
+    };
+    void prepare().then(reveal, reveal);
+    setTimeout(reveal, PREPARE_MAX_WAIT_MS);
+  };
+
+  // Grace period, not an immediate close: the pointer has to cross a few px of
+  // dead space to reach the panel, and every one of those frames is a mouseleave.
+  const scheduleClose = () => {
+    hoverToken.current++;
+    if (closeTimer.current) clearTimeout(closeTimer.current);
+    closeTimer.current = setTimeout(() => setIsOpen(false), 220);
+  };
+  useEffect(() => () => { if (closeTimer.current) clearTimeout(closeTimer.current); }, []);
+
+  return (
+    <span ref={triggerRef} onMouseEnter={enter} onMouseLeave={scheduleClose}>
+      {children}
+      {isOpen && typeof document !== "undefined" && createPortal(
+        <div
+          role="tooltip"
+          onMouseEnter={open}
+          onMouseLeave={scheduleClose}
+          className="fixed z-[99999] px-2 py-1.5 text-xs leading-relaxed bg-zinc-800 text-zinc-200 rounded shadow-lg max-w-[400px] text-left select-text cursor-text overflow-y-auto overscroll-contain"
+          style={{ top: position.top, left: position.left, maxHeight: position.maxHeight, transform: "translateX(-50%) translateY(-100%)" }}
+        >
+          {content}
+        </div>,
+        document.body
+      )}
+    </span>
+  );
+}
+
+
+// The ⚑ tooltip's body. Every species it names links to that species' own
+// Catalogue of Life record — those names are the actionable part ("what is
+// Hedlundia minima?"), and a link per name beats one link on the flag, which
+// could only ever point at a single record.
+/** Provenance per CoL record, cached for the page's lifetime — the tooltip
+ *  unmounts on every close, so without this a second hover refetches. */
+const colProvenanceCache = new Map<string, ColProvenance | null>();
+const colProvenanceInFlight = new Map<string, Promise<void>>();
+
+/**
+ * Warm the cache for one CoL record. Awaited by the tooltip BEFORE it opens, so
+ * the provenance block is there from the first frame rather than appearing a
+ * moment later and shoving the panel taller — see SelectableHoverTooltip's
+ * `prepare`. Never rejects: a failed lookup caches null and the block is simply
+ * absent.
+ */
+function prefetchColProvenance(colId: string): Promise<void> {
+  if (colProvenanceCache.has(colId)) return Promise.resolve();
+  const existing = colProvenanceInFlight.get(colId);
+  if (existing) return existing;
+  const p = fetch(`/api/col/provenance?colId=${encodeURIComponent(colId)}`)
+    .then((r) => (r.ok ? r.json() : null))
+    .catch(() => null)
+    .then((d: ColProvenance | null) => { colProvenanceCache.set(colId, d); })
+    .finally(() => { colProvenanceInFlight.delete(colId); });
+  colProvenanceInFlight.set(colId, p);
+  return p;
+}
+
+/**
+ * Where CoL's record came from — scrutiny, source dataset, and the record on the
+ * source's own site. Reads the cache only: whatever `prepare` managed to fetch
+ * before the panel opened is what shows, and nothing arrives later to reflow it.
+ */
+function ColProvenanceBlock({ colId }: { colId: string }) {
+  const data = colProvenanceCache.get(colId);
+  if (!data) return null;
+  const source = [data.sourceAlias, data.sourceTitle].filter(Boolean).join(": ");
+  // Name only: CoL's scrutinizerDate is a batch timestamp, not the date this
+  // record was vetted, so pairing the two states something untrue.
+  const scrutiny = data.scrutinizer;
+  if (!source && !scrutiny && !data.link) return null;
+
+  const link = (href: string, text: string) => (
+    <a
+      href={href}
+      target="_blank"
+      rel="noopener noreferrer"
+      onClick={(e) => e.stopPropagation()}
+      className="text-blue-300 hover:text-blue-200 underline"
+    >
+      {text}
+    </a>
+  );
+  // The full URL wraps to two or three lines and says less than its host does.
+  let recordHost = "";
+  if (data.link) {
+    try { recordHost = new URL(data.link).hostname.replace(/^www\./, ""); } catch { recordHost = data.link; }
+  }
+
+  // A two-column grid rather than inline text: the label column sizes to the
+  // longest label, so the values line up instead of starting at three different
+  // places.
+  return (
+    <div className="mt-2 pt-2 border-t border-zinc-600/60 grid grid-cols-[max-content_1fr] gap-x-2 gap-y-0.5 text-[11px] text-zinc-400">
+      {scrutiny && (
+        <>
+          {/* Not CoL's own page label, "Taxonomic scrutiny" — that names the
+              activity and reads as a fragment once its date is gone. ColDP
+              defines the field as "the person who is the latest scrutinizer who
+              revised or reviewed the taxonomic concept", which is a person, so
+              the label is a person's. */}
+          <span className="text-zinc-500">Reviewed by:</span>
+          <span>{scrutiny}</span>
+        </>
+      )}
+      {source && (
+        <>
+          <span className="text-zinc-500">Source:</span>
+          <span>{data.sourceKey != null ? link(colDatasetUrl(data.sourceKey), source) : source}</span>
+        </>
+      )}
+      {data.link && (
+        <>
+          <span className="text-zinc-500">Original record:</span>
+          <span>{link(data.link, recordHost)}</span>
+        </>
+      )}
+    </div>
+  );
+}
+
+
+/** Split-off species per tooltip page. A handful of aggregates run long —
+ *  Rubus fruticosus has 73 — and the list names every one of them rather than
+ *  standing in for the tail, so it pages instead of growing without bound.
+ *  Five keeps the panel to a glanceable height: entries wrap to two lines once
+ *  the old name is long, which a page of ten often is. */
+const SPLIT_PAGE_SIZE = 5;
+
+function RevisionTooltipContent({ flag, name, category }: { flag: ColRevision; name: string; category?: string }) {
+  // Resets to the first page on every open: the panel is only mounted while the
+  // tooltip is up, so there is no stale page to come back to.
+  const [splitPage, setSplitPage] = useState(0);
+  const colLink = (text: string, colId?: string) =>
+    colId ? (
+      <a
+        href={colUrl(colId)}
+        target="_blank"
+        rel="noopener noreferrer"
+        onClick={(e) => e.stopPropagation()}
+        className="text-blue-300 hover:text-blue-200 underline"
+      >
+        {text}
+      </a>
+    ) : (
+      text
+    );
+
+  // The row's own species is a link too, wherever its name appears in the
+  // sentence — for reasons that name no second species ("provisional",
+  // "extinct flag") it is the only record there is to open, and even where a
+  // second species IS named, "what does CoL say about THIS one" is the question
+  // the flag raises. A lump's lead also names the CoL species the group is filed
+  // under, which is the most useful target in it, so that gets linked too.
+  const linkNames = (text: string, targets: { name: string; href: string }[]): React.ReactNode => {
+    const hit = targets
+      .map((t) => ({ ...t, at: text.indexOf(t.name) }))
+      .filter((t) => t.at >= 0)
+      .sort((a, b) => a.at - b.at)[0];
+    if (!hit) return text;
+    return (
+      <>
+        {text.slice(0, hit.at)}
+        <a
+          href={hit.href}
+          target="_blank"
+          rel="noopener noreferrer"
+          onClick={(e) => e.stopPropagation()}
+          className="text-blue-300 hover:text-blue-200 underline"
+        >
+          {hit.name}
+        </a>
+        {linkNames(text.slice(hit.at + hit.name.length), targets.filter((t) => t.name !== hit.name))}
+      </>
+    );
+  };
+  const linkSubject = (text: string): React.ReactNode => linkNames(text, [
+    { name, href: colTaxonUrl(flag, name) },
+    // For a lump, CoL's accepted name for the shared record — flag.colId IS that
+    // record, so it is the right target even when the name is nobody's own.
+    ...(flag.lumpedUnder && flag.colId ? [{ name: flag.lumpedUnder, href: colUrl(flag.colId) }] : []),
+  ]);
+
+  // A listed group — split-off species, or the other assessments sharing a
+  // lumped CoL record. Both name several species, both page, and in both the
+  // second name on each row is the evidence, so they render the same way.
+  const renderList = (key: string, summary: SplitSummary) => {
+    const pages = Math.ceil(summary.entries.length / SPLIT_PAGE_SIZE);
+    const from = splitPage * SPLIT_PAGE_SIZE;
+    const to = Math.min(from + SPLIT_PAGE_SIZE, summary.entries.length);
+    const step = (delta: number) => (e: React.MouseEvent) => {
+      e.preventDefault();
+      e.stopPropagation();
+      setSplitPage((p) => Math.min(pages - 1, Math.max(0, p + delta)));
+    };
+    const arrow = "px-1 text-zinc-300 hover:text-white disabled:text-zinc-600 disabled:hover:text-zinc-600";
+    return (
+      <span key={key}>
+        {linkSubject(summary.lead)}
+        <ul className="mt-1 space-y-0.5">
+          {summary.entries.slice(from, to).map((e) => (
+            <li key={e.name} className="flex gap-1.5">
+              <span aria-hidden className="text-zinc-500">•</span>
+              <span>
+                {colLink(e.name, e.colId)}
+                {e.category && <span className="text-zinc-400"> ({e.category})</span>}
+                {/* The old infraspecific name that now resolves to this species
+                    IS the evidence for the split, and CoL only shows it from
+                    this side — so link it too. */}
+                {e.previousName && (
+                  <span className="text-zinc-400"> — previously {colLink(e.previousName, e.previousColId)}</span>
+                )}
+              </span>
+            </li>
+          ))}
+        </ul>
+        {summary.entries.length > SPLIT_PAGE_SIZE && (
+          <div className="mt-1.5 flex items-center gap-1 text-[11px] text-zinc-400">
+            <button type="button" onClick={step(-1)} disabled={splitPage === 0} className={arrow} aria-label="Previous species">‹</button>
+            <span>{from + 1}–{to} of {summary.entries.length}</span>
+            <button type="button" onClick={step(1)} disabled={splitPage >= pages - 1} className={arrow} aria-label="More species">›</button>
+          </div>
+        )}
+      </span>
+    );
+  };
+
+  // The three signals are independent, so each renders on its own terms — a
+  // lumped species no longer carries a `reason` at all (see revisionReasons),
+  // which is why the lump list can't hang off one.
+  //
+  // Each carries the code it came from so the block can be headed with the same
+  // label the chart uses. Without it the tooltip states a finding without saying
+  // which finding, and a reader who filtered by a bar has no way to tell which
+  // sentence is the one they clicked.
+  const sentences: { code: string; node: React.ReactNode }[] = [];
+  const lump = lumpSentence(flag, name, category);
+  if (lump) {
+    sentences.push({ code: "lumped", node: (
+      <span key="lump">
+        {lump.before}
+        {lump.members.map((m, i) => (
+          <React.Fragment key={m.name}>
+            {i > 0 && (i === lump.members.length - 1 ? " and " : ", ")}
+            {colLink(m.name, m.colId)}
+            {m.category && <span className="text-zinc-400"> ({m.category})</span>}
+          </React.Fragment>
+        ))}
+        {lump.mid}
+        {lump.under && <>{", "}{colLink(lump.under.name, lump.under.colId)}</>}
+        {lump.after}
+      </span>
+    ) });
+  }
+  // NOT `else`: see revisionSentences. A species can be lumped AND carry a
+  // no-match reason, and its tooltip has to show every finding its own flag is
+  // filterable by, or a bar returns a row that never explains itself.
+  if (flag.reason != null && !(lump && flag.reason === "lumped")) {
+    const s = noMatchSentence(flag, name);
+    sentences.push({ code: flag.reason, node: (
+      <span key="no-match">
+        {linkSubject(s.before)}
+        {s.detail != null && colLink(s.detail, flag.detailColId)}
+        {s.after}
+      </span>
+    ) });
+  }
+  const accepted = acceptedNameSentence(flag, name);
+  if (accepted) {
+    sentences.push({ code: flag.genusDiffers ? GENUS_DIFFERS_REASON : RENAMED_REASON, node: (
+      <span key="accepted">
+        {linkSubject(accepted.before)}
+        {colLink(accepted.detail, flag.acceptedColId)}
+        {accepted.after}
+      </span>
+    ) });
+  }
+  const split = splitSummary(flag, name);
+  if (split) sentences.push({ code: "split", node: renderList("split", split) });
+
+  return (
+    <>
+      {/* One block per signal: a species can be both lumped and split, and the
+          two are separate findings rather than one running sentence. */}
+      <div className="space-y-2.5">
+        {sentences.map(({ code, node }, i) => (
+          <div key={i}>
+            <div className="text-[10px] font-semibold uppercase tracking-wide text-amber-300/80">
+              {/* The BAR's words, not the reason's: a reader who filtered by
+                  "No 1:1 CoL match" has to recognise the block it returned.
+                  The sentence under it still gives the specific reason. */}
+              {barForReason(code)?.label ?? REVISION_REASON_SHORT[code] ?? code}
+            </div>
+            <div className="mt-0.5">{node}</div>
+          </div>
+        ))}
+      </div>
+      <p className="mt-2 text-[11px] italic leading-snug text-zinc-400">{REVISION_CAVEAT}</p>
+      {flag.colId && <ColProvenanceBlock colId={flag.colId} />}
+    </>
   );
 }
 
@@ -631,7 +1091,10 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
     selectedPopulationTrends, setSelectedPopulationTrends,
     selectedMovementPatterns, setSelectedMovementPatterns,
     selectedThreats, setSelectedThreats,
+    threatsScope, setThreatsScope,
     selectedCriteria, setSelectedCriteria,
+    colMatch, setColMatch,
+    selectedColReasons, setColReasons,
     selectedHabitat, setSelectedHabitat,
     habitatBreadth, setHabitatBreadth,
     selectedHabitatImportance, setSelectedHabitatImportance,
@@ -641,6 +1104,8 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
     endemicsOnly, setEndemicsOnly,
     selectedGrowthForms, setSelectedGrowthForms,
     selectedAssessors, setSelectedAssessors,
+    selectedFacilitators, setSelectedFacilitators,
+    sortField2, sortDirection2, setSort2,
     selectedReviewers, setSelectedReviewers,
     searchFilter, setSearchFilter,
     exactFilters, setExactFilters,
@@ -774,13 +1239,14 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
     setSelectedGrowthForms(new Set());
     setSelectedAssessors(new Set());
     setSelectedReviewers(new Set());
+    setSelectedFacilitators(new Set());
     setSort(null, "desc");
     setShowOnlyStarred(false);
     // Clear "all" taxa selection when switching to new-assessments (NE dataset too large for "all")
     if (viewMode === "new-assessments") {
       setSelectedTaxa(prev => prev.has("all") ? new Set<string>() : prev);
     }
-  }, [viewMode, setSelectedTaxa, setSelectedCategories, setSelectedYearRanges, setSelectedAssessmentYears, setSelectedDescribedYears, setSelectedCountries, setSelectedObsRanges, setSelectedAssessmentCounts, setSelectedSystems, setSelectedPopulationTrends, setSelectedMovementPatterns, setSelectedThreats, setSelectedCriteria, setSelectedHabitat, setHabitatBreadth, setSelectedHabitatImportance, setSelectedHabitatSeasons, setSelectedHabitatSuitability, setEndemicsOnly, setSelectedGrowthForms, setSelectedAssessors, setSelectedReviewers, setSort]);
+  }, [viewMode, setSelectedTaxa, setSelectedCategories, setSelectedYearRanges, setSelectedAssessmentYears, setSelectedDescribedYears, setSelectedCountries, setSelectedObsRanges, setSelectedAssessmentCounts, setSelectedSystems, setSelectedPopulationTrends, setSelectedMovementPatterns, setSelectedThreats, setSelectedCriteria, setSelectedHabitat, setHabitatBreadth, setSelectedHabitatImportance, setSelectedHabitatSeasons, setSelectedHabitatSuitability, setEndemicsOnly, setSelectedGrowthForms, setSelectedAssessors, setSelectedReviewers, setSelectedFacilitators, setSort]);
 
   // Taxon toggle handler (used by TaxaSummary)
   // Regular click: select only that taxon (or deselect if already sole selection)
@@ -968,12 +1434,90 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
   // — halves the vertical space these together take up, at the cost of one
   // click to see the other list. Local-only UI state, not URL-synced (same as
   // e.g. habitatPage above) since it's a view toggle, not a filter.
-  const [assessorReviewerMode, setAssessorReviewerMode] = useState<"assessors" | "reviewers">("assessors");
+  const [assessorReviewerMode, setAssessorReviewerMode] = useState<CreditChartMode>("assessors");
+  // Restore the remembered Assessors/Reviewers/Facilitators tab after mount
+  // (see the years toggle above for why it is an effect and not an initializer).
+  // The tab is display-only — it changes which names are charted, never which
+  // species the table shows — so there is no shared-link ambiguity to guard.
+  useEffect(() => {
+    const stored = readViewPreference("creditChartMode", CREDIT_CHART_MODES);
+    if (stored) setAssessorReviewerMode(stored);
+  }, []);
+  const changeCreditChartMode = useCallback((mode: CreditChartMode) => {
+    setAssessorReviewerMode(mode);
+    writeViewPreference("creditChartMode", mode);
+  }, []);
+
+  // Which credit line the Suggested Experts tab ranks. Remembered like the chart
+  // toggle above (someone at BirdLife wants Facilitators every session), but under
+  // its own key: the two are different surfaces and picking one shouldn't move the
+  // other. A legacy ?tab=assessors/reviewers link names a role explicitly, and an
+  // explicit choice in the URL beats the remembered one — so it wins the race with
+  // the restore effect by seeding the initial state.
+  const roleFromUrlRef = useRef(false);
+  const storedRoleAppliedRef = useRef(false);
+  const [candidateRole, setCandidateRole] = useState<CreditRole>("assessors");
+  useEffect(() => {
+    // A legacy ?tab=assessors/reviewers link names a role explicitly, and an
+    // explicit choice in the URL beats the remembered one. It arrives LATE:
+    // useFilterParams hydrates from window.location in its own mount effect, so
+    // urlTab is still null on the first pass through here — which is why this
+    // latches when the role turns up rather than reading it once at mount.
+    // Opening the tab then rewrites ?tab= to "candidates", and that must not undo
+    // it either: without the latch, a ?tab=reviewers link opened on Facilitators
+    // for anyone whose remembered choice was Facilitators.
+    const legacy = roleFromLegacyTab(urlTab);
+    if (legacy) {
+      roleFromUrlRef.current = true;
+      setCandidateRole(legacy);
+      return;
+    }
+    if (roleFromUrlRef.current || storedRoleAppliedRef.current) return;
+    storedRoleAppliedRef.current = true;
+    const stored = readViewPreference("candidateRole", CREDIT_ROLES);
+    if (stored) setCandidateRole(stored);
+  }, [urlTab]);
+  const changeCandidateRole = useCallback((role: CreditRole) => {
+    setCandidateRole(role);
+    writeViewPreference("candidateRole", role);
+  }, []);
+
+  // Map/List is URL state (mapview=), so the stored preference applies only
+  // when the URL is silent about it — a link that says "list" stays a list for
+  // whoever opens it, regardless of what they last chose here.
+  const mapPrefRestored = useRef(false);
+  useEffect(() => {
+    if (mapPrefRestored.current) return;
+    mapPrefRestored.current = true;
+    if (new URLSearchParams(window.location.search).has("mapview")) return;
+    const stored = readViewPreference("countryViewMode", MAP_VIEW_MODES);
+    if (stored && stored !== mapViewMode) setMapViewMode(stored);
+  }, [mapViewMode, setMapViewMode]);
+
+  const changeMapViewMode = useCallback((mode: MapViewMode) => {
+    setMapViewMode(mode);
+    writeViewPreference("countryViewMode", mode);
+  }, [setMapViewMode]);
 
   // Breadth/Importance/Season/Suitability dropdown menus in the Habitat card header
   // (replacing a wall of individual toggle buttons — Breadth is a single-select
   // Specialist/Generalist choice, Exclude minor a single checkbox, Season a
   // multi-select list of all 5 IUCN values).
+  // Threats card's scope dropdown (threatened-only vs all species).
+  const [threatsScopeMenuOpen, setThreatsScopeMenuOpen] = useState(false);
+  const threatsScopeMenuRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!threatsScopeMenuOpen) return;
+    const handler = (e: MouseEvent) => {
+      if (threatsScopeMenuRef.current && !threatsScopeMenuRef.current.contains(e.target as Node)) {
+        setThreatsScopeMenuOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [threatsScopeMenuOpen]);
+
   const [habitatBreadthMenuOpen, setHabitatBreadthMenuOpen] = useState(false);
   const [habitatImportanceMenuOpen, setHabitatImportanceMenuOpen] = useState(false);
   const [habitatSeasonMenuOpen, setHabitatSeasonMenuOpen] = useState(false);
@@ -1116,15 +1660,18 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
     // skip the parent taxon_id filter, which would otherwise drop them.
     if (selectedTaxa.size > 0 && !selectedTaxa.has("all") && !(isNewAssessments && selectedSubgroups.size > 0)) {
       // Display-root entries (the 8 taxa) match by taxon_id. Any selected taxon
-      // that isn't a taxonomy node — an arbitrary rank like ?taxa=turdidae — is
-      // matched against the species' own class/order/family (#261).
+      // that isn't a taxonomy node — an arbitrary rank like ?taxa=turdidae or
+      // ?taxa=panthera — is matched against the species' own class/order/family/genus
+      // (#261). Genus is derived from the leading word of the scientific name, the
+      // same way the server's resolveWhere does it (no genus column exists).
       const arbitrary = [...selectedTaxa].filter((t) => t !== "all" && !findNode(t)).map((t) => t.toLowerCase());
       filtered = filtered.filter((s) =>
         (s.taxon_id != null && selectedTaxa.has(s.taxon_id)) ||
         (arbitrary.length > 0 && arbitrary.some((v) =>
           (s.class_name ?? "").toLowerCase() === v ||
           (s.order_name ?? "").toLowerCase() === v ||
-          (s.family ?? "").toLowerCase() === v)),
+          (s.family ?? "").toLowerCase() === v ||
+          matchesBreakdownName(s, "genus", v))),
       );
     }
     if (selectedSubgroups.size > 0) {
@@ -1271,9 +1818,10 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
     return buckets.has(describedYearBucket(year));
   }, [selectedDescribedYears, describedYearBucket]);
 
-  // Assessors/reviewers from the latest assessment. These are denormalized inline
-  // on the species list (latest_assessors/latest_reviewers) so the filter works
-  // without the full history array (which is fetched lazily for the detail panel).
+  // Assessors/reviewers/facilitators from the latest assessment. These are
+  // denormalized inline on the species list (latest_assessors/latest_reviewers/
+  // latest_facilitators) so the filters work without the full history array
+  // (which is fetched lazily for the detail panel).
   const getSpeciesAssessors = useCallback((s: Species): string[] => {
     return parseAssessors(s.latest_assessors);
   }, []);
@@ -1282,17 +1830,50 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
     return parseAssessors(s.latest_reviewers);
   }, []);
 
+  // Facilitators are the individuals behind an organisational assessor. Every
+  // bird assessment credits "BirdLife International" as the assessor, so the
+  // assessor filter cannot pick out one person's work — the facilitator can.
+  const getSpeciesFacilitators = useCallback((s: Species): string[] => {
+    return parseAssessors(s.latest_facilitators);
+  }, []);
+
   // Track which view is active in the years-since-assessed chart ("range" buckets vs specific year).
   // Defaults to "year" when a specific-year filter is already active (e.g. from URL).
   const [yearsChartMode, setYearsChartMode] = useState<"range" | "year">(
     () => (selectedAssessmentYears.size > 0 ? "year" : "range")
   );
-  // If the URL hydrates with specific years selected after mount, surface the year view.
+  // If the URL hydrates with specific years — or an explicit min/max year range
+  // (still accepted from /browse, the MCP server and hand-built links, though
+  // the UI now selects years by shift+dragging the chart) — surface the year
+  // view, so a shared link opens on the chart its filter applies to.
   useEffect(() => {
-    if (selectedAssessmentYears.size > 0) {
+    if (selectedAssessmentYears.size > 0
+      || exactFilters.minAssessmentYear != null
+      || exactFilters.maxAssessmentYear != null) {
       setYearsChartMode("year");
     }
-  }, [selectedAssessmentYears]);
+  }, [selectedAssessmentYears, exactFilters.minAssessmentYear, exactFilters.maxAssessmentYear]);
+
+  // Restore the remembered Range/Year choice — after mount, not in the state
+  // initializer, so server and first client render agree. Skipped when the URL
+  // already implies a view (specific years, or an explicit year range), which
+  // must win so a shared link renders the same for whoever opens it.
+  const yearsPrefRestored = useRef(false);
+  useEffect(() => {
+    if (yearsPrefRestored.current) return;
+    yearsPrefRestored.current = true;
+    if (selectedAssessmentYears.size > 0) return;
+    if (exactFilters.minAssessmentYear != null || exactFilters.maxAssessmentYear != null) return;
+    const stored = readViewPreference("yearsChartMode", YEARS_CHART_MODES);
+    if (stored) setYearsChartMode(stored);
+  }, [selectedAssessmentYears, exactFilters.minAssessmentYear, exactFilters.maxAssessmentYear]);
+
+  // One place that both moves the toggle and remembers it, so the two can't
+  // drift apart (every caller goes through this rather than setYearsChartMode).
+  const changeYearsChartMode = useCallback((mode: "range" | "year") => {
+    setYearsChartMode(mode);
+    writeViewPreference("yearsChartMode", mode);
+  }, []);
   // Paginate the by-year chart: show 10 years at a time, defaulting to the most recent
   const YEARS_PAGE_SIZE = 10;
   const [yearsPage, setYearsPage] = useState(0);
@@ -1315,6 +1896,24 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
     return getSpeciesReviewers(s).some(r => { const rl = r.toLowerCase(); return sels.some(x => rl.includes(x)); });
   }, [selectedReviewers, getSpeciesReviewers]);
 
+  // Helper to check if species matches the facilitators filter (substring, as above).
+  const matchesFacilitatorsFilter = useCallback((s: Species): boolean => {
+    if (selectedFacilitators.size === 0) return true;
+    const sels = [...selectedFacilitators].map(x => x.toLowerCase());
+    return getSpeciesFacilitators(s).some(f => { const fl = f.toLowerCase(); return sels.some(x => fl.includes(x)); });
+  }, [selectedFacilitators, getSpeciesFacilitators]);
+
+  // Possible-taxonomic-revision filter (#col-match): `colMatch` is the coarse
+  // toggle — "flagged" = this species has no clean 1:1 Catalogue of Life match,
+  // "clean" = it does — and `selectedColReasons` narrows the flagged bucket to
+  // specific reasons (lumped, subspecies, not-in-checklist…). Selecting a reason
+  // implies flagged, so it doesn't need the toggle set as well. Same shape as
+  // habitatBreadth + selectedHabitat.
+  const matchesColFilter = useCallback(
+    (s: Species): boolean => matchesRevisionFilter(s.col_revision, colMatch, selectedColReasons),
+    [colMatch, selectedColReasons],
+  );
+
   // Consolidates all 5 habitat-related filters into one predicate (rather than 5
   // separate inline checks repeated at every filter site) since major/resident both
   // need the full parsed entry list, not just codes — cheaper to parse once per
@@ -1331,6 +1930,25 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
       suitability: selectedHabitatSuitability,
     }),
   [selectedHabitat, habitatBreadth, selectedHabitatImportance, selectedHabitatSeasons, selectedHabitatSuitability]);
+
+  // The threat filter, in one place — every chart's cross-filtered count and the
+  // species table itself run this, so they can't disagree about what a selected
+  // threat means. Two parts:
+  //  - the code match itself: prefix-based, so picking a top-level category
+  //    ("11") matches every sub-threat under it ("11.1", "11.4", …);
+  //  - the scope: under the default "threatened" scope a threat selection ALSO
+  //    excludes non-threatened species. IUCN's feedback is that threat coding is
+  //    only reliable for CR/EN/VU assessments, so filtering by a threat shouldn't
+  //    surface species whose threat data isn't trustworthy — and the Threats
+  //    chart's bars (see threatCounts) then count exactly the species that
+  //    clicking them selects. "All species" opts back in to the fuller data.
+  // Inert while nothing is selected: the scope narrows the threat axis, it is
+  // not a standing "threatened only" filter on the whole dashboard.
+  const matchesThreatFilter = useCallback((s: Species): boolean => {
+    if (selectedThreats.size === 0) return true;
+    if (threatsScope === "threatened" && !THREATENED_SET.has(s.category)) return false;
+    return s.threat_codes?.some(tc => Array.from(selectedThreats).some(sel => tc === sel || tc.startsWith(sel + "."))) ?? false;
+  }, [selectedThreats, threatsScope]);
 
   // Species details cache (images, criteria, common names)
   const [speciesDetails, setSpeciesDetails] = useState<Record<string, SpeciesDetails>>({});
@@ -1600,13 +2218,15 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
       if (selectedSystems.size > 0 && !s.systems?.some(sys => selectedSystems.has(sys))) return;
       if (selectedPopulationTrends.size > 0 && (!s.population_trend || !selectedPopulationTrends.has(s.population_trend))) return;
       if (selectedMovementPatterns.size > 0 && (!s.movement_pattern || !selectedMovementPatterns.has(s.movement_pattern))) return;
-      if (selectedThreats.size > 0 && !s.threat_codes?.some(tc => Array.from(selectedThreats).some(sel => tc === sel || tc.startsWith(sel + ".")))) return;
+      if (!matchesThreatFilter(s)) return;
       if (selectedCriteria.size > 0 && !parseCriteriaCodes(s.criteria).some(code => Array.from(selectedCriteria).some(sel => code === sel || code.startsWith(sel)))) return;
       if (endemicsOnly && s.countries.length !== 1) return;
       if (selectedGrowthForms.size > 0 && !s.growth_forms?.some(gf => selectedGrowthForms.has(gf))) return;
       if (!matchesAssessorsFilter(s)) return;
       if (!matchesHabitatFilter(s)) return;
       if (!matchesReviewersFilter(s)) return;
+      if (!matchesFacilitatorsFilter(s)) return;
+      if (!matchesColFilter(s)) return;
       counts[s.category] = (counts[s.category] || 0) + 1;
     });
     const DISPLAY_ORDER = ["EX", "EW", "CR", "EN", "VU", "NT", "LC", "DD"];
@@ -1619,10 +2239,54 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
       percent: total > 0 ? Math.round(((counts[code] || 0) / total) * 100) : 0,
       label: `${(counts[code] || 0).toLocaleString()} (${total > 0 ? Math.round(((counts[code] || 0) / total) * 100) : 0}%)`,
     }));
-  }, [taxaFilteredSpecies, selectedCountries, selectedYearRanges, selectedObsRanges, selectedSystems, selectedPopulationTrends, selectedMovementPatterns, selectedThreats, selectedCriteria, matchesHabitatFilter, endemicsOnly, selectedGrowthForms, matchesSearch, matchesAssessorsFilter, matchesReviewersFilter, matchesObsRangeFilter, selectedAssessmentCounts, matchesAssessmentCountFilter, matchesYearRangeFilter, selectedAssessmentYears, matchesAssessmentYearFilter]);
+  }, [taxaFilteredSpecies, selectedCountries, selectedYearRanges, selectedObsRanges, selectedSystems, selectedPopulationTrends, selectedMovementPatterns, matchesThreatFilter, selectedCriteria, matchesHabitatFilter, endemicsOnly, selectedGrowthForms, matchesSearch, matchesAssessorsFilter, matchesReviewersFilter, matchesFacilitatorsFilter, matchesColFilter, matchesObsRangeFilter, selectedAssessmentCounts, matchesAssessmentCountFilter, matchesYearRangeFilter, selectedAssessmentYears, matchesAssessmentYearFilter]);
 
   // Year chart: apply all filters EXCEPT year range AND outdated (see
   // taxaFilteredSpeciesExceptOutdated above) — buckets align exactly with the
+  // ── One filter predicate for every cross-filter chart ────────────────
+  //
+  // Each chart shows what WOULD match if you clicked a bar, so each applies
+  // every filter except the axis it is itself the control for — Threats applies
+  // everything but the threat selection, and so on. That used to be twelve
+  // hand-maintained copies of the same clause list, which drifted: the
+  // taxonomic-revision filter was added to all twelve and still missed the
+  // credits chart (a thirteenth copy in matchesNonCreditFilters), which then
+  // reported unfiltered counts until it was spotted.
+  //
+  // Now the clause list lives once and each caller passes the axes it skips, so
+  // "what does this chart deliberately ignore?" is a visible argument rather
+  // than an absence you have to notice. The skip sets below are exactly what the
+  // old inline chains did, quirks included — see SKIP_THREATS et al.
+  const matchesFilters = useCallback((s: Species, skip: ReadonlySet<FilterAxis>): boolean => {
+    if (!skip.has("search") && !matchesSearch(s)) return false;
+    if (!skip.has("categories") && selectedCategories.size > 0 && !selectedCategories.has(s.category)) return false;
+    if (!skip.has("countries") && selectedCountries.size > 0 && !s.countries.some(c => selectedCountries.has(c))) return false;
+    // Year filters are gated on NE throughout: an unassessed species has no
+    // assessment date to compare against.
+    if (!skip.has("years") && s.category !== "NE" && selectedYearRanges.size > 0 && !matchesYearRangeFilter(s.assessment_date, selectedYearRanges)) return false;
+    if (!skip.has("assessmentYears") && s.category !== "NE" && selectedAssessmentYears.size > 0 && !matchesAssessmentYearFilter(s.assessment_date, selectedAssessmentYears)) return false;
+    if (!skip.has("obs") && selectedObsRanges.size > 0 && !matchesObsRangeFilter(s.gbif_occurrence_count, selectedObsRanges)) return false;
+    if (!skip.has("assessmentCounts") && selectedAssessmentCounts.size > 0 && !matchesAssessmentCountFilter(s.assessment_count, selectedAssessmentCounts)) return false;
+    if (!skip.has("systems") && selectedSystems.size > 0 && !s.systems?.some(sys => selectedSystems.has(sys))) return false;
+    if (!skip.has("trends") && selectedPopulationTrends.size > 0 && (!s.population_trend || !selectedPopulationTrends.has(s.population_trend))) return false;
+    if (!skip.has("movement") && selectedMovementPatterns.size > 0 && (!s.movement_pattern || !selectedMovementPatterns.has(s.movement_pattern))) return false;
+    if (!skip.has("threats") && !matchesThreatFilter(s)) return false;
+    if (!skip.has("criteria") && selectedCriteria.size > 0 && !parseCriteriaCodes(s.criteria).some(code => Array.from(selectedCriteria).some(sel => code === sel || code.startsWith(sel)))) return false;
+    if (!skip.has("endemics") && endemicsOnly && s.countries.length !== 1) return false;
+    if (!skip.has("growthForms") && selectedGrowthForms.size > 0 && !s.growth_forms?.some(gf => selectedGrowthForms.has(gf))) return false;
+    if (!skip.has("assessors") && !matchesAssessorsFilter(s)) return false;
+    if (!skip.has("habitat") && !matchesHabitatFilter(s)) return false;
+    if (!skip.has("reviewers") && !matchesReviewersFilter(s)) return false;
+    if (!skip.has("facilitators") && !matchesFacilitatorsFilter(s)) return false;
+    if (!skip.has("revision") && !matchesColFilter(s)) return false;
+    return true;
+  }, [matchesSearch, selectedCategories, selectedCountries, selectedYearRanges, matchesYearRangeFilter,
+      selectedAssessmentYears, matchesAssessmentYearFilter, selectedObsRanges, matchesObsRangeFilter,
+      selectedAssessmentCounts, matchesAssessmentCountFilter, selectedSystems, selectedPopulationTrends,
+      selectedMovementPatterns, matchesThreatFilter, selectedCriteria, endemicsOnly, selectedGrowthForms,
+      matchesAssessorsFilter, matchesHabitatFilter, matchesReviewersFilter, matchesFacilitatorsFilter,
+      matchesColFilter]);
+
   // isOutdated() threshold (>10 years) so the Outdated toggle mutes rather than
   // zeroes out the buckets that don't match.
   const assessmentYearData = useMemo(() => {
@@ -1636,22 +2300,8 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
       { range: "20+ years", shortRange: ">20y", count: 0, minYear: 20 },
     ];
     taxaFilteredSpeciesExceptOutdated.forEach(s => {
+      if (!matchesFilters(s, SKIP_YEARS)) return;
       if (!s.assessment_date || s.category === "NE") return;
-      if (!matchesSearch(s)) return;
-      if (selectedCategories.size > 0 && !selectedCategories.has(s.category)) return;
-      if (selectedCountries.size > 0 && !s.countries.some(c => selectedCountries.has(c))) return;
-      if (selectedObsRanges.size > 0 && !matchesObsRangeFilter(s.gbif_occurrence_count, selectedObsRanges)) return;
-      if (selectedAssessmentCounts.size > 0 && !matchesAssessmentCountFilter(s.assessment_count, selectedAssessmentCounts)) return;
-      if (selectedSystems.size > 0 && !s.systems?.some(sys => selectedSystems.has(sys))) return;
-      if (selectedPopulationTrends.size > 0 && (!s.population_trend || !selectedPopulationTrends.has(s.population_trend))) return;
-      if (selectedMovementPatterns.size > 0 && (!s.movement_pattern || !selectedMovementPatterns.has(s.movement_pattern))) return;
-      if (selectedThreats.size > 0 && !s.threat_codes?.some(tc => Array.from(selectedThreats).some(sel => tc === sel || tc.startsWith(sel + ".")))) return;
-      if (selectedCriteria.size > 0 && !parseCriteriaCodes(s.criteria).some(code => Array.from(selectedCriteria).some(sel => code === sel || code.startsWith(sel)))) return;
-      if (endemicsOnly && s.countries.length !== 1) return;
-      if (selectedGrowthForms.size > 0 && !s.growth_forms?.some(gf => selectedGrowthForms.has(gf))) return;
-      if (!matchesAssessorsFilter(s)) return;
-      if (!matchesHabitatFilter(s)) return;
-      if (!matchesReviewersFilter(s)) return;
       const yearsSince = (now - new Date(s.assessment_date).getTime()) / msPerYear;
       if (yearsSince < 1) ranges[0].count++;
       else if (yearsSince < 5) ranges[1].count++;
@@ -1664,7 +2314,7 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
       ...r,
       label: `${r.count.toLocaleString()} (${total > 0 ? Math.round((r.count / total) * 100) : 0}%)`,
     }));
-  }, [taxaFilteredSpeciesExceptOutdated, selectedCategories, selectedCountries, selectedObsRanges, selectedSystems, selectedPopulationTrends, selectedMovementPatterns, selectedThreats, selectedCriteria, matchesHabitatFilter, endemicsOnly, selectedGrowthForms, matchesSearch, matchesAssessorsFilter, matchesReviewersFilter, matchesObsRangeFilter, selectedAssessmentCounts, matchesAssessmentCountFilter]);
+  }, [taxaFilteredSpeciesExceptOutdated, matchesFilters]);
 
   // Assessments-by-year chart: apply all filters EXCEPT the year-based ones
   // (selectedYearRanges, selectedAssessmentYears) AND outdated. The Range bucket
@@ -1677,22 +2327,8 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
   const assessmentYearsByYearData = useMemo(() => {
     const counts: Record<string, number> = {};
     taxaFilteredSpeciesExceptOutdated.forEach(s => {
+      if (!matchesFilters(s, SKIP_YEARS)) return;
       if (!s.assessment_date || s.category === "NE") return;
-      if (!matchesSearch(s)) return;
-      if (selectedCategories.size > 0 && !selectedCategories.has(s.category)) return;
-      if (selectedCountries.size > 0 && !s.countries.some(c => selectedCountries.has(c))) return;
-      if (selectedObsRanges.size > 0 && !matchesObsRangeFilter(s.gbif_occurrence_count, selectedObsRanges)) return;
-      if (selectedAssessmentCounts.size > 0 && !matchesAssessmentCountFilter(s.assessment_count, selectedAssessmentCounts)) return;
-      if (selectedSystems.size > 0 && !s.systems?.some(sys => selectedSystems.has(sys))) return;
-      if (selectedPopulationTrends.size > 0 && (!s.population_trend || !selectedPopulationTrends.has(s.population_trend))) return;
-      if (selectedMovementPatterns.size > 0 && (!s.movement_pattern || !selectedMovementPatterns.has(s.movement_pattern))) return;
-      if (selectedThreats.size > 0 && !s.threat_codes?.some(tc => Array.from(selectedThreats).some(sel => tc === sel || tc.startsWith(sel + ".")))) return;
-      if (selectedCriteria.size > 0 && !parseCriteriaCodes(s.criteria).some(code => Array.from(selectedCriteria).some(sel => code === sel || code.startsWith(sel)))) return;
-      if (endemicsOnly && s.countries.length !== 1) return;
-      if (selectedGrowthForms.size > 0 && !s.growth_forms?.some(gf => selectedGrowthForms.has(gf))) return;
-      if (!matchesAssessorsFilter(s)) return;
-      if (!matchesHabitatFilter(s)) return;
-      if (!matchesReviewersFilter(s)) return;
       const year = String(new Date(s.assessment_date).getFullYear());
       counts[year] = (counts[year] || 0) + 1;
     });
@@ -1705,7 +2341,7 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
         count,
         label: `${count.toLocaleString()} (${total > 0 ? Math.round((count / total) * 100) : 0}%)`,
       }));
-  }, [taxaFilteredSpeciesExceptOutdated, selectedCategories, selectedCountries, selectedObsRanges, selectedSystems, selectedPopulationTrends, selectedMovementPatterns, selectedThreats, selectedCriteria, matchesHabitatFilter, endemicsOnly, selectedGrowthForms, matchesSearch, matchesAssessorsFilter, matchesReviewersFilter, matchesObsRangeFilter, selectedAssessmentCounts, matchesAssessmentCountFilter]);
+  }, [taxaFilteredSpeciesExceptOutdated, matchesFilters]);
 
   const yearsTotalPages = Math.max(1, Math.ceil(assessmentYearsByYearData.length / YEARS_PAGE_SIZE));
   const paginatedAssessmentYearsData = useMemo(
@@ -1751,21 +2387,7 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
       { range: "10K+", shortRange: "10K+", count: 0 },
     ];
     taxaFilteredSpecies.forEach(s => {
-      if (!matchesSearch(s)) return;
-      if (selectedCategories.size > 0 && !selectedCategories.has(s.category)) return;
-      if (selectedCountries.size > 0 && !s.countries.some(c => selectedCountries.has(c))) return;
-      if (s.category !== "NE" && selectedYearRanges.size > 0 && !matchesYearRangeFilter(s.assessment_date, selectedYearRanges)) return;
-      if (s.category !== "NE" && selectedAssessmentYears.size > 0 && !matchesAssessmentYearFilter(s.assessment_date, selectedAssessmentYears)) return;
-      if (selectedSystems.size > 0 && !s.systems?.some(sys => selectedSystems.has(sys))) return;
-      if (selectedPopulationTrends.size > 0 && (!s.population_trend || !selectedPopulationTrends.has(s.population_trend))) return;
-      if (selectedMovementPatterns.size > 0 && (!s.movement_pattern || !selectedMovementPatterns.has(s.movement_pattern))) return;
-      if (selectedThreats.size > 0 && !s.threat_codes?.some(tc => Array.from(selectedThreats).some(sel => tc === sel || tc.startsWith(sel + ".")))) return;
-      if (selectedCriteria.size > 0 && !parseCriteriaCodes(s.criteria).some(code => Array.from(selectedCriteria).some(sel => code === sel || code.startsWith(sel)))) return;
-      if (endemicsOnly && s.countries.length !== 1) return;
-      if (selectedGrowthForms.size > 0 && !s.growth_forms?.some(gf => selectedGrowthForms.has(gf))) return;
-      if (!matchesAssessorsFilter(s)) return;
-      if (!matchesHabitatFilter(s)) return;
-      if (!matchesReviewersFilter(s)) return;
+      if (!matchesFilters(s, SKIP_OBS)) return;
       const obs = s.gbif_occurrence_count ?? 0;
       if (obs === 0) ranges[0].count++;
       else if (obs <= 10) ranges[1].count++;
@@ -1779,7 +2401,7 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
       ...r,
       label: `${r.count.toLocaleString()} (${total > 0 ? Math.round((r.count / total) * 100) : 0}%)`,
     }));
-  }, [taxaFilteredSpecies, selectedCategories, selectedCountries, selectedYearRanges, selectedSystems, selectedPopulationTrends, selectedMovementPatterns, selectedThreats, selectedCriteria, matchesHabitatFilter, endemicsOnly, selectedGrowthForms, matchesSearch, matchesAssessorsFilter, matchesReviewersFilter, matchesYearRangeFilter, selectedAssessmentYears, matchesAssessmentYearFilter]);
+  }, [taxaFilteredSpecies, matchesFilters]);
 
   // Number of Assessments chart (#423 item 1): apply all filters EXCEPT the
   // assessment-count selection itself. NE species have no assessment history
@@ -1795,23 +2417,8 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
     ];
     const byBucket: Record<string, number> = { "1": 0, "2": 1, "3": 2, "4": 3, "5+": 4 };
     taxaFilteredSpecies.forEach(s => {
+      if (!matchesFilters(s, SKIP_ASSESSMENT_COUNTS)) return;
       if (s.category === "NE") return;
-      if (!matchesSearch(s)) return;
-      if (selectedCategories.size > 0 && !selectedCategories.has(s.category)) return;
-      if (selectedCountries.size > 0 && !s.countries.some(c => selectedCountries.has(c))) return;
-      if (selectedYearRanges.size > 0 && !matchesYearRangeFilter(s.assessment_date, selectedYearRanges)) return;
-      if (selectedAssessmentYears.size > 0 && !matchesAssessmentYearFilter(s.assessment_date, selectedAssessmentYears)) return;
-      if (selectedObsRanges.size > 0 && !matchesObsRangeFilter(s.gbif_occurrence_count, selectedObsRanges)) return;
-      if (selectedSystems.size > 0 && !s.systems?.some(sys => selectedSystems.has(sys))) return;
-      if (selectedPopulationTrends.size > 0 && (!s.population_trend || !selectedPopulationTrends.has(s.population_trend))) return;
-      if (selectedMovementPatterns.size > 0 && (!s.movement_pattern || !selectedMovementPatterns.has(s.movement_pattern))) return;
-      if (selectedThreats.size > 0 && !s.threat_codes?.some(tc => Array.from(selectedThreats).some(sel => tc === sel || tc.startsWith(sel + ".")))) return;
-      if (selectedCriteria.size > 0 && !parseCriteriaCodes(s.criteria).some(code => Array.from(selectedCriteria).some(sel => code === sel || code.startsWith(sel)))) return;
-      if (endemicsOnly && s.countries.length !== 1) return;
-      if (selectedGrowthForms.size > 0 && !s.growth_forms?.some(gf => selectedGrowthForms.has(gf))) return;
-      if (!matchesAssessorsFilter(s)) return;
-      if (!matchesHabitatFilter(s)) return;
-      if (!matchesReviewersFilter(s)) return;
       buckets[byBucket[assessmentCountBucket(s.assessment_count)]].count++;
     });
     const total = buckets.reduce((sum, r) => sum + r.count, 0);
@@ -1819,7 +2426,7 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
       ...r,
       label: `${r.count.toLocaleString()} (${total > 0 ? Math.round((r.count / total) * 100) : 0}%)`,
     }));
-  }, [taxaFilteredSpecies, selectedCategories, selectedCountries, selectedYearRanges, selectedAssessmentYears, selectedObsRanges, selectedSystems, selectedPopulationTrends, selectedMovementPatterns, selectedThreats, selectedCriteria, matchesHabitatFilter, endemicsOnly, selectedGrowthForms, matchesSearch, matchesAssessorsFilter, matchesReviewersFilter, matchesYearRangeFilter, matchesAssessmentYearFilter, matchesObsRangeFilter, assessmentCountBucket]);
+  }, [taxaFilteredSpecies, assessmentCountBucket, matchesFilters]);
 
   // Year Described chart (NE / new-assessments only): per-bucket counts, cross-filtered
   // by every OTHER active filter (search, country, GBIF obs) but NOT the described-year
@@ -1850,22 +2457,7 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
     const counts: Record<string, number> = {};
     const outdatedCounts: Record<string, number> = {};
     taxaFilteredSpecies.forEach(s => {
-      if (!matchesSearch(s)) return;
-      if (selectedCategories.size > 0 && !selectedCategories.has(s.category)) return;
-      if (s.category !== "NE" && selectedYearRanges.size > 0 && !matchesYearRangeFilter(s.assessment_date, selectedYearRanges)) return;
-      if (s.category !== "NE" && selectedAssessmentYears.size > 0 && !matchesAssessmentYearFilter(s.assessment_date, selectedAssessmentYears)) return;
-      if (selectedObsRanges.size > 0 && !matchesObsRangeFilter(s.gbif_occurrence_count, selectedObsRanges)) return;
-      if (selectedAssessmentCounts.size > 0 && !matchesAssessmentCountFilter(s.assessment_count, selectedAssessmentCounts)) return;
-      if (selectedSystems.size > 0 && !s.systems?.some(sys => selectedSystems.has(sys))) return;
-      if (selectedPopulationTrends.size > 0 && (!s.population_trend || !selectedPopulationTrends.has(s.population_trend))) return;
-      if (selectedMovementPatterns.size > 0 && (!s.movement_pattern || !selectedMovementPatterns.has(s.movement_pattern))) return;
-      if (selectedThreats.size > 0 && !s.threat_codes?.some(tc => Array.from(selectedThreats).some(sel => tc === sel || tc.startsWith(sel + ".")))) return;
-      if (selectedCriteria.size > 0 && !parseCriteriaCodes(s.criteria).some(code => Array.from(selectedCriteria).some(sel => code === sel || code.startsWith(sel)))) return;
-      if (endemicsOnly && s.countries.length !== 1) return;
-      if (selectedGrowthForms.size > 0 && !s.growth_forms?.some(gf => selectedGrowthForms.has(gf))) return;
-      if (!matchesAssessorsFilter(s)) return;
-      if (!matchesHabitatFilter(s)) return;
-      if (!matchesReviewersFilter(s)) return;
+      if (!matchesFilters(s, SKIP_COUNTRIES)) return;
       // Gated on NE the same way the assessment-year filters above are, since NE species have no assessment.
       const outdated = s.category !== "NE" && isOutdated(s.assessment_date, dataAsOf);
       s.countries.forEach(code => {
@@ -1887,12 +2479,12 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
       ])
     );
     return { countryCounts: counts, uniqueCountries: sorted, countryStatsForMap: statsForMap };
-  }, [taxaFilteredSpecies, selectedCategories, selectedYearRanges, selectedObsRanges, selectedSystems, selectedPopulationTrends, selectedMovementPatterns, selectedThreats, selectedCriteria, matchesHabitatFilter, endemicsOnly, selectedGrowthForms, matchesSearch, matchesAssessorsFilter, matchesReviewersFilter, matchesObsRangeFilter, selectedAssessmentCounts, matchesAssessmentCountFilter, matchesYearRangeFilter, selectedAssessmentYears, matchesAssessmentYearFilter, dataAsOf]);
+  }, [taxaFilteredSpecies, dataAsOf, matchesFilters]);
 
   // True per-country totals — taxon/subgroup selection only, no other filters —
   // so the Country map tooltip can show "142 of 3,847 total" instead of just
-  // "142" when a filter (e.g. Outdated, a category) narrows the country's
-  // species count. Without this, e.g. "% Outdated: 100%" while the Outdated
+  // "142" when a filter (e.g. Needs Updating, a category) narrows the country's
+  // species count. Without this, e.g. "% Needs Updating: 100%" while the Needs Updating
   // toggle is on reads as a fact about the country instead of a tautology.
   const countryStatsForMapTotal = useMemo(() => {
     const counts: Record<string, number> = {};
@@ -1925,19 +2517,21 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
       if (selectedAssessmentCounts.size > 0 && !matchesAssessmentCountFilter(s.assessment_count, selectedAssessmentCounts)) return;
       if (selectedPopulationTrends.size > 0 && (!s.population_trend || !selectedPopulationTrends.has(s.population_trend))) return;
       if (selectedMovementPatterns.size > 0 && (!s.movement_pattern || !selectedMovementPatterns.has(s.movement_pattern))) return;
-      if (selectedThreats.size > 0 && !s.threat_codes?.some(tc => Array.from(selectedThreats).some(sel => tc === sel || tc.startsWith(sel + ".")))) return;
+      if (!matchesThreatFilter(s)) return;
       if (selectedCriteria.size > 0 && !parseCriteriaCodes(s.criteria).some(code => Array.from(selectedCriteria).some(sel => code === sel || code.startsWith(sel)))) return;
       if (endemicsOnly && s.countries.length !== 1) return;
       if (selectedGrowthForms.size > 0 && !s.growth_forms?.some(gf => selectedGrowthForms.has(gf))) return;
       if (!matchesAssessorsFilter(s)) return;
       if (!matchesHabitatFilter(s)) return;
       if (!matchesReviewersFilter(s)) return;
+      if (!matchesFacilitatorsFilter(s)) return;
+      if (!matchesColFilter(s)) return;
       for (const sys of s.systems ?? []) {
         if (sys in counts) counts[sys]++;
       }
     });
     return counts;
-  }, [taxaFilteredSpecies, selectedCategories, selectedCountries, selectedYearRanges, selectedObsRanges, selectedPopulationTrends, selectedMovementPatterns, selectedThreats, selectedCriteria, matchesHabitatFilter, matchesSearch, matchesAssessorsFilter, matchesReviewersFilter, endemicsOnly, matchesObsRangeFilter, selectedAssessmentCounts, matchesAssessmentCountFilter, matchesYearRangeFilter, selectedGrowthForms, selectedAssessmentYears, matchesAssessmentYearFilter]);
+  }, [taxaFilteredSpecies, selectedCategories, selectedCountries, selectedYearRanges, selectedObsRanges, selectedPopulationTrends, selectedMovementPatterns, matchesThreatFilter, selectedCriteria, matchesHabitatFilter, matchesSearch, matchesAssessorsFilter, matchesReviewersFilter, matchesFacilitatorsFilter, matchesColFilter, endemicsOnly, matchesObsRangeFilter, selectedAssessmentCounts, matchesAssessmentCountFilter, matchesYearRangeFilter, selectedGrowthForms, selectedAssessmentYears, matchesAssessmentYearFilter]);
 
   // Population trend counts: apply all filters EXCEPT population trend
   const populationTrendCounts = useMemo(() => {
@@ -1953,17 +2547,19 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
       if (selectedAssessmentCounts.size > 0 && !matchesAssessmentCountFilter(s.assessment_count, selectedAssessmentCounts)) return;
       if (selectedSystems.size > 0 && !s.systems?.some(sys => selectedSystems.has(sys))) return;
       if (selectedMovementPatterns.size > 0 && (!s.movement_pattern || !selectedMovementPatterns.has(s.movement_pattern))) return;
-      if (selectedThreats.size > 0 && !s.threat_codes?.some(tc => Array.from(selectedThreats).some(sel => tc === sel || tc.startsWith(sel + ".")))) return;
+      if (!matchesThreatFilter(s)) return;
       if (selectedCriteria.size > 0 && !parseCriteriaCodes(s.criteria).some(code => Array.from(selectedCriteria).some(sel => code === sel || code.startsWith(sel)))) return;
       if (endemicsOnly && s.countries.length !== 1) return;
       if (selectedGrowthForms.size > 0 && !s.growth_forms?.some(gf => selectedGrowthForms.has(gf))) return;
       if (!matchesAssessorsFilter(s)) return;
       if (!matchesHabitatFilter(s)) return;
       if (!matchesReviewersFilter(s)) return;
+      if (!matchesFacilitatorsFilter(s)) return;
+      if (!matchesColFilter(s)) return;
       counts[s.population_trend] = (counts[s.population_trend] || 0) + 1;
     });
     return counts;
-  }, [taxaFilteredSpecies, selectedCategories, selectedCountries, selectedYearRanges, selectedObsRanges, selectedSystems, selectedMovementPatterns, selectedThreats, selectedCriteria, matchesHabitatFilter, matchesSearch, matchesAssessorsFilter, matchesReviewersFilter, endemicsOnly, matchesObsRangeFilter, selectedAssessmentCounts, matchesAssessmentCountFilter, matchesYearRangeFilter, selectedGrowthForms, selectedAssessmentYears, matchesAssessmentYearFilter]);
+  }, [taxaFilteredSpecies, selectedCategories, selectedCountries, selectedYearRanges, selectedObsRanges, selectedSystems, selectedMovementPatterns, matchesThreatFilter, selectedCriteria, matchesHabitatFilter, matchesSearch, matchesAssessorsFilter, matchesReviewersFilter, matchesFacilitatorsFilter, matchesColFilter, endemicsOnly, matchesObsRangeFilter, selectedAssessmentCounts, matchesAssessmentCountFilter, matchesYearRangeFilter, selectedGrowthForms, selectedAssessmentYears, matchesAssessmentYearFilter]);
 
   // Movement pattern counts: apply all filters EXCEPT movement pattern
   const movementPatternCounts = useMemo(() => {
@@ -1979,41 +2575,37 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
       if (selectedAssessmentCounts.size > 0 && !matchesAssessmentCountFilter(s.assessment_count, selectedAssessmentCounts)) return;
       if (selectedSystems.size > 0 && !s.systems?.some(sys => selectedSystems.has(sys))) return;
       if (selectedPopulationTrends.size > 0 && (!s.population_trend || !selectedPopulationTrends.has(s.population_trend))) return;
-      if (selectedThreats.size > 0 && !s.threat_codes?.some(tc => Array.from(selectedThreats).some(sel => tc === sel || tc.startsWith(sel + ".")))) return;
+      if (!matchesThreatFilter(s)) return;
       if (selectedCriteria.size > 0 && !parseCriteriaCodes(s.criteria).some(code => Array.from(selectedCriteria).some(sel => code === sel || code.startsWith(sel)))) return;
       if (endemicsOnly && s.countries.length !== 1) return;
       if (selectedGrowthForms.size > 0 && !s.growth_forms?.some(gf => selectedGrowthForms.has(gf))) return;
       if (!matchesAssessorsFilter(s)) return;
       if (!matchesHabitatFilter(s)) return;
       if (!matchesReviewersFilter(s)) return;
+      if (!matchesFacilitatorsFilter(s)) return;
+      if (!matchesColFilter(s)) return;
       counts[s.movement_pattern] = (counts[s.movement_pattern] || 0) + 1;
     });
     return counts;
-  }, [taxaFilteredSpecies, selectedCategories, selectedCountries, selectedYearRanges, selectedObsRanges, selectedSystems, selectedPopulationTrends, selectedThreats, selectedCriteria, matchesHabitatFilter, matchesSearch, matchesAssessorsFilter, matchesReviewersFilter, endemicsOnly, matchesObsRangeFilter, selectedAssessmentCounts, matchesAssessmentCountFilter, matchesYearRangeFilter, selectedGrowthForms, selectedAssessmentYears, matchesAssessmentYearFilter]);
+  }, [taxaFilteredSpecies, selectedCategories, selectedCountries, selectedYearRanges, selectedObsRanges, selectedSystems, selectedPopulationTrends, matchesThreatFilter, selectedCriteria, matchesHabitatFilter, matchesSearch, matchesAssessorsFilter, matchesReviewersFilter, matchesFacilitatorsFilter, matchesColFilter, endemicsOnly, matchesObsRangeFilter, selectedAssessmentCounts, matchesAssessmentCountFilter, matchesYearRangeFilter, selectedGrowthForms, selectedAssessmentYears, matchesAssessmentYearFilter]);
 
   // Threat counts: apply all filters EXCEPT threats (count species per prefix, deduplicated)
   // Threat counts per code, plus the denominator (`threatTotal`) for percentages:
   // every in-view species that passes the same filters, with or without a threat
   // coded. The threat *selection* is intentionally excluded here, so both the
   // counts and the percentage stay stable as threats are clicked.
+  //
+  // The scope is NOT excluded, though: under the default "threatened" scope both
+  // the counts and the denominator are restricted to CR/EN/VU, because IUCN's
+  // feedback is that threat coding on non-threatened assessments isn't reliable
+  // enough to chart. SKIP_THREATS drops the whole threats axis (scope included —
+  // it lives in matchesThreatFilter), so the restriction is re-applied here.
   const { threatCounts, threatTotal } = useMemo(() => {
     const counts: Record<string, number> = {};
     let total = 0;
     taxaFilteredSpecies.forEach(s => {
-      if (!matchesSearch(s)) return;
-      if (selectedCategories.size > 0 && !selectedCategories.has(s.category)) return;
-      if (selectedCountries.size > 0 && !s.countries.some(c => selectedCountries.has(c))) return;
-      if (s.category !== "NE" && selectedYearRanges.size > 0 && !matchesYearRangeFilter(s.assessment_date, selectedYearRanges)) return;
-      if (s.category !== "NE" && selectedAssessmentYears.size > 0 && !matchesAssessmentYearFilter(s.assessment_date, selectedAssessmentYears)) return;
-      if (selectedObsRanges.size > 0 && !matchesObsRangeFilter(s.gbif_occurrence_count, selectedObsRanges)) return;
-      if (selectedAssessmentCounts.size > 0 && !matchesAssessmentCountFilter(s.assessment_count, selectedAssessmentCounts)) return;
-      if (selectedSystems.size > 0 && !s.systems?.some(sys => selectedSystems.has(sys))) return;
-      if (selectedPopulationTrends.size > 0 && (!s.population_trend || !selectedPopulationTrends.has(s.population_trend))) return;
-      if (selectedMovementPatterns.size > 0 && (!s.movement_pattern || !selectedMovementPatterns.has(s.movement_pattern))) return;
-      if (selectedCriteria.size > 0 && !parseCriteriaCodes(s.criteria).some(code => Array.from(selectedCriteria).some(sel => code === sel || code.startsWith(sel)))) return;
-      if (!matchesAssessorsFilter(s)) return;
-      if (!matchesHabitatFilter(s)) return;
-      if (!matchesReviewersFilter(s)) return;
+      if (!matchesFilters(s, SKIP_THREATS)) return;
+      if (threatsScope === "threatened" && !THREATENED_SET.has(s.category)) return;
       total++;
       if (!s.threat_codes?.length) return;
       // Deduplicate: count each prefix at most once per species
@@ -2030,7 +2622,7 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
       }
     });
     return { threatCounts: counts, threatTotal: total };
-  }, [taxaFilteredSpecies, selectedCategories, selectedCountries, selectedYearRanges, selectedObsRanges, selectedSystems, selectedPopulationTrends, selectedMovementPatterns, selectedCriteria, matchesHabitatFilter, matchesSearch, matchesAssessorsFilter, matchesReviewersFilter, matchesObsRangeFilter, selectedAssessmentCounts, matchesAssessmentCountFilter, matchesYearRangeFilter, selectedAssessmentYears, matchesAssessmentYearFilter]);
+  }, [taxaFilteredSpecies, matchesFilters, threatsScope]);
 
   // Criteria counts: apply all filters EXCEPT criteria (count species per code — at every
   // depth: letter, number, sub-clause, roman numeral — deduplicated per species) — mirrors
@@ -2048,20 +2640,7 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
     const counts: Record<string, number> = {};
     let total = 0;
     taxaFilteredSpecies.forEach(s => {
-      if (!matchesSearch(s)) return;
-      if (selectedCategories.size > 0 && !selectedCategories.has(s.category)) return;
-      if (selectedCountries.size > 0 && !s.countries.some(c => selectedCountries.has(c))) return;
-      if (s.category !== "NE" && selectedYearRanges.size > 0 && !matchesYearRangeFilter(s.assessment_date, selectedYearRanges)) return;
-      if (s.category !== "NE" && selectedAssessmentYears.size > 0 && !matchesAssessmentYearFilter(s.assessment_date, selectedAssessmentYears)) return;
-      if (selectedObsRanges.size > 0 && !matchesObsRangeFilter(s.gbif_occurrence_count, selectedObsRanges)) return;
-      if (selectedAssessmentCounts.size > 0 && !matchesAssessmentCountFilter(s.assessment_count, selectedAssessmentCounts)) return;
-      if (selectedSystems.size > 0 && !s.systems?.some(sys => selectedSystems.has(sys))) return;
-      if (selectedPopulationTrends.size > 0 && (!s.population_trend || !selectedPopulationTrends.has(s.population_trend))) return;
-      if (selectedMovementPatterns.size > 0 && (!s.movement_pattern || !selectedMovementPatterns.has(s.movement_pattern))) return;
-      if (selectedThreats.size > 0 && !s.threat_codes?.some(tc => Array.from(selectedThreats).some(sel => tc === sel || tc.startsWith(sel + ".")))) return;
-      if (!matchesAssessorsFilter(s)) return;
-      if (!matchesHabitatFilter(s)) return;
-      if (!matchesReviewersFilter(s)) return;
+      if (!matchesFilters(s, SKIP_CRITERIA)) return;
       const codes = parseCriteriaCodes(s.criteria);
       if (codes.length === 0) return;
       total++;
@@ -2072,7 +2651,28 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
       for (const letter of letters) counts[letter] = (counts[letter] || 0) + 1;
     });
     return { criteriaCounts: counts, criteriaTotal: total };
-  }, [taxaFilteredSpecies, selectedCategories, selectedCountries, selectedYearRanges, selectedObsRanges, selectedSystems, selectedPopulationTrends, selectedMovementPatterns, selectedThreats, matchesHabitatFilter, matchesSearch, matchesAssessorsFilter, matchesReviewersFilter, matchesObsRangeFilter, selectedAssessmentCounts, matchesAssessmentCountFilter, matchesYearRangeFilter, selectedAssessmentYears, matchesAssessmentYearFilter]);
+  }, [taxaFilteredSpecies, matchesFilters]);
+
+  // Taxonomic-revision counts: apply every filter EXCEPT this chart's own two
+  // (colMatch/colReasons — hence no matchesColFilter here), so each reason bar
+  // stays visible and comparable once one of them is picked, and the
+  // Flagged/Clean toggle keeps showing what it WOULD select. Same
+  // "cross-filter, minus my own axis" rule as threatCounts/criteriaCounts.
+  //
+  // The six no-match reasons partition their own set, but "Split" is an
+  // orthogonal property, so the seven bars together don't partition the flagged
+  // species — see RevisionTally for why forcing them to would be worse. The
+  // tally carries the overlap so the card can show the arithmetic rather than
+  // leave a 1.5% gap for someone to find. Species-level totals DO partition:
+  // flagged + clean is every in-view species.
+  const colTally = useMemo(() => {
+    const tally = newRevisionTally();
+    taxaFilteredSpecies.forEach(s => {
+      if (!matchesFilters(s, SKIP_REVISION)) return;
+      tallyRevision(tally, s.col_revision);
+    });
+    return tally;
+  }, [taxaFilteredSpecies, matchesFilters]);
 
   // Habitat counts: apply all filters EXCEPT habitat (all 4 dimensions — code
   // selection, specialists/major/resident toggles — so the drill-down counts and
@@ -2088,20 +2688,7 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
     const counts: Record<string, number> = {};
     let total = 0;
     taxaFilteredSpecies.forEach(s => {
-      if (!matchesSearch(s)) return;
-      if (selectedCategories.size > 0 && !selectedCategories.has(s.category)) return;
-      if (selectedCountries.size > 0 && !s.countries.some(c => selectedCountries.has(c))) return;
-      if (s.category !== "NE" && selectedYearRanges.size > 0 && !matchesYearRangeFilter(s.assessment_date, selectedYearRanges)) return;
-      if (s.category !== "NE" && selectedAssessmentYears.size > 0 && !matchesAssessmentYearFilter(s.assessment_date, selectedAssessmentYears)) return;
-      if (selectedObsRanges.size > 0 && !matchesObsRangeFilter(s.gbif_occurrence_count, selectedObsRanges)) return;
-      if (selectedAssessmentCounts.size > 0 && !matchesAssessmentCountFilter(s.assessment_count, selectedAssessmentCounts)) return;
-      if (selectedSystems.size > 0 && !s.systems?.some(sys => selectedSystems.has(sys))) return;
-      if (selectedPopulationTrends.size > 0 && (!s.population_trend || !selectedPopulationTrends.has(s.population_trend))) return;
-      if (selectedMovementPatterns.size > 0 && (!s.movement_pattern || !selectedMovementPatterns.has(s.movement_pattern))) return;
-      if (selectedThreats.size > 0 && !s.threat_codes?.some(tc => Array.from(selectedThreats).some(sel => tc === sel || tc.startsWith(sel + ".")))) return;
-      if (selectedCriteria.size > 0 && !parseCriteriaCodes(s.criteria).some(code => Array.from(selectedCriteria).some(sel => code === sel || code.startsWith(sel)))) return;
-      if (!matchesAssessorsFilter(s)) return;
-      if (!matchesReviewersFilter(s)) return;
+      if (!matchesFilters(s, SKIP_HABITAT)) return;
       // selectedHabitat itself is excluded from this cross-filter (so every bar
       // stays visible to compare against, even once one is picked) but Breadth/
       // Importance/Season are refinements, not "the axis being explored" —
@@ -2137,86 +2724,49 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
       }
     });
     return { habitatCounts: counts, habitatTotal: total };
-  }, [taxaFilteredSpecies, selectedCategories, selectedCountries, selectedYearRanges, selectedObsRanges, selectedSystems, selectedPopulationTrends, selectedMovementPatterns, selectedThreats, selectedCriteria, matchesSearch, matchesAssessorsFilter, matchesReviewersFilter, matchesObsRangeFilter, selectedAssessmentCounts, matchesAssessmentCountFilter, matchesYearRangeFilter, selectedAssessmentYears, matchesAssessmentYearFilter, habitatBreadth, selectedHabitatImportance, selectedHabitatSeasons, selectedHabitatSuitability, habitatImportanceActive, habitatSeasonsActive, habitatSuitabilityActive]);
+  }, [taxaFilteredSpecies, habitatBreadth, selectedHabitatImportance, selectedHabitatSeasons, selectedHabitatSuitability, habitatImportanceActive, habitatSeasonsActive, habitatSuitabilityActive, matchesFilters]);
 
   // Handle region filter — select all countries in the chosen region
-  const handleRegionFilter = useCallback((region: string) => {
-    if (!region) {
-      setSelectedCountries(new Set());
-      return;
-    }
-    setSelectedCountries(new Set(iucnRegionCountries(region)));
+  // The region picker hands back a whole country set (a union of the regions
+  // ticked), so this is a straight assignment — regions are not their own piece
+  // of state, they are just a fast way to select countries.
+  const handleRegionsChange = useCallback((countries: Set<string>) => {
+    setSelectedCountries(countries);
   }, [setSelectedCountries]);
 
-  // Assessor chart: apply all filters EXCEPT assessors (include reviewers).
-  // `total` (species with at least one listed assessor) is the percentage
-  // denominator — like criteriaTotal/habitatTotal, since an assessment can
-  // list multiple assessors, percentages are expected to sum past 100%.
-  const assessorChartData = useMemo(() => {
-    const counts: Record<string, number> = {};
-    let total = 0;
-    taxaFilteredSpecies.forEach(s => {
-      if (!matchesSearch(s)) return;
-      if (selectedCategories.size > 0 && !selectedCategories.has(s.category)) return;
-      if (selectedCountries.size > 0 && !s.countries.some(c => selectedCountries.has(c))) return;
-      if (s.category !== "NE" && selectedYearRanges.size > 0 && !matchesYearRangeFilter(s.assessment_date, selectedYearRanges)) return;
-      if (s.category !== "NE" && selectedAssessmentYears.size > 0 && !matchesAssessmentYearFilter(s.assessment_date, selectedAssessmentYears)) return;
-      if (selectedObsRanges.size > 0 && !matchesObsRangeFilter(s.gbif_occurrence_count, selectedObsRanges)) return;
-      if (selectedAssessmentCounts.size > 0 && !matchesAssessmentCountFilter(s.assessment_count, selectedAssessmentCounts)) return;
-      if (selectedSystems.size > 0 && !s.systems?.some(sys => selectedSystems.has(sys))) return;
-      if (selectedPopulationTrends.size > 0 && (!s.population_trend || !selectedPopulationTrends.has(s.population_trend))) return;
-      if (selectedMovementPatterns.size > 0 && (!s.movement_pattern || !selectedMovementPatterns.has(s.movement_pattern))) return;
-      if (selectedThreats.size > 0 && !s.threat_codes?.some(tc => Array.from(selectedThreats).some(sel => tc === sel || tc.startsWith(sel + ".")))) return;
-      if (selectedCriteria.size > 0 && !parseCriteriaCodes(s.criteria).some(code => Array.from(selectedCriteria).some(sel => code === sel || code.startsWith(sel)))) return;
-      if (!matchesHabitatFilter(s)) return;
-      if (endemicsOnly && s.countries.length !== 1) return;
-      if (selectedGrowthForms.size > 0 && !s.growth_forms?.some(gf => selectedGrowthForms.has(gf))) return;
-      if (!matchesReviewersFilter(s)) return;
-      const assessors = getSpeciesAssessors(s);
-      if (assessors.length === 0) return;
-      total++;
-      for (const a of assessors) {
-        counts[a] = (counts[a] || 0) + 1;
-      }
-    });
-    return Object.entries(counts)
-      .sort((a, b) => b[1] - a[1])
-      .map(([name, count]) => ({
-        code: name,
-        count,
-        label: `${count.toLocaleString()} (${total > 0 ? Math.round((count / total) * 100) : 0}%)`,
-      }));
-  }, [taxaFilteredSpecies, selectedCategories, selectedCountries, selectedYearRanges, selectedObsRanges, selectedSystems, selectedPopulationTrends, selectedMovementPatterns, selectedThreats, selectedCriteria, matchesHabitatFilter, endemicsOnly, selectedGrowthForms, matchesSearch, matchesReviewersFilter, getSpeciesAssessors, matchesObsRangeFilter, selectedAssessmentCounts, matchesAssessmentCountFilter, matchesYearRangeFilter, selectedAssessmentYears, matchesAssessmentYearFilter]);
+  // Assessor / reviewer / facilitator charts all count names over the same
+  // filtered species set: every active filter EXCEPT the credit filter the chart
+  // itself drives, so clicking a bar narrows the table without emptying the chart
+  // you clicked in. Shared here rather than copied per chart — the three differ
+  // only in which names they pull and which credit filter they leave out.
+  // Every filter EXCEPT the three credit ones, for the assessors/reviewers/
+  // facilitators chart — which cross-filters against the other two credits
+  // separately (see buildCreditChart).
+  //
+  // This restates the same clause list the per-chart memos above run inline, and
+  // that duplication is a live trap: the taxonomic-revision filter was added to
+  // all twelve inline chains and silently missed here, leaving the credits chart
+  // reporting unfiltered counts. Anything added to one belongs in the other.
+  const matchesNonCreditFilters = useCallback(
+    (s: Species): boolean => matchesFilters(s, SKIP_CREDITS),
+    [matchesFilters]);
 
-  // Reviewer chart: apply all filters EXCEPT reviewers (include assessors).
-  // `total` mirrors assessorChartData's — species with at least one listed
-  // reviewer — so these percentages are also expected to sum past 100%.
-  const reviewerChartData = useMemo(() => {
+  // `total` is the percentage denominator: species carrying at least one name of
+  // this credit type. Like criteria/habitat, one assessment can list several
+  // people, so the percentages are expected to sum past 100%.
+  const buildCreditChart = useCallback((
+    getNames: (s: Species) => string[],
+    otherCreditFilters: Array<(s: Species) => boolean>,
+  ) => {
     const counts: Record<string, number> = {};
     let total = 0;
     taxaFilteredSpecies.forEach(s => {
-      if (!matchesSearch(s)) return;
-      if (selectedCategories.size > 0 && !selectedCategories.has(s.category)) return;
-      if (selectedCountries.size > 0 && !s.countries.some(c => selectedCountries.has(c))) return;
-      if (s.category !== "NE" && selectedYearRanges.size > 0 && !matchesYearRangeFilter(s.assessment_date, selectedYearRanges)) return;
-      if (s.category !== "NE" && selectedAssessmentYears.size > 0 && !matchesAssessmentYearFilter(s.assessment_date, selectedAssessmentYears)) return;
-      if (selectedObsRanges.size > 0 && !matchesObsRangeFilter(s.gbif_occurrence_count, selectedObsRanges)) return;
-      if (selectedAssessmentCounts.size > 0 && !matchesAssessmentCountFilter(s.assessment_count, selectedAssessmentCounts)) return;
-      if (selectedSystems.size > 0 && !s.systems?.some(sys => selectedSystems.has(sys))) return;
-      if (selectedPopulationTrends.size > 0 && (!s.population_trend || !selectedPopulationTrends.has(s.population_trend))) return;
-      if (selectedMovementPatterns.size > 0 && (!s.movement_pattern || !selectedMovementPatterns.has(s.movement_pattern))) return;
-      if (selectedThreats.size > 0 && !s.threat_codes?.some(tc => Array.from(selectedThreats).some(sel => tc === sel || tc.startsWith(sel + ".")))) return;
-      if (selectedCriteria.size > 0 && !parseCriteriaCodes(s.criteria).some(code => Array.from(selectedCriteria).some(sel => code === sel || code.startsWith(sel)))) return;
-      if (endemicsOnly && s.countries.length !== 1) return;
-      if (selectedGrowthForms.size > 0 && !s.growth_forms?.some(gf => selectedGrowthForms.has(gf))) return;
-      if (!matchesAssessorsFilter(s)) return;
-      if (!matchesHabitatFilter(s)) return;
-      const reviewers = getSpeciesReviewers(s);
-      if (reviewers.length === 0) return;
+      if (!matchesNonCreditFilters(s)) return;
+      if (!otherCreditFilters.every(f => f(s))) return;
+      const names = getNames(s);
+      if (names.length === 0) return;
       total++;
-      for (const r of reviewers) {
-        counts[r] = (counts[r] || 0) + 1;
-      }
+      for (const n of names) counts[n] = (counts[n] || 0) + 1;
     });
     return Object.entries(counts)
       .sort((a, b) => b[1] - a[1])
@@ -2225,13 +2775,22 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
         count,
         label: `${count.toLocaleString()} (${total > 0 ? Math.round((count / total) * 100) : 0}%)`,
       }));
-  }, [taxaFilteredSpecies, selectedCategories, selectedCountries, selectedYearRanges, selectedObsRanges, selectedSystems, selectedPopulationTrends, selectedMovementPatterns, selectedThreats, selectedCriteria, matchesHabitatFilter, endemicsOnly, selectedGrowthForms, matchesSearch, matchesAssessorsFilter, getSpeciesReviewers, matchesObsRangeFilter, selectedAssessmentCounts, matchesAssessmentCountFilter, matchesYearRangeFilter, selectedAssessmentYears, matchesAssessmentYearFilter]);
+  }, [taxaFilteredSpecies, matchesNonCreditFilters]);
+
+  const assessorChartData = useMemo(
+    () => buildCreditChart(getSpeciesAssessors, [matchesReviewersFilter, matchesFacilitatorsFilter]),
+    [buildCreditChart, getSpeciesAssessors, matchesReviewersFilter, matchesFacilitatorsFilter]);
+
+  const reviewerChartData = useMemo(
+    () => buildCreditChart(getSpeciesReviewers, [matchesAssessorsFilter, matchesFacilitatorsFilter]),
+    [buildCreditChart, getSpeciesReviewers, matchesAssessorsFilter, matchesFacilitatorsFilter]);
+
+  const facilitatorChartData = useMemo(
+    () => buildCreditChart(getSpeciesFacilitators, [matchesAssessorsFilter, matchesReviewersFilter]),
+    [buildCreditChart, getSpeciesFacilitators, matchesAssessorsFilter, matchesReviewersFilter]);
 
   // ── Client-side filtering and sorting ──────────────────────────────
   const { filteredSpecies, sortedSpecies } = useMemo(() => {
-    const CATEGORY_ORDER: Record<string, number> = {
-      EX: 0, EW: 1, CR: 2, EN: 3, VU: 4, NT: 5, LC: 6, DD: 7, NE: 8,
-    };
     const filtered = taxaFilteredSpecies.filter((s) => {
       const matchesCategory = selectedCategories.size === 0 || selectedCategories.has(s.category);
       const matchesYear = s.category === "NE" || (matchesYearRangeFilter(s.assessment_date) && matchesAssessmentYearFilter(s.assessment_date));
@@ -2243,7 +2802,7 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
       const matchesSystem = selectedSystems.size === 0 || s.systems?.some(sys => selectedSystems.has(sys));
       const matchesTrend = selectedPopulationTrends.size === 0 || (s.population_trend != null && selectedPopulationTrends.has(s.population_trend));
       const matchesMovement = selectedMovementPatterns.size === 0 || (s.movement_pattern != null && selectedMovementPatterns.has(s.movement_pattern));
-      const matchesThreat = selectedThreats.size === 0 || s.threat_codes?.some(tc => Array.from(selectedThreats).some(sel => tc === sel || tc.startsWith(sel + ".")));
+      const matchesThreat = matchesThreatFilter(s);
       const matchesCriteria = selectedCriteria.size === 0 || parseCriteriaCodes(s.criteria).some(code => Array.from(selectedCriteria).some(sel => code === sel || code.startsWith(sel)));
       const matchesHabitat = matchesHabitatFilter(s);
       const matchesEndemic = !endemicsOnly || s.countries.length === 1;
@@ -2254,8 +2813,10 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
         s.common_name?.toLowerCase().includes(searchFilter);
       const matchesAssessor = matchesAssessorsFilter(s);
       const matchesReviewer = matchesReviewersFilter(s);
+      const matchesFacilitator = matchesFacilitatorsFilter(s);
+      const matchesCol = matchesColFilter(s);
       const matchesStarred = !showOnlyStarred || pinnedSet.has(s.species_key);
-      return matchesCategory && matchesYear && matchesDescribed && matchesObs && matchesAssessmentCount && matchesCountry && matchesSystem && matchesTrend && matchesMovement && matchesThreat && matchesCriteria && matchesHabitat && matchesEndemic && matchesGrowth && matchesSearch && matchesAssessor && matchesReviewer && matchesStarred;
+      return matchesCategory && matchesYear && matchesDescribed && matchesObs && matchesAssessmentCount && matchesCountry && matchesSystem && matchesTrend && matchesMovement && matchesThreat && matchesCriteria && matchesHabitat && matchesEndemic && matchesGrowth && matchesSearch && matchesAssessor && matchesReviewer && matchesFacilitator && matchesCol && matchesStarred;
     });
 
     const sorted = [...filtered].sort((a, b) => {
@@ -2265,45 +2826,33 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
         if (aIdx !== -1 && bIdx !== -1) return aIdx - bIdx;
       }
 
-      let comparison = 0;
-      if (isNewAssessments && !sortField) {
-        // Default sort for new-assessments: by total GBIF desc
-        comparison = (a.gbif_occurrence_count ?? -1) - (b.gbif_occurrence_count ?? -1);
-      } else if (!sortField || sortField === "year") {
-        const dateA = a.assessment_date ? new Date(a.assessment_date).getTime() : 0;
-        const dateB = b.assessment_date ? new Date(b.assessment_date).getTime() : 0;
-        comparison = dateA - dateB;
-      } else if (sortField === "category") {
-        comparison = (CATEGORY_ORDER[a.category] ?? 99) - (CATEGORY_ORDER[b.category] ?? 99);
-      } else if (sortField === "totalGbif") {
-        comparison = (a.gbif_occurrence_count ?? -1) - (b.gbif_occurrence_count ?? -1);
-      } else if (sortField === "newGbif") {
-        comparison = (a.gbif_observations_after_assessment_year ?? -1) - (b.gbif_observations_after_assessment_year ?? -1);
-      } else if (sortField === "pctNewGbif") {
-        const pctA = (a.gbif_occurrence_count && a.gbif_occurrence_count > 0 && a.gbif_observations_after_assessment_year != null)
-          ? a.gbif_observations_after_assessment_year / a.gbif_occurrence_count : -1;
-        const pctB = (b.gbif_occurrence_count && b.gbif_occurrence_count > 0 && b.gbif_observations_after_assessment_year != null)
-          ? b.gbif_observations_after_assessment_year / b.gbif_occurrence_count : -1;
-        comparison = pctA - pctB;
-      } else if (sortField === "describedYear") {
-        // Nulls (no known year) sort to the bottom regardless of direction below.
-        comparison = (a.described_year ?? -1) - (b.described_year ?? -1);
-      }
-
-      // Apply primary sort direction
-      const primary = sortDirection === "asc" ? comparison : -comparison;
+      // Primary, then the user's chosen secondary (shift/cmd-click a second
+      // header), then total GBIF desc, then row key. compareBy is shared by the
+      // first two so "sort by X then Y" means the same thing at either level.
+      // With no explicit sort, new-assessments defaults to total GBIF desc and
+      // everything else to assessment date desc.
+      const primaryField: SortField = sortField ?? (isNewAssessments ? "totalGbif" : "year");
+      const primaryCmp = compareBy(primaryField, a, b);
+      const primary = sortDirection === "asc" ? primaryCmp : -primaryCmp;
       if (primary !== 0) return primary;
 
-      // Secondary sort: total GBIF desc (always, regardless of primary direction)
+      if (sortField2 && sortField2 !== primaryField) {
+        const secondaryCmp = compareBy(sortField2, a, b);
+        const secondary = sortDirection2 === "asc" ? secondaryCmp : -secondaryCmp;
+        if (secondary !== 0) return secondary;
+      }
+
+      // Implicit tiebreaker: total GBIF desc, then stable row-key order. Kept
+      // below the explicit secondary so the old behaviour still applies once
+      // the user's own columns have run out of discriminating power.
       const gbifCmp = (b.gbif_occurrence_count ?? -1) - (a.gbif_occurrence_count ?? -1);
       if (gbifCmp !== 0) return gbifCmp;
 
-      // Tertiary tiebreaker: stable row-key order
       return a.species_key.localeCompare(b.species_key);
     });
 
     return { filteredSpecies: filtered, sortedSpecies: sorted };
-  }, [taxaFilteredSpecies, selectedCategories, selectedCountries, selectedSystems, selectedPopulationTrends, selectedMovementPatterns, selectedThreats, selectedCriteria, matchesHabitatFilter, endemicsOnly, selectedGrowthForms, searchFilter, showOnlyStarred, pinnedSet, pinnedSpecies, sortField, sortDirection, matchesAssessorsFilter, matchesReviewersFilter, isNewAssessments, matchesObsRangeFilter, matchesAssessmentCountFilter, matchesYearRangeFilter, matchesAssessmentYearFilter, matchesDescribedYearFilter]);
+  }, [taxaFilteredSpecies, selectedCategories, selectedCountries, selectedSystems, selectedPopulationTrends, selectedMovementPatterns, matchesThreatFilter, selectedCriteria, matchesHabitatFilter, endemicsOnly, selectedGrowthForms, searchFilter, showOnlyStarred, pinnedSet, pinnedSpecies, sortField, sortDirection, sortField2, sortDirection2, matchesAssessorsFilter, matchesReviewersFilter, matchesFacilitatorsFilter, matchesColFilter, isNewAssessments, matchesObsRangeFilter, matchesAssessmentCountFilter, matchesYearRangeFilter, matchesAssessmentYearFilter, matchesDescribedYearFilter]);
 
   // Giant aggregates (insects, invertebrates…) are capped at 400k server-side; surface
   // a banner so the list reads as "showing N of M — drill into a sub-group for the rest".
@@ -2362,6 +2911,7 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
   const singleSpecies = isSingleSpecies ? filteredSpecies[0] : null;
   const singleSpeciesAssessors = useMemo(() => singleSpecies ? getSpeciesAssessors(singleSpecies) : [], [singleSpecies, getSpeciesAssessors]);
   const singleSpeciesReviewers = useMemo(() => singleSpecies ? getSpeciesReviewers(singleSpecies) : [], [singleSpecies, getSpeciesReviewers]);
+  const singleSpeciesFacilitators = useMemo(() => singleSpecies ? getSpeciesFacilitators(singleSpecies) : [], [singleSpecies, getSpeciesFacilitators]);
 
   // Helper to get country display name
   const getCountryName = (code: string) => ALPHA2_TO_NAME[code] || code;
@@ -2385,7 +2935,50 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
 
 
   // Handle sort toggle
-  const handleSort = (field: "year" | "category" | "totalGbif" | "newGbif" | "pctNewGbif" | "describedYear") => {
+  // The ↓/↑ arrow in a sortable column header, plus a ①/② rank badge once a
+  // secondary sort is active — with only one sort running the badge is noise, so
+  // it appears only when there is actually an order to disambiguate.
+  const SortIndicator = ({ field }: { field: SortField }) => {
+    const effectivePrimary: SortField = sortField ?? (isNewAssessments ? "totalGbif" : "year");
+    const isPrimary = field === effectivePrimary;
+    const isSecondary = !isPrimary && sortField2 === field;
+    if (!isPrimary && !isSecondary) return null;
+
+    const direction = isPrimary ? sortDirection : sortDirection2;
+    const showRank = !!sortField2 && sortField2 !== effectivePrimary;
+    // New-assessments keeps its existing emerald accent; everything else red.
+    const color = isNewAssessments && isPrimary ? "text-emerald-500" : "text-red-500";
+    return (
+      <span className={`${color} whitespace-nowrap`}>
+        {showRank && <span className="text-[9px] align-super mr-0.5">{isPrimary ? "①" : "②"}</span>}
+        {direction === "desc" ? "↓" : "↑"}
+      </span>
+    );
+  };
+
+  // Plain click drives the primary sort (desc → asc → off, as before).
+  // Shift or Cmd/Ctrl+click drives the SECONDARY sort — "sort within the first"
+  // — on the same three-step cycle. Cmd/Ctrl is accepted alongside Shift
+  // because it already means "add this to the selection" on every chart in this
+  // dashboard, so it is the modifier people reach for first here too.
+  const handleSort = (field: SortField, event?: React.MouseEvent) => {
+    const isSecondary = !!event && (event.shiftKey || event.metaKey || event.ctrlKey);
+
+    if (isSecondary) {
+      // A secondary that matches the primary would be a no-op tiebreaker;
+      // promote it to primary instead of silently doing nothing.
+      if (field === (sortField ?? "year")) {
+        setSort(field, sortDirection === "desc" ? "asc" : "desc");
+      } else if (sortField2 === field) {
+        if (sortDirection2 === "desc") setSort2(field, "asc");
+        else setSort2(null, "desc");
+      } else {
+        setSort2(field, "desc");
+      }
+      setCurrentPage(1);
+      return;
+    }
+
     const currentField = sortField === null ? "year" : sortField;
     if (currentField === field) {
       if (sortDirection === "desc") {
@@ -2396,6 +2989,9 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
     } else {
       setSort(field, "desc");
     }
+    // Clearing/changing the primary leaves a secondary on a now-identical
+    // column meaningless — drop it rather than let it linger invisibly.
+    if (sortField2 === field) setSort2(null, "desc");
     setCurrentPage(1);
   };
 
@@ -2798,6 +3394,24 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
   // handlers are parameterised by which selection setter they target.
   type SetSelection = React.Dispatch<React.SetStateAction<Set<string>>>;
 
+  // Shift+drag across a chart selects every bar the drag swept over (see
+  // FilterBarChart/YearBarChart's onRangeSelect). Plain shift+drag replaces the
+  // selection; holding Cmd/Ctrl as well adds to it, which is how a range wider
+  // than what's on screen gets built — e.g. the by-year chart pages 10 years at
+  // a time, so 2005-2020 is one drag per page.
+  const makeRangeSelect = useCallback((setter: SetSelection) =>
+    (keys: string[], event: MouseEvent | React.MouseEvent) => {
+      const isAdditive = event.metaKey || event.ctrlKey;
+      setter(prev => isAdditive ? new Set([...prev, ...keys]) : new Set(keys));
+    }, []);
+  const rangeSelectCategories = useMemo(() => makeRangeSelect(setSelectedCategories), [makeRangeSelect, setSelectedCategories]);
+  const rangeSelectYearRanges = useMemo(() => makeRangeSelect(setSelectedYearRanges), [makeRangeSelect, setSelectedYearRanges]);
+  const rangeSelectAssessmentYears = useMemo(() => makeRangeSelect(setSelectedAssessmentYears), [makeRangeSelect, setSelectedAssessmentYears]);
+  const rangeSelectObsRanges = useMemo(() => makeRangeSelect(setSelectedObsRanges), [makeRangeSelect, setSelectedObsRanges]);
+  const rangeSelectDescribedYears = useMemo(() => makeRangeSelect(setSelectedDescribedYears), [makeRangeSelect, setSelectedDescribedYears]);
+  const rangeSelectAssessmentCounts = useMemo(() => makeRangeSelect(setSelectedAssessmentCounts), [makeRangeSelect, setSelectedAssessmentCounts]);
+  const rangeSelectColReasons = useMemo(() => makeRangeSelect(setColReasons), [makeRangeSelect, setColReasons]);
+
   // Toggle a single assessor/reviewer in/out of selection (used by search list)
   const makeAssessorToggle = useCallback((setter: SetSelection) => (code: string) => {
     setter(prev => {
@@ -2807,6 +3421,15 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
       return next;
     });
   }, []);
+
+  // Which selection the credit chart drives, keyed by its active tab — so the
+  // chart's selected pills, bar clicks and search toggles all follow the tab
+  // without a chain of ternaries at each of the three call sites.
+  const creditSelection = useMemo(() => ({
+    assessors: { selected: selectedAssessors, setter: setSelectedAssessors },
+    reviewers: { selected: selectedReviewers, setter: setSelectedReviewers },
+    facilitators: { selected: selectedFacilitators, setter: setSelectedFacilitators },
+  }), [selectedAssessors, setSelectedAssessors, selectedReviewers, setSelectedReviewers, selectedFacilitators, setSelectedFacilitators]);
 
   // Handle assessor/reviewer bar click
   const makeAssessorClick = useCallback((setter: SetSelection) => (data: { payload?: { code?: string } }, event: React.MouseEvent) => {
@@ -2879,6 +3502,7 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
     && selectedGrowthForms.size === 0
     && selectedAssessors.size === 0
     && selectedReviewers.size === 0
+    && selectedFacilitators.size === 0
     && !endemicsOnly
     && !searchFilter
     && !showOnlyStarred;
@@ -2982,9 +3606,9 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
       speciesLabel={isNewAssessments ? "# Unassessed" : undefined}
       showOutdatedMode={!isNewAssessments}
       showGbifToggle={false}
-      onRegionFilter={handleRegionFilter}
+      onRegionsChange={handleRegionsChange}
       mapViewMode={mapViewMode}
-      onMapViewModeChange={setMapViewMode}
+      onMapViewModeChange={changeMapViewMode}
       mapSortKey={mapSortKey}
       mapSortDirection={mapSortDirection}
       onMapSortChange={setMapSort}
@@ -3060,12 +3684,12 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
           speciesLabel={isNewAssessments ? "# Unassessed" : undefined}
           showOutdatedMode={!isNewAssessments}
           showColorModeDropdown={!isNewAssessments}
-          onRegionFilter={handleRegionFilter}
+          onRegionsChange={handleRegionsChange}
           endemicsOnly={endemicsOnly}
           onEndemicsToggle={isNewAssessments ? undefined : () => setEndemicsOnly(!endemicsOnly)}
           showGbifToggle={showGbifToggle}
           mapViewMode={mapViewMode}
-          onMapViewModeChange={setMapViewMode}
+          onMapViewModeChange={changeMapViewMode}
           mapSortKey={mapSortKey}
           mapSortDirection={mapSortDirection}
           onMapSortChange={setMapSort}
@@ -3073,6 +3697,159 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
       )}
     </div>
   );
+
+  // Taxonomic differences from Catalogue of Life — the SSC-group view's "No 1:1 CoL
+  // Match" diagnostic, surfaced as an ordinary dashboard filter. The coarse
+  // Flagged/Clean toggle sits in the header (it's a two-way choice, not a bar);
+  // the bars below break the flagged bucket down by reason, which is the part
+  // that actually says what KIND of taxonomic disagreement this is. Clicking a
+  // reason implies flagged, so it also lights the toggle.
+  const taxonomicRevisionCard = (() => {
+    const loading = speciesLoading && assessedSpecies.length === 0;
+    const barSelected = (bar: (typeof REVISION_BARS)[number]) =>
+      bar.reasons.some(r => selectedColReasons.has(r));
+    // Which bars are drawn, and the empty-bar rule, live in col-revision.ts.
+    const barData = visibleBars(colTally.counts, selectedColReasons).map(({ bar, count }) => ({
+      code: bar.label,
+      rawCode: bar.key,
+      count,
+      label: count.toLocaleString(),
+    }));
+    // FilterBarChart keys selection off the displayed `code`, not our bar key.
+    const selectedShort = new Set(REVISION_BARS.filter(barSelected).map(b => b.label));
+    const barByLabel = new Map(REVISION_BARS.map(b => [b.label, b]));
+    // Selecting a bar selects every reason it covers.
+    const reasonsForLabel = (label: string) => barByLabel.get(label)?.reasons ?? [];
+    // A reason narrowing implies flagged, so the Flagged button renders pressed
+    // whenever one is active — and clicking it then has to mean "turn the whole
+    // thing off", not "switch flagged on" (setColMatch(null) drops the reasons
+    // with it). Without this, the button looked pressed but behaved as unpressed.
+    const flaggedActive = colMatch === "flagged" || selectedColReasons.size > 0;
+    const toggle = (value: "flagged" | "clean") => () =>
+      setColMatch((value === "flagged" ? flaggedActive : colMatch === value) ? null : value);
+    const toggleClass = (active: boolean, activeColor: string) =>
+      `px-2 py-0.5 text-xs font-semibold rounded transition-colors ${
+        active ? `${activeColor} text-white shadow-sm` : "bg-zinc-100 dark:bg-zinc-800 text-zinc-500 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-300"
+      }`;
+    return (
+      <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-3 flex flex-col">
+        <div className="flex items-center justify-between gap-2 mb-1 min-h-[24px]">
+          <span className="text-sm font-semibold text-zinc-900 dark:text-zinc-100 flex items-center gap-1">
+            Taxonomic differences from Catalogue of Life
+            <HoverTooltip text="Assessed species whose name Catalogue of Life treats differently: either the IUCN name has no clean one-to-one match in the current Catalogue of Life checklist (lumped, now a subspecies, or not in the checklist yet), or Catalogue of Life now recognises species likely split out of it. Two checklists can differ without either being wrong — the Red List assesses the taxon its assessors scoped, Catalogue of Life maintains a nomenclatural checklist — so this says where they differ, not who is right. The split signal is a name-pattern heuristic. The no-match half is the same diagnostic the SSC group view shows as 'No 1:1 CoL Match'.">
+              <svg className="w-3 h-3 text-zinc-400 dark:text-zinc-500 cursor-help" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <circle cx="12" cy="12" r="10" />
+                <path d="M12 16v-4M12 8h.01" />
+              </svg>
+            </HoverTooltip>
+          </span>
+          <div className="flex items-center gap-1 flex-shrink-0">
+            <button
+              type="button"
+              onClick={toggle("flagged")}
+              className={toggleClass(flaggedActive, "bg-amber-600")}
+              aria-pressed={flaggedActive}
+              title="Only species with no clean 1:1 Catalogue of Life match"
+            >
+              ⚑ {colTally.flagged.toLocaleString()}
+            </button>
+            <button
+              type="button"
+              onClick={toggle("clean")}
+              className={toggleClass(colMatch === "clean", "bg-emerald-600")}
+              aria-pressed={colMatch === "clean"}
+              title="Only species with a clean 1:1 Catalogue of Life match"
+            >
+              Clean {colTally.clean.toLocaleString()}
+            </button>
+          </div>
+        </div>
+        {loading ? (
+          <div style={{ height: 150 }} className="flex items-center justify-center"><Spinner className="h-4 w-4" /></div>
+        ) : barData.length > 0 ? (
+          <>
+            <div style={{ height: Math.max(90, barData.length * 26) }}>
+              <FilterBarChart
+                data={barData}
+                dataKey="code"
+                selectedItems={selectedShort}
+                onBarClick={(data: { payload?: { code?: string } }, event: React.MouseEvent) => {
+                  const reasons = data.payload?.code ? reasonsForLabel(data.payload.code) : [];
+                  if (!reasons.length) return;
+                  // Cmd/ctrl-click adds a bar (reasons are mutually exclusive per
+                  // species, so multi-select is a union), plain click replaces —
+                  // same convention as Criteria/Threats. A bar carries all of its
+                  // reasons in and out together, so the URL stays a reason list
+                  // and matchesRevisionFilter needs no notion of bars.
+                  const isMulti = event.metaKey || event.ctrlKey;
+                  const has = reasons.every(r => selectedColReasons.has(r));
+                  setColReasons(prev => {
+                    const next = new Set(isMulti ? prev : []);
+                    if (isMulti && has) reasons.forEach(r => next.delete(r));
+                    else if (!isMulti && has && prev.size === reasons.length) return new Set<string>();
+                    else reasons.forEach(r => next.add(r));
+                    return next;
+                  });
+                }}
+                // This chart's bars are keyed by their display label, not the
+                // reason id (FilterBarChart renders `code` as the axis tick), so
+                // a swept range comes back as short labels — map them before
+                // handing off to the shared additive/replace semantics.
+                onRangeSelect={(keys, event) => {
+                  const reasons = keys.flatMap(k => [...reasonsForLabel(k)]);
+                  if (reasons.length) rangeSelectColReasons(reasons, event);
+                }}
+                barColor="#d97706"
+                yAxisWidth={180}
+                rightMargin={60}
+                // Just the label. It used to append the reason's one-line
+                // summary, which made the hover box 635px wide inside a 506px
+                // card — covering every bar, so you could not see which one you
+                // were about to click, and clipping its own text off the edge.
+                // The summary was there when the labels were cryptic ("Renamed",
+                // "In XR, not Base"); they now say what they mean, and the
+                // sentence lives in the ⚑ tooltip on each row where there is room
+                // for it.
+                labelFormatter={(short: string) => short}
+              />
+            </div>
+            {/* Why the bars total more than the ⚑ count. Split, lumped and the
+                no-match reasons are independent properties, not one axis, so a
+                species can sit in more than one bar. Rather than leave that as a
+                silent gap for a reader to trip over, state it — and only when
+                this view actually contains an overlap. */}
+            {colTally.multiSignal > 0 && (
+              <p
+                className="mt-1 text-[11px] leading-snug text-zinc-500 dark:text-zinc-400"
+                title="Each bar still selects exactly the species it counts. A species that has been both split and lumped, say, appears in both."
+              >
+                {colTally.multiSignal.toLocaleString()} of these carry more than one signal, so the bars
+                {" "}total {barTotal(colTally).toLocaleString()}, not {colTally.flagged.toLocaleString()}.
+              </p>
+            )}
+            <p className="mt-1.5 text-[11px] italic leading-snug text-zinc-500 dark:text-zinc-400">
+              {REVISION_CAVEAT}
+            </p>
+            {selectedColReasons.size > 0 && (
+              <button
+                type="button"
+                onClick={() => setColReasons(new Set<string>())}
+                className="self-start mt-1 text-[11px] text-zinc-500 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200 underline"
+              >
+                Clear reason filter
+              </button>
+            )}
+          </>
+        ) : (
+          <div style={{ height: 90 }} className="flex items-center justify-center">
+            <span className="text-sm text-zinc-400 dark:text-zinc-500">
+              {colTally.clean > 0 ? "No differences flagged here" : "No Catalogue of Life match data"}
+            </span>
+          </div>
+        )}
+      </div>
+    );
+  })();
 
   // Shared by Criteria/Threats/Habitat (#436 follow-up): renders a bar chart
   // with pills inserted directly below whichever bar(s) are currently
@@ -3132,7 +3909,8 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
   const threatsCard = (() => {
     // Map label→code for reverse lookup from chart clicks
     const threatLabelToCode = new Map(THREAT_CATEGORIES.map(c => [c.label, c.code]));
-    // Bar label: count + share of all in-view species (see threatTotal).
+    // Bar label: count + share of the in-view species the scope covers — under
+    // the default scope that's every in-view THREATENED species (see threatTotal).
     const threatBarLabel = (count: number) =>
       `${count.toLocaleString()} (${threatTotal > 0 ? Math.round((count / threatTotal) * 100) : 0}%)`;
     // Use label as `code` field so it displays on y-axis, sorted by count desc
@@ -3190,8 +3968,55 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
     };
     return (
       <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-3 flex flex-col">
-        <div className="flex items-center justify-between mb-1 min-h-[24px]">
+        <div className="flex items-center justify-between mb-1 min-h-[24px] flex-wrap gap-1">
           <span className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">Threats</span>
+          {/* Scope — which species the threat data is drawn from. Defaults to
+              threatened (CR/EN/VU) on IUCN's own advice that threat coding is
+              only reliable there; "All species" is the opt-out. Highlighted in
+              the default state precisely because it IS narrowing the data: a
+              default that quietly drops species should say so on the card.
+              Mirrors the Habitat card's Breadth dropdown. */}
+          <div className="relative" ref={threatsScopeMenuRef}>
+            <button
+              type="button"
+              onClick={() => setThreatsScopeMenuOpen(prev => !prev)}
+              className={`px-2 py-0.5 text-xs font-semibold rounded transition-colors ${
+                threatsScope === "threatened"
+                  ? "bg-orange-400 text-white shadow-sm"
+                  : "bg-zinc-100 dark:bg-zinc-800 text-zinc-500 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-300"
+              }`}
+              aria-expanded={threatsScopeMenuOpen}
+              title="Which species these threat counts are drawn from"
+            >
+              {threatsScope === "threatened" ? "Threatened only" : "All species"} ▾
+            </button>
+            {threatsScopeMenuOpen && (
+              <div className="absolute right-0 top-full mt-1 z-20 bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-lg shadow-lg py-1 w-72">
+                {([
+                  { value: "threatened" as const, label: "Threatened only", hint: "Critically Endangered, Endangered and Vulnerable assessments" },
+                  { value: "all" as const, label: "All species", hint: "Also count threats coded on non-threatened assessments" },
+                ]).map(({ value, label, hint }) => (
+                  <label
+                    key={value}
+                    className="flex items-start gap-2 px-3 py-1.5 text-xs text-zinc-700 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-700/50 cursor-pointer"
+                  >
+                    <input
+                      type="radio"
+                      name="threats-scope"
+                      checked={threatsScope === value}
+                      onChange={() => { setThreatsScope(value); setThreatsScopeMenuOpen(false); }}
+                      className="mt-0.5 border-zinc-300 dark:border-zinc-600 text-orange-500 focus:ring-orange-400"
+                    />
+                    <span>
+                      {label}
+                      <br />
+                      <span className="text-[10px] text-zinc-400 dark:text-zinc-500">{hint}</span>
+                    </span>
+                  </label>
+                ))}
+              </div>
+            )}
+          </div>
         </div>
         {loading ? (
           <div style={{ height: 200 }} className="flex items-center justify-center"><Spinner /></div>
@@ -3215,7 +4040,7 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
                 });
                 setExpandedThreat(prev => { const next = new Set(prev); if (next.has(code)) next.delete(code); else next.add(code); return next; });
               },
-              barColor: "#8b5cf6",
+              barColor: "#fb923c",
               yAxisWidth: 155,
               rightMargin: 80,
               yAxisTickMaxLength: 22,
@@ -3849,6 +4674,7 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
                     dataKey="code"
                     selectedItems={selectedCategories}
                     onBarClick={handleCategoryClick}
+                    onRangeSelect={rangeSelectCategories}
                     yAxisWidth={26}
                     rightMargin={55}
                     labelFormatter={(code) => ({
@@ -3868,11 +4694,17 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
 
             {/* Years Since Assessed / Year of Latest Assessment */}
             <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-3 flex flex-col">
-              <div className="flex flex-wrap items-center justify-between mb-1 gap-x-2 gap-y-1">
+              {/* The charts row is a fixed-width 3-up grid, so this header always has
+                  ~305px to work with, whatever the viewport. Title + Needs Updating +
+                  the view select came to ~341px, which wrapped the two controls onto
+                  a row of their own; the sizes below (and on both controls) are what
+                  fits them beside the title instead. It still wraps rather than
+                  overflowing if a platform's text runs wider than the ~6px to spare. */}
+              <div className="flex flex-wrap items-center justify-between mb-1 gap-x-1.5 gap-y-1">
                 <span className="text-sm font-semibold text-zinc-900 dark:text-zinc-100 whitespace-nowrap">
                   {yearsChartMode === "range" ? "Years Since Assessed" : "Year of Latest Assessment"}
                 </span>
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-1">
                   {/* Outdated shortcut: filter to species assessed >10 years ago (mirrors the Threatened button).
                       Range-view only — the Year view's muting is only year-granular, so the button's precise
                       cutoff date doesn't line up as cleanly there. */}
@@ -3880,7 +4712,7 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
                     <button
                       type="button"
                       onClick={handleOutdatedClick}
-                      className={`px-2 py-0.5 text-xs font-semibold rounded transition-colors ${
+                      className={`px-1 py-0.5 text-[11px] font-semibold rounded transition-colors ${
                         isOutdatedSelected
                           ? "bg-red-600 text-white shadow-sm"
                           : "bg-zinc-100 dark:bg-zinc-800 text-zinc-500 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-300"
@@ -3888,7 +4720,7 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
                       aria-pressed={isOutdatedSelected}
                       title={`Filter to species last assessed before ${outdatedCutoffDate(dataAsOf).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })}`}
                     >
-                      Outdated
+                      Needs Updating
                     </button>
                   )}
                   {/* Pagination controls (year view only, and only when multiple pages) */}
@@ -3929,15 +4761,25 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
                     );
                   })()}
                   {!(isSingleSpecies && singleSpecies) && (
-                    <select
-                      value={yearsChartMode}
-                      onChange={(e) => setYearsChartMode(e.target.value as "range" | "year")}
-                      aria-label="Year chart view"
-                      className="text-xs font-semibold bg-zinc-100 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-md px-1.5 py-0.5 text-zinc-700 dark:text-zinc-300 focus:outline-none focus:ring-1 focus:ring-blue-500 cursor-pointer"
-                    >
-                      <option value="range">Range</option>
-                      <option value="year">Year</option>
-                    </select>
+                    // appearance-none + our own chevron: a native select reserves a
+                    // chunk of width for the platform's own arrow (wider still on
+                    // macOS) that no amount of padding reclaims. The chevron is an SVG
+                    // rather than a "▾" glyph so its width doesn't vary by platform
+                    // font either — see the header's note on how little room there is.
+                    <div className="relative">
+                      <select
+                        value={yearsChartMode}
+                        onChange={(e) => changeYearsChartMode(e.target.value as "range" | "year")}
+                        aria-label="Year chart view"
+                        className="appearance-none text-[11px] font-semibold bg-zinc-100 dark:bg-zinc-800 rounded-md pl-1 pr-3 py-0.5 text-zinc-700 dark:text-zinc-300 focus:outline-none focus:ring-1 focus:ring-blue-500 cursor-pointer"
+                      >
+                        <option value="range">Range</option>
+                        <option value="year">Year</option>
+                      </select>
+                      <svg aria-hidden className="pointer-events-none absolute right-0.5 top-1/2 -translate-y-1/2 w-2 h-2 text-zinc-500 dark:text-zinc-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={3} strokeLinecap="round" strokeLinejoin="round">
+                        <polyline points="6 9 12 15 18 9" />
+                      </svg>
+                    </div>
                   )}
                 </div>
               </div>
@@ -3969,6 +4811,7 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
                         dataKey="shortRange"
                         selectedItems={yearRangeSelectedItems}
                         onBarClick={handleYearClick}
+                        onRangeSelect={rangeSelectYearRanges}
                         barColor="#3b82f6"
                         yAxisWidth={36}
                         rightMargin={85}
@@ -3981,6 +4824,7 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
                       data={paginatedAssessmentYearsData}
                       selectedItems={assessmentYearSelectedItems}
                       onBarClick={handleAssessmentYearClick}
+                      onRangeSelect={rangeSelectAssessmentYears}
                       barColor="#3b82f6"
                       yMax={yearsGlobalMax}
                     />
@@ -4015,6 +4859,7 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
                     dataKey="shortRange"
                     selectedItems={selectedObsRanges}
                     onBarClick={handleObsClick}
+                    onRangeSelect={rangeSelectObsRanges}
                     barColor="#10b981"
                     yAxisWidth={42}
                     rightMargin={85}
@@ -4057,6 +4902,7 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
                     dataKey="shortRange"
                     selectedItems={selectedDescribedYears}
                     onBarClick={handleDescribedYearClick}
+                    onRangeSelect={rangeSelectDescribedYears}
                     barColor="#3b82f6"
                     yAxisWidth={64}
                     rightMargin={85}
@@ -4081,6 +4927,7 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
                     dataKey="shortRange"
                     selectedItems={selectedObsRanges}
                     onBarClick={handleObsClick}
+                    onRangeSelect={rangeSelectObsRanges}
                     barColor="#10b981"
                     yAxisWidth={42}
                     rightMargin={85}
@@ -4100,10 +4947,59 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
               confusing, so this reverts to plain click-to-expand instead. */}
           {!isNewAssessments && (
             <>
-                {/* Country, Threats — paired side by side. */}
+                {/* Country alongside Assessors/Reviewers/Facilitators. */}
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                   {countryMapCard}
-                  {threatsCard}
+                  {isSingleSpecies && singleSpecies ? (() => {
+                    // Facilitators are absent on ~62% of latest assessments — the
+                    // field is only filled when the credited assessor is an
+                    // organisation — so "Facilitators / None listed" is the common
+                    // case, not the exception. Drop the card rather than spend a
+                    // third of the row saying nothing. Assessors and Reviewers keep
+                    // theirs: empty there is genuinely notable.
+                    const cards = [
+                      { title: "Assessors", names: singleSpeciesAssessors },
+                      { title: "Reviewers", names: singleSpeciesReviewers },
+                      ...(singleSpeciesFacilitators.length > 0
+                        ? [{ title: "Facilitators", names: singleSpeciesFacilitators }]
+                        : []),
+                    ];
+                    return (
+                    <div className={`grid grid-cols-1 gap-3 ${cards.length === 3 ? "sm:grid-cols-3" : "sm:grid-cols-2"}`}>
+                      {cards.map(({ title, names }) => (
+                        <div key={title} className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-3 flex flex-col">
+                          <div className="flex items-center justify-between mb-1">
+                            <span className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">{title}</span>
+                          </div>
+                          <div className="overflow-y-auto mt-2" style={{ maxHeight: 260 }}>
+                            {names.length > 0 ? (
+                              <div className="flex flex-wrap gap-2">
+                                {names.map((name) => (
+                                  <span key={name} className="inline-block px-3 py-1.5 text-sm rounded-lg bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300">{name}</span>
+                                ))}
+                              </div>
+                            ) : (
+                              <span className="text-sm text-zinc-400 dark:text-zinc-500">None listed</span>
+                            )}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                    );
+                  })() : (
+                    <ReviewerChart
+                      allAssessors={assessorChartData}
+                      allReviewers={reviewerChartData}
+                      allFacilitators={facilitatorChartData}
+                      viewMode={assessorReviewerMode}
+                      onViewModeChange={changeCreditChartMode}
+                      selectedItems={creditSelection[assessorReviewerMode].selected}
+                      onBarClick={makeAssessorClick(creditSelection[assessorReviewerMode].setter)}
+                      onRangeSelect={makeRangeSelect(creditSelection[assessorReviewerMode].setter)}
+                      onItemToggle={makeAssessorToggle(creditSelection[assessorReviewerMode].setter)}
+                      loading={speciesLoading && assessedSpecies.length === 0}
+                    />
+                  )}
                 </div>
 
                 <button
@@ -4114,9 +5010,9 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
                   </svg>
                   More Filters
-                  {(selectedGrowthForms.size + selectedHabitat.size + (habitatBreadth ? 1 : 0) + (habitatImportanceActive ? 1 : 0) + (habitatSeasonsActive ? 1 : 0) + (habitatSuitabilityActive ? 1 : 0) + selectedAssessmentCounts.size + selectedSystems.size + selectedMovementPatterns.size + selectedPopulationTrends.size + selectedCriteria.size + selectedAssessors.size + selectedReviewers.size > 0) && (
+                  {(selectedGrowthForms.size + selectedHabitat.size + (habitatBreadth ? 1 : 0) + (habitatImportanceActive ? 1 : 0) + (habitatSeasonsActive ? 1 : 0) + (habitatSuitabilityActive ? 1 : 0) + selectedAssessmentCounts.size + selectedSystems.size + selectedMovementPatterns.size + selectedPopulationTrends.size + selectedCriteria.size + selectedAssessors.size + selectedReviewers.size + selectedFacilitators.size > 0) && (
                     <span className="ml-1 px-1.5 py-0.5 text-[10px] rounded-full bg-zinc-200 dark:bg-zinc-700 text-zinc-600 dark:text-zinc-300">
-                      {selectedGrowthForms.size + selectedHabitat.size + (habitatBreadth ? 1 : 0) + (habitatImportanceActive ? 1 : 0) + (habitatSeasonsActive ? 1 : 0) + (habitatSuitabilityActive ? 1 : 0) + selectedAssessmentCounts.size + selectedSystems.size + selectedMovementPatterns.size + selectedPopulationTrends.size + selectedCriteria.size + selectedAssessors.size + selectedReviewers.size} active
+                      {selectedGrowthForms.size + selectedHabitat.size + (habitatBreadth ? 1 : 0) + (habitatImportanceActive ? 1 : 0) + (habitatSeasonsActive ? 1 : 0) + (habitatSuitabilityActive ? 1 : 0) + selectedAssessmentCounts.size + selectedSystems.size + selectedMovementPatterns.size + selectedPopulationTrends.size + selectedCriteria.size + selectedAssessors.size + selectedReviewers.size + selectedFacilitators.size} active
                     </span>
                   )}
                 </button>
@@ -4149,12 +5045,14 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
                     if (selectedSystems.size > 0 && !s.systems?.some(sys => selectedSystems.has(sys))) return;
                     if (selectedPopulationTrends.size > 0 && (!s.population_trend || !selectedPopulationTrends.has(s.population_trend))) return;
                     if (selectedMovementPatterns.size > 0 && (!s.movement_pattern || !selectedMovementPatterns.has(s.movement_pattern))) return;
-                    if (selectedThreats.size > 0 && !s.threat_codes?.some(tc => Array.from(selectedThreats).some(sel => tc === sel || tc.startsWith(sel + ".")))) return;
+                    if (!matchesThreatFilter(s)) return;
                     if (selectedCriteria.size > 0 && !parseCriteriaCodes(s.criteria).some(code => Array.from(selectedCriteria).some(sel => code === sel || code.startsWith(sel)))) return;
                     if (endemicsOnly && s.countries.length !== 1) return;
                     if (!matchesAssessorsFilter(s)) return;
                     if (!matchesHabitatFilter(s)) return;
                     if (!matchesReviewersFilter(s)) return;
+                    if (!matchesFacilitatorsFilter(s)) return;
+      if (!matchesColFilter(s)) return;
                     for (const gf of s.growth_forms) {
                       gfCounts[gf] = (gfCounts[gf] || 0) + 1;
                     }
@@ -4193,10 +5091,7 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
                   );
                 })()}
 
-                {/* Assessment Criteria alongside Number of Assessments — a row, not a
-                    stack (previously stacked in Habitat's right column; moved
-                    out once Habitat started pairing with Assessors/Reviewers
-                    instead). */}
+                {/* Assessment Criteria alongside Number of Assessments. */}
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                   {/* Criteria — top-level A-E bar chart (see criteriaCard);
                       clicking a bar both selects it as a filter AND expands
@@ -4252,6 +5147,7 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
                             dataKey="shortRange"
                             selectedItems={selectedAssessmentCounts}
                             onBarClick={handleAssessmentCountClick}
+                            onRangeSelect={rangeSelectAssessmentCounts}
                             barColor="#8b5cf6"
                             yAxisWidth={42}
                             rightMargin={85}
@@ -4369,46 +5265,21 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
                   </div>
                 </div>
 
-                {/* Habitat alongside Assessors/Reviewers. */}
+                {/* Habitat alongside Threats. */}
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                   {habitatCard}
-                  {isSingleSpecies && singleSpecies ? (
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                      {([
-                        { title: "Assessors", names: singleSpeciesAssessors },
-                        { title: "Reviewers", names: singleSpeciesReviewers },
-                      ] as const).map(({ title, names }) => (
-                        <div key={title} className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-3 flex flex-col">
-                          <div className="flex items-center justify-between mb-1">
-                            <span className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">{title}</span>
-                          </div>
-                          <div className="overflow-y-auto mt-2" style={{ maxHeight: 260 }}>
-                            {names.length > 0 ? (
-                              <div className="flex flex-wrap gap-2">
-                                {names.map((name) => (
-                                  <span key={name} className="inline-block px-3 py-1.5 text-sm rounded-lg bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300">{name}</span>
-                                ))}
-                              </div>
-                            ) : (
-                              <span className="text-sm text-zinc-400 dark:text-zinc-500">None listed</span>
-                            )}
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  ) : (
-                    <ReviewerChart
-                      allAssessors={assessorChartData}
-                      allReviewers={reviewerChartData}
-                      viewMode={assessorReviewerMode}
-                      onViewModeChange={setAssessorReviewerMode}
-                      selectedItems={assessorReviewerMode === "assessors" ? selectedAssessors : selectedReviewers}
-                      onBarClick={makeAssessorClick(assessorReviewerMode === "assessors" ? setSelectedAssessors : setSelectedReviewers)}
-                      onItemToggle={makeAssessorToggle(assessorReviewerMode === "assessors" ? setSelectedAssessors : setSelectedReviewers)}
-                      loading={speciesLoading && assessedSpecies.length === 0}
-                    />
-                  )}
+                  {threatsCard}
                 </div>
+
+                {/* Taxonomic differences from CoL — assessed-only: the flag is a
+                    property of an IUCN assessment's name, so it has no meaning
+                    in the Not Evaluated (new-assessments) view, whose rows are
+                    CoL species with no assessment to disagree with. */}
+                {!isNewAssessments && (
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    {taxonomicRevisionCard}
+                  </div>
+                )}
 
             </>
           )}
@@ -4441,7 +5312,7 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
               </svg>
             </div>
-            {(selectedTaxa.size > 0 || selectedSubgroups.size > 0 || selectedCategories.size > 0 || selectedYearRanges.size > 0 || selectedAssessmentYears.size > 0 || selectedDescribedYears.size > 0 || selectedObsRanges.size > 0 || selectedAssessmentCounts.size > 0 || selectedCountries.size > 0 || selectedSystems.size > 0 || endemicsOnly || selectedGrowthForms.size > 0 || selectedPopulationTrends.size > 0 || selectedMovementPatterns.size > 0 || selectedThreats.size > 0 || selectedCriteria.size > 0 || selectedHabitat.size > 0 || habitatBreadth || habitatImportanceActive || habitatSeasonsActive || habitatSuitabilityActive || selectedAssessors.size > 0 || selectedReviewers.size > 0 || showOnlyStarred || exactFilters.outdated || exactFilters.minObs != null || exactFilters.maxObs != null || exactFilters.minAssessmentYear != null || exactFilters.maxAssessmentYear != null || exactFilters.minDescribedYear != null || exactFilters.maxDescribedYear != null) && (
+            {(selectedTaxa.size > 0 || selectedSubgroups.size > 0 || selectedCategories.size > 0 || selectedYearRanges.size > 0 || selectedAssessmentYears.size > 0 || selectedDescribedYears.size > 0 || selectedObsRanges.size > 0 || selectedAssessmentCounts.size > 0 || selectedCountries.size > 0 || selectedSystems.size > 0 || endemicsOnly || selectedGrowthForms.size > 0 || selectedPopulationTrends.size > 0 || selectedMovementPatterns.size > 0 || selectedThreats.size > 0 || selectedCriteria.size > 0 || selectedHabitat.size > 0 || habitatBreadth || colMatch || selectedColReasons.size > 0 || habitatImportanceActive || habitatSeasonsActive || habitatSuitabilityActive || selectedAssessors.size > 0 || selectedReviewers.size > 0 || selectedFacilitators.size > 0 || showOnlyStarred || exactFilters.outdated || exactFilters.minObs != null || exactFilters.maxObs != null || exactFilters.minAssessmentYear != null || exactFilters.maxAssessmentYear != null || exactFilters.minDescribedYear != null || exactFilters.maxDescribedYear != null) && (
               <button
                 onClick={() => {
                   clearAllFiltersAndTaxa();
@@ -4571,25 +5442,25 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
             ))}
             {(() => {
               if (selectedCountries.size === 0) return null;
-              // Check if selected countries exactly match a single IUCN region
-              const regions = new Set<string>();
-              selectedCountries.forEach(c => regions.add(countryToIucnRegion(c)));
-              if (regions.size === 1) {
-                const region = [...regions][0];
-                if (region !== "Other") {
-                  const regionCodes = iucnRegionCountries(region);
-                  if (regionCodes.length === selectedCountries.size && regionCodes.every(c => selectedCountries.has(c))) {
-                    return (
-                      <button
-                        onClick={() => setSelectedCountries(new Set())}
-                        className="px-3 py-1.5 text-sm font-medium rounded-full bg-green-100 text-green-600 dark:bg-green-900/30 dark:text-green-400 flex items-center gap-1 hover:opacity-80"
-                      >
-                        {region}
-                        <span className="text-sm">×</span>
-                      </button>
-                    );
-                  }
-                }
+              // A selection that exactly covers whole IUCN regions reads as those
+              // regions rather than as their countries — two ticked regions is two
+              // pills, not the nineteen country pills it expands to underneath.
+              const regions = matchingRegions(selectedCountries);
+              if (regions.length > 0) {
+                return regions.map(region => (
+                  <button
+                    key={`region-${region}`}
+                    onClick={() => setSelectedCountries(prev => {
+                      const next = new Set(prev);
+                      iucnRegionCountries(region).forEach(c => next.delete(c));
+                      return next;
+                    })}
+                    className="px-3 py-1.5 text-sm font-medium rounded-full bg-green-100 text-green-600 dark:bg-green-900/30 dark:text-green-400 flex items-center gap-1 hover:opacity-80"
+                  >
+                    {region}
+                    <span className="text-sm">×</span>
+                  </button>
+                ));
               }
               // Otherwise show individual country pills
               return Array.from(selectedCountries).map(code => (
@@ -4657,6 +5528,22 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
                 </button>
               );
             })}
+            {/* The threats scope only narrows anything once a threat is picked
+                (see matchesThreatFilter), so it earns a chip exactly then —
+                a permanent chip for a default that isn't filtering would be
+                noise, and no chip at all would hide the fact that the species
+                list has quietly dropped every non-threatened match. × widens to
+                all species rather than clearing the threat itself. */}
+            {selectedThreats.size > 0 && threatsScope === "threatened" && (
+              <button
+                onClick={() => setThreatsScope("all")}
+                title="Threat data is only counted for Critically Endangered, Endangered and Vulnerable species"
+                className="px-3 py-1.5 text-sm font-medium rounded-full bg-rose-100 text-rose-600 dark:bg-rose-900/30 dark:text-rose-400 flex items-center gap-1 hover:opacity-80"
+              >
+                Threatened only
+                <span className="text-sm">×</span>
+              </button>
+            )}
             {Array.from(selectedCriteria).map(code => {
               const label = findCriteriaNode(CRITERIA_CATEGORIES, code)?.label || code;
               return (
@@ -4685,6 +5572,37 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
                 </button>
               );
             })}
+            {/* Taxonomic-revision chips. colReasons implies flagged, so when
+                reasons are picked they ARE the chips — a redundant "Flagged"
+                chip beside them would need its own × that means something
+                different (clear the toggle, keep the reasons?), which is a
+                distinction without a use. */}
+            {selectedColReasons.size === 0 && colMatch && (
+              <button
+                onClick={() => setColMatch(null)}
+                className="px-3 py-1.5 text-sm font-medium rounded-full bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-500 flex items-center gap-1 hover:opacity-80"
+              >
+                {colMatch === "flagged" ? "⚑ Differs from Catalogue of Life" : "Clean CoL match"}
+                <span className="text-sm">×</span>
+              </button>
+            )}
+            {/* One chip per BAR, not per reason: "No 1:1 CoL match" covers six
+                reasons, and six chips for one click would read as six filters. */}
+            {REVISION_BARS.filter(bar => bar.reasons.some(r => selectedColReasons.has(r))).map(bar => (
+              <button
+                key={`col-bar-${bar.key}`}
+                onClick={() => setColReasons(prev => {
+                  const next = new Set(prev);
+                  bar.reasons.forEach(r => next.delete(r));
+                  return next;
+                })}
+                title={bar.reasons.map(r => REVISION_REASON_SUMMARY[r]).filter(Boolean).join("; ")}
+                className="px-3 py-1.5 text-sm font-medium rounded-full bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-500 flex items-center gap-1 hover:opacity-80"
+              >
+                ⚑ {bar.label}
+                <span className="text-sm">×</span>
+              </button>
+            ))}
             {habitatBreadth && (
               <button
                 onClick={() => setHabitatBreadth(null)}
@@ -4764,12 +5682,22 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
                 <span className="text-sm">×</span>
               </button>
             ))}
+            {!isNewAssessments && Array.from(selectedFacilitators).map(name => (
+              <button
+                key={`f-${name}`}
+                onClick={() => setSelectedFacilitators(prev => { const next = new Set(prev); next.delete(name); return next; })}
+                className="px-3 py-1.5 text-sm font-medium rounded-full bg-teal-100 text-teal-600 dark:bg-teal-900/30 dark:text-teal-400 flex items-center gap-1 hover:opacity-80"
+              >
+                {name} <span className="text-[10px] opacity-60">(facilitator)</span>
+                <span className="text-sm">×</span>
+              </button>
+            ))}
             {/* Exact URL-only filters (typically arrive via an agent/MCP dashboard
                 link). Shown as chips so a human can see and clear them. */}
             {(() => {
               const ef = exactFilters;
               const chips: { key: keyof typeof ef; label: string }[] = [];
-              if (ef.outdated) chips.push({ key: "outdated", label: ef.outdated === "yes" ? "Outdated (>10 yrs)" : "Current (≤10 yrs)" });
+              if (ef.outdated) chips.push({ key: "outdated", label: ef.outdated === "yes" ? "Needs updating (>10 yrs)" : "Current (≤10 yrs)" });
               if (ef.minObs != null) chips.push({ key: "minObs", label: `≥ ${ef.minObs.toLocaleString()} obs` });
               if (ef.maxObs != null) chips.push({ key: "maxObs", label: `≤ ${ef.maxObs.toLocaleString()} obs` });
               if (ef.minAssessmentYear != null) chips.push({ key: "minAssessmentYear", label: `Assessed ≥ ${ef.minAssessmentYear}` });
@@ -4866,58 +5794,50 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
                 {!isNewAssessments && (
                 <th
                   className="px-2 md:px-4 py-3 text-left text-xs font-medium text-zinc-500 uppercase tracking-wider cursor-pointer hover:text-zinc-700 dark:hover:text-zinc-300 select-none whitespace-nowrap"
-                  onClick={() => handleSort("category")}
+                  onClick={(e) => handleSort("category", e)}
                 >
                   <span className="flex items-center gap-1">
                     Category
-                    {sortField === "category" && (
-                      <span className="text-red-500">{sortDirection === "desc" ? "↓" : "↑"}</span>
-                    )}
+                    <SortIndicator field="category" />
                   </span>
                 </th>
                 )}
                 {!isNewAssessments && (
                 <th
                   className="px-2 md:px-4 py-3 text-left text-xs font-medium text-zinc-500 uppercase tracking-wider cursor-pointer hover:text-zinc-700 dark:hover:text-zinc-300 select-none whitespace-nowrap"
-                  onClick={() => handleSort("year")}
+                  onClick={(e) => handleSort("year", e)}
                 >
                   <span className="flex items-center gap-1">
                     Assess. Date
-                    {(sortField === "year" || sortField === null) && (
-                      <span className="text-red-500">{sortDirection === "desc" ? "↓" : "↑"}</span>
-                    )}
+                    <SortIndicator field="year" />
                   </span>
                 </th>
                 )}
                 {isNewAssessments && (
                 <th
                   className="px-2 md:px-4 py-3 text-left text-xs font-medium text-zinc-500 uppercase tracking-wider cursor-pointer hover:text-zinc-700 dark:hover:text-zinc-300 select-none whitespace-nowrap"
-                  onClick={() => handleSort("describedYear")}
+                  onClick={(e) => handleSort("describedYear", e)}
                 >
                   <span className="flex items-center gap-1">
                     Year Described
-                    {sortField === "describedYear" && (
-                      <span className="text-emerald-500">{sortDirection === "desc" ? "↓" : "↑"}</span>
-                    )}
+                    <SortIndicator field="describedYear" />
                   </span>
                 </th>
                 )}
                 <th
                   className="px-3 md:px-4 py-3 text-right text-xs font-medium text-zinc-500 uppercase tracking-wider min-w-[60px] cursor-pointer hover:text-zinc-700 dark:hover:text-zinc-300 select-none"
-                  onClick={() => handleSort("totalGbif")}
+                  onClick={(e) => handleSort("totalGbif", e)}
                 >
                   <span className="flex items-center justify-end gap-1">
                     {isNewAssessments ? "GBIF Observations" : "GBIF Total"}
                     <GbifInfoTooltip />
-                    {(sortField === "totalGbif" || (isNewAssessments && sortField === null)) && (
-                      <span className={isNewAssessments ? "text-emerald-500" : "text-red-500"}>{sortDirection === "desc" ? "↓" : "↑"}</span>
-                    )}
+                    <SortIndicator field="totalGbif" />
                   </span>
                 </th>
                 {!isNewAssessments && (
                 <th
                   className="px-3 md:px-4 py-3 text-right text-xs font-medium text-zinc-500 uppercase tracking-wider min-w-[60px] cursor-pointer hover:text-zinc-700 dark:hover:text-zinc-300 select-none"
-                  onClick={() => handleSort("newGbif")}
+                  onClick={(e) => handleSort("newGbif", e)}
                 >
                   <span className="flex items-center justify-end gap-1">
                     GBIF Since Assess.
@@ -4927,22 +5847,18 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
                         <path d="M12 16v-4M12 8h.01" />
                       </svg>
                     </HoverTooltip>
-                    {sortField === "newGbif" && (
-                      <span className="text-red-500">{sortDirection === "desc" ? "↓" : "↑"}</span>
-                    )}
+                    <SortIndicator field="newGbif" />
                   </span>
                 </th>
                 )}
                 {!isNewAssessments && (
                 <th
                   className="px-3 md:px-4 py-3 text-right text-xs font-medium text-zinc-500 uppercase tracking-wider min-w-[60px] cursor-pointer hover:text-zinc-700 dark:hover:text-zinc-300 select-none"
-                  onClick={() => handleSort("pctNewGbif")}
+                  onClick={(e) => handleSort("pctNewGbif", e)}
                 >
                   <span className="flex items-center justify-end gap-1">
                     % GBIF Since Assess.
-                    {sortField === "pctNewGbif" && (
-                      <span className="text-red-500">{sortDirection === "desc" ? "↓" : "↑"}</span>
-                    )}
+                    <SortIndicator field="pctNewGbif" />
                   </span>
                 </th>
                 )}
@@ -4958,6 +5874,18 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
                   : null;
                 const details = speciesDetails[s.species_key];
                 const gbifSpeciesKey = s.gbif_species_key || details?.gbifUrl?.split('/').pop() || null;
+                // Suggested Assessors/Reviewers rank people over THIS species' own
+                // lineage (its taxon group down to its genus), not over whatever taxon
+                // is selected — so the ranking is the same wherever you reached the
+                // species from. See getCreditCandidates.
+                const candidateSpecies = {
+                  taxonGroup: s.taxon_group,
+                  scientificName: s.scientific_name,
+                  className: s.class_name,
+                  orderName: s.order_name,
+                  family: s.family,
+                  countries: s.countries,
+                };
                 const isPinned = pinnedSet.has(speciesKey);
                 const isDragging = draggedSpecies === speciesKey;
                 const isDragOver = dragOverSpecies === speciesKey && draggedSpecies !== speciesKey;
@@ -5038,6 +5966,34 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
                           >
                             {s.scientific_name}
                           </span>
+                          {/* Possible-taxonomic-revision flag — see the
+                              "Taxonomic differences from Catalogue of Life"
+                              filter card. Only
+                              the ~6% of assessed species CoL disagrees with (or
+                              has split something out of) carry one, so this is a
+                              rare marker, not a per-row decoration. It opens the
+                              CoL record the flag is about: the tooltip says what
+                              CoL did, and the obvious next question is "show
+                              me", which the filter chart already answers for the
+                              "give me all of these" case. A species can carry
+                              both signals, hence a list of sentences. */}
+                          {isFlagged(s.col_revision) && (
+                            <SelectableHoverTooltip
+                              content={<RevisionTooltipContent flag={s.col_revision!} name={s.scientific_name} category={s.category} />}
+                              prepare={s.col_revision!.colId ? () => prefetchColProvenance(s.col_revision!.colId!) : undefined}
+                            >
+                              <a
+                                href={colTaxonUrl(s.col_revision!, s.scientific_name)}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                onClick={(e) => e.stopPropagation()}
+                                aria-label={`Differs from Catalogue of Life — ${revisionReasons(s.col_revision!).map(r => REVISION_REASON_SUMMARY[r] ?? r).join("; ")}. Open in Catalogue of Life`}
+                                className="ml-1 align-middle text-amber-600 dark:text-amber-500 hover:text-amber-700 dark:hover:text-amber-400 text-xs"
+                              >
+                                ⚑
+                              </a>
+                            </SelectableHoverTooltip>
+                          )}
                           {s.common_name && (
                             <div className="text-zinc-500 dark:text-zinc-400 text-xs truncate max-w-[140px] md:max-w-none">
                               {s.common_name}
@@ -5208,7 +6164,7 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
                                     className={`shrink-0 px-2 sm:px-4 py-2 text-sm font-medium whitespace-nowrap transition-colors ${activeDetailTab === "redlist" ? "text-blue-600 dark:text-blue-400 border-b-2 border-blue-600 dark:border-blue-400" : "text-zinc-500 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-300"}`}
                                     onClick={() => setActiveDetailTab("redlist")}
                                   >
-                                    IUCN Red List
+                                    IUCN Red List Assessments
                                   </button>
                                 )}
                                 <button
@@ -5239,18 +6195,10 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
                                 </button>
                                 {s.category === "NE" && (
                                   <button
-                                    className={`shrink-0 px-2 sm:px-4 py-2 text-sm font-medium whitespace-nowrap transition-colors ${activeDetailTab === "assessors" ? "text-blue-600 dark:text-blue-400 border-b-2 border-blue-600 dark:border-blue-400" : "text-zinc-500 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-300"}`}
-                                    onClick={() => setActiveDetailTab("assessors")}
+                                    className={`shrink-0 px-2 sm:px-4 py-2 text-sm font-medium whitespace-nowrap transition-colors ${activeDetailTab === "candidates" ? "text-blue-600 dark:text-blue-400 border-b-2 border-blue-600 dark:border-blue-400" : "text-zinc-500 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-300"}`}
+                                    onClick={() => setActiveDetailTab("candidates")}
                                   >
-                                    Suggested Assessors
-                                  </button>
-                                )}
-                                {s.category === "NE" && (
-                                  <button
-                                    className={`shrink-0 px-2 sm:px-4 py-2 text-sm font-medium whitespace-nowrap transition-colors ${activeDetailTab === "reviewers" ? "text-blue-600 dark:text-blue-400 border-b-2 border-blue-600 dark:border-blue-400" : "text-zinc-500 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-300"}`}
-                                    onClick={() => setActiveDetailTab("reviewers")}
-                                  >
-                                    Suggested Reviewers
+                                    Suggested Experts
                                   </button>
                                 )}
                           </div>
@@ -5370,22 +6318,9 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
                             <CitesSummary scientificName={s.scientific_name} />
                           </div>
                           )}
-                          {s.category === "NE" && (visitedTabs.has("assessors")) && (
-                            <div style={{ display: activeDetailTab === "assessors" ? undefined : "none" }}>
-                              <AssessorCandidatesTable
-                                taxaId={[...selectedSubgroups][0] ?? [...selectedTaxa][0] ?? s.taxon_group}
-                                taxaName={findNode([...selectedSubgroups][0] ?? [...selectedTaxa][0] ?? s.taxon_group)?.name ?? (selectedSubgroups.size > 0 ? dynamicNodeDisplayName([...selectedSubgroups][0]) : undefined) ?? TAXA_BY_ID[[...selectedTaxa][0] ?? s.taxon_group]?.name ?? "Species"}
-                                countries={s.countries}
-                              />
-                            </div>
-                          )}
-                          {s.category === "NE" && (visitedTabs.has("reviewers")) && (
-                            <div style={{ display: activeDetailTab === "reviewers" ? undefined : "none" }}>
-                              <ReviewerCandidatesTable
-                                taxaId={[...selectedSubgroups][0] ?? [...selectedTaxa][0] ?? s.taxon_group}
-                                taxaName={findNode([...selectedSubgroups][0] ?? [...selectedTaxa][0] ?? s.taxon_group)?.name ?? (selectedSubgroups.size > 0 ? dynamicNodeDisplayName([...selectedSubgroups][0]) : undefined) ?? TAXA_BY_ID[[...selectedTaxa][0] ?? s.taxon_group]?.name ?? "Species"}
-                                countries={s.countries}
-                              />
+                          {s.category === "NE" && (visitedTabs.has("candidates")) && (
+                            <div style={{ display: activeDetailTab === "candidates" ? undefined : "none" }}>
+                              <CandidatesTable role={candidateRole} onRoleChange={changeCandidateRole} species={candidateSpecies} />
                             </div>
                           )}
                           </div>
@@ -5415,6 +6350,24 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
               <div className="text-xs md:text-sm text-zinc-500">
                 {(currentPage - 1) * PAGE_SIZE + 1}-{Math.min(currentPage * PAGE_SIZE, totalFiltered)} of {totalFiltered}
               </div>
+              {/* Secondary-sort hint. Shown only while a secondary is NOT set, so
+                  it teaches the gesture and then gets out of the way — the ①/②
+                  header badges carry the state once it is in use. Hidden on
+                  small screens, where the modifier gesture isn't available. */}
+              {!sortField2 && (
+                <span className="hidden lg:inline text-xs text-zinc-400 dark:text-zinc-500">
+                  ⇧ or ⌘/Ctrl+click a second column to sort within the first
+                </span>
+              )}
+              {sortField2 && (
+                <button
+                  onClick={() => { setSort2(null, "desc"); setCurrentPage(1); }}
+                  className="hidden lg:inline text-xs text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300 underline decoration-dotted"
+                  title="Remove the secondary sort"
+                >
+                  Clear 2nd sort
+                </button>
+              )}
               <label className="flex items-center gap-1.5 text-xs md:text-sm text-zinc-500">
                 <span>Rows</span>
                 <select

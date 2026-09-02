@@ -20,8 +20,8 @@
  *  - taxa are emitted as a single flat token list (`taxa=corals,felidae`); the
  *    dashboard's parseParams expands each token to its display-root + sub-group
  *    (corals → invertebrates + inv-corals) — see taxonomy-utils. A scientific-rank
- *    taxon (`felidae`) has no node and is matched by class/order/family.
- *  - `assessors`/`reviewers`: both surfaces case-insensitively SUBSTRING-match the
+ *    taxon (`felidae`, `panthera`) has no node and is matched by class/order/family/genus.
+ *  - `assessors`/`reviewers`/`facilitators`: both surfaces case-insensitively SUBSTRING-match the
  *    name (the dashboard predicate mirrors /browse), so a partial name selects the
  *    same species set in each.
  */
@@ -66,6 +66,14 @@ export function browseInputToDashboardQuery(input: BrowseInput): string {
   applySharedFilters(input, criteria);
   emitSharedParams(criteria, p);
 
+  // The dashboard's Threats chart defaults to a threatened-only (CR/EN/VU) scope,
+  // which also narrows a threat SELECTION (see RedListView's matchesThreatFilter).
+  // /browse and MCP have no such scope — `threats` there is a plain code match over
+  // every species — so a link carrying threats has to opt out of it explicitly, or
+  // the dashboard would silently show a smaller set than the answer it links from.
+  // Someone who wants the reliable-only view flips the card's dropdown themselves.
+  if (p.get("threats")) p.set("threatsScope", "all");
+
   // Countries + region (region expands to its country set — lossless).
   const countries = new Set<string>([
     ...resolveCountries(arr(input.countries)).codes,
@@ -77,6 +85,8 @@ export function browseInputToDashboardQuery(input: BrowseInput): string {
   if (assessors.length) p.set("assessors", assessors.join("|"));
   const reviewers = arr(input.reviewers);
   if (reviewers.length) p.set("reviewers", reviewers.join("|"));
+  const facilitators = arr(input.facilitators);
+  if (facilitators.length) p.set("facilitators", facilitators.join("|"));
 
   // Exact numeric / outdated params (URL-only; feed the same predicate the
   // dashboard runs, so the result matches the bucket-free /browse query).

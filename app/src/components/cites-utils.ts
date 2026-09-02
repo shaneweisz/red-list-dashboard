@@ -1,4 +1,4 @@
-import { ALPHA2_TO_NAME } from "./WorldMap";
+import { ALPHA2_TO_NAME } from "@/lib/countries";
 export { fmtQty } from "@/lib/data-utils";
 
 export function countryName(code: string): string {

@@ -2,6 +2,8 @@
 // by RedListView. (The data is fetched inline in RedListView; this module is the
 // canonical type definition imported across the app.)
 
+import type { ColRevision } from "@/lib/col-revision";
+
 export interface RedListSpecies {
   /**
    * This row's identity everywhere in the UI — selection, pinning, React keys,
@@ -31,12 +33,21 @@ export interface RedListSpecies {
   gbif_species_key: string | null;
   gbif_occurrence_count: number | null;
   gbif_observations_after_assessment_year: number | null;
-  // Latest assessment's assessors/reviewers, inline in the species list (drives
-  // the assessor/reviewer filter). The full history array is fetched lazily into
-  // previous_assessments when a detail panel opens — empty in the list response.
+  // Latest assessment's assessors/reviewers/facilitators, inline in the species
+  // list (drives the assessor/reviewer/facilitator filter). The full history
+  // array is fetched lazily into previous_assessments when a detail panel opens
+  // — empty in the list response.
   latest_assessors: string | null;
   latest_reviewers: string | null;
-  previous_assessments: { id: number; year: string; category: string; date: string | null; criteria: string | null; assessors: string | null; reviewers: string | null }[];
+  /**
+   * RedListFacilitators — who actually ran the assessment when the credited
+   * assessor is an organisation rather than a person. BirdLife International is
+   * the assessor on every bird assessment, so this is the only field naming the
+   * individuals who did the work. null on the ~62% of latest assessments that
+   * credit no facilitator at all.
+   */
+  latest_facilitators: string | null;
+  previous_assessments: { id: number; year: string; category: string; date: string | null; criteria: string | null; assessors: string | null; reviewers: string | null; facilitators: string | null }[];
   systems: string[];
   growth_forms: string[];
   movement_pattern: string | null;
@@ -45,6 +56,14 @@ export interface RedListSpecies {
   criteria: string | null;
   threat_codes: string[];
   habitat_codes: string[];
+  /**
+   * A possible sign that this species' taxonomy has moved since it was assessed:
+   * either Catalogue of Life has no clean 1:1 match for it (lumped it, demoted it
+   * to a subspecies, doesn't list it yet…), or CoL now recognises species likely
+   * split out of it. null for the ~94% with neither, and for NE rows.
+   * See lib/col-revision.
+   */
+  col_revision?: ColRevision | null;
   // Count of distinct assessment years on record (>=2 means reassessed at
   // least once). null for NE rows, which have no assessment history.
   assessment_count: number | null;

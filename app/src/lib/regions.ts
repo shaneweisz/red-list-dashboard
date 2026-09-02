@@ -239,12 +239,15 @@ const COUNTRY_TO_IUCN_REGION: Record<string, string> = {
   // North Asia
   RU: "North Asia",
 
-  // Oceania
-  AS: "Oceania", AU: "Oceania", CK: "Oceania", FJ: "Oceania", FM: "Oceania",
-  GU: "Oceania", KI: "Oceania", MH: "Oceania", MP: "Oceania", NC: "Oceania",
-  NF: "Oceania", NR: "Oceania", NU: "Oceania", NZ: "Oceania", PF: "Oceania",
-  PG: "Oceania", PN: "Oceania", PW: "Oceania", SB: "Oceania", TK: "Oceania",
-  TO: "Oceania", TV: "Oceania", VU: "Oceania", WF: "Oceania", WS: "Oceania",
+  // Oceania — including the Indian Ocean and Pacific island territories IUCN
+  // files here (Christmas Island, Cocos, US Minor Outlying Islands), which
+  // used to fall through to "Other" and so sat outside every region filter.
+  AS: "Oceania", AU: "Oceania", CC: "Oceania", CK: "Oceania", CX: "Oceania",
+  FJ: "Oceania", FM: "Oceania", GU: "Oceania", KI: "Oceania", MH: "Oceania",
+  MP: "Oceania", NC: "Oceania", NF: "Oceania", NR: "Oceania", NU: "Oceania",
+  NZ: "Oceania", PF: "Oceania", PG: "Oceania", PN: "Oceania", PW: "Oceania",
+  SB: "Oceania", TK: "Oceania", TO: "Oceania", TV: "Oceania", UM: "Oceania",
+  VU: "Oceania", WF: "Oceania", WS: "Oceania",
 
   // South America
   AR: "South America", BO: "South America", BR: "South America", CL: "South America",
@@ -256,6 +259,7 @@ const COUNTRY_TO_IUCN_REGION: Record<string, string> = {
   AF: "South and Southeast Asia", BD: "South and Southeast Asia",
   BN: "South and Southeast Asia", BT: "South and Southeast Asia",
   ID: "South and Southeast Asia", IN: "South and Southeast Asia",
+  IO: "South and Southeast Asia",
   KH: "South and Southeast Asia", LA: "South and Southeast Asia",
   LK: "South and Southeast Asia", MM: "South and Southeast Asia",
   MV: "South and Southeast Asia", MY: "South and Southeast Asia",
@@ -324,25 +328,51 @@ export function iucnRegionCountries(region: string): string[] {
 }
 
 /**
- * Which region (if any) a set of country codes matches *exactly* — not just
+ * The IUCN region a country selection exactly covers — meaning, not
  * "some/one country within it", every code in the region and no others. Used
  * to show a region's name (e.g. "Sub-Saharan Africa") instead of a generic
  * "N countries" label wherever a whole region was selected as a unit, whether
- * via the region dropdown or by happening to cmd-click every one of its
+ * via the region control or by happening to cmd-click every one of its
  * countries individually. Returns null for an empty set, an arbitrary
  * multi-select that doesn't line up with any one region, or a set spanning
  * more than one region.
  */
 export function matchingRegion(codes: Set<string> | string[]): string | null {
+  const regions = matchingRegions(codes);
+  return regions.length === 1 ? regions[0] : null;
+}
+
+/**
+ * Every IUCN region a country selection exactly covers, in IUCN_REGION_ORDER.
+ *
+ * The multi-region generalisation of matchingRegion: "North America + South
+ * America" is two fully-covered regions, so both come back. A selection is
+ * only reported as covering a region when EVERY one of that region's countries
+ * is present — a partial overlap contributes nothing, which is what makes this
+ * safe to round-trip through a checkbox UI (ticking a box adds exactly the
+ * codes that make the box read as ticked).
+ *
+ * Returns [] when the selection contains any country outside the regions it
+ * otherwise covers, so an arbitrary hand-picked set is never mislabelled as
+ * "a region" — the same all-or-nothing rule matchingRegion always applied,
+ * just extended past one region.
+ */
+export function matchingRegions(codes: Set<string> | string[]): string[] {
   const codeSet = codes instanceof Set ? codes : new Set(codes);
-  if (codeSet.size === 0) return null;
-  const regions = new Set<string>();
-  codeSet.forEach((c) => regions.add(countryToIucnRegion(c)));
-  if (regions.size !== 1) return null;
-  const region = [...regions][0];
-  if (region === "Other") return null;
-  const regionCodes = iucnRegionCountries(region);
-  return regionCodes.length === codeSet.size && regionCodes.every((c) => codeSet.has(c)) ? region : null;
+  if (codeSet.size === 0) return [];
+
+  const covered: string[] = [];
+  let accountedFor = 0;
+  for (const region of IUCN_REGION_ORDER) {
+    const regionCodes = iucnRegionCountries(region);
+    if (regionCodes.length > 0 && regionCodes.every((c) => codeSet.has(c))) {
+      covered.push(region);
+      accountedFor += regionCodes.length;
+    }
+  }
+  // Any selected country outside the fully-covered regions means this is an
+  // arbitrary selection that merely happens to contain some whole regions.
+  return accountedFor === codeSet.size ? covered : [];
 }
 
 /**

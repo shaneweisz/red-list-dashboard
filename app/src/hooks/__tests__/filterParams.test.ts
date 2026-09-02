@@ -225,6 +225,19 @@ describe("parseParams", () => {
     expect(result.maxObs).toBe(null);
   });
 
+  // The Threats chart's scope: threatened-only is the DEFAULT (IUCN's threat
+  // coding is only reliable for CR/EN/VU), so the param is only ever present in
+  // the URL for the opt-out — an old link with no param must land on the default.
+  it("defaults threatsScope to threatened", () => {
+    expect(parseParams("").threatsScope).toBe("threatened");
+    expect(parseParams("?threats=11").threatsScope).toBe("threatened");
+  });
+
+  it("parses threatsScope=all, and treats an unrecognised value as the default", () => {
+    expect(parseParams("?threatsScope=all").threatsScope).toBe("all");
+    expect(parseParams("?threatsScope=nonsense").threatsScope).toBe("threatened");
+  });
+
   it("expands a region param into its country codes (no separate region state)", () => {
     const result = parseParams("?region=Sub-Saharan+Africa");
     expect(result.countries.size).toBeGreaterThan(0);
@@ -262,9 +275,12 @@ describe("buildQs", () => {
     growthForms: new Set<string>(),
     assessors: new Set<string>(),
     reviewers: new Set<string>(),
+    facilitators: new Set<string>(),
     search: "",
     subgroups: new Set<string>(),
     sortField: null as "year" | "category" | "totalGbif" | "newGbif" | "pctNewGbif" | null,
+    sortField2: null as "year" | "category" | "totalGbif" | "newGbif" | "pctNewGbif" | null,
+    sortDirection2: "desc" as const,
     sortDirection: "desc" as const,
     species: null as string | null,
     tab: null as "gbif" | "literature" | "redlist" | "wikipedia" | "cites" | "assessors" | null,
@@ -282,6 +298,16 @@ describe("buildQs", () => {
 
   it("returns empty string for default state", () => {
     expect(buildQs(emptyState)).toBe("");
+  });
+
+  // Only the opt-out is written: "threatened" is the default, so writing it would
+  // put a param in every URL that says nothing, and (worse) a shared link would
+  // pin the scope it happened to have rather than following the default.
+  it("omits threatsScope for the default (threatened) scope, writes it for all", () => {
+    expect(buildQs({ ...emptyState, threats: new Set(["11"]), threatsScope: "threatened" as const }))
+      .not.toContain("threatsScope");
+    expect(buildQs({ ...emptyState, threats: new Set(["11"]), threatsScope: "all" as const }))
+      .toContain("threatsScope=all");
   });
 
   it("includes taxa when set", () => {
@@ -408,6 +434,47 @@ describe("buildQs", () => {
     expect(params.has("dir")).toBe(false);
   });
 
+  // Facilitator names carry commas ("Rutherford, C.A."), so the multi-select
+  // delimiter is a pipe — same as assessors/reviewers.
+  it("round-trips facilitators through the pipe-delimited param", () => {
+    const qs = buildQs({ ...emptyState, facilitators: new Set(["Rutherford, C.A.", "Hermes, C."]) });
+    expect(new URLSearchParams(qs).get("facilitators")).toBe("Rutherford, C.A.|Hermes, C.");
+    // buildQs already returns the leading "?", so qs is a complete query string.
+    expect([...parseParams(qs).facilitators]).toEqual(["Rutherford, C.A.", "Hermes, C."]);
+  });
+
+  // Secondary sort — shift/cmd-click a second column header.
+  it("round-trips a secondary sort through sort2/dir2", () => {
+    const qs = buildQs({ ...emptyState, sortField: "year", sortDirection: "desc", sortField2: "newGbif", sortDirection2: "asc" });
+    const p = new URLSearchParams(qs);
+    expect(p.get("sort2")).toBe("newGbif");
+    expect(p.get("dir2")).toBe("asc");
+    const parsed = parseParams(qs);
+    expect(parsed.sortField2).toBe("newGbif");
+    expect(parsed.sortDirection2).toBe("asc");
+  });
+
+  it("omits dir2 when the secondary is the default desc", () => {
+    const qs = buildQs({ ...emptyState, sortField: "category", sortField2: "newGbif", sortDirection2: "desc" });
+    const p = new URLSearchParams(qs);
+    expect(p.get("sort2")).toBe("newGbif");
+    expect(p.has("dir2")).toBe(false);
+  });
+
+  it("omits a secondary that duplicates the primary — it would be a no-op tiebreaker", () => {
+    const qs = buildQs({ ...emptyState, sortField: "newGbif", sortField2: "newGbif" });
+    expect(new URLSearchParams(qs).has("sort2")).toBe(false);
+  });
+
+  it("omits a secondary that duplicates the implicit default primary (year)", () => {
+    const qs = buildQs({ ...emptyState, sortField: null, sortField2: "year" });
+    expect(new URLSearchParams(qs).has("sort2")).toBe(false);
+  });
+
+  it("ignores an unrecognised sort2 rather than trusting the URL", () => {
+    expect(parseParams("?sort2=notAColumn").sortField2).toBeNull();
+  });
+
   it("includes species when set", () => {
     const qs = buildQs({ ...emptyState, species: "sis-176168", tab: "gbif" });
     const params = new URLSearchParams(qs);
@@ -496,9 +563,12 @@ describe("parseParams ↔ buildQs round-trip", () => {
       growthForms: new Set<string>(),
       assessors: new Set<string>(),
       reviewers: new Set<string>(),
+      facilitators: new Set<string>(),
       search: "shrew",
       sortField: "category" as const,
       sortDirection: "asc" as const,
+      sortField2: "newGbif" as const,
+      sortDirection2: "desc" as const,
       species: null,
       tab: null,
     };
@@ -542,8 +612,11 @@ describe("parseParams ↔ buildQs round-trip", () => {
       growthForms: new Set<string>(),
       assessors: new Set<string>(),
       reviewers: new Set<string>(),
+      facilitators: new Set<string>(),
       search: "",
       sortField: null as "year" | "category" | "totalGbif" | "newGbif" | "pctNewGbif" | null,
+    sortField2: null as "year" | "category" | "totalGbif" | "newGbif" | "pctNewGbif" | null,
+    sortDirection2: "desc" as const,
       sortDirection: "desc" as const,
       species: null as string | null,
       tab: null as "gbif" | "literature" | "redlist" | "wikipedia" | "cites" | "assessors" | null,
@@ -581,8 +654,11 @@ describe("parseParams ↔ buildQs round-trip", () => {
     growthForms: new Set<string>(),
     assessors: new Set<string>(),
     reviewers: new Set<string>(),
+    facilitators: new Set<string>(),
     search: "",
     sortField: null as "year" | "category" | "totalGbif" | "newGbif" | "pctNewGbif" | null,
+    sortField2: null as "year" | "category" | "totalGbif" | "newGbif" | "pctNewGbif" | null,
+    sortDirection2: "desc" as const,
     sortDirection: "desc" as const,
     species: null as string | null,
     tab: null as "gbif" | "literature" | "redlist" | "wikipedia" | "cites" | "assessors" | null,
@@ -690,8 +766,11 @@ describe("parseParams ↔ buildQs round-trip", () => {
       growthForms: new Set<string>(),
       assessors: new Set<string>(),
       reviewers: new Set<string>(),
+      facilitators: new Set<string>(),
       search: "",
       sortField: null as "year" | "category" | "totalGbif" | "newGbif" | "pctNewGbif" | null,
+    sortField2: null as "year" | "category" | "totalGbif" | "newGbif" | "pctNewGbif" | null,
+    sortDirection2: "desc" as const,
       sortDirection: "desc" as const,
       species: null as string | null,
       tab: null as "gbif" | "literature" | "redlist" | "wikipedia" | "cites" | "assessors" | null,
@@ -729,8 +808,11 @@ describe("parseParams ↔ buildQs round-trip", () => {
       growthForms: new Set<string>(),
       assessors: new Set<string>(),
       reviewers: new Set<string>(),
+      facilitators: new Set<string>(),
       search: "",
       sortField: null as "year" | "category" | "totalGbif" | "newGbif" | "pctNewGbif" | null,
+    sortField2: null as "year" | "category" | "totalGbif" | "newGbif" | "pctNewGbif" | null,
+    sortDirection2: "desc" as const,
       sortDirection: "desc" as const,
       species: null as string | null,
       tab: null as "gbif" | "literature" | "redlist" | "wikipedia" | "cites" | "assessors" | null,
@@ -767,9 +849,12 @@ describe("parseParams ↔ buildQs round-trip", () => {
       growthForms: new Set<string>(),
       assessors: new Set<string>(),
       reviewers: new Set<string>(),
+      facilitators: new Set<string>(),
       search: "",
       sortField: "newGbif" as const,
       sortDirection: "desc" as const,
+      sortField2: null,
+      sortDirection2: "desc" as const,
       species: null as string | null,
       tab: null as "gbif" | "literature" | "redlist" | "wikipedia" | "cites" | "assessors" | null,
     };
@@ -805,10 +890,13 @@ describe("param suffixing (compare mode)", () => {
     growthForms: new Set<string>(),
     assessors: new Set<string>(),
     reviewers: new Set<string>(),
+    facilitators: new Set<string>(),
     search: "",
     subgroups: new Set<string>(),
     sortField: null as "year" | "category" | "totalGbif" | "newGbif" | "pctNewGbif" | "describedYear" | null,
     sortDirection: "desc" as const,
+    sortField2: null as "year" | "category" | "totalGbif" | "newGbif" | "pctNewGbif" | "describedYear" | null,
+    sortDirection2: "desc" as const,
     species: null as string | null,
     tab: null as "gbif" | "literature" | "redlist" | "wikipedia" | "cites" | "assessors" | "reviewers" | "col" | "eol" | null,
   };
@@ -922,6 +1010,7 @@ describe("OWN_PARAM_NAMES stays in sync with buildQs", () => {
       populationTrends: new Set(["Decreasing"]),
       movementPatterns: new Set(["Migratory"]),
       threats: new Set(["Agriculture"]),
+      threatsScope: "all" as const,
       criteria: new Set(["B1"]),
       habitat: new Set(["5.1"]),
       habitatBreadth: "specialist" as const,
@@ -933,6 +1022,7 @@ describe("OWN_PARAM_NAMES stays in sync with buildQs", () => {
       growthForms: new Set(["Tree"]),
       assessors: new Set(["Someone"]),
       reviewers: new Set(["Someone Else"]),
+      facilitators: new Set<string>(),
       search: "shrew",
       outdated: "yes" as const,
       minObs: 1,
@@ -943,6 +1033,8 @@ describe("OWN_PARAM_NAMES stays in sync with buildQs", () => {
       maxDescribedYear: 2010,
       sortField: "category" as const,
       sortDirection: "asc" as const,
+      sortField2: "newGbif" as const,
+      sortDirection2: "desc" as const,
       mapViewMode: "list" as const,
       mapSortKey: "outdated" as const,
       mapSortDirection: "asc" as const,

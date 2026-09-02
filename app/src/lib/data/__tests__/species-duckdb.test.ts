@@ -28,14 +28,27 @@ describe("resolveWhere", () => {
     expect(resolveWhere("mammalia").params.g).toBe("mammals");
   });
 
-  it("matches an arbitrary rank (non-node) at class/order/family", () => {
+  it("matches an arbitrary rank (non-node) at class/order/family/genus", () => {
     const w = resolveWhere("turdidae");
-    expect(w.clauses).toEqual(["(class_name = $arv OR order_name = $arv OR family = $arv)"]);
+    expect(w.clauses).toEqual([
+      "(class_name = $arv OR order_name = $arv OR family = $arv OR lower(split_part(scientific_name, ' ', 1)) = $arv)",
+    ]);
     expect(w.params.arv).toBe("turdidae");
+  });
+
+  // No parquet carries a genus column — it is the leading word of the binomial, derived
+  // the same way taxonomy-sql.ts's filterToSql derives a node's `genera` filter. Without
+  // this branch, ?taxa=panthera compared "panthera" against class/order/family only and
+  // returned an empty view, which is why suggestTaxa used to refuse to offer genus hits.
+  it("matches a genus (no genus column exists) off the scientific name", () => {
+    const w = resolveWhere("panthera");
+    expect(w.clauses[0]).toContain("lower(split_part(scientific_name, ' ', 1)) = $arv");
+    expect(w.params.arv).toBe("panthera");
   });
 
   it("lowercases arbitrary values", () => {
     expect(resolveWhere("Turdidae").params.arv).toBe("turdidae");
+    expect(resolveWhere("Panthera").params.arv).toBe("panthera");
   });
 });
 

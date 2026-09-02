@@ -25,6 +25,16 @@ export type ViewMode = "reassessments" | "new-assessments";
 // navigateToTaxonSubgroup below) or a country (see enterCountryDrilldown).
 export type LayoutMode = "table1a" | "ssc" | "country" | null;
 
+/**
+ * Values the species detail panel's `?tab=` can take.
+ *
+ * "assessors" and "reviewers" are legacy aliases: the two Suggested tabs merged
+ * into one ("candidates") with a credit-line toggle, and links predating that
+ * still name them. They stay accepted here and are mapped — with the role they
+ * asked for preselected — by RedListView's visibleTab/roleFromLegacyTab.
+ */
+export type DetailTabParam = "gbif" | "literature" | "redlist" | "wikipedia" | "cites" | "candidates" | "assessors" | "reviewers" | "col" | "eol";
+
 // WorldMap's own Map/List toggle and the list view's column sort — URL-synced
 // (distinct from sortField/sortDirection above, which sort the species table)
 // so a list-view sort like "most outdated plants" is a shareable link.
@@ -78,12 +88,31 @@ const paramKey = (name: string, suffix: string): string => (suffix ? `${name}${s
 export const OWN_PARAM_NAMES = [
   "view", "layout", "origin", "countries", "region", "taxa", "subgroups",
   "categories", "years", "assessmentYears", "describedYears", "obsRanges", "assessmentCounts",
-  "systems", "trends", "movement", "threats", "criteria", "habitat", "habitatBreadth",
+  "systems", "trends", "movement", "threats", "threatsScope", "criteria", "habitat", "habitatBreadth",
   "habitatImportance", "habitatSeasons", "habitatSuitability", "bd", "endemics", "growthForms",
-  "assessors", "reviewers", "search", "outdated", "minObs", "maxObs",
+  "colMatch", "colReasons",
+  "assessors", "reviewers", "facilitators", "search", "outdated", "minObs", "maxObs",
   "minAssessmentYear", "maxAssessmentYear", "minDescribedYear", "maxDescribedYear",
-  "species", "tab", "sort", "dir", "mapview", "mapsort", "mapdir",
+  "species", "tab", "sort", "dir", "sort2", "dir2", "mapview", "mapsort", "mapdir",
 ];
+
+/**
+ * Which species the Threats chart (and a threat selection made from it) covers.
+ * IUCN's feedback is that threat coding is only reliable for threatened
+ * assessments, so "threatened" (CR/EN/VU) is the default and "all" is the
+ * explicit opt-in to the fuller, patchier data.
+ */
+export type ThreatsScope = "threatened" | "all";
+
+/** Columns the species table can be sorted by. */
+export type SortField = "year" | "category" | "totalGbif" | "newGbif" | "pctNewGbif" | "describedYear";
+
+const SORT_FIELDS: SortField[] = ["year", "category", "totalGbif", "newGbif", "pctNewGbif", "describedYear"];
+
+/** Narrow a raw `sort=`/`sort2=` param to a SortField, or null if unrecognised. */
+function parseSortField(raw: string | null): SortField | null {
+  return SORT_FIELDS.find((f) => f === raw) ?? null;
+}
 
 // `bd=ssc-small-mammal:order:rodentia` — narrows a node's species list to one
 // breakdown row (see TaxaSummary.tsx's BreakdownList). nodeId:rank:name, colon-joined
@@ -236,8 +265,27 @@ export function parseParams(search: string, suffix: string = "") {
     threats: p.get(k("threats"))
       ? new Set(p.get(k("threats"))!.split(",").filter(Boolean))
       : new Set<string>(),
+    // Which species the threat axis covers. IUCN's own advice is that threat
+    // coding is only reliable for threatened (CR/EN/VU) assessments, so
+    // "threatened" is the DEFAULT and the param is only written to the URL for
+    // the opt-out ("all"). Absent/unrecognised therefore means threatened.
+    threatsScope: (p.get(k("threatsScope")) === "all" ? "all" : "threatened") as ThreatsScope,
     criteria: p.get(k("criteria"))
       ? new Set(p.get(k("criteria"))!.split(",").filter(Boolean))
+      : new Set<string>(),
+    // Catalogue of Life match state — "flagged" = no clean 1:1 CoL match (a
+    // possible taxonomic revision since the assessment), "clean" = its mirror
+    // image. Any other/missing value means no filter. colReasons narrows
+    // "flagged" to specific reasons (see lib/col-revision.ts); it implies
+    // flagged on its own, so the two are independent params, like
+    // habitat/habitatBreadth.
+    colMatch: (
+      p.get(k("colMatch")) === "flagged" ? "flagged"
+      : p.get(k("colMatch")) === "clean" ? "clean"
+      : null
+    ) as "flagged" | "clean" | null,
+    colReasons: p.get(k("colReasons"))
+      ? new Set(p.get(k("colReasons"))!.split(",").filter(Boolean))
       : new Set<string>(),
     habitat: p.get(k("habitat"))
       ? new Set(p.get(k("habitat"))!.split(",").filter(Boolean))
@@ -276,6 +324,9 @@ export function parseParams(search: string, suffix: string = "") {
     reviewers: p.get(k("reviewers"))
       ? new Set(p.get(k("reviewers"))!.split("|").filter(Boolean))
       : new Set<string>(),
+    facilitators: p.get(k("facilitators"))
+      ? new Set(p.get(k("facilitators"))!.split("|").filter(Boolean))
+      : new Set<string>(),
     search: p.get(k("search")) || "",
     // Exact URL-only base filters (see ExactFilters).
     outdated: (p.get(k("outdated")) === "yes" ? "yes" : p.get(k("outdated")) === "no" ? "no" : null) as "yes" | "no" | null,
@@ -285,16 +336,13 @@ export function parseParams(search: string, suffix: string = "") {
     maxAssessmentYear: numParam(p, k("maxAssessmentYear")),
     minDescribedYear: numParam(p, k("minDescribedYear")),
     maxDescribedYear: numParam(p, k("maxDescribedYear")),
-    sortField: (
-      sortParam === "category" ? "category" :
-      sortParam === "year" ? "year" :
-      sortParam === "totalGbif" ? "totalGbif" :
-      sortParam === "newGbif" ? "newGbif" :
-      sortParam === "pctNewGbif" ? "pctNewGbif" :
-      sortParam === "describedYear" ? "describedYear" :
-      null
-    ) as "year" | "category" | "totalGbif" | "newGbif" | "pctNewGbif" | "describedYear" | null,
+    sortField: parseSortField(sortParam),
     sortDirection: (p.get(k("dir")) === "asc" ? "asc" : "desc") as "asc" | "desc",
+    // Secondary sort — applied within ties on the primary (shift/cmd-click a
+    // second column header). Ignored when it names the same column as the
+    // primary, which would be a no-op tiebreaker.
+    sortField2: parseSortField(p.get(k("sort2"))),
+    sortDirection2: (p.get(k("dir2")) === "asc" ? "asc" : "desc") as "asc" | "desc",
     mapViewMode: (p.get(k("mapview")) === "list" ? "list" : "map") as MapViewMode,
     mapSortKey: (
       p.get(k("mapsort")) === "name" ? "name" :
@@ -306,7 +354,7 @@ export function parseParams(search: string, suffix: string = "") {
     // The row key, namespaced (`sis-…`/`col-…`). parseSpeciesParam also accepts the
     // pre-namespace bare-number form so existing links keep working — see its doc.
     species: speciesKey,
-    tab: (p.get(k("tab")) || null) as "gbif" | "literature" | "redlist" | "wikipedia" | "cites" | "assessors" | "reviewers" | "col" | "eol" | null,
+    tab: (p.get(k("tab")) || null) as DetailTabParam | null,
   };
 }
 
@@ -327,7 +375,10 @@ export function buildQs(state: {
   populationTrends: Set<string>;
   movementPatterns: Set<string>;
   threats: Set<string>;
+  threatsScope?: ThreatsScope;
   criteria: Set<string>;
+  colMatch?: "flagged" | "clean" | null;
+  colReasons?: Set<string>;
   habitat: Set<string>;
   habitatBreadth: "specialist" | "generalist" | null;
   habitatImportance: Set<string>;
@@ -338,6 +389,8 @@ export function buildQs(state: {
   growthForms: Set<string>;
   assessors: Set<string>;
   reviewers: Set<string>;
+  /** Facilitator names — the individuals behind an organisational assessor. */
+  facilitators: Set<string>;
   search: string;
   outdated?: "yes" | "no" | null;
   minObs?: number | null;
@@ -346,13 +399,15 @@ export function buildQs(state: {
   maxAssessmentYear?: number | null;
   minDescribedYear?: number | null;
   maxDescribedYear?: number | null;
-  sortField: "year" | "category" | "totalGbif" | "newGbif" | "pctNewGbif" | "describedYear" | null;
+  sortField: SortField | null;
   sortDirection: "asc" | "desc";
+  sortField2: SortField | null;
+  sortDirection2: "asc" | "desc";
   mapViewMode?: MapViewMode;
   mapSortKey?: MapSortKey;
   mapSortDirection?: "asc" | "desc";
   species: string | null;
-  tab: "gbif" | "literature" | "redlist" | "wikipedia" | "cites" | "assessors" | "reviewers" | "col" | "eol" | null;
+  tab: DetailTabParam | null;
 }, suffix: string = ""): string {
   const p = new URLSearchParams();
   const k = (name: string) => paramKey(name, suffix);
@@ -374,7 +429,11 @@ export function buildQs(state: {
   if (state.populationTrends.size > 0) p.set(k("trends"), [...state.populationTrends].join(","));
   if (state.movementPatterns.size > 0) p.set(k("movement"), [...state.movementPatterns].join(","));
   if (state.threats.size > 0) p.set(k("threats"), [...state.threats].join(","));
+  // Only the opt-out is written — "threatened" is the default (see parseParams).
+  if (state.threatsScope === "all") p.set(k("threatsScope"), "all");
   if (state.criteria.size > 0) p.set(k("criteria"), [...state.criteria].join(","));
+  if (state.colMatch) p.set(k("colMatch"), state.colMatch);
+  if (state.colReasons && state.colReasons.size > 0) p.set(k("colReasons"), [...state.colReasons].join(","));
   if (state.habitat.size > 0) p.set(k("habitat"), [...state.habitat].join(","));
   if (state.habitatBreadth) p.set(k("habitatBreadth"), state.habitatBreadth);
   if (!setEqualsArray(state.habitatImportance, ALL_HABITAT_IMPORTANCE)) p.set(k("habitatImportance"), [...state.habitatImportance].join(","));
@@ -390,6 +449,7 @@ export function buildQs(state: {
   if (state.growthForms.size > 0) p.set(k("growthForms"), [...state.growthForms].join(","));
   if (state.assessors.size > 0) p.set(k("assessors"), [...state.assessors].join("|"));
   if (state.reviewers.size > 0) p.set(k("reviewers"), [...state.reviewers].join("|"));
+  if (state.facilitators.size > 0) p.set(k("facilitators"), [...state.facilitators].join("|"));
   if (state.search) p.set(k("search"), state.search);
   if (state.outdated) p.set(k("outdated"), state.outdated);
   if (state.minObs != null) p.set(k("minObs"), String(state.minObs));
@@ -407,6 +467,11 @@ export function buildQs(state: {
     if (state.sortDirection !== "desc") p.set(k("dir"), state.sortDirection);
   } else if (state.sortDirection !== "desc") {
     p.set(k("dir"), state.sortDirection);
+  }
+  // Secondary sort is only meaningful alongside a primary that differs from it.
+  if (state.sortField2 && state.sortField2 !== (state.sortField ?? "year")) {
+    p.set(k("sort2"), state.sortField2);
+    if (state.sortDirection2 !== "desc") p.set(k("dir2"), state.sortDirection2);
   }
   if (state.mapViewMode === "list") p.set(k("mapview"), "list");
   if (state.mapSortKey && state.mapSortKey !== "species") p.set(k("mapsort"), state.mapSortKey);
@@ -763,11 +828,48 @@ export function useFilterParams(paramSuffix: string = "") {
     [syncUrl]
   );
 
+  const setThreatsScope = useCallback(
+    (value: ThreatsScope) => {
+      setState(prev => {
+        const next = { ...prev, threatsScope: value };
+        queueMicrotask(() => syncUrl(next, false));
+        return next;
+      });
+    },
+    [syncUrl]
+  );
+
   const setSelectedCriteria = useCallback(
     (updater: Set<string> | ((prev: Set<string>) => Set<string>)) => {
       setState(prev => {
         const nextVal = typeof updater === "function" ? updater(prev.criteria) : updater;
         const next = { ...prev, criteria: nextVal };
+        queueMicrotask(() => syncUrl(next, false));
+        return next;
+      });
+    },
+    [syncUrl]
+  );
+
+  const setColMatch = useCallback(
+    (value: "flagged" | "clean" | null) => {
+      setState(prev => {
+        // Leaving the flagged bucket makes a reason narrowing meaningless, so
+        // clear it rather than leaving an invisible filter behind a toggle the
+        // user just switched off.
+        const next = { ...prev, colMatch: value, colReasons: value === "flagged" ? prev.colReasons : new Set<string>() };
+        queueMicrotask(() => syncUrl(next, false));
+        return next;
+      });
+    },
+    [syncUrl]
+  );
+
+  const setColReasons = useCallback(
+    (updater: Set<string> | ((prev: Set<string>) => Set<string>)) => {
+      setState(prev => {
+        const nextVal = typeof updater === "function" ? updater(prev.colReasons) : updater;
+        const next = { ...prev, colReasons: nextVal };
         queueMicrotask(() => syncUrl(next, false));
         return next;
       });
@@ -892,6 +994,18 @@ export function useFilterParams(paramSuffix: string = "") {
     [syncUrl]
   );
 
+  const setSelectedFacilitators = useCallback(
+    (updater: Set<string> | ((prev: Set<string>) => Set<string>)) => {
+      setState(prev => {
+        const nextFacilitators = typeof updater === "function" ? updater(prev.facilitators) : updater;
+        const next = { ...prev, facilitators: nextFacilitators };
+        queueMicrotask(() => syncUrl(next, false));
+        return next;
+      });
+    },
+    [syncUrl]
+  );
+
   const setSearchFilter = useCallback(
     (value: string) => {
       setState(prev => {
@@ -939,9 +1053,20 @@ export function useFilterParams(paramSuffix: string = "") {
   );
 
   const setSort = useCallback(
-    (field: "year" | "category" | "totalGbif" | "newGbif" | "pctNewGbif" | "describedYear" | null, direction: "asc" | "desc") => {
+    (field: SortField | null, direction: "asc" | "desc") => {
       setState(prev => {
         const next = { ...prev, sortField: field, sortDirection: direction };
+        queueMicrotask(() => syncUrl(next, false));
+        return next;
+      });
+    },
+    [syncUrl]
+  );
+
+  const setSort2 = useCallback(
+    (field: SortField | null, direction: "asc" | "desc") => {
+      setState(prev => {
+        const next = { ...prev, sortField2: field, sortDirection2: direction };
         queueMicrotask(() => syncUrl(next, false));
         return next;
       });
@@ -972,7 +1097,7 @@ export function useFilterParams(paramSuffix: string = "") {
   );
 
   const setSpeciesParam = useCallback(
-    (species: string | null, tab: "gbif" | "literature" | "redlist" | "wikipedia" | "cites" | "assessors" | "reviewers" | "col" | "eol" = "gbif") => {
+    (species: string | null, tab: DetailTabParam = "gbif") => {
       setState(prev => {
         const next = { ...prev, species, tab: species != null ? tab : null };
         queueMicrotask(() => syncUrl(next, true));
@@ -983,7 +1108,7 @@ export function useFilterParams(paramSuffix: string = "") {
   );
 
   const setTabParam = useCallback(
-    (tab: "gbif" | "literature" | "redlist" | "wikipedia" | "cites" | "assessors" | "reviewers" | "col" | "eol") => {
+    (tab: DetailTabParam) => {
       setState(prev => {
         if (prev.species == null) return prev; // no species selected, nothing to update
         const next = { ...prev, tab };
@@ -1010,7 +1135,10 @@ export function useFilterParams(paramSuffix: string = "") {
         populationTrends: new Set<string>(),
         movementPatterns: new Set<string>(),
         threats: new Set<string>(),
+        threatsScope: "threatened" as ThreatsScope,
         criteria: new Set<string>(),
+        colMatch: null,
+        colReasons: new Set<string>(),
         habitat: new Set<string>(),
         habitatBreadth: null,
         habitatImportance: new Set<string>(ALL_HABITAT_IMPORTANCE),
@@ -1021,10 +1149,13 @@ export function useFilterParams(paramSuffix: string = "") {
         growthForms: new Set<string>(),
         assessors: new Set<string>(),
         reviewers: new Set<string>(),
+        facilitators: new Set<string>(),
         search: "",
         ...EMPTY_EXACT_FILTERS,
         sortField: null,
         sortDirection: "desc" as const,
+        sortField2: null,
+        sortDirection2: "desc" as const,
         species: null,
         tab: null,
       };
@@ -1050,7 +1181,10 @@ export function useFilterParams(paramSuffix: string = "") {
         populationTrends: new Set<string>(),
         movementPatterns: new Set<string>(),
         threats: new Set<string>(),
+        threatsScope: "threatened" as ThreatsScope,
         criteria: new Set<string>(),
+        colMatch: null,
+        colReasons: new Set<string>(),
         habitat: new Set<string>(),
         habitatBreadth: null,
         habitatImportance: new Set<string>(ALL_HABITAT_IMPORTANCE),
@@ -1061,10 +1195,13 @@ export function useFilterParams(paramSuffix: string = "") {
         growthForms: new Set<string>(),
         assessors: new Set<string>(),
         reviewers: new Set<string>(),
+        facilitators: new Set<string>(),
         search: "",
         ...EMPTY_EXACT_FILTERS,
         sortField: null,
         sortDirection: "desc" as const,
+        sortField2: null,
+        sortDirection2: "desc" as const,
         species: null,
         tab: null,
       };
@@ -1090,7 +1227,10 @@ export function useFilterParams(paramSuffix: string = "") {
     selectedPopulationTrends: state.populationTrends,
     selectedMovementPatterns: state.movementPatterns,
     selectedThreats: state.threats,
+    threatsScope: state.threatsScope,
     selectedCriteria: state.criteria,
+    colMatch: state.colMatch,
+    selectedColReasons: state.colReasons,
     selectedHabitat: state.habitat,
     habitatBreadth: state.habitatBreadth,
     selectedHabitatImportance: state.habitatImportance,
@@ -1101,15 +1241,20 @@ export function useFilterParams(paramSuffix: string = "") {
     selectedGrowthForms: state.growthForms,
     selectedAssessors: state.assessors,
     selectedReviewers: state.reviewers,
+    selectedFacilitators: state.facilitators,
     searchFilter: state.search,
     exactFilters,
     setExactFilters,
     sortField: state.sortField,
     sortDirection: state.sortDirection,
+    sortField2: state.sortField2,
+    sortDirection2: state.sortDirection2,
     mapViewMode: state.mapViewMode,
     mapSortKey: state.mapSortKey,
     mapSortDirection: state.mapSortDirection,
 
+    setColMatch,
+    setColReasons,
     setViewMode,
     setLayoutMode,
     navigateToTaxonSubgroup,
@@ -1129,6 +1274,7 @@ export function useFilterParams(paramSuffix: string = "") {
     setSelectedPopulationTrends,
     setSelectedMovementPatterns,
     setSelectedThreats,
+    setThreatsScope,
     setSelectedCriteria,
     setSelectedHabitat,
     setHabitatBreadth,
@@ -1140,8 +1286,10 @@ export function useFilterParams(paramSuffix: string = "") {
     setSelectedGrowthForms,
     setSelectedAssessors,
     setSelectedReviewers,
+    setSelectedFacilitators,
     setSearchFilter,
     setSort,
+    setSort2,
     setMapViewMode,
     setMapSort,
     fromPopstateRef,

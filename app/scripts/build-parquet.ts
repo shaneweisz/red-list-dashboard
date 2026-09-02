@@ -7,7 +7,7 @@
  *  - assessed.parquet     = Red List assessed species, enriched with GBIF
  *      occurrence counts summed across ALL their mapping links (canonical-
  *      preferred representative key). Rich schema; columns match SpeciesRow.
- *      Includes denormalized latest_assessors/latest_reviewers (history seq 0)
+ *      Includes denormalized latest_assessors/latest_reviewers/latest_facilitators (history seq 0)
  *      and assessment_count (count of history rows) so the species list needs
  *      no history join (full history is lazy).
  *  - unassessed.parquet   = GBIF species not linked to any assessment (minus
@@ -228,7 +228,7 @@ export async function run(): Promise<void> {
       JOIN gbif_all g ON g.gbif_species_key = c.gbif_species_key;
   `);
 
-  // History, loaded first so the latest assessors/reviewers can be denormalized
+  // History, loaded first so the latest assessors/reviewers/facilitators can be denormalized
   // into assessed.parquet below. Flatten the map-shaped history/*.json into rows
   // (one per past assessment), preserving array order via `seq` (index 0 =
   // latest) so the lazy per-species history query can rebuild it in order.
@@ -240,9 +240,12 @@ export async function run(): Promise<void> {
         // criteria is optional on the parsed shape (not just the type) — history
         // files regenerated before it was added to fetchAssessmentHistory won't
         // have the key at all; `x.criteria ?? null` below handles that at runtime.
-        Record<string, Array<{ id: number; year: string; category: string; date: string | null; criteria?: string | null; assessors: string | null; reviewers: string | null }>>;
+        // facilitators is optional on the parsed shape for the same reason as
+        // criteria: history files written before it was added to
+        // fetchAssessmentHistory have no such key at all.
+        Record<string, Array<{ id: number; year: string; category: string; date: string | null; criteria?: string | null; assessors: string | null; reviewers: string | null; facilitators?: string | null }>>;
       for (const [sis, arr] of Object.entries(data)) {
-        arr.forEach((x, seq) => ws.write(JSON.stringify({ sis_taxon_id: Number(sis), seq, id: x.id, year: x.year, category: x.category, date: x.date, criteria: x.criteria ?? null, assessors: x.assessors, reviewers: x.reviewers }) + "\n"));
+        arr.forEach((x, seq) => ws.write(JSON.stringify({ sis_taxon_id: Number(sis), seq, id: x.id, year: x.year, category: x.category, date: x.date, criteria: x.criteria ?? null, assessors: x.assessors, reviewers: x.reviewers, facilitators: x.facilitators ?? null }) + "\n"));
       }
     }
   }
@@ -254,21 +257,23 @@ export async function run(): Promise<void> {
   // quotes in the string) rather than unwrapping it.
   await conn.run(`
     CREATE TEMP TABLE hist AS
-      SELECT sis_taxon_id, seq, id, "year", category, "date", criteria, assessors, reviewers
+      SELECT sis_taxon_id, seq, id, "year", category, "date", criteria, assessors, reviewers, facilitators
       FROM read_json('${ndjson}', format='newline_delimited', columns={
         sis_taxon_id: 'BIGINT', seq: 'INTEGER', id: 'BIGINT', "year": 'VARCHAR',
         category: 'VARCHAR', "date": 'VARCHAR', criteria: 'VARCHAR',
-        assessors: 'VARCHAR', reviewers: 'VARCHAR'
+        assessors: 'VARCHAR', reviewers: 'VARCHAR', facilitators: 'VARCHAR'
       });
   `);
   fs.unlinkSync(ndjson);
-  // Latest (seq 0 = most recent) assessors/reviewers per species. Denormalized
-  // into assessed.parquet so the species list needs NO history join — the list
-  // view's assessor/reviewer filter reads these scalars; the full history array
-  // is fetched lazily (getAssessmentHistory) only when a detail panel opens.
+  // Latest (seq 0 = most recent) assessors/reviewers/facilitators per species.
+  // Denormalized into assessed.parquet so the species list needs NO history join
+  // — the list view's assessor/reviewer/facilitator filter reads these scalars;
+  // the full history array is fetched lazily (getAssessmentHistory) only when a
+  // detail panel opens.
   await conn.run(`
     CREATE TEMP TABLE latest_assess AS
-      SELECT sis_taxon_id, assessors AS latest_assessors, reviewers AS latest_reviewers
+      SELECT sis_taxon_id, assessors AS latest_assessors, reviewers AS latest_reviewers,
+             facilitators AS latest_facilitators
       FROM hist WHERE seq = 0;
   `);
 
@@ -309,7 +314,7 @@ export async function run(): Promise<void> {
         coalesce(CAST(r.possibly_extinct_in_the_wild AS VARCHAR), '') = 'true' AS possibly_extinct_in_the_wild,
         nullif(r.criteria, '')            AS criteria,
         r.threat_codes, r.habitat_codes,
-        la.latest_assessors, la.latest_reviewers,
+        la.latest_assessors, la.latest_reviewers, la.latest_facilitators,
         coalesce(ac.assessment_count, 1)  AS assessment_count
       FROM read_csv_auto('${redlistGlob}', union_by_name=true, ${CSV_QUOTING}) r
       LEFT JOIN enrich e ON e.sis_taxon_id = r.sis_taxon_id
@@ -393,7 +398,7 @@ export async function run(): Promise<void> {
   // sis_taxon_id so a single-species lazy lookup prunes to one row group.
   await conn.run(`
     COPY (
-      SELECT sis_taxon_id, seq, id, "year", category, "date", criteria, assessors, reviewers
+      SELECT sis_taxon_id, seq, id, "year", category, "date", criteria, assessors, reviewers, facilitators
       FROM hist
       ORDER BY sis_taxon_id, seq
     ) TO '${assessmentsOut}' (FORMAT PARQUET, COMPRESSION ZSTD);
