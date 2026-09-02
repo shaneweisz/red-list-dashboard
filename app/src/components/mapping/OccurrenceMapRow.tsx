@@ -99,7 +99,6 @@ import {
   FOREST_LOSS_MAX_ZOOM,
   FOREST_LOSS_SOURCE_NOTE,
   FOREST_LOSS_THRESHOLD_NOTE,
-  FOREST_LOSS_URL,
   forestLossTileUrl,
 } from "@/lib/mapping/forest-loss";
 import {
@@ -112,7 +111,6 @@ import {
   FOREST_LOSS_DRIVERS_MAX_ZOOM,
   FOREST_LOSS_DRIVERS_PAPER_URL,
   FOREST_LOSS_DRIVERS_TILE_URL,
-  FOREST_LOSS_DRIVERS_URL,
   type LossDriverClass,
 } from "@/lib/mapping/forest-loss-drivers";
 import { hasForestAnswer, queryForestPoint, type ForestPoint } from "@/lib/mapping/forest-point-query";
@@ -770,6 +768,38 @@ function DriverSwatch({ driver }: { driver: LossDriverClass }) {
         </span>
       )}
     </span>
+  );
+}
+
+/**
+ * Where an overlay's data comes from, as a citation you can click.
+ *
+ * These rows each carried an ⓘ linking to the source, which said that a source
+ * existed and nothing about what it was. A layer drawn over a species' range
+ * is evidence, and evidence in an assessment gets attributed — so the row
+ * names the paper or the database instead, in the bracketed form a reader
+ * already knows how to skim past or follow.
+ *
+ * It links where the ⓘ linked, and opens the same way: these sit inside a
+ * <label>, so a plain anchor click would be forwarded to the checkbox and
+ * toggle the layer on the way out.
+ */
+function SourceCitation({ href, cite, title }: { href: string; cite: string; title: string }) {
+  return (
+    <a
+      href={href}
+      target="_blank"
+      rel="noopener noreferrer"
+      title={title}
+      onClick={(e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        window.open(href, "_blank", "noopener,noreferrer");
+      }}
+      className="shrink-0 italic tabular-nums text-[10px] text-zinc-400 hover:text-zinc-600 hover:underline dark:text-zinc-500 dark:hover:text-zinc-300"
+    >
+      [{cite}]
+    </a>
   );
 }
 
@@ -4353,7 +4383,7 @@ export default function OccurrenceMapRow({
                       title={lossDriverNotesOpen ? "Hide what this layer does and doesn't mean" : "What this layer does and doesn't mean"}
                       className="flex-1 min-w-0 flex items-center gap-1 text-left hover:text-zinc-800 dark:hover:text-zinc-100"
                     >
-                      <span className="truncate">Loss by dominant driver</span>
+                      <span className="truncate">Tree cover loss by dominant driver</span>
                       <span className="text-[9px] text-zinc-400">{lossDriverNotesOpen ? "▾" : "▸"}</span>
                     </button>
                     {/* Seven classes, so the swatches carry their names on
@@ -5898,7 +5928,7 @@ export default function OccurrenceMapRow({
   };
 
   const renderOverlayLayers = () => (
-    <div className="flex flex-col py-1 w-56">
+    <div className="flex flex-col py-1 w-[20rem]">
       <>
       {assessmentId && canViewRangeMap && (
         <>
@@ -6013,23 +6043,11 @@ export default function OccurrenceMapRow({
           className="w-3 h-3 rounded accent-emerald-500 shrink-0"
         />
         <span className="flex-1 min-w-0 text-zinc-700 dark:text-zinc-200">Protected areas</span>
-        <a
+        <SourceCitation
           href="https://www.protectedplanet.net"
-          target="_blank"
-          rel="noopener noreferrer"
-          title="World Database on Protected Areas (WDPA), via Protected Planet — UNEP-WCMC & IUCN"
-          onClick={(e) => {
-            // Same pattern as the other info-icon links in this
-            // component: prevent the enclosing <label>'s native
-            // click-forwarding from toggling the checkbox.
-            e.preventDefault();
-            e.stopPropagation();
-            window.open("https://www.protectedplanet.net", "_blank", "noopener,noreferrer");
-          }}
-          className="shrink-0 text-zinc-300 hover:text-zinc-500 dark:text-zinc-600 dark:hover:text-zinc-400"
-        >
-          <FaInfoCircle className="w-3 h-3" />
-        </a>
+          cite="WDPA"
+          title="World Database on Protected Areas — UNEP-WCMC & IUCN, via Protected Planet"
+        />
       </label>
       <label
         className="flex items-center gap-2 px-2 py-0.5 text-[11px] hover:bg-zinc-50 dark:hover:bg-zinc-700 cursor-pointer"
@@ -6042,20 +6060,11 @@ export default function OccurrenceMapRow({
           className="w-3 h-3 rounded accent-emerald-500 shrink-0"
         />
         <span className="flex-1 min-w-0 text-zinc-700 dark:text-zinc-200">Tree cover loss</span>
-        <a
-          href={FOREST_LOSS_URL}
-          target="_blank"
-          rel="noopener noreferrer"
-          title={`${FOREST_LOSS_SOURCE_NOTE} Opens Global Nature Watch, the platform formerly called Global Forest Watch.`}
-          onClick={(e) => {
-            e.preventDefault();
-            e.stopPropagation();
-            window.open(FOREST_LOSS_URL, "_blank", "noopener,noreferrer");
-          }}
-          className="shrink-0 text-zinc-300 hover:text-zinc-500 dark:text-zinc-600 dark:hover:text-zinc-400"
-        >
-          <FaInfoCircle className="w-3 h-3" />
-        </a>
+        <SourceCitation
+          href={FOREST_LOSS_DATASET_URL}
+          cite="Hansen et al. 2013"
+          title="High-Resolution Global Maps of 21st-Century Forest Cover Change — Hansen et al. 2013, Science. The Global Forest Change dataset these tiles are drawn from."
+        />
       </label>
       {/* Next to the loss layer, because it answers the question that one
           raises: a cleared block inside a range means something different if
@@ -6070,21 +6079,12 @@ export default function OccurrenceMapRow({
           onChange={() => setShowLossDrivers((v) => !v)}
           className="w-3 h-3 rounded accent-emerald-500 shrink-0"
         />
-        <span className="flex-1 min-w-0 text-zinc-700 dark:text-zinc-200">Loss by dominant driver</span>
-        <a
-          href={FOREST_LOSS_DRIVERS_URL}
-          target="_blank"
-          rel="noopener noreferrer"
-          title="Tree cover loss by dominant driver, WRI/Google DeepMind. Opens Global Nature Watch, where the layer is published."
-          onClick={(e) => {
-            e.preventDefault();
-            e.stopPropagation();
-            window.open(FOREST_LOSS_DRIVERS_URL, "_blank", "noopener,noreferrer");
-          }}
-          className="shrink-0 text-zinc-300 hover:text-zinc-500 dark:text-zinc-600 dark:hover:text-zinc-400"
-        >
-          <FaInfoCircle className="w-3 h-3" />
-        </a>
+        <span className="flex-1 min-w-0 text-zinc-700 dark:text-zinc-200">Tree cover loss by dominant driver</span>
+        <SourceCitation
+          href={FOREST_LOSS_DRIVERS_PAPER_URL}
+          cite="Sims et al. 2025"
+          title="Global drivers of forest loss at 1 km resolution — Sims et al. 2025, Environmental Research Letters."
+        />
       </label>
       <label
         className="flex items-center gap-2 px-2 py-0.5 text-[11px] hover:bg-zinc-50 dark:hover:bg-zinc-700 cursor-pointer"
@@ -6100,20 +6100,11 @@ export default function OccurrenceMapRow({
           className="w-3 h-3 rounded accent-emerald-500 shrink-0"
         />
         <span className="flex-1 min-w-0 text-zinc-700 dark:text-zinc-200">IUCN habitat types</span>
-        <a
+        <SourceCitation
           href="https://zenodo.org/records/4058819"
-          target="_blank"
-          rel="noopener noreferrer"
-          title="A global map of terrestrial habitat types — Jung et al. 2020"
-          onClick={(e) => {
-            e.preventDefault();
-            e.stopPropagation();
-            window.open("https://zenodo.org/records/4058819", "_blank", "noopener,noreferrer");
-          }}
-          className="shrink-0 text-zinc-300 hover:text-zinc-500 dark:text-zinc-600 dark:hover:text-zinc-400"
-        >
-          <FaInfoCircle className="w-3 h-3" />
-        </a>
+          cite="Jung et al. 2020"
+          title="A global map of terrestrial habitat types — Jung et al. 2020. The 100 m map behind Area of Habitat."
+        />
       </label>
       <label
         className="flex items-center gap-2 px-2 py-0.5 hover:bg-zinc-50 dark:hover:bg-zinc-700 cursor-pointer text-[11px]"
@@ -6137,20 +6128,11 @@ export default function OccurrenceMapRow({
         {ecoregionsFailed && (
           <span className="text-[10px] text-red-500 shrink-0">unavailable</span>
         )}
-        <a
+        <SourceCitation
           href={ECOREGIONS_PAPER_URL}
-          target="_blank"
-          rel="noopener noreferrer"
+          cite="Dinerstein et al. 2017"
           title="An Ecoregion-Based Approach to Protecting Half the Terrestrial Realm — Dinerstein et al. 2017, BioScience. The RESOLVE Ecoregions 2017 layer, CC BY 4.0."
-          onClick={(e) => {
-            e.preventDefault();
-            e.stopPropagation();
-            window.open(ECOREGIONS_PAPER_URL, "_blank", "noopener,noreferrer");
-          }}
-          className="shrink-0 text-zinc-300 hover:text-zinc-500 dark:text-zinc-600 dark:hover:text-zinc-400"
-        >
-          <FaInfoCircle className="w-3 h-3" />
-        </a>
+        />
       </label>
       <label
         className={`flex items-center gap-2 px-2 py-0.5 text-[11px] ${
@@ -6169,28 +6151,11 @@ export default function OccurrenceMapRow({
         />
         <span className="flex-1 min-w-0 text-zinc-700 dark:text-zinc-200">POWO native range</span>
         {wcvpPowoId && (
-          <a
+          <SourceCitation
             href={`https://powo.science.kew.org/taxon/urn:lsid:ipni.org:names:${wcvpPowoId}`}
-            target="_blank"
-            rel="noopener noreferrer"
-            title="View this species on Plants of the World Online (POWO)"
-            onClick={(e) => {
-              // See the identical pattern on Coordinate cleaning's
-              // source links: prevent the enclosing <label>'s native
-              // click-forwarding from toggling the checkbox, without
-              // losing the link's own navigation.
-              e.preventDefault();
-              e.stopPropagation();
-              window.open(
-                `https://powo.science.kew.org/taxon/urn:lsid:ipni.org:names:${wcvpPowoId}`,
-                "_blank",
-                "noopener,noreferrer"
-              );
-            }}
-            className="shrink-0 text-zinc-300 hover:text-zinc-500 dark:text-zinc-600 dark:hover:text-zinc-400"
-          >
-            <FaInfoCircle className="w-3 h-3" />
-          </a>
+            cite="POWO"
+            title="This species on Plants of the World Online — Kew's World Checklist of Vascular Plants, which is where these countries come from."
+          />
         )}
       </label>
 {hasIucnNativeRange && (
@@ -6205,6 +6170,13 @@ export default function OccurrenceMapRow({
           className="w-3 h-3 rounded accent-amber-500 shrink-0"
         />
         <span className="flex-1 min-w-0 text-zinc-700 dark:text-zinc-200">IUCN native countries</span>
+        {sisTaxonId && assessmentId && (
+          <SourceCitation
+            href={`https://www.iucnredlist.org/species/${sisTaxonId}/${assessmentId}`}
+            cite="IUCN Red List"
+            title="This species' Red List assessment, which is where these countries are listed."
+          />
+        )}
       </label>
       )}
       {/* Withheld entirely where the dataset has no matching
@@ -6231,20 +6203,11 @@ export default function OccurrenceMapRow({
                 </svg>
               )}
             </span>
-            <a
+            <SourceCitation
               href={EFFORT_PAPER_URL}
-              target="_blank"
-              rel="noopener noreferrer"
-              title="Global sampling effort of GBIF biodiversity data — El-Gabbas 2026, Diversity and Distributions"
-              onClick={(e) => {
-                e.preventDefault();
-                e.stopPropagation();
-                window.open(EFFORT_PAPER_URL, "_blank", "noopener,noreferrer");
-              }}
-              className="shrink-0 text-zinc-300 hover:text-zinc-500 dark:text-zinc-600 dark:hover:text-zinc-400"
-            >
-              <FaInfoCircle className="w-3 h-3" />
-            </a>
+              cite="El-Gabbas 2026"
+              title="Global sampling effort of GBIF biodiversity data — El-Gabbas 2026, Diversity and Distributions."
+            />
           </label>
           {/* One taxon at a time, not several: two effort
               surfaces drawn over each other give a colour that
