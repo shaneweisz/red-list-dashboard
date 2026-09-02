@@ -420,6 +420,44 @@ describe("buildIucnPointFileCsv", () => {
     expect(input.map((r) => r.year)).toEqual([2011, 1963]);
   });
 
+  /** The four coordinate columns of the first written row. */
+  const coordsOf = (csv: string) => {
+    const [header, row] = csv.trim().split("\n");
+    const cells = Object.fromEntries(header.split(",").map((h, i) => [h, row.split(",")[i]]));
+    return [cells.dec_lat, cells.dec_long, cells.latitude, cells.longitude];
+  };
+
+  it("writes a coordinate without padding it out to six decimals", () => {
+    // 1.250000 states a precision nobody measured.
+    const csv = buildIucnPointFileCsv([{ ...record, latitude: 1.25, longitude: -70.234 }]);
+    expect(coordsOf(csv)).toEqual(["1.25", "-70.234", "1.25", "-70.234"]);
+  });
+
+  it("writes a whole-number coordinate as a whole number", () => {
+    const csv = buildIucnPointFileCsv([{ ...record, latitude: 5, longitude: 0 }]);
+    expect(coordsOf(csv)).toEqual(["5", "0", "5", "0"]);
+  });
+
+  it("still caps at six decimals, so float noise doesn't reach the file", () => {
+    const csv = buildIucnPointFileCsv([
+      { ...record, latitude: 4.366666999999999, longitude: -75.7508334999 },
+    ]);
+    expect(coordsOf(csv)).toEqual(["4.366667", "-75.750833", "4.366667", "-75.750833"]);
+  });
+
+  it("never writes a coordinate in exponential notation", () => {
+    // String(0.0000001) is "1e-7", which no GIS will read.
+    const csv = buildIucnPointFileCsv([{ ...record, latitude: 0.0000001, longitude: -0.00000005 }]);
+    expect(coordsOf(csv).join(",")).not.toMatch(/e/i);
+  });
+
+  it("reads back as the same position it was given", () => {
+    const csv = buildIucnPointFileCsv([{ ...record, latitude: 1.25, longitude: -70.234 }]);
+    const back = parseIucnPointFile(csv, "f.csv");
+    expect(back.points[0].latitude).toBe(1.25);
+    expect(back.points[0].longitude).toBe(-70.234);
+  });
+
   it("writes the IUCN columns, in the order the importer reads them", () => {
     const csv = buildIucnPointFileCsv([record]);
     const [header, row] = csv.trim().split("\n");

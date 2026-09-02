@@ -511,6 +511,25 @@ function iucnBasisOfRecord(basis: string | undefined): string {
     .join("");
 }
 
+/**
+ * A coordinate as the file should carry it: six decimals at most, and no
+ * trailing zeros to reach them.
+ *
+ * The cap is worth keeping — six decimals is about 0.1 m, past which the digits
+ * are float noise rather than precision, and it stops 4.366666999999999 being
+ * written out in full. The padding is not: a locality georeferenced to a
+ * village is 1.25, and writing it 1.250000 states a precision nobody measured.
+ * Reading them back is unaffected — they parse as the same number either way —
+ * so this is about not making a claim in the file that the work doesn't
+ * support.
+ */
+function coordinateField(value: number): string {
+  // toFixed rather than String, so a very small coordinate can't come out in
+  // exponential notation, which no GIS will read.
+  const fixed = value.toFixed(6);
+  return fixed.includes(".") ? fixed.replace(/0+$/, "").replace(/\.$/, "") : fixed;
+}
+
 /** One CSV field, quoted where it has to be. */
 function csvField(value: string): string {
   return /[",\n\r]/.test(value) ? `"${value.replace(/"/g, '""')}"` : value;
@@ -564,8 +583,8 @@ export function buildIucnPointFileCsv(
     return ya - yb;
   });
   for (const r of ordered) {
-    const lat = r.latitude.toFixed(6);
-    const lon = r.longitude.toFixed(6);
+    const lat = coordinateField(r.latitude);
+    const lon = coordinateField(r.longitude);
     const year = pointYear(r);
     const values: Record<string, string> = {
       sci_name: r.species ?? "",
