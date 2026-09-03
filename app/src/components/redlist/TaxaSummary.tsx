@@ -231,7 +231,7 @@ const flexTdClasses = `${cellPad} ${colDivider} whitespace-nowrap w-0`;
 const flexThClasses = `${cellPad} ${colDivider} text-left text-sm font-bold text-zinc-600 dark:text-zinc-300 whitespace-nowrap w-0`;
 // Bar-column headers (Assessed / Outdated / Unassessed / Not Evaluated) are allowed
 // to wrap: their cells already carry a bar min-width, so a long single-line header
-// (e.g. "# Needs Updating (>10 yrs old)") would otherwise force the column wider than
+// (e.g. "# Needs Updating (10+ yrs old)") would otherwise force the column wider than
 // it needs to be and push the table into horizontal overflow.
 const centeredThClasses = `${cellPad} ${colDivider} text-center text-sm font-bold text-zinc-600 dark:text-zinc-300 w-0`;
 // "# Described Species" is the widest single-line header after the taxon name
@@ -257,7 +257,7 @@ const COLUMN_LABELS: Record<ColumnId, string> = {
   described: "# Described Species",
   colDescribed: "# Described Species (CoL)",
   assessed: "# Red List Assessed",
-  outdated: "# Needs Updating (>10 yrs old)",
+  outdated: "# Needs Updating (10+ yrs old)",
   breakdown: "Conservation Status Breakdown",
   gbifUnassessed: "# Unassessed, 1+ GBIF Obs",
   colNe: "# Not Evaluated",
@@ -2607,13 +2607,13 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
         {isVisible("outdated") && (
           <th className={countryStyleColumns ? numericThNoDividerClasses : centeredThClasses}>
             {/* Country View's half-width column has no room for the full
-                "(>10 yrs old)" qualifier + info icon on one non-wrapping line
+                "(10+ yrs old)" qualifier + info icon on one non-wrapping line
                 (inline-flex forces it to stay unwrapped) — shortened here,
                 same info still available via the plain-mode header. */}
             {countryStyleColumns ? (
               "# Needs Updating"
             ) : (
-              <span className="inline-flex items-center gap-1"># Needs Updating (&gt;10 yrs old) <OutdatedInfoIcon /></span>
+              <span className="inline-flex items-center gap-1"># Needs Updating (10+ yrs old) <OutdatedInfoIcon /></span>
             )}
           </th>
         )}

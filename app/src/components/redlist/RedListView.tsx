@@ -4821,8 +4821,8 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
             {/* Years Since Assessed / Year of Latest Assessment */}
             <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-3 flex flex-col">
               {/* The charts row is a fixed-width 3-up grid, so this header always has
-                  ~305px to work with, whatever the viewport. Title + Needs Updating +
-                  the view select came to ~341px, which wrapped the two controls onto
+                  ~305px to work with, whatever the viewport. Title + the "10+ yrs old"
+                  button + the view select came to ~341px, which wrapped the two controls onto
                   a row of their own; the sizes below (and on both controls) are what
                   fits them beside the title instead. It still wraps rather than
                   overflowing if a platform's text runs wider than the ~6px to spare. */}
@@ -4846,7 +4846,7 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
                       aria-pressed={isOutdatedSelected}
                       title={`Filter to species last assessed before ${outdatedCutoffDate(dataAsOf).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })}`}
                     >
-                      Needs Updating
+                      10+ yrs old
                     </button>
                   )}
                   {/* Pagination controls (year view only, and only when multiple pages) */}
