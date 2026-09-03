@@ -561,6 +561,16 @@ type FilterAxis =
   | "habitat" | "endemics" | "growthForms" | "assessors" | "reviewers" | "facilitators"
   | "contributors" | "institutions" | "revision";
 
+// Species-table column classes. Deliberately the same treatment as the taxa
+// summary table above it (TaxaSummary's numericThClasses and friends): sentence-case
+// bold headers rather than the small-caps tracked ones this table used, and the same
+// 1px dividers between columns, so the two tables read as one system instead of two
+// unrelated ones stacked on a page. Written out in full rather than composed from
+// fragments — Tailwind only sees class names it can read literally in the source.
+const SPECIES_TH = "px-2 md:px-4 py-3 text-sm font-bold text-zinc-600 dark:text-zinc-300 whitespace-nowrap border-l border-zinc-200 dark:border-zinc-700";
+const SPECIES_TH_SORTABLE = "cursor-pointer hover:text-zinc-900 dark:hover:text-zinc-100 select-none";
+const SPECIES_COL_DIVIDER = "border-l border-zinc-200 dark:border-zinc-700";
+
 const skipSet = (...axes: FilterAxis[]): ReadonlySet<FilterAxis> => new Set(axes);
 
 // A chart's own axis, so its bars keep showing what clicking them would select.
@@ -5961,18 +5971,18 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
         >
           <table className="w-full text-sm">
             <thead className="bg-zinc-50 dark:bg-zinc-800">
-              <tr>
-                <th className="sticky left-0 z-10 bg-zinc-50 dark:bg-zinc-800 px-2 py-3 text-center text-xs font-medium text-zinc-500 uppercase tracking-wider w-10">
+              <tr className="border-b border-zinc-200 dark:border-zinc-700">
+                <th className="sticky left-0 z-10 bg-zinc-50 dark:bg-zinc-800 px-2 py-3 text-center text-sm font-bold text-zinc-600 dark:text-zinc-300 w-10">
                   <svg className="w-4 h-4 mx-auto text-zinc-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.197-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.784-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z" />
                   </svg>
                 </th>
-                <th className="sticky left-[40px] z-10 bg-zinc-50 dark:bg-zinc-800 px-2 md:px-4 py-3 text-left text-xs font-medium text-zinc-500 uppercase tracking-wider">
+                <th className="sticky left-[40px] z-10 bg-zinc-50 dark:bg-zinc-800 px-2 md:px-4 py-3 text-left text-sm font-bold text-zinc-600 dark:text-zinc-300">
                   Species
                 </th>
                 {!isNewAssessments && (
                 <th
-                  className="px-2 md:px-4 py-3 text-left text-xs font-medium text-zinc-500 uppercase tracking-wider cursor-pointer hover:text-zinc-700 dark:hover:text-zinc-300 select-none whitespace-nowrap"
+                  className={`${SPECIES_TH} text-left ${SPECIES_TH_SORTABLE}`}
                   onClick={(e) => handleSort("category", e)}
                 >
                   <span className="flex items-center gap-1">
@@ -5983,18 +5993,18 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
                 )}
                 {!isNewAssessments && (
                 <th
-                  className="px-2 md:px-4 py-3 text-left text-xs font-medium text-zinc-500 uppercase tracking-wider cursor-pointer hover:text-zinc-700 dark:hover:text-zinc-300 select-none whitespace-nowrap"
+                  className={`${SPECIES_TH} text-left ${SPECIES_TH_SORTABLE}`}
                   onClick={(e) => handleSort("year", e)}
                 >
                   <span className="flex items-center gap-1">
-                    Assess. Date
+                    Assessment Date
                     <SortIndicator field="year" />
                   </span>
                 </th>
                 )}
                 {isNewAssessments && (
                 <th
-                  className="px-2 md:px-4 py-3 text-left text-xs font-medium text-zinc-500 uppercase tracking-wider cursor-pointer hover:text-zinc-700 dark:hover:text-zinc-300 select-none whitespace-nowrap"
+                  className={`${SPECIES_TH} text-left ${SPECIES_TH_SORTABLE}`}
                   onClick={(e) => handleSort("describedYear", e)}
                 >
                   <span className="flex items-center gap-1">
@@ -6004,22 +6014,22 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
                 </th>
                 )}
                 <th
-                  className="px-3 md:px-4 py-3 text-right text-xs font-medium text-zinc-500 uppercase tracking-wider min-w-[60px] cursor-pointer hover:text-zinc-700 dark:hover:text-zinc-300 select-none"
+                  className={`${SPECIES_TH} text-right min-w-[60px] ${SPECIES_TH_SORTABLE}`}
                   onClick={(e) => handleSort("totalGbif", e)}
                 >
                   <span className="flex items-center justify-end gap-1">
-                    {isNewAssessments ? "GBIF Observations" : "GBIF Total"}
+                    {isNewAssessments ? "GBIF Records" : "Total GBIF Records"}
                     <GbifInfoTooltip />
                     <SortIndicator field="totalGbif" />
                   </span>
                 </th>
                 {!isNewAssessments && (
                 <th
-                  className="px-3 md:px-4 py-3 text-right text-xs font-medium text-zinc-500 uppercase tracking-wider min-w-[60px] cursor-pointer hover:text-zinc-700 dark:hover:text-zinc-300 select-none"
+                  className={`${SPECIES_TH} text-right min-w-[60px] ${SPECIES_TH_SORTABLE}`}
                   onClick={(e) => handleSort("newGbif", e)}
                 >
                   <span className="flex items-center justify-end gap-1">
-                    GBIF Since Assess.
+                    Records Since Assessment
                     <HoverTooltip text="Records added after the assessment year (not the exact date). Uses the year following the assessment as the start of the range.">
                       <svg className="w-3 h-3 text-zinc-400 dark:text-zinc-500 cursor-help" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                         <circle cx="12" cy="12" r="10" />
@@ -6032,11 +6042,11 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
                 )}
                 {!isNewAssessments && (
                 <th
-                  className="px-3 md:px-4 py-3 text-right text-xs font-medium text-zinc-500 uppercase tracking-wider min-w-[60px] cursor-pointer hover:text-zinc-700 dark:hover:text-zinc-300 select-none"
+                  className={`${SPECIES_TH} text-right min-w-[60px] ${SPECIES_TH_SORTABLE}`}
                   onClick={(e) => handleSort("pctNewGbif", e)}
                 >
                   <span className="flex items-center justify-end gap-1">
-                    % GBIF Since Assess.
+                    % Since Assessment
                     <SortIndicator field="pctNewGbif" />
                   </span>
                 </th>
@@ -6190,7 +6200,7 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
                       </div>
                     </td>
                     {!isNewAssessments && (
-                    <td className="px-2 md:px-4 py-3 whitespace-nowrap">
+                    <td className={`px-2 md:px-4 py-3 whitespace-nowrap ${SPECIES_COL_DIVIDER}`}>
                       {(() => {
                         const criteria = s.criteria ?? details?.criteria;
                         return criteria && !["DD", "LC", "NT", "EX", "EW", "NE"].includes(s.category) ? (
@@ -6221,7 +6231,7 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
                     </td>
                     )}
                     {!isNewAssessments && (
-                    <td className="px-2 md:px-4 py-3 text-zinc-600 dark:text-zinc-400 whitespace-nowrap">
+                    <td className={`px-2 md:px-4 py-3 text-zinc-600 dark:text-zinc-400 whitespace-nowrap ${SPECIES_COL_DIVIDER}`}>
                       {isNE(s) ? <span className="text-zinc-400">N/A</span> : (
                         <>
                           <HoverTooltip
@@ -6248,7 +6258,7 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
                     )}
                     {/* Year Described (CoL) */}
                     {isNewAssessments && (
-                    <td className="px-2 md:px-4 py-3 text-zinc-600 dark:text-zinc-400 text-sm tabular-nums whitespace-nowrap">
+                    <td className={`px-2 md:px-4 py-3 text-zinc-600 dark:text-zinc-400 text-sm tabular-nums whitespace-nowrap ${SPECIES_COL_DIVIDER}`}>
                       {/* The searched-species preview row is built from the search result,
                           which carries no CoL description year — so it has none to show
                           until the taxon's own list lands. A "—" there says CoL has no
@@ -6265,7 +6275,7 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
                     </td>
                     )}
                     {/* Total GBIF */}
-                    <td className="px-4 py-3 text-right text-zinc-600 dark:text-zinc-400 text-sm tabular-nums whitespace-nowrap">
+                    <td className={`px-4 py-3 text-right text-zinc-600 dark:text-zinc-400 text-sm tabular-nums whitespace-nowrap ${SPECIES_COL_DIVIDER}`}>
                       {details?.gbifOccurrences != null && details?.gbifUrl ? (
                         <a
                           href={`https://www.gbif.org/occurrence/search?taxonKey=${details.gbifUrl.split('/').pop()}&${gbifFiltersFor(s.taxon_group)}`}
@@ -6298,7 +6308,7 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
                     </td>
                     {/* New GBIF */}
                     {!isNewAssessments && (
-                    <td className="px-4 py-3 text-right text-zinc-600 dark:text-zinc-400 text-sm tabular-nums whitespace-nowrap">
+                    <td className={`px-4 py-3 text-right text-zinc-600 dark:text-zinc-400 text-sm tabular-nums whitespace-nowrap ${SPECIES_COL_DIVIDER}`}>
                       {isNE(s) ? (
                         <span className="text-zinc-400">N/A</span>
                       ) : (() => {
@@ -6327,7 +6337,7 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
                     )}
                     {/* % New GBIF */}
                     {!isNewAssessments && (
-                    <td className="px-4 py-3 text-right text-zinc-600 dark:text-zinc-400 text-sm tabular-nums whitespace-nowrap">
+                    <td className={`px-4 py-3 text-right text-zinc-600 dark:text-zinc-400 text-sm tabular-nums whitespace-nowrap ${SPECIES_COL_DIVIDER}`}>
                       {isNE(s) ? <span className="text-zinc-400">N/A</span> : (() => {
                         const total = details?.gbifOccurrences ?? s.gbif_occurrence_count;
                         const newObs = details?.gbifOccurrencesSinceAssessment ?? s.gbif_observations_after_assessment_year;
