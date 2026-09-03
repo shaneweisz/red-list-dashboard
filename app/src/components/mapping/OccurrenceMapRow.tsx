@@ -871,6 +871,21 @@ export default function OccurrenceMapRow({
   const [wcvpPowoId, setWcvpPowoId] = useState<string | null>(null);
   const [loadingWcvpRange, setLoadingWcvpRange] = useState(false);
   const [colorByDate, setColorByDate] = useState(true);
+  /** The spanner beside GBIF points: how they're coloured, and split view. */
+  const [gbifOptionsOpen, setGbifOptionsOpen] = useState(false);
+  const gbifOptionsRef = useRef<HTMLSpanElement>(null);
+  useEffect(() => {
+    if (!gbifOptionsOpen) return;
+    // Capture, so a click elsewhere closes it before that thing acts — but not
+    // a click inside the menu, which would tear it down before its own button
+    // ever fired.
+    const close = (e: MouseEvent) => {
+      if (gbifOptionsRef.current?.contains(e.target as Node)) return;
+      setGbifOptionsOpen(false);
+    };
+    document.addEventListener("click", close, true);
+    return () => document.removeEventListener("click", close, true);
+  }, [gbifOptionsOpen]);
   const [basemap, setBasemap] = useState<BasemapKey>("streets");
   // Overlays — informational map layers, independent of the "Native range only"
   // occurrence filter above: shading which countries a source considers native,
@@ -4510,28 +4525,6 @@ export default function OccurrenceMapRow({
               )}
             </div>
           )}
-          {/* Only the way into split view lives out here now. The colour key
-              and its toggle moved onto the row they describe, in the Records
-              panel — one legend for the layer rather than one for the points
-              and another for what their colours mean. */}
-          {!loadingOccurrences && !label && assessmentYear && !splitView && (
-            <div className="bg-white dark:bg-zinc-800 px-2 py-1 rounded shadow text-[10px] text-zinc-500 dark:text-zinc-400 flex items-center gap-2 flex-wrap">
-              <button
-                onClick={() => {
-                  if (!splitDate && assessmentDate) setSplitDate(assessmentDate.split("T")[0]);
-                  setSplitView(true);
-                }}
-                title="Show the records before and after the assessment date side by side"
-                className="flex items-center gap-1 hover:text-zinc-700 dark:hover:text-zinc-200"
-              >
-                <svg width="10" height="10" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
-                  <rect x="1" y="2" width="14" height="12" rx="1.5" />
-                  <line x1="8" y1="2" x2="8" y2="14" />
-                </svg>
-                Split view
-              </button>
-            </div>
-          )}
           </div>
           {/* This session's edits, newest first. Clicking one steps back to it,
               which is undo applied until it's reached. */}
@@ -6365,6 +6358,70 @@ export default function OccurrenceMapRow({
           style={{ background: "#4ade80", border: "1.5px solid #16a34a" }}
         />
         <span className="shrink-0 text-zinc-700 dark:text-zinc-200">GBIF points</span>
+        {/* What to do with this layer, behind one icon: the two colourings and
+            the split. They were a link under the row and a card of their own
+            below the panel, which spent three lines of a legend on controls
+            rather than on the key. */}
+        {!label && assessmentYear && (
+          <span ref={gbifOptionsRef} className="relative shrink-0">
+            <button
+              onClick={(e) => {
+                // Inside the row's <label>, so a plain click would land on the
+                // checkbox and take the layer off the map.
+                e.preventDefault();
+                e.stopPropagation();
+                setGbifOptionsOpen((v) => !v);
+              }}
+              title="How these points are coloured, and split view"
+              aria-label="GBIF points options"
+              className="block text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300"
+            >
+              <svg className="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  d="M14.7 6.3a4 4 0 0 0 5 5l-9.4 9.4a2.1 2.1 0 0 1-3-3l9.4-9.4a4 4 0 0 0-5-5l2.9 2.9-2.1 2.1-2.9-2.9a4 4 0 0 0 5 5z"
+                />
+              </svg>
+            </button>
+            {gbifOptionsOpen && (
+              <span
+                onClick={(e) => { e.preventDefault(); e.stopPropagation(); }}
+                className="absolute left-0 bottom-5 z-[1002] block w-max rounded-md border border-zinc-200 bg-white p-1 shadow-lg dark:border-zinc-700 dark:bg-zinc-800"
+              >
+                <button
+                  onClick={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    setColorByDate(!colorByDate);
+                    setGbifOptionsOpen(false);
+                  }}
+                  className="block w-full rounded px-1.5 py-1 text-left text-[11px] text-zinc-700 hover:bg-zinc-100 dark:text-zinc-200 dark:hover:bg-zinc-700"
+                >
+                  {colorByDate ? "Colour by assessment date" : "Colour by date"}
+                </button>
+                {!splitView && (
+                  <button
+                    onClick={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      if (!splitDate && assessmentDate) setSplitDate(assessmentDate.split("T")[0]);
+                      setSplitView(true);
+                      setGbifOptionsOpen(false);
+                    }}
+                    className="flex w-full items-center gap-1.5 rounded px-1.5 py-1 text-left text-[11px] text-zinc-700 hover:bg-zinc-100 dark:text-zinc-200 dark:hover:bg-zinc-700"
+                  >
+                    <svg width="10" height="10" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
+                      <rect x="1" y="2" width="14" height="12" rx="1.5" />
+                      <line x1="8" y1="2" x2="8" y2="14" />
+                    </svg>
+                    Split view
+                  </button>
+                )}
+              </span>
+            )}
+          </span>
+        )}
         {/* The colour key on the same row as the name it belongs to, which is
             what the panel was widened for. */}
         {showGbif && !label && colorByDate && (
@@ -6414,11 +6471,11 @@ export default function OccurrenceMapRow({
           points here, the key to their colours there. The colouring is a
           property of that row, so it belongs under it, and the toggle that
           switches between the two schemes belongs with the key it changes. */}
-      {showGbif && !label && assessmentYear && (
+      {/* Only in the before/after scheme: the date ramp has its own key inline
+          on the row above, where both ends can be labelled. */}
+      {showGbif && !label && assessmentYear && !colorByDate && (
         <div className="px-2 pb-0.5 pl-6 text-[10px] text-zinc-500 dark:text-zinc-400">
-          {/* Only in the before/after scheme: the date ramp has its own key
-              inline on the row above, where both ends can be labelled. */}
-          {!colorByDate && (
+          {(
             <div className="flex flex-col gap-0.5">
               <span className="flex items-center gap-1">
                 <span className="w-2.5 h-2.5 rounded-full shrink-0 bg-gray-400 border-[1.5px] border-gray-500" />
@@ -6430,13 +6487,6 @@ export default function OccurrenceMapRow({
               </span>
             </div>
           )}
-          <button
-            onClick={() => setColorByDate(!colorByDate)}
-            title={colorByDate ? "Colour by before/after the assessment date" : "Colour by date"}
-            className="mt-0.5 underline decoration-dotted hover:text-zinc-700 dark:hover:text-zinc-200"
-          >
-            {colorByDate ? "by assessment date" : "by date"}
-          </button>
         </div>
       )}
     </div>
