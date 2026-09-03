@@ -33,7 +33,22 @@ Runs on port 3000 (Next.js + Turbopack). Stop with `pkill -f 'next dev'`.
 brew install node@22   # one-time; safe, does not relink the default node
 export PATH="/opt/homebrew/opt/node@22/bin:$PATH"
 mkdir -p /tmp/pw-browsers-node22
-PLAYWRIGHT_BROWSERS_PATH=/tmp/pw-browsers-node22 npx playwright install chromium
+PLAYWRIGHT_BROWSERS_PATH=/tmp/pw-browsers-node22 npx playwright install --no-shell chromium
+```
+
+**`--no-shell` matters for anything with a map.** Plain `playwright install chromium`
+can leave you with only `chromium_headless_shell`, which cannot create a WebGL
+context on macOS — MapLibre then fails to initialise with
+`Failed to initialize WebGL ... BindToCurrentSequence failed`, the canvas never
+appears, and `waitForSelector("canvas.maplibregl-canvas")` times out. No GPU flag
+fixes it, because the shell build is the problem. Install the full browser and
+launch it explicitly:
+
+```js
+const browser = await chromium.launch({
+  channel: "chromium",                        // the full build, not the shell
+  args: ["--enable-unsafe-swiftshader"],      // software GL, still needed
+});
 ```
 
 Then drive it with a small script (adjust the flow to whatever you're verifying):

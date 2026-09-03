@@ -147,12 +147,12 @@ input[type="range"].dual-range-thumb::-webkit-slider-thumb {
   margin-top: 0;
   border: none;
   border-radius: 3px;
-  background: #3b82f6 linear-gradient(rgba(255, 255, 255, 0.7), rgba(255, 255, 255, 0.7)) no-repeat center / 2px 8px;
+  background: var(--range-thumb, #3b82f6) linear-gradient(rgba(255, 255, 255, 0.7), rgba(255, 255, 255, 0.7)) no-repeat center / 2px 8px;
   cursor: ew-resize;
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.35);
 }
 input[type="range"].dual-range-thumb:focus-visible::-webkit-slider-thumb {
-  box-shadow: 0 0 0 2px white, 0 0 0 4px #3b82f6;
+  box-shadow: 0 0 0 2px white, 0 0 0 4px var(--range-thumb, #3b82f6);
 }
 .dark input[type="range"].dual-range-thumb:focus-visible::-webkit-slider-thumb {
   box-shadow: 0 0 0 2px #18181b, 0 0 0 4px #3b82f6;
@@ -175,4 +175,111 @@ input[type="range"].dual-range-thumb:focus-visible::-moz-range-thumb {
 }
 .dark input[type="range"].dual-range-thumb:focus-visible::-moz-range-thumb {
   box-shadow: 0 0 0 2px #18181b, 0 0 0 4px #3b82f6;
+}
+
+/*
+ * MapLibre's popup ships a hardcoded white bubble and white arrow, which sits
+ * on the map as a bright rectangle in dark mode. Themed here rather than by
+ * class on the element, because the parts that need it — the tip, the close
+ * button — are MapLibre's own DOM, not ours.
+ */
+.occurrence-popup .maplibregl-popup-content {
+  padding: 8px 10px;
+  border-radius: 8px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25);
+}
+.dark .occurrence-popup .maplibregl-popup-content {
+  background: #18181b;
+  border: 1px solid #3f3f46;
+}
+.dark .occurrence-popup .maplibregl-popup-tip {
+  border-top-color: #18181b;
+  border-bottom-color: #18181b;
+  border-left-color: #18181b;
+  border-right-color: #18181b;
+}
+.dark .occurrence-popup .maplibregl-popup-close-button {
+  color: #a1a1aa;
+}
+
+/*
+ * The occurrence map's attribution, kept to the right half of the map.
+ *
+ * It grows with every layer switched on — MapLibre, OpenStreetMap, WDPA,
+ * ecoregions, Jung et al., Hansen — and at full width it reached across the
+ * bottom of the map into the legends and the records panel stacked at the
+ * left. Half the width is enough for the sources of whatever is currently
+ * drawn; past that it truncates, and the ⓘ toggle still opens the full list.
+ *
+ * Scoped to this map so other maps in the app keep MapLibre's own behaviour.
+ */
+/*
+ * The map's footer: the scale sitting directly on the attribution, as one
+ * block in the corner rather than two bars with air between them.
+ *
+ * The scale is flattened to a hairline — its own height is a MapLibre default
+ * sized for a control standing alone, and here it only has to mark a length.
+ */
+.occurrence-map .maplibregl-ctrl-bottom-right {
+  display: flex;
+  /* Reversed, because MapLibre adds the scale first and the attribution
+     second: this puts the credits on the left and the scale at the far right,
+     past the ⓘ, as one footer line. */
+  flex-direction: row-reverse;
+  align-items: flex-end;
+  gap: 6px;
+  /* Clear of the map's own bottom edge, which the attribution used to sit on. */
+  padding-bottom: 6px;
+}
+.occurrence-map .maplibregl-ctrl-bottom-right .maplibregl-ctrl {
+  margin: 0;
+}
+.occurrence-map .maplibregl-ctrl-scale {
+  height: 12px;
+  line-height: 11px;
+  font-size: 9px;
+  padding: 0 4px;
+  border-width: 1px;
+}
+
+/*
+ * Small print, deliberately. CC BY asks for credit "reasonable to the medium",
+ * and 10px is what a map's own furniture is set in — legible at arm's length,
+ * and every credit still spelled out rather than abbreviated or hidden behind
+ * a toggle, which is the part that actually matters.
+ */
+.occurrence-map .maplibregl-ctrl-attrib,
+.occurrence-map .maplibregl-ctrl-attrib-inner {
+  font-size: 10px;
+  line-height: 1.35;
+}
+
+/*
+ * Capped on the control column, not the attribution itself: MapLibre's
+ * bottom-right container shrink-wraps its contents, so a percentage on the
+ * attribution resolves against a box the attribution is itself sizing. The
+ * column is positioned within the map, so a percentage there means the map.
+ */
+.occurrence-map .maplibregl-ctrl-bottom-right {
+  max-width: 50%;
+}
+/*
+ * !important because maplibre-gl.css is imported after this file and sets
+ * content-box on the attribution: without it the element's own padding is
+ * added outside the 50%, and the strip overhangs the column to the left by
+ * that much — which is exactly the overlap this is here to stop.
+ */
+.occurrence-map .maplibregl-ctrl-attrib {
+  box-sizing: border-box !important;
+  max-width: 100%;
+}
+/*
+ * Wrapped rather than truncated. Several of these layers are CC BY — RESOLVE
+ * Ecoregions, Jung et al., Hansen — and an ellipsis that eats the last credit
+ * in the list is a licence term quietly dropped. Two lines in the corner is
+ * the cost of citing everything that's switched on.
+ */
+.occurrence-map .maplibregl-ctrl-attrib-inner {
+  display: block;
+  white-space: normal;
 }

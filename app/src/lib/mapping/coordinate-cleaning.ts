@@ -36,7 +36,7 @@
  * flagged point is the *only* record for that species nearby, which would unflag it) — matches
  * the precedent set for cc_gbif in phase 1: skip it, keep the check as a simple proximity test.
  *
- * Reference data (src/lib/coordinate-cleaning-refdata/) is sourced independently of
+ * Reference data (src/lib/mapping/coordinate-cleaning-refdata/) is sourced independently of
  * CoordinateCleaner's own bundled GPL-3 tables — see that directory's README for
  * provenance.
  */

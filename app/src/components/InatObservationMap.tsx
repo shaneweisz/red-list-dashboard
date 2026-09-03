@@ -10,7 +10,7 @@ const MapGL = dynamic(() => import("react-map-gl/maplibre").then((m) => m.Map), 
 const Source = dynamic(() => import("react-map-gl/maplibre").then((m) => m.Source), { ssr: false });
 const Layer = dynamic(() => import("react-map-gl/maplibre").then((m) => m.Layer), { ssr: false });
 const ScaleControl = dynamic(() => import("react-map-gl/maplibre").then((m) => m.ScaleControl), { ssr: false });
-const MapOccurrenceTooltip = dynamic(() => import("./MapOccurrenceTooltip"), { ssr: false });
+const MapOccurrenceTooltip = dynamic(() => import("@/components/mapping/MapOccurrenceTooltip"), { ssr: false });
 
 // Plain OSM raster basemap (matches the streets basemap used by OccurrenceMapRow).
 const OSM_STYLE: maplibregl.StyleSpecification = {
@@ -132,10 +132,16 @@ export default function InatObservationMap({ observations, scientificName, mount
             <MapOccurrenceTooltip
               lat={hovered.decimalLatitude}
               lng={hovered.decimalLongitude}
-              species={scientificName}
-              eventDate={hovered.date ?? undefined}
-              observer={hovered.observer}
-              imageUrl={hovered.imageUrl ? getThumbUrl(hovered.imageUrl) : null}
+              fields={[
+                { label: "Species", value: scientificName },
+                ...(hovered.date ? [{ label: "Date", value: hovered.date }] : []),
+                ...(hovered.observer ? [{ label: "Observer", value: hovered.observer }] : []),
+                {
+                  label: "Coordinates",
+                  value: `${hovered.decimalLatitude.toFixed(4)}, ${hovered.decimalLongitude.toFixed(4)}`,
+                },
+              ]}
+              images={hovered.imageUrl ? [{ url: getThumbUrl(hovered.imageUrl) }] : undefined}
             />
           )}
         </MapGL>

@@ -22,6 +22,7 @@ import type { ColProvenance } from "@/app/api/col/provenance/route";
 import { parseAssessors, parseInstitutions } from "@/lib/parseAssessors";
 import { iucnRegionCountries, matchingRegions } from "@/lib/regions";
 import { useFilterParams, type SortField, type MapViewMode } from "@/hooks/useFilterParams";
+import { HABITAT_CATEGORIES } from "@/lib/habitat-classification";
 import { readViewPreference, writeViewPreference } from "@/lib/view-preference";
 import { parseHabitatEntries, matchesHabitatFilter as matchesHabitatCriteria, coarseKnownCategories, isRestrictiveSelection, ALL_HABITAT_SEASONS, ALL_HABITAT_IMPORTANCE, ALL_HABITAT_SUITABILITY } from "@/lib/habitat-filter";
 import { type RedListSpecies } from "@/hooks/useRedListSpeciesQuery";
@@ -44,6 +45,10 @@ type LegacyDetailTab = DetailTab | "assessors" | "reviewers";
 // /api/eol routes are all still here — flip this back to true to bring it back.
 const SHOW_EOL_TAB = false;
 
+// Wikipedia tab is hidden for now. The tab, its panel and the WikipediaSummary
+// component are all still here — flip this back to true to bring it back.
+const SHOW_WIKIPEDIA_TAB = false;
+
 // A ?tab=eol link (or a stale one) shouldn't strand the user on a tab with no
 // button in the bar, so fall back to the default tab while EoL is hidden.
 function visibleTab(tab: LegacyDetailTab | null | undefined): DetailTab {
@@ -53,6 +58,7 @@ function visibleTab(tab: LegacyDetailTab | null | undefined): DetailTab {
   // roleFromLegacyTab).
   if (tab === "assessors" || tab === "reviewers") return "candidates";
   if (tab === "eol" && !SHOW_EOL_TAB) return "gbif";
+  if (tab === "wikipedia" && !SHOW_WIKIPEDIA_TAB) return "gbif";
   return tab;
 }
 
@@ -63,7 +69,7 @@ function roleFromLegacyTab(tab: LegacyDetailTab | null | undefined): CreditRole 
 
 // Dynamically import OccurrenceMapRow to avoid SSR issues with Leaflet
 const OccurrenceMapRow = dynamic(
-  () => import("../OccurrenceMapRow"),
+  () => import("@/components/mapping/OccurrenceMapRow"),
   { ssr: false }
 );
 
@@ -150,65 +156,6 @@ const THREAT_CATEGORIES: { code: string; label: string; children: { code: string
   ]},
 ];
 
-// IUCN habitat classification (18 top-level categories, 126 codes total) — see
-// https://www.iucnredlist.org/resources/habitat-classification-scheme. A handful
-// of codes go a 3rd level deep (e.g. 11.1.1/11.1.2 under 11.1, 9.8.1-9.8.6 under
-// 9.8); those are intentionally folded into their 2nd-level parent rather than
-// given their own drill row, mirroring THREAT_CATEGORIES' 2-level depth — the
-// prefix-based matching (code.startsWith(sel + ".")) still counts a species
-// under e.g. "11.1.1" when "11.1" is selected, it just isn't its own pill.
-const HABITAT_CATEGORIES: { code: string; label: string; children: { code: string; label: string }[] }[] = [
-  { code: "1", label: "Forest", children: [
-    { code: "1.1", label: "Forest - Boreal" }, { code: "1.2", label: "Forest - Subarctic" }, { code: "1.3", label: "Forest - Subantarctic" }, { code: "1.4", label: "Forest - Temperate" }, { code: "1.5", label: "Forest - Subtropical/Tropical Dry" }, { code: "1.6", label: "Forest - Subtropical/Tropical Moist Lowland" }, { code: "1.7", label: "Forest - Subtropical/Tropical Mangrove Vegetation Above High Tide Level" }, { code: "1.8", label: "Forest - Subtropical/Tropical Swamp" }, { code: "1.9", label: "Forest - Subtropical/Tropical Moist Montane" },
-  ]},
-  { code: "2", label: "Savanna", children: [
-    { code: "2.1", label: "Savanna - Dry" }, { code: "2.2", label: "Savanna - Moist" },
-  ]},
-  { code: "3", label: "Shrubland", children: [
-    { code: "3.1", label: "Shrubland - Subarctic" }, { code: "3.2", label: "Shrubland - Subantarctic" }, { code: "3.3", label: "Shrubland - Boreal" }, { code: "3.4", label: "Shrubland - Temperate" }, { code: "3.5", label: "Shrubland - Subtropical/Tropical Dry" }, { code: "3.6", label: "Shrubland - Subtropical/Tropical Moist" }, { code: "3.7", label: "Shrubland - Subtropical/Tropical High Altitude" }, { code: "3.8", label: "Shrubland - Mediterranean-type Shrubby Vegetation" },
-  ]},
-  { code: "4", label: "Grassland", children: [
-    { code: "4.1", label: "Grassland - Tundra" }, { code: "4.2", label: "Grassland - Subarctic" }, { code: "4.3", label: "Grassland - Subantarctic" }, { code: "4.4", label: "Grassland - Temperate" }, { code: "4.5", label: "Grassland - Subtropical/Tropical Dry" }, { code: "4.6", label: "Grassland - Subtropical/Tropical Seasonally Wet/Flooded" }, { code: "4.7", label: "Grassland - Subtropical/Tropical High Altitude" },
-  ]},
-  { code: "5", label: "Wetlands (inland)", children: [
-    { code: "5.1", label: "Wetlands (inland) - Permanent Rivers/Streams/Creeks (includes waterfalls)" }, { code: "5.2", label: "Wetlands (inland) - Seasonal/Intermittent/Irregular Rivers/Streams/Creeks" }, { code: "5.3", label: "Wetlands (inland) - Shrub Dominated Wetlands" }, { code: "5.4", label: "Wetlands (inland) - Bogs, Marshes, Swamps, Fens, Peatlands" }, { code: "5.5", label: "Wetlands (inland) - Permanent Freshwater Lakes (over 8ha)" }, { code: "5.6", label: "Wetlands (inland) - Seasonal/Intermittent Freshwater Lakes (over 8ha)" }, { code: "5.7", label: "Wetlands (inland) - Permanent Freshwater Marshes/Pools (under 8ha)" }, { code: "5.8", label: "Wetlands (inland) - Seasonal/Intermittent Freshwater Marshes/Pools (under 8ha)" }, { code: "5.9", label: "Wetlands (inland) - Freshwater Springs and Oases" }, { code: "5.10", label: "Wetlands (inland) - Tundra Wetlands (incl. pools and temporary waters from snowmelt)" }, { code: "5.11", label: "Wetlands (inland) - Alpine Wetlands (includes temporary waters from snowmelt)" }, { code: "5.12", label: "Wetlands (inland) - Geothermal Wetlands" }, { code: "5.13", label: "Wetlands (inland) - Permanent Inland Deltas" }, { code: "5.14", label: "Wetlands (inland) - Permanent Saline, Brackish or Alkaline Lakes" }, { code: "5.15", label: "Wetlands (inland) - Seasonal/Intermittent Saline, Brackish or Alkaline Lakes and Flats" }, { code: "5.16", label: "Wetlands (inland) - Permanent Saline, Brackish or Alkaline Marshes/Pools" }, { code: "5.17", label: "Wetlands (inland) - Seasonal/Intermittent Saline, Brackish or Alkaline Marshes/Pools" }, { code: "5.18", label: "Wetlands (inland) - Karst and Other Subterranean Hydrological Systems (inland)" },
-  ]},
-  { code: "6", label: "Rocky areas (eg. inland cliffs, mountain peaks)", children: [
-  ]},
-  { code: "7", label: "Caves and Subterranean Habitats (non-aquatic)", children: [
-    { code: "7.1", label: "Caves and Subterranean Habitats (non-aquatic) - Caves" }, { code: "7.2", label: "Caves and Subterranean Habitats (non-aquatic) - Other Subterranean Habitats" },
-  ]},
-  { code: "8", label: "Desert", children: [
-    { code: "8.1", label: "Desert - Hot" }, { code: "8.2", label: "Desert - Temperate" }, { code: "8.3", label: "Desert - Cold" },
-  ]},
-  { code: "9", label: "Marine Neritic", children: [
-    { code: "9.1", label: "Marine Neritic - Pelagic" }, { code: "9.2", label: "Marine Neritic - Subtidal Rock and Rocky Reefs" }, { code: "9.3", label: "Marine Neritic - Subtidal Loose Rock/pebble/gravel" }, { code: "9.4", label: "Marine Neritic - Subtidal Sandy" }, { code: "9.5", label: "Marine Neritic - Subtidal Sandy-Mud" }, { code: "9.6", label: "Marine Neritic - Subtidal Muddy" }, { code: "9.7", label: "Marine Neritic - Macroalgal/Kelp" }, { code: "9.8", label: "Marine Neritic - Coral Reef" }, { code: "9.9", label: "Marine Neritic - Seagrass (Submerged)" }, { code: "9.10", label: "Marine Neritic - Estuaries" },
-  ]},
-  { code: "10", label: "Marine Oceanic", children: [
-    { code: "10.1", label: "Marine Oceanic - Epipelagic (0-200m)" }, { code: "10.2", label: "Marine Oceanic - Mesopelagic (200-1000m)" }, { code: "10.3", label: "Marine Oceanic - Bathypelagic (1000-4000m)" }, { code: "10.4", label: "Marine Oceanic - Abyssopelagic (4000-6000m)" },
-  ]},
-  { code: "11", label: "Marine Deep Benthic", children: [
-    { code: "11.1", label: "Marine Deep Benthic - Continental Slope/Bathyl Zone (200-4,000m)" }, { code: "11.2", label: "Marine Deep Benthic - Abyssal Plain (4,000-6,000m)" }, { code: "11.3", label: "Marine Deep Benthic - Abyssal Mountain/Hills (4,000-6,000m)" }, { code: "11.4", label: "Marine Deep Benthic - Hadal/Deep Sea Trench (>6,000m)" }, { code: "11.5", label: "Marine Deep Benthic - Seamount" }, { code: "11.6", label: "Marine Deep Benthic - Deep Sea Vents (Rifts/Seeps)" },
-  ]},
-  { code: "12", label: "Marine Intertidal", children: [
-    { code: "12.1", label: "Marine Intertidal - Rocky Shoreline" }, { code: "12.2", label: "Marine Intertidal - Sandy Shoreline and/or Beaches, Sand Bars, Spits, Etc" }, { code: "12.3", label: "Marine Intertidal - Shingle and/or Pebble Shoreline and/or Beaches" }, { code: "12.4", label: "Marine Intertidal - Mud Flats and Salt Flats" }, { code: "12.5", label: "Marine Intertidal - Salt Marshes (Emergent Grasses)" }, { code: "12.6", label: "Marine Intertidal - Tidepools" }, { code: "12.7", label: "Marine Intertidal - Mangrove Submerged Roots" },
-  ]},
-  { code: "13", label: "Marine Coastal/Supratidal", children: [
-    { code: "13.1", label: "Marine Coastal/Supratidal - Sea Cliffs and Rocky Offshore Islands" }, { code: "13.2", label: "Marine Coastal/supratidal - Coastal Caves/Karst" }, { code: "13.3", label: "Marine Coastal/Supratidal - Coastal Sand Dunes" }, { code: "13.4", label: "Marine Coastal/Supratidal - Coastal Brackish/Saline Lagoons/Marine Lakes" }, { code: "13.5", label: "Marine Coastal/Supratidal - Coastal Freshwater Lakes" },
-  ]},
-  { code: "14", label: "Artificial/Terrestrial", children: [
-    { code: "14.1", label: "Artificial/Terrestrial - Arable Land" }, { code: "14.2", label: "Artificial/Terrestrial - Pastureland" }, { code: "14.3", label: "Artificial/Terrestrial - Plantations" }, { code: "14.4", label: "Artificial/Terrestrial - Rural Gardens" }, { code: "14.5", label: "Artificial/Terrestrial - Urban Areas" }, { code: "14.6", label: "Artificial/Terrestrial - Subtropical/Tropical Heavily Degraded Former Forest" },
-  ]},
-  { code: "15", label: "Artificial/Aquatic & Marine", children: [
-    { code: "15.1", label: "Artificial/Aquatic - Water Storage Areas (over 8ha)" }, { code: "15.2", label: "Artificial/Aquatic - Ponds (below 8ha)" }, { code: "15.3", label: "Artificial/Aquatic - Aquaculture Ponds" }, { code: "15.4", label: "Artificial/Aquatic - Salt Exploitation Sites" }, { code: "15.5", label: "Artificial/Aquatic - Excavations (open)" }, { code: "15.6", label: "Artificial/Aquatic - Wastewater Treatment Areas" }, { code: "15.7", label: "Artificial/Aquatic - Irrigated Land (includes irrigation channels)" }, { code: "15.8", label: "Artificial/Aquatic - Seasonally Flooded Agricultural Land" }, { code: "15.9", label: "Artificial/Aquatic - Canals and Drainage Channels, Ditches" }, { code: "15.10", label: "Artificial/Aquatic - Karst and Other Subterranean Hydrological Systems (human-made)" }, { code: "15.11", label: "Artificial/Marine - Marine Anthropogenic Structures" }, { code: "15.12", label: "Artificial/Marine - Mariculture Cages" }, { code: "15.13", label: "Artificial/Marine - Mari/Brackishculture Ponds" },
-  ]},
-  { code: "16", label: "Introduced vegetation", children: [
-  ]},
-  { code: "17", label: "Other", children: [
-  ]},
-  { code: "18", label: "Unknown", children: [
-  ]},
-];
 
 interface CriteriaNode {
   code: string;
@@ -1155,7 +1102,6 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
     selectedCriteria, setSelectedCriteria,
     colMatch, setColMatch,
     selectedColReasons, setColReasons,
-    colScope, setColScope,
     selectedHabitat, setSelectedHabitat,
     habitatBreadth, setHabitatBreadth,
     selectedHabitatImportance, setSelectedHabitatImportance,
@@ -1583,21 +1529,6 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
     return () => document.removeEventListener("mousedown", handler);
   }, [threatsScopeMenuOpen]);
 
-  // CoL differences card's scope dropdown (10+ yrs only vs every assessment).
-  const [colScopeMenuOpen, setColScopeMenuOpen] = useState(false);
-  const colScopeMenuRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    if (!colScopeMenuOpen) return;
-    const handler = (e: MouseEvent) => {
-      if (colScopeMenuRef.current && !colScopeMenuRef.current.contains(e.target as Node)) {
-        setColScopeMenuOpen(false);
-      }
-    };
-    document.addEventListener("mousedown", handler);
-    return () => document.removeEventListener("mousedown", handler);
-  }, [colScopeMenuOpen]);
-
   const [habitatBreadthMenuOpen, setHabitatBreadthMenuOpen] = useState(false);
   const [habitatImportanceMenuOpen, setHabitatImportanceMenuOpen] = useState(false);
   const [habitatSeasonMenuOpen, setHabitatSeasonMenuOpen] = useState(false);
@@ -2009,22 +1940,6 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
     const sels = [...selectedInstitutions].map(x => x.toLowerCase());
     return getSpeciesInstitutions(s).some(i => { const il = i.toLowerCase(); return sels.some(x => il.includes(x)); });
   }, [selectedInstitutions, getSpeciesInstitutions]);
-  // Does this species fall inside the CoL card's scope? Under the default
-  // "outdated" scope only assessments more than 10 years old do — exactly the
-  // set the dashboard's Needs Updating toggle selects, deliberately the same
-  // predicate (isOutdated) rather than a second, separately-drifting notion of
-  // "old". A taxonomic difference matters where the assessment is due for
-  // renewal; on a recent one, the assessors already had the current checklist
-  // in front of them. "Any age" opts back in to the full picture.
-  //
-  // Three surfaces read this: the card's counts (colTally), the filter itself
-  // (matchesColFilter, only once something is selected) and the ⚑ marker on
-  // each species row — so what the chart counts, what clicking it selects and
-  // which rows carry a flag can't disagree.
-  const colScopeCovers = useCallback(
-    (s: Species): boolean => colScope === "all" || isOutdated(s.assessment_date, dataAsOf),
-    [colScope, dataAsOf],
-  );
 
   // Possible-taxonomic-revision filter (#col-match): `colMatch` is the coarse
   // toggle — "flagged" = this species has no clean 1:1 Catalogue of Life match,
@@ -2033,15 +1948,13 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
   // implies flagged, so it doesn't need the toggle set as well. Same shape as
   // habitatBreadth + selectedHabitat.
   const matchesColFilter = useCallback(
-    (s: Species): boolean => {
-      // Inert while nothing is selected: the scope narrows the CoL axis, it is
-      // not a standing ">10 yrs" filter on the whole dashboard.
-      if (!colMatch && selectedColReasons.size === 0) return true;
-      if (!colScopeCovers(s)) return false;
-      return matchesRevisionFilter(s.col_revision, colMatch, selectedColReasons);
-    },
-    [colMatch, selectedColReasons, colScopeCovers],
+    (s: Species): boolean => matchesRevisionFilter(s.col_revision, colMatch, selectedColReasons),
+    [colMatch, selectedColReasons],
   );
+
+  // Is either half of that filter active? The ⚑ marker on a species row keys off
+  // this — see the row itself for why the flag is opt-in rather than always on.
+  const colFilterActive = colMatch != null || selectedColReasons.size > 0;
 
   // Consolidates all 5 habitat-related filters into one predicate (rather than 5
   // separate inline checks repeated at every filter site) since major/resident both
@@ -2808,16 +2721,10 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
     const tally = newRevisionTally();
     taxaFilteredSpecies.forEach(s => {
       if (!matchesFilters(s, SKIP_REVISION)) return;
-      // The scope is NOT part of that skipped axis: SKIP_REVISION drops the
-      // whole CoL filter (scope included — it lives in matchesColFilter), so
-      // the restriction is re-applied here. Under the default scope both the
-      // reason bars and the flagged/clean totals count only assessments over
-      // 10 years old, which is exactly what clicking them then selects.
-      if (!colScopeCovers(s)) return;
       tallyRevision(tally, s.col_revision);
     });
     return tally;
-  }, [taxaFilteredSpecies, matchesFilters, colScopeCovers]);
+  }, [taxaFilteredSpecies, matchesFilters]);
 
   // Habitat counts: apply all filters EXCEPT habitat (all 4 dimensions — code
   // selection, specialists/major/resident toggles — so the drill-down counts and
@@ -3896,82 +3803,25 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
       `px-2 py-0.5 text-xs font-semibold rounded transition-colors ${
         active ? `${activeColor} text-white shadow-sm` : "bg-zinc-100 dark:bg-zinc-800 text-zinc-500 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-300"
       }`;
-    // Both totals are scoped (see colTally), so both tooltips have to say so —
-    // otherwise "Clean 412" reads as a claim about every species in view.
-    const scopeNote = colScope === "outdated" ? ", among assessments over 10 years old" : "";
     return (
       <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-3 flex flex-col">
-        <div className="flex items-center justify-between gap-2 mb-1 min-h-[24px] flex-wrap">
+        <div className="flex items-center justify-between gap-2 mb-1 min-h-[24px]">
           <span className="text-sm font-semibold text-zinc-900 dark:text-zinc-100 flex items-center gap-1">
             Taxonomic differences from Catalogue of Life
-            <HoverTooltip text="Assessed species whose name Catalogue of Life treats differently: either the IUCN name has no clean one-to-one match in the current Catalogue of Life checklist (lumped, now a subspecies, or not in the checklist yet), or Catalogue of Life now recognises species likely split out of it. Two checklists can differ without either being wrong — the Red List assesses the taxon its assessors scoped, Catalogue of Life maintains a nomenclatural checklist — so this says where they differ, not who is right. The split signal is a name-pattern heuristic. The no-match half is the same diagnostic the SSC group view shows as 'No 1:1 CoL Match'. By default this covers only assessments over 10 years old — the ones a taxonomic difference is due to be acted on — and the ⚑ flags in the species table below follow the same scope; switch the dropdown to 'Any age' for every assessment.">
+            <HoverTooltip text="Assessed species whose name Catalogue of Life treats differently: either the IUCN name has no clean one-to-one match in the current Catalogue of Life checklist (lumped, now a subspecies, or not in the checklist yet), or Catalogue of Life now recognises species likely split out of it. Two checklists can differ without either being wrong — the Red List assesses the taxon its assessors scoped, Catalogue of Life maintains a nomenclatural checklist — so this says where they differ, not who is right. The split signal is a name-pattern heuristic. The no-match half is the same diagnostic the SSC group view shows as 'No 1:1 CoL Match'.">
               <svg className="w-3 h-3 text-zinc-400 dark:text-zinc-500 cursor-help" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                 <circle cx="12" cy="12" r="10" />
                 <path d="M12 16v-4M12 8h.01" />
               </svg>
             </HoverTooltip>
           </span>
-          {/* ml-auto so the controls sit against the card's RIGHT edge on their
-              own line once the long title forces this header to wrap — which it
-              does at the usual half-width card size. Without it the wrapped row
-              starts at the left edge and the scope menu below (anchored
-              right-0) would hang off the side of the card. */}
-          <div className="flex items-center gap-1 flex-shrink-0 ml-auto">
-            {/* Scope — which assessments the difference counts are drawn from.
-                Defaults to the >10-year-old ones, because that is where a
-                taxonomic difference is actually due to be acted on; "Any age"
-                is the opt-out. Highlighted in the default state precisely
-                because it IS narrowing the data: a default that quietly drops
-                species should say so on the card. Mirrors the Threats card's
-                scope dropdown, orange in both so the control reads as the same
-                kind of thing. */}
-            <div className="relative" ref={colScopeMenuRef}>
-              <button
-                type="button"
-                onClick={() => setColScopeMenuOpen(prev => !prev)}
-                className={`px-2 py-0.5 text-xs font-semibold rounded transition-colors ${
-                  colScope === "outdated"
-                    ? "bg-orange-400 text-white shadow-sm"
-                    : "bg-zinc-100 dark:bg-zinc-800 text-zinc-500 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-300"
-                }`}
-                aria-expanded={colScopeMenuOpen}
-                title="Which assessments these difference counts — and the ⚑ flags in the species table — are drawn from"
-              >
-                {colScope === "outdated" ? "10+ yrs" : "Any age"} ▾
-              </button>
-              {colScopeMenuOpen && (
-                <div className="absolute right-0 top-full mt-1 z-20 bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-lg shadow-lg py-1 w-72">
-                  {([
-                    { value: "outdated" as const, label: "10+ yrs old only", hint: `Assessments last done before ${outdatedCutoffDate(dataAsOf).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })} — where a taxonomic difference is due to be acted on` },
-                    { value: "all" as const, label: "Any age", hint: "Also count (and flag) differences on assessments under 10 years old" },
-                  ]).map(({ value, label, hint }) => (
-                    <label
-                      key={value}
-                      className="flex items-start gap-2 px-3 py-1.5 text-xs text-zinc-700 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-700/50 cursor-pointer"
-                    >
-                      <input
-                        type="radio"
-                        name="col-scope"
-                        checked={colScope === value}
-                        onChange={() => { setColScope(value); setColScopeMenuOpen(false); }}
-                        className="mt-0.5 border-zinc-300 dark:border-zinc-600 text-orange-500 focus:ring-orange-400"
-                      />
-                      <span>
-                        {label}
-                        <br />
-                        <span className="text-[10px] text-zinc-400 dark:text-zinc-500">{hint}</span>
-                      </span>
-                    </label>
-                  ))}
-                </div>
-              )}
-            </div>
+          <div className="flex items-center gap-1 flex-shrink-0">
             <button
               type="button"
               onClick={toggle("flagged")}
               className={toggleClass(flaggedActive, "bg-amber-600")}
               aria-pressed={flaggedActive}
-              title={`Only species with no clean 1:1 Catalogue of Life match${scopeNote}`}
+              title="Only species with no clean 1:1 Catalogue of Life match"
             >
               ⚑ {colTally.flagged.toLocaleString()}
             </button>
@@ -3980,7 +3830,7 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
               onClick={toggle("clean")}
               className={toggleClass(colMatch === "clean", "bg-emerald-600")}
               aria-pressed={colMatch === "clean"}
-              title={`Only species with a clean 1:1 Catalogue of Life match${scopeNote}`}
+              title="Only species with a clean 1:1 Catalogue of Life match"
             >
               Clean {colTally.clean.toLocaleString()}
             </button>
@@ -4065,9 +3915,7 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
         ) : (
           <div style={{ height: 90 }} className="flex items-center justify-center">
             <span className="text-sm text-zinc-400 dark:text-zinc-500">
-              {colTally.clean > 0 ? "No differences flagged here"
-                : colScope === "outdated" && colTally.flagged === 0 ? "No assessments over 10 years old here"
-                : "No Catalogue of Life match data"}
+              {colTally.clean > 0 ? "No differences flagged here" : "No Catalogue of Life match data"}
             </span>
           </div>
         )}
@@ -5834,23 +5682,6 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
                 <span className="text-sm">×</span>
               </button>
             ))}
-            {/* The CoL scope only narrows the species list once flagged/clean or
-                a reason is picked (see matchesColFilter), so it earns a chip
-                exactly then — a permanent chip for a default that isn't
-                filtering would be noise, and no chip at all would hide the fact
-                that the list has quietly dropped every recently-assessed match.
-                × widens to every assessment rather than clearing the CoL
-                selection itself. */}
-            {(colMatch || selectedColReasons.size > 0) && colScope === "outdated" && (
-              <button
-                onClick={() => setColScope("all")}
-                title="Catalogue of Life differences are only counted for assessments last done more than 10 years ago"
-                className="px-3 py-1.5 text-sm font-medium rounded-full bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-500 flex items-center gap-1 hover:opacity-80"
-              >
-                10+ yrs old only
-                <span className="text-sm">×</span>
-              </button>
-            )}
             {habitatBreadth && (
               <button
                 onClick={() => setHabitatBreadth(null)}
@@ -6242,21 +6073,24 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
                           </span>
                           {/* Possible-taxonomic-revision flag — see the
                               "Taxonomic differences from Catalogue of Life"
-                              filter card. Only
-                              the ~6% of assessed species CoL disagrees with (or
-                              has split something out of) carry one, so this is a
-                              rare marker, not a per-row decoration. It opens the
+                              filter card. It opens the
                               CoL record the flag is about: the tooltip says what
                               CoL did, and the obvious next question is "show
                               me", which the filter chart already answers for the
                               "give me all of these" case. A species can carry
                               both signals, hence a list of sentences.
-                              Scoped by the card's dropdown (colScopeCovers):
-                              by default a flag only appears on assessments over
-                              10 years old, so the marker points at differences
-                              that are due to be acted on rather than at every
-                              checklist disagreement. "Any age" shows them all. */}
-                          {isFlagged(s.col_revision) && colScopeCovers(s) && (
+
+                              Shown only while that card is actually filtering
+                              (colFilterActive). The flag answers a question the
+                              reader has to have asked — "which of these differ
+                              from CoL, and how?" — and on the unfiltered table
+                              it was answering it unprompted, putting a caveat
+                              about a second checklist beside names in a list
+                              that is otherwise about assessments. Once a
+                              flagged/clean or reason filter is on, the marker
+                              earns its place: it says which signal each row
+                              matched on, which is exactly what was asked. */}
+                          {colFilterActive && isFlagged(s.col_revision) && (
                             <SelectableHoverTooltip
                               content={<RevisionTooltipContent flag={s.col_revision!} name={s.scientific_name} category={s.category} />}
                               prepare={s.col_revision!.colId ? () => prefetchColProvenance(s.col_revision!.colId!) : undefined}
@@ -6466,12 +6300,14 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
                                     Encyclopedia of Life
                                   </button>
                                 )}
-                                <button
-                                  className={`shrink-0 px-2 sm:px-4 py-2 text-sm font-medium whitespace-nowrap transition-colors ${activeDetailTab === "wikipedia" ? "text-blue-600 dark:text-blue-400 border-b-2 border-blue-600 dark:border-blue-400" : "text-zinc-500 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-300"}`}
-                                  onClick={() => setActiveDetailTab("wikipedia")}
-                                >
-                                  Wikipedia
-                                </button>
+                                {SHOW_WIKIPEDIA_TAB && (
+                                  <button
+                                    className={`shrink-0 px-2 sm:px-4 py-2 text-sm font-medium whitespace-nowrap transition-colors ${activeDetailTab === "wikipedia" ? "text-blue-600 dark:text-blue-400 border-b-2 border-blue-600 dark:border-blue-400" : "text-zinc-500 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-300"}`}
+                                    onClick={() => setActiveDetailTab("wikipedia")}
+                                  >
+                                    Wikipedia
+                                  </button>
+                                )}
                                 {s.category === "NE" && (
                                   <button
                                     className={`shrink-0 px-2 sm:px-4 py-2 text-sm font-medium whitespace-nowrap transition-colors ${activeDetailTab === "candidates" ? "text-blue-600 dark:text-blue-400 border-b-2 border-blue-600 dark:border-blue-400" : "text-zinc-500 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-300"}`}
@@ -6486,6 +6322,12 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
                           {gbifSpeciesKey ? (
                             (visitedTabs.has("gbif")) && (
                             <div style={{ display: activeDetailTab === "gbif" ? undefined : "none" }}>
+                              {/* nativeCountriesRedList is withheld for Not
+                                  Evaluated species: there is no assessment, so
+                                  `countries` there is derived from the GBIF
+                                  occurrences themselves, and offering it as the
+                                  "IUCN native range" would check the occurrence
+                                  data against itself. */}
                               <OccurrenceMapRow
                                 speciesKey={gbifSpeciesKey}
                                 mounted={mounted}
@@ -6497,7 +6339,7 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
                                 criteria={s.criteria}
                                 taxonGroup={s.taxon_group}
                                 scientificName={s.scientific_name}
-                                nativeCountriesRedList={s.countries}
+                                nativeCountriesRedList={s.category === "NE" ? undefined : s.countries}
                                 previousAssessments={(s.sis_taxon_id ? assessmentHistory[s.sis_taxon_id] : null) ?? s.previous_assessments}
                                 onEmpty={s.category === "NE" ? handleOccurrenceEmpty : undefined}
                               />
@@ -6581,7 +6423,7 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
                               />
                             </div>
                           )}
-                          {(visitedTabs.has("wikipedia")) && (
+                          {SHOW_WIKIPEDIA_TAB && (visitedTabs.has("wikipedia")) && (
                           <div style={{ display: activeDetailTab === "wikipedia" ? undefined : "none" }}>
                             <WikipediaSummary scientificName={s.scientific_name} />
                           </div>

@@ -116,15 +116,8 @@ export default function AssessorChart({
       <div className="flex items-center gap-2 mb-1.5">
         {showToggle ? (
           /* Credit-type picker. A segmented control fitted three modes beside the
-             search box; at five it no longer fits, so this is a select. The dot
-             carries the bar colour so the chart below is recognisably the same
-             thing you just picked. */
-          <div className="relative shrink-0 flex items-center gap-1.5">
-            <span
-              aria-hidden
-              className="w-2 h-2 rounded-full shrink-0"
-              style={{ backgroundColor: activeColor }}
-            />
+             search box; at five it no longer fits, so this is a select. */
+          <div className="relative shrink-0">
             <select
               value={viewMode}
               onChange={(e) => handleViewModeChange(e.target.value as ViewMode)}

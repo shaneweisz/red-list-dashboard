@@ -255,3 +255,24 @@ describe("nodeIdForSpecies", () => {
     expect(nodeIdForSpecies("not_a_real_group", butterfly)).toBeNull();
   });
 });
+
+/**
+ * The mapping page's "exit fullscreen" link has to land on the species' own row
+ * in the dashboard, which means producing the same key the row does.
+ */
+describe("getSpeciesByGbifKey row key", () => {
+  it("keys an assessed species on its SIS id", () => {
+    expect(speciesRowKey({ sis_taxon_id: 44393, col_id: "6CX6F" })).toBe("sis-44393");
+  });
+
+  it("keys a Not Evaluated species on its CoL id", () => {
+    expect(speciesRowKey({ sis_taxon_id: null, col_id: "6CX6F" })).toBe("col-6CX6F");
+  });
+
+  // unassessed.parquet is one row per GBIF key, the NE list one row per col_id,
+  // and 3,756 col_ids carry more than one GBIF key — so the key can't be built
+  // from the GBIF key even though the two usually coincide.
+  it("has no key for a species with neither identity", () => {
+    expect(speciesRowKey({ sis_taxon_id: null, col_id: null })).toBeNull();
+  });
+});

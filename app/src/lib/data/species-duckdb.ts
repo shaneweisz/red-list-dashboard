@@ -18,7 +18,7 @@ import { canonicalizeTaxonId, mapTaxonId } from "@/lib/data/taxonomy-constants";
 import { getTaxaSummary, getColRevisions } from "@/lib/data/species-store";
 import { isDynamicNodeId, dynamicNodeFilter, buildDynamicNodeId, rankOrderFor, isLiveDrilldownNode, type DynamicRank, type DynamicSegment } from "@/lib/dynamic-taxon";
 import { filterToSql, sqlStrList, GENUS_SQL } from "@/lib/taxonomy-sql";
-import { sisRowKey, colRowKey, type SpeciesRowKey } from "@/lib/species-row-key";
+import { sisRowKey, colRowKey, speciesRowKey, type SpeciesRowKey } from "@/lib/species-row-key";
 import { COL_DOMESTIC_EXCLUDE_NAMES } from "@/config/col-described-overrides";
 
 const DATA_DIR = path.join(process.cwd(), "data");
@@ -872,6 +872,86 @@ export interface SpeciesSynonyms {
 // via species_link), then one scan of backbone for `col_id = c` (the accepted) OR
 // `parent_id = c` (its synonyms). backbone isn't indexed on these, so it full-scans — fine
 // for a deliberate, cached detail-tab open (not the search hot path).
+/**
+ * One species by its GBIF/CoL key, with just what the standalone occurrence
+ * page needs to render — name, taxon group, and the assessment context the map
+ * colours and filters by. Deliberately narrow: that page exists to load fast,
+ * and the dashboard's own species query reads far more than it needs.
+ *
+ * `assessed` distinguishes a real Red List assessment from an unassessed
+ * species: the countries on an unassessed row are derived from GBIF, so they
+ * must not be presented as an IUCN native range.
+ */
+export async function getSpeciesByGbifKey(gbifSpeciesKey: string): Promise<{
+  scientific_name: string;
+  common_name: string | null;
+  taxon_group: string;
+  category: string;
+  gbif_species_key: string;
+  assessment_id: number | null;
+  assessment_date: string | null;
+  sis_taxon_id: number | null;
+  criteria: string | null;
+  countries: string[];
+  assessed: boolean;
+  /** Taxonomic node this species sits under, as the dashboard's `taxa` URL
+   *  token — the Not Evaluated view can't list anything without one. */
+  node_id: string | null;
+  /**
+   * The dashboard's row key for this species, for its `species=` URL param —
+   * `sis-<id>` when assessed, `col-<id>` when not. See lib/species-row-key.ts,
+   * which owns what a row key is; this only supplies the two identities.
+   */
+  dashboard_row_key: SpeciesRowKey | null;
+} | null> {
+  const conn = await getConn();
+  // sis_taxon_id isn't a column: assessed rows carry it as their positive `id`,
+  // while unassessed rows get a synthetic negative one (see toSpeciesRow).
+  const proj = (src: string, assessed: boolean) => `
+    SELECT id, scientific_name, common_name, taxon_group, iucn_category AS category, gbif_species_key,
+           class_name, order_name, family,
+           ${assessed
+             ? "assessment_id, CAST(assessment_date AS VARCHAR) AS assessment_date, criteria"
+             : "NULL AS assessment_id, NULL AS assessment_date, NULL AS criteria"},
+           countries, ${assessed} AS assessed
+    FROM '${parquetUri(src)}'
+    WHERE gbif_species_key = $key`;
+  const sql = `${proj("assessed.parquet", true)} UNION ALL ${proj("unassessed.parquet", false)} LIMIT 1`;
+  const rows = (await conn.runAndReadAll(sql, { key: gbifSpeciesKey })).getRowObjects();
+  const r = rows[0];
+  if (!r) return null;
+  const sisTaxonId = Number(r.id) > 0 ? Number(r.id) : null;
+  const colId = sisTaxonId
+    ? null
+    : (await colIdsForGbifKeys(conn, [str(r.gbif_species_key) ?? gbifSpeciesKey])).get(
+        str(r.gbif_species_key) ?? gbifSpeciesKey
+      ) ?? null;
+  return {
+    scientific_name: String(r.scientific_name ?? ""),
+    common_name: (r.common_name as string) ?? null,
+    taxon_group: String(r.taxon_group ?? ""),
+    category: String(r.category ?? ""),
+    gbif_species_key: str(r.gbif_species_key) ?? gbifSpeciesKey,
+    assessment_id: num(r.assessment_id),
+    assessment_date: (r.assessment_date as string) ?? null,
+    sis_taxon_id: sisTaxonId,
+    criteria: (r.criteria as string) ?? null,
+    countries: splitList(r.countries),
+    assessed: !!r.assessed,
+    // Built by the one helper that decides what a row key is, rather than
+    // derived here. The CoL id comes from species_link rather than from the
+    // GBIF key: unassessed.parquet is one row per GBIF key and the NE list is
+    // one row per col_id, and 3,756 col_ids carry more than one GBIF key, so
+    // assuming they're the same value is wrong for ~4.3k species.
+    dashboard_row_key: speciesRowKey({ sis_taxon_id: sisTaxonId, col_id: colId }),
+    node_id: nodeIdForSpecies(String(r.taxon_group ?? ""), {
+      class_name: str(r.class_name),
+      order_name: str(r.order_name),
+      family: str(r.family),
+    }),
+  };
+}
+
 export async function getSynonyms(opts: { col?: string | null; sis?: number | null }): Promise<SpeciesSynonyms> {
   const conn = await getConn();
   let colId = opts.col ?? null;

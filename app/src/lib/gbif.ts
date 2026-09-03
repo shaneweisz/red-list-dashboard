@@ -85,6 +85,37 @@ export function includedBasisOfRecord(includePreservedSpecimens: boolean): reado
     : INCLUDED_BASIS_OF_RECORD;
 }
 
+/**
+ * The GBIF occurrence issues that concern a record's position — the set behind
+ * GBIF's own `hasGeospatialIssue` filter (https://techdocs.gbif.org/en/openapi/,
+ * OccurrenceIssue). A record carrying one of these still has coordinates; GBIF
+ * just doesn't trust them, which is exactly what makes it a candidate for
+ * manual re-georeferencing rather than something to silently drop.
+ *
+ * Occurrence records also carry non-geospatial issues (fuzzy taxon matches,
+ * invalid dates); those are filtered out rather than shipped to the client,
+ * since nothing in the occurrence viewer acts on them.
+ */
+export const GBIF_GEOSPATIAL_ISSUES = new Set([
+  "ZERO_COORDINATE",
+  "COORDINATE_INVALID",
+  "COORDINATE_OUT_OF_RANGE",
+  "COORDINATE_REPROJECTION_FAILED",
+  "COORDINATE_REPROJECTION_SUSPICIOUS",
+  "COUNTRY_COORDINATE_MISMATCH",
+  "CONTINENT_COORDINATE_MISMATCH",
+  "GEODETIC_DATUM_INVALID",
+  "PRESUMED_NEGATED_LATITUDE",
+  "PRESUMED_NEGATED_LONGITUDE",
+  "PRESUMED_SWAPPED_COORDINATE",
+]);
+
+/** Human-readable label for a GBIF issue code, e.g. "Country coordinate mismatch". */
+export function formatGbifIssue(issue: string): string {
+  const words = issue.toLowerCase().replace(/_/g, " ");
+  return words.charAt(0).toUpperCase() + words.slice(1);
+}
+
 /** Catalogue of Life kingdom key for Animalia — the taxa config carries N/P/F/C. */
 const COL_KINGDOM_ANIMALIA = "N";
 
