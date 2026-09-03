@@ -3803,7 +3803,13 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
               Country
             </h2>
           </div>
-          <div className="flex-1 flex items-center justify-center">
+          {/* The 180px box (not flex-1) is what lines this spinner up with the
+              Year Described / GBIF Records ones beside it: those cards size their
+              chart area to exactly 180px, so centering in the map card's full
+              height — it reserves 320px for the map — dropped this one ~60px
+              lower than the other two. The card keeps its own height; only the
+              spinner moves. */}
+          <div style={{ height: 180 }} className="flex items-center justify-center">
             <Spinner />
           </div>
         </div>
