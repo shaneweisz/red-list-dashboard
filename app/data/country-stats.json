@@ -5,11 +5,11 @@
   },
   "ID": {
     "species": 18057,
-    "outdated": 4017
+    "outdated": 4014
   },
   "PH": {
     "species": 9398,
-    "outdated": 2581
+    "outdated": 2580
   },
   "AO": {
     "species": 5202,
@@ -41,11 +41,11 @@
   },
   "IR": {
     "species": 2865,
-    "outdated": 1130
+    "outdated": 1129
   },
   "KE": {
     "species": 6806,
-    "outdated": 2642
+    "outdated": 2641
   },
   "ML": {
     "species": 1888,
@@ -53,7 +53,7 @@
   },
   "MZ": {
     "species": 6540,
-    "outdated": 1936
+    "outdated": 1935
   },
   "NA": {
     "species": 3418,
@@ -69,15 +69,15 @@
   },
   "TZ": {
     "species": 9203,
-    "outdated": 3866
+    "outdated": 3865
   },
   "UG": {
     "species": 4058,
-    "outdated": 1170
+    "outdated": 1169
   },
   "ZA": {
     "species": 8340,
-    "outdated": 2443
+    "outdated": 2442
   },
   "ZM": {
     "species": 3890,
@@ -141,7 +141,7 @@
   },
   "SA": {
     "species": 2665,
-    "outdated": 933
+    "outdated": 932
   },
   "YE": {
     "species": 3421,
@@ -181,7 +181,7 @@
   },
   "CN": {
     "species": 12334,
-    "outdated": 4376
+    "outdated": 4372
   },
   "BN": {
     "species": 4556,
@@ -189,11 +189,11 @@
   },
   "MY": {
     "species": 12463,
-    "outdated": 3058
+    "outdated": 3055
   },
   "TH": {
     "species": 9114,
-    "outdated": 2920
+    "outdated": 2917
   },
   "CD": {
     "species": 7794,
@@ -217,7 +217,7 @@
   },
   "BR": {
     "species": 19708,
-    "outdated": 3523
+    "outdated": 3522
   },
   "BZ": {
     "species": 3866,
@@ -249,7 +249,7 @@
   },
   "MX": {
     "species": 12748,
-    "outdated": 4571
+    "outdated": 4570
   },
   "NI": {
     "species": 5585,
@@ -281,7 +281,7 @@
   },
   "UY": {
     "species": 1881,
-    "outdated": 604
+    "outdated": 603
   },
   "BT": {
     "species": 1856,
@@ -289,11 +289,11 @@
   },
   "IN": {
     "species": 11047,
-    "outdated": 4040
+    "outdated": 4038
   },
   "MM": {
     "species": 7068,
-    "outdated": 2231
+    "outdated": 2227
   },
   "NP": {
     "species": 2652,
@@ -325,7 +325,7 @@
   },
   "MN": {
     "species": 950,
-    "outdated": 314
+    "outdated": 313
   },
   "IQ": {
     "species": 1531,
@@ -333,7 +333,7 @@
   },
   "KW": {
     "species": 1024,
-    "outdated": 264
+    "outdated": 263
   },
   "LB": {
     "species": 1406,
@@ -345,15 +345,15 @@
   },
   "AF": {
     "species": 1168,
-    "outdated": 408
+    "outdated": 407
   },
   "PK": {
     "species": 2942,
-    "outdated": 943
+    "outdated": 942
   },
   "KZ": {
     "species": 1368,
-    "outdated": 473
+    "outdated": 472
   },
   "RU": {
     "species": 3810,
@@ -365,19 +365,19 @@
   },
   "UZ": {
     "species": 905,
-    "outdated": 286
+    "outdated": 285
   },
   "TJ": {
     "species": 836,
-    "outdated": 270
+    "outdated": 269
   },
   "TM": {
     "species": 954,
-    "outdated": 324
+    "outdated": 323
   },
   "KG": {
     "species": 822,
-    "outdated": 268
+    "outdated": 267
   },
   "CG": {
     "species": 4069,
@@ -429,7 +429,7 @@
   },
   "PG": {
     "species": 9767,
-    "outdated": 2400
+    "outdated": 2398
   },
   "GA": {
     "species": 4764,
@@ -449,7 +449,7 @@
   },
   "AU": {
     "species": 13467,
-    "outdated": 4260
+    "outdated": 4259
   },
   "SB": {
     "species": 3933,
@@ -521,7 +521,7 @@
   },
   "JP": {
     "species": 6612,
-    "outdated": 2604
+    "outdated": 2603
   },
   "KP": {
     "species": 1402,
@@ -573,7 +573,7 @@
   },
   "TW": {
     "species": 5544,
-    "outdated": 2137
+    "outdated": 2136
   },
   "AL": {
     "species": 2056,
@@ -705,7 +705,7 @@
   },
   "OM": {
     "species": 2336,
-    "outdated": 877
+    "outdated": 876
   },
   "VU": {
     "species": 2847,
@@ -713,15 +713,15 @@
   },
   "BD": {
     "species": 3196,
-    "outdated": 1011
+    "outdated": 1010
   },
   "LA": {
     "species": 3730,
-    "outdated": 1175
+    "outdated": 1174
   },
   "VN": {
     "species": 8593,
-    "outdated": 2780
+    "outdated": 2777
   },
   "AI": {
     "species": 1603,
@@ -801,7 +801,7 @@
   },
   "AE": {
     "species": 1461,
-    "outdated": 457
+    "outdated": 456
   },
   "AS": {
     "species": 1798,
@@ -813,7 +813,7 @@
   },
   "BH": {
     "species": 894,
-    "outdated": 221
+    "outdated": 220
   },
   "BL": {
     "species": 1236,
@@ -845,7 +845,7 @@
   },
   "KH": {
     "species": 4386,
-    "outdated": 1306
+    "outdated": 1303
   },
   "KI": {
     "species": 1765,
@@ -861,7 +861,7 @@
   },
   "LK": {
     "species": 4375,
-    "outdated": 1573
+    "outdated": 1572
   },
   "MH": {
     "species": 1844,
@@ -897,7 +897,7 @@
   },
   "QA": {
     "species": 928,
-    "outdated": 233
+    "outdated": 232
   },
   "SC": {
     "species": 2690,
