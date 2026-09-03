@@ -561,12 +561,21 @@ type FilterAxis =
   | "habitat" | "endemics" | "growthForms" | "assessors" | "reviewers" | "facilitators"
   | "contributors" | "institutions" | "revision";
 
-// Species-table column classes. Deliberately the same treatment as the taxa
-// summary table above it (TaxaSummary's numericThClasses and friends): sentence-case
-// bold headers rather than the small-caps tracked ones this table used, and the same
-// 1px dividers between columns, so the two tables read as one system instead of two
-// unrelated ones stacked on a page. Written out in full rather than composed from
-// fragments — Tailwind only sees class names it can read literally in the source.
+// Species-table column classes. Deliberately the same treatment as the taxa summary
+// table above it (TaxaSummary's numericThClasses and friends): sentence-case bold
+// headers rather than the small-caps tracked ones this table used, so the two read as
+// one system instead of two unrelated tables stacked on a page.
+//
+// The 1px column rules stop at the header, where that table carries them through its
+// body too. They earn their place there because every cell is a composite — count,
+// bar, percent — so without a rule it isn't obvious where one column's three parts
+// end. Here each cell is a single value, which alignment and padding already separate;
+// ruling them too would only add a grid. The header keeps them because that's where
+// the eye maps the columns, and because the wrapped two-line labels ("Total GBIF /
+// Records" beside "Records Since / Assessment") would otherwise run together.
+//
+// Written out in full rather than composed from fragments — Tailwind only sees class
+// names it can read literally in the source.
 const SPECIES_TH = "px-2 md:px-4 py-3 text-sm font-bold text-zinc-600 dark:text-zinc-300 border-l border-zinc-200 dark:border-zinc-700";
 const SPECIES_TH_SORTABLE = "cursor-pointer hover:text-zinc-900 dark:hover:text-zinc-100 select-none";
 // Spelled-out headers ("Records Since Assessment") are wider than the numbers under
@@ -575,9 +584,8 @@ const SPECIES_TH_SORTABLE = "cursor-pointer hover:text-zinc-900 dark:hover:text-
 // long ones wrap to two lines inside a width the values still fit in, which costs a
 // header line and buys back ~250px. The taxa summary table wraps its own headers the
 // same way (numericThWrapClasses). Short ones (Category) keep one line.
-const SPECIES_TH_LABEL = "max-w-[104px] leading-tight";
+const SPECIES_TH_LABEL = "max-w-[128px] leading-tight";
 const SPECIES_TH_NOWRAP = "whitespace-nowrap";
-const SPECIES_COL_DIVIDER = "border-l border-zinc-200 dark:border-zinc-700";
 
 const skipSet = (...axes: FilterAxis[]): ReadonlySet<FilterAxis> => new Set(axes);
 
@@ -6054,7 +6062,7 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
                   onClick={(e) => handleSort("pctNewGbif", e)}
                 >
                   <span className="flex items-center justify-end gap-1">
-                    <span className={SPECIES_TH_LABEL}>% Since Assessment</span>
+                    <span className={SPECIES_TH_LABEL}>% Records Since Assessment</span>
                     <SortIndicator field="pctNewGbif" />
                   </span>
                 </th>
@@ -6208,7 +6216,7 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
                       </div>
                     </td>
                     {!isNewAssessments && (
-                    <td className={`px-2 md:px-4 py-3 whitespace-nowrap ${SPECIES_COL_DIVIDER}`}>
+                    <td className="px-2 md:px-4 py-3 whitespace-nowrap">
                       {(() => {
                         const criteria = s.criteria ?? details?.criteria;
                         return criteria && !["DD", "LC", "NT", "EX", "EW", "NE"].includes(s.category) ? (
@@ -6239,7 +6247,7 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
                     </td>
                     )}
                     {!isNewAssessments && (
-                    <td className={`px-2 md:px-4 py-3 text-zinc-600 dark:text-zinc-400 whitespace-nowrap ${SPECIES_COL_DIVIDER}`}>
+                    <td className="px-2 md:px-4 py-3 text-zinc-600 dark:text-zinc-400 whitespace-nowrap">
                       {isNE(s) ? <span className="text-zinc-400">N/A</span> : (
                         <>
                           <HoverTooltip
@@ -6266,7 +6274,7 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
                     )}
                     {/* Year Described (CoL) */}
                     {isNewAssessments && (
-                    <td className={`px-2 md:px-4 py-3 text-zinc-600 dark:text-zinc-400 text-sm tabular-nums whitespace-nowrap ${SPECIES_COL_DIVIDER}`}>
+                    <td className="px-2 md:px-4 py-3 text-zinc-600 dark:text-zinc-400 text-sm tabular-nums whitespace-nowrap">
                       {/* The searched-species preview row is built from the search result,
                           which carries no CoL description year — so it has none to show
                           until the taxon's own list lands. A "—" there says CoL has no
@@ -6283,7 +6291,7 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
                     </td>
                     )}
                     {/* Total GBIF */}
-                    <td className={`px-4 py-3 text-right text-zinc-600 dark:text-zinc-400 text-sm tabular-nums whitespace-nowrap ${SPECIES_COL_DIVIDER}`}>
+                    <td className="px-4 py-3 text-right text-zinc-600 dark:text-zinc-400 text-sm tabular-nums whitespace-nowrap">
                       {details?.gbifOccurrences != null && details?.gbifUrl ? (
                         <a
                           href={`https://www.gbif.org/occurrence/search?taxonKey=${details.gbifUrl.split('/').pop()}&${gbifFiltersFor(s.taxon_group)}`}
@@ -6316,7 +6324,7 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
                     </td>
                     {/* New GBIF */}
                     {!isNewAssessments && (
-                    <td className={`px-4 py-3 text-right text-zinc-600 dark:text-zinc-400 text-sm tabular-nums whitespace-nowrap ${SPECIES_COL_DIVIDER}`}>
+                    <td className="px-4 py-3 text-right text-zinc-600 dark:text-zinc-400 text-sm tabular-nums whitespace-nowrap">
                       {isNE(s) ? (
                         <span className="text-zinc-400">N/A</span>
                       ) : (() => {
@@ -6345,7 +6353,7 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
                     )}
                     {/* % New GBIF */}
                     {!isNewAssessments && (
-                    <td className={`px-4 py-3 text-right text-zinc-600 dark:text-zinc-400 text-sm tabular-nums whitespace-nowrap ${SPECIES_COL_DIVIDER}`}>
+                    <td className="px-4 py-3 text-right text-zinc-600 dark:text-zinc-400 text-sm tabular-nums whitespace-nowrap">
                       {isNE(s) ? <span className="text-zinc-400">N/A</span> : (() => {
                         const total = details?.gbifOccurrences ?? s.gbif_occurrence_count;
                         const newObs = details?.gbifOccurrencesSinceAssessment ?? s.gbif_observations_after_assessment_year;
