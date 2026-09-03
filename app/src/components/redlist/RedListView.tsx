@@ -567,8 +567,16 @@ type FilterAxis =
 // 1px dividers between columns, so the two tables read as one system instead of two
 // unrelated ones stacked on a page. Written out in full rather than composed from
 // fragments — Tailwind only sees class names it can read literally in the source.
-const SPECIES_TH = "px-2 md:px-4 py-3 text-sm font-bold text-zinc-600 dark:text-zinc-300 whitespace-nowrap border-l border-zinc-200 dark:border-zinc-700";
+const SPECIES_TH = "px-2 md:px-4 py-3 text-sm font-bold text-zinc-600 dark:text-zinc-300 border-l border-zinc-200 dark:border-zinc-700";
 const SPECIES_TH_SORTABLE = "cursor-pointer hover:text-zinc-900 dark:hover:text-zinc-100 select-none";
+// Spelled-out headers ("Records Since Assessment") are wider than the numbers under
+// them, and six nowrap headers pushed the table past its container on a normal laptop
+// — a horizontal scrollbar to read a column title, while the data itself fits. So the
+// long ones wrap to two lines inside a width the values still fit in, which costs a
+// header line and buys back ~250px. The taxa summary table wraps its own headers the
+// same way (numericThWrapClasses). Short ones (Category) keep one line.
+const SPECIES_TH_LABEL = "max-w-[104px] leading-tight";
+const SPECIES_TH_NOWRAP = "whitespace-nowrap";
 const SPECIES_COL_DIVIDER = "border-l border-zinc-200 dark:border-zinc-700";
 
 const skipSet = (...axes: FilterAxis[]): ReadonlySet<FilterAxis> => new Set(axes);
@@ -5982,7 +5990,7 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
                 </th>
                 {!isNewAssessments && (
                 <th
-                  className={`${SPECIES_TH} text-left ${SPECIES_TH_SORTABLE}`}
+                  className={`${SPECIES_TH} text-left ${SPECIES_TH_NOWRAP} ${SPECIES_TH_SORTABLE}`}
                   onClick={(e) => handleSort("category", e)}
                 >
                   <span className="flex items-center gap-1">
@@ -5997,7 +6005,7 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
                   onClick={(e) => handleSort("year", e)}
                 >
                   <span className="flex items-center gap-1">
-                    Assessment Date
+                    <span className={SPECIES_TH_LABEL}>Assessment Date</span>
                     <SortIndicator field="year" />
                   </span>
                 </th>
@@ -6008,7 +6016,7 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
                   onClick={(e) => handleSort("describedYear", e)}
                 >
                   <span className="flex items-center gap-1">
-                    Year Described
+                    <span className={SPECIES_TH_LABEL}>Year Described</span>
                     <SortIndicator field="describedYear" />
                   </span>
                 </th>
@@ -6018,7 +6026,7 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
                   onClick={(e) => handleSort("totalGbif", e)}
                 >
                   <span className="flex items-center justify-end gap-1">
-                    {isNewAssessments ? "GBIF Records" : "Total GBIF Records"}
+                    <span className={SPECIES_TH_LABEL}>{isNewAssessments ? "GBIF Records" : "Total GBIF Records"}</span>
                     <GbifInfoTooltip />
                     <SortIndicator field="totalGbif" />
                   </span>
@@ -6029,7 +6037,7 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
                   onClick={(e) => handleSort("newGbif", e)}
                 >
                   <span className="flex items-center justify-end gap-1">
-                    Records Since Assessment
+                    <span className={SPECIES_TH_LABEL}>Records Since Assessment</span>
                     <HoverTooltip text="Records added after the assessment year (not the exact date). Uses the year following the assessment as the start of the range.">
                       <svg className="w-3 h-3 text-zinc-400 dark:text-zinc-500 cursor-help" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                         <circle cx="12" cy="12" r="10" />
@@ -6046,7 +6054,7 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
                   onClick={(e) => handleSort("pctNewGbif", e)}
                 >
                   <span className="flex items-center justify-end gap-1">
-                    % Since Assessment
+                    <span className={SPECIES_TH_LABEL}>% Since Assessment</span>
                     <SortIndicator field="pctNewGbif" />
                   </span>
                 </th>
