@@ -586,6 +586,19 @@ const SKIP_CREDITS = skipSet("assessors", "reviewers", "facilitators", "contribu
 // been written from the Criteria chart's clause list.
 const SKIP_REVISION = skipSet("revision", "endemics", "growthForms");
 
+// GBIF occurrence-count bucket for a species — the bars on the GBIF Records
+// chart, and the single-value card that replaces that chart when the view is
+// narrowed to one searched species.
+function gbifObsBucket(count: number | null | undefined): string {
+  const obs = count ?? 0;
+  if (obs === 0) return "0";
+  if (obs <= 10) return "1-10";
+  if (obs <= 100) return "11-100";
+  if (obs <= 1000) return "101-1K";
+  if (obs <= 10000) return "1K-10K";
+  return "10K+";
+}
+
 // Explain IUCN Red List criteria codes
 // See: https://www.iucnredlist.org/resources/categories-and-criteria
 function explainCriteria(criteria: string): string {
@@ -2485,15 +2498,10 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
       { range: "1K-10K", shortRange: "1K-10K", count: 0 },
       { range: "10K+", shortRange: "10K+", count: 0 },
     ];
+    const byBucket: Record<string, number> = Object.fromEntries(ranges.map((r, i) => [r.range, i]));
     taxaFilteredSpecies.forEach(s => {
       if (!matchesFilters(s, SKIP_OBS)) return;
-      const obs = s.gbif_occurrence_count ?? 0;
-      if (obs === 0) ranges[0].count++;
-      else if (obs <= 10) ranges[1].count++;
-      else if (obs <= 100) ranges[2].count++;
-      else if (obs <= 1000) ranges[3].count++;
-      else if (obs <= 10000) ranges[4].count++;
-      else ranges[5].count++;
+      ranges[byBucket[gbifObsBucket(s.gbif_occurrence_count)]].count++;
     });
     const total = ranges.reduce((sum, r) => sum + r.count, 0);
     return ranges.map(r => ({
@@ -4970,15 +4978,11 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
               <div className="flex-1 min-h-[150px] flex items-center justify-center">
                 {speciesLoading && assessedSpecies.length === 0 ? (
                   <Spinner />
-                ) : isSingleSpecies && singleSpecies ? (() => {
-                  const obs = singleSpecies.gbif_occurrence_count ?? 0;
-                  const range = obs === 0 ? "0" : obs <= 10 ? "1-10" : obs <= 100 ? "11-100" : obs <= 1000 ? "101-1K" : obs <= 10000 ? "1K-10K" : "10K+";
-                  return (
-                    <span className="text-4xl font-bold text-zinc-900 dark:text-zinc-100">
-                      {range}
-                    </span>
-                  );
-                })() : gbifObsData.length > 0 ? (
+                ) : isSingleSpecies && singleSpecies ? (
+                  <span className="text-4xl font-bold text-zinc-900 dark:text-zinc-100">
+                    {gbifObsBucket(singleSpecies.gbif_occurrence_count)}
+                  </span>
+                ) : gbifObsData.length > 0 ? (
                   <FilterBarChart
                     data={gbifObsData}
                     dataKey="shortRange"
@@ -5021,6 +5025,13 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
               <div style={{ height: 180 }} className="flex items-center justify-center">
                 {speciesLoading && assessedSpecies.length === 0 ? (
                   <Spinner />
+                ) : isSingleSpecies && singleSpecies ? (
+                  // One species is one bar — a chart of it says nothing the number
+                  // doesn't. Show the year itself rather than its bucket: unlike the
+                  // GBIF card below, the exact value is short enough to read at a glance.
+                  <span className="text-4xl font-bold text-zinc-900 dark:text-zinc-100">
+                    {singleSpecies.described_year ?? "Unknown"}
+                  </span>
                 ) : describedYearData.length > 0 ? (
                   <FilterBarChart
                     data={describedYearData}
@@ -5046,6 +5057,10 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
               <div style={{ height: 180 }} className="flex items-center justify-center">
                 {speciesLoading && assessedSpecies.length === 0 ? (
                   <Spinner />
+                ) : isSingleSpecies && singleSpecies ? (
+                  <span className="text-4xl font-bold text-zinc-900 dark:text-zinc-100">
+                    {gbifObsBucket(singleSpecies.gbif_occurrence_count)}
+                  </span>
                 ) : (
                   <FilterBarChart
                     data={gbifObsData}
