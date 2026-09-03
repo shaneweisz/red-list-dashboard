@@ -531,10 +531,21 @@ const SPECIES_TH_SORTABLE = "cursor-pointer hover:text-zinc-900 dark:hover:text-
 //
 // A fixed width, not a max: as a max it was only an upper bound, so once the table came
 // under width pressure the column squeezed below it and "GBIF Records Since Assessment"
-// broke onto a third line. 128px is the narrowest box that still fits the wider of the
-// two lines it should break into ("Since Assessment"), so every long header holds at
-// two lines whatever the table around it is doing.
-const SPECIES_TH_LABEL = "w-[128px] leading-tight";
+// broke onto a third line.
+//
+// Each label carries its own width — the narrowest box that still fits the wider of the
+// two lines it should break into, measured at this size and weight:
+//
+//   Assessment / Date               84   ("Assessment" 83)
+//   Total GBIF / Records            72   ("Total GBIF" 70)
+//   GBIF Records / Since Assessment 124  ("Since Assessment" 124)
+//   Year Described                  104  (one line, 102 — new-assessments has the room)
+//   GBIF Records                    96   (one line, 94 — likewise)
+//
+// One shared width would have to be the largest of them, which is what left Assessment
+// Date and Total GBIF Records ~50px wider than their text and put a gutter of dead space
+// between the date and the number beside it.
+const SPECIES_TH_LABEL = "leading-tight";
 const SPECIES_TH_NOWRAP = "whitespace-nowrap";
 
 const skipSet = (...axes: FilterAxis[]): ReadonlySet<FilterAxis> => new Set(axes);
@@ -5963,7 +5974,7 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
                   onClick={(e) => handleSort("year", e)}
                 >
                   <span className="flex items-center gap-1">
-                    <span className={SPECIES_TH_LABEL}>Assessment Date</span>
+                    <span className={`${SPECIES_TH_LABEL} w-[84px]`}>Assessment Date</span>
                     <SortIndicator field="year" />
                   </span>
                 </th>
@@ -5974,7 +5985,7 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
                   onClick={(e) => handleSort("describedYear", e)}
                 >
                   <span className="flex items-center gap-1">
-                    <span className={SPECIES_TH_LABEL}>Year Described</span>
+                    <span className={`${SPECIES_TH_LABEL} w-[104px]`}>Year Described</span>
                     <SortIndicator field="describedYear" />
                   </span>
                 </th>
@@ -5984,7 +5995,7 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
                   onClick={(e) => handleSort("totalGbif", e)}
                 >
                   <span className="flex items-center justify-end gap-1">
-                    <span className={SPECIES_TH_LABEL}>{isNewAssessments ? "GBIF Records" : "Total GBIF Records"}</span>
+                    <span className={`${SPECIES_TH_LABEL} ${isNewAssessments ? "w-[96px]" : "w-[72px]"}`}>{isNewAssessments ? "GBIF Records" : "Total GBIF Records"}</span>
                     <GbifInfoTooltip />
                     <SortIndicator field="totalGbif" />
                   </span>
@@ -5995,7 +6006,7 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
                   onClick={(e) => handleSort("newGbif", e)}
                 >
                   <span className="flex items-center justify-end gap-1">
-                    <span className={SPECIES_TH_LABEL}>GBIF Records Since Assessment</span>
+                    <span className={`${SPECIES_TH_LABEL} w-[124px]`}>GBIF Records Since Assessment</span>
                     <HoverTooltip text="Records added after the assessment year (not the exact date). Uses the year following the assessment as the start of the range.">
                       <svg className="w-3 h-3 text-zinc-400 dark:text-zinc-500 cursor-help" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                         <circle cx="12" cy="12" r="10" />
@@ -6012,7 +6023,7 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
                   onClick={(e) => handleSort("pctNewGbif", e)}
                 >
                   <span className="flex items-center justify-end gap-1">
-                    <span className={SPECIES_TH_LABEL}>% GBIF Records Since Assessment</span>
+                    <span className={`${SPECIES_TH_LABEL} w-[124px]`}>% GBIF Records Since Assessment</span>
                     <SortIndicator field="pctNewGbif" />
                   </span>
                 </th>
