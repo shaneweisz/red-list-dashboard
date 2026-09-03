@@ -44,6 +44,10 @@ type LegacyDetailTab = DetailTab | "assessors" | "reviewers";
 // /api/eol routes are all still here — flip this back to true to bring it back.
 const SHOW_EOL_TAB = false;
 
+// Wikipedia tab is hidden for now. The tab, its panel and the WikipediaSummary
+// component are all still here — flip this back to true to bring it back.
+const SHOW_WIKIPEDIA_TAB = false;
+
 // A ?tab=eol link (or a stale one) shouldn't strand the user on a tab with no
 // button in the bar, so fall back to the default tab while EoL is hidden.
 function visibleTab(tab: LegacyDetailTab | null | undefined): DetailTab {
@@ -53,6 +57,7 @@ function visibleTab(tab: LegacyDetailTab | null | undefined): DetailTab {
   // roleFromLegacyTab).
   if (tab === "assessors" || tab === "reviewers") return "candidates";
   if (tab === "eol" && !SHOW_EOL_TAB) return "gbif";
+  if (tab === "wikipedia" && !SHOW_WIKIPEDIA_TAB) return "gbif";
   return tab;
 }
 
@@ -6353,12 +6358,14 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
                                     Encyclopedia of Life
                                   </button>
                                 )}
-                                <button
-                                  className={`shrink-0 px-2 sm:px-4 py-2 text-sm font-medium whitespace-nowrap transition-colors ${activeDetailTab === "wikipedia" ? "text-blue-600 dark:text-blue-400 border-b-2 border-blue-600 dark:border-blue-400" : "text-zinc-500 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-300"}`}
-                                  onClick={() => setActiveDetailTab("wikipedia")}
-                                >
-                                  Wikipedia
-                                </button>
+                                {SHOW_WIKIPEDIA_TAB && (
+                                  <button
+                                    className={`shrink-0 px-2 sm:px-4 py-2 text-sm font-medium whitespace-nowrap transition-colors ${activeDetailTab === "wikipedia" ? "text-blue-600 dark:text-blue-400 border-b-2 border-blue-600 dark:border-blue-400" : "text-zinc-500 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-300"}`}
+                                    onClick={() => setActiveDetailTab("wikipedia")}
+                                  >
+                                    Wikipedia
+                                  </button>
+                                )}
                                 {s.category === "NE" && (
                                   <button
                                     className={`shrink-0 px-2 sm:px-4 py-2 text-sm font-medium whitespace-nowrap transition-colors ${activeDetailTab === "candidates" ? "text-blue-600 dark:text-blue-400 border-b-2 border-blue-600 dark:border-blue-400" : "text-zinc-500 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-300"}`}
@@ -6468,7 +6475,7 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
                               />
                             </div>
                           )}
-                          {(visitedTabs.has("wikipedia")) && (
+                          {SHOW_WIKIPEDIA_TAB && (visitedTabs.has("wikipedia")) && (
                           <div style={{ display: activeDetailTab === "wikipedia" ? undefined : "none" }}>
                             <WikipediaSummary scientificName={s.scientific_name} />
                           </div>
