@@ -523,73 +523,124 @@ async function colIdsForGbifKeys(conn: DuckDBConnection, keys: string[]): Promis
   return out;
 }
 
-// Substring search over both parquets (replaces the in-memory search-index.json).
-// ILIKE can't use row-group pruning, but with column projection it scans only the
-// name columns from R2 — ~200ms warm over both files. Ranking mirrors the old
-// JSON path: exact common-name > common-name prefix > scientific prefix > alpha.
-// Falls back to the CoL universe (species/) only when the fast path is sparse — see below.
-export async function searchSpecies(query: string, limit = 10): Promise<SearchResult[]> {
-  if (query.length < 2) return [];
-  const conn = await getConn();
-  const lim = Math.min(Math.max(limit, 1), 50);
-  const proj = (src: string, assessed: boolean) => `
-    SELECT id, scientific_name, common_name, taxon_group, iucn_category AS category, gbif_species_key,
-           class_name, order_name, family, gbif_occurrence_count,
-           ${assessed ? "assessment_id, CAST(assessment_date AS VARCHAR) AS assessment_date" : "NULL AS assessment_id, NULL AS assessment_date"},
-           countries, class_name, order_name, family, ${assessed} AS assessed
-    FROM '${parquetUri(src)}'
-    WHERE scientific_name ILIKE '%' || $q || '%'
-       OR (common_name IS NOT NULL AND common_name ILIKE '%' || $q || '%')`;
-  const sql = `
-    WITH hits AS (${proj("assessed.parquet", true)} UNION ALL ${proj("unassessed.parquet", false)})
-    SELECT * FROM hits
-    ORDER BY (lower(common_name) = $q) DESC,
-             (lower(common_name) LIKE $q || '%') DESC,
-             (lower(scientific_name) LIKE $q || '%') DESC,
-             lower(scientific_name)
-    LIMIT ${lim}`;
-  const rows = (await conn.runAndReadAll(sql, { q: query.toLowerCase() })).getRowObjects();
-  // An unassessed hit is keyed by the col_id its GBIF key links to, which is what the
-  // NE list keys its rows on — resolved for the whole page of hits in one lookup.
-  const neKeys = rows.filter((r) => !r.assessed).map((r) => str(r.gbif_species_key)).filter((k): k is string => !!k);
-  const colIdByGbifKey = await colIdsForGbifKeys(conn, neKeys);
-  const hits: SearchResult[] = rows.map((r) => {
-    const tg = String(r.taxon_group);
-    const cat = String(r.category ?? "");
-    const lineage = { class_name: str(r.class_name), order_name: str(r.order_name), family: str(r.family) };
-    // assessed.parquet's id column IS the SIS taxon id; unassessed.parquet's is an
-    // internal build-time key that never leaves the pipeline (see build-parquet).
-    const sisTaxonId = r.assessed ? Number(r.id) : null;
-    const colId = r.assessed ? null : (colIdByGbifKey.get(str(r.gbif_species_key) ?? "") ?? null);
-    // Both views browse via the top-level taxon, plus the sub-group node the species
-    // itself sits in — see nodeIdForSpecies.
-    return {
-      species_key: sisTaxonId != null ? sisRowKey(sisTaxonId) : colId ? colRowKey(colId) : null,
-      sis_taxon_id: sisTaxonId,
-      col_id: colId,
-      scientific_name: String(r.scientific_name ?? ""),
-      common_name: (r.common_name as string) ?? null,
-      taxon_id: mapTaxonId(tg),
-      taxon_group: tg,
-      category: cat,
-      gbif_species_key: str(r.gbif_species_key),
-      gbif_occurrence_count: num(r.gbif_occurrence_count),
-      assessment_id: num(r.assessment_id),
-      assessment_date: (r.assessment_date as string) ?? null,
-      countries: splitList(r.countries),
-      ...lineage,
-      node_id: nodeIdForSpecies(tg, lineage),
-    };
-  });
+// ─── The search hot path's in-memory index ──────────────────────────────────
+//
+// Every keystroke past the debounce is a fresh serverless request, and each one used
+// to re-scan the name columns of assessed+unassessed straight off R2 — ~25MB pulled
+// and decompressed per request, with no pruning possible (a substring ILIKE can't use
+// row-group statistics, and both parquets are written ORDER BY class_name, order_name,
+// family, so names are scattered across every row group anyway — see build-parquet).
+// Measured against production: ~2.2s per uncached query, essentially all of it this
+// scan, with searchSpecies and suggestTaxa serialized behind one another on the shared
+// connection. A cold no-match, which falls through to species/** and synonym-index,
+// measured 13.7s.
+//
+// The data is immutable for the life of the deploy (latest-sync.txt is repo-tracked, so
+// a new sync IS a new deploy), so the scan is the same work every time. Materialize it
+// once per warm container instead: ~1.9s and ~220MB to build, after which a search is a
+// memory scan — measured 17ms for the species query and 3ms for the rank suggestions.
+// /api/search/warm (called on page load) triggers the build so the first real keystroke
+// finds it ready.
+//
+// Deliberately best-effort: if the build fails (memory pressure being the plausible
+// cause), searchSource/rankSource fall back to reading the parquets exactly as before,
+// so search degrades to its old latency rather than breaking. Reset on failure so a
+// transient R2 error can retry, matching ensureNeHelpers.
+//
+// The projections are shared with the fallback path, so the temp table and the parquets
+// present an identical schema and one query text works against either.
+const searchProj = (src: string, assessed: boolean) => `
+  SELECT id, scientific_name, common_name,
+         lower(scientific_name) AS sn_lo, lower(common_name) AS cn_lo,
+         taxon_group, iucn_category AS category, gbif_species_key, gbif_occurrence_count,
+         ${assessed ? "assessment_id, CAST(assessment_date AS VARCHAR) AS assessment_date" : "NULL AS assessment_id, NULL AS assessment_date"},
+         countries, class_name, order_name, family, ${assessed} AS assessed
+  FROM '${parquetUri(src)}'`;
 
-  // One entry per species. unassessed.parquet is one row per GBIF species key, and CoL
-  // lumps some of those: 3,756 col_ids carry more than one key, so a name like Abutilon
-  // halophilum matched twice (keys VLWL9 and 8N4F) and listed twice in the dropdown —
-  // two rows that now resolve to the same species and would select the same table row.
-  // The NE list already shows one row per col_id (ne_gbif_by_col groups by it), so
-  // collapsing here is what makes search agree with the list it selects into. Keep the
-  // best-observed key of the group, which is the most useful one to preview from.
-  // Null keys are never collapsed — those species have no shared identity to merge on.
+// One DISTINCT (name, rank-priority, taxon_group) triple per rank value, which is all
+// suggestTaxa's prefix match needs — 116k rows, a rounding error next to search_idx.
+// Only reached when rank-index.parquet isn't in the sync prefix; the aggregation that
+// consumes it then reproduces what that file bakes in at build time.
+const rankProj = (src: string) => SUGGEST_RANKS.map((rank, rp) => `
+  SELECT DISTINCT ${RANK_TO_MATCH_SQL[rank]} AS name, ${rp} AS rp, taxon_group
+  FROM '${parquetUri(src)}'
+  WHERE ${rank === "genus" ? "scientific_name IS NOT NULL" : `${RANK_TO_MATCH_SQL[rank]} IS NOT NULL`}`
+).join(" UNION ALL ");
+
+let searchTablesPromise: Promise<void> | null = null;
+export function ensureSearchTables(conn: DuckDBConnection): Promise<void> {
+  if (!searchTablesPromise) {
+    searchTablesPromise = (async () => {
+      await conn.run(`CREATE TEMP TABLE search_idx AS
+        ${searchProj("assessed.parquet", true)} UNION ALL ${searchProj("unassessed.parquet", false)}`);
+      await conn.run(`CREATE TEMP TABLE rank_idx AS
+        SELECT DISTINCT * FROM (${rankProj("assessed.parquet")} UNION ALL ${rankProj("unassessed.parquet")})`);
+    })().catch((e) => { searchTablesPromise = null; throw e; });
+  }
+  return searchTablesPromise;
+}
+
+/** The materialized index when it's available, else the parquets inline (same schema). */
+async function searchSource(conn: DuckDBConnection): Promise<string> {
+  try {
+    await ensureSearchTables(conn);
+    return "search_idx";
+  } catch (e) {
+    console.error("search_idx unavailable, falling back to parquet scan:", e);
+    return `(${searchProj("assessed.parquet", true)} UNION ALL ${searchProj("unassessed.parquet", false)})`;
+  }
+}
+
+/** As searchSource, for the rank-name suggestions. */
+async function rankSource(conn: DuckDBConnection): Promise<string> {
+  try {
+    await ensureSearchTables(conn);
+    return "rank_idx";
+  } catch {
+    return `(${rankProj("assessed.parquet")} UNION ALL ${rankProj("unassessed.parquet")})`;
+  }
+}
+
+/** A search hit's parquet/temp-table row → the shape the dropdown renders. */
+function toSearchResult(r: Record<string, unknown>, colIdOverride: string | null): SearchResult {
+  const tg = String(r.taxon_group);
+  const lineage = { class_name: str(r.class_name), order_name: str(r.order_name), family: str(r.family) };
+  // assessed.parquet's id column IS the SIS taxon id; unassessed.parquet's is an
+  // internal build-time key that never leaves the pipeline (see build-parquet).
+  const sisTaxonId = r.assessed ? Number(r.id) : null;
+  const colId = r.assessed ? null : colIdOverride;
+  // Both views browse via the top-level taxon, plus the sub-group node the species
+  // itself sits in — see nodeIdForSpecies.
+  return {
+    species_key: sisTaxonId != null ? sisRowKey(sisTaxonId) : colId ? colRowKey(colId) : null,
+    sis_taxon_id: sisTaxonId,
+    col_id: colId,
+    scientific_name: String(r.scientific_name ?? ""),
+    common_name: (r.common_name as string) ?? null,
+    taxon_id: mapTaxonId(tg),
+    taxon_group: tg,
+    category: String(r.category ?? ""),
+    gbif_species_key: str(r.gbif_species_key),
+    gbif_occurrence_count: num(r.gbif_occurrence_count),
+    assessment_id: num(r.assessment_id),
+    assessment_date: (r.assessment_date as string) ?? null,
+    countries: splitList(r.countries),
+    ...lineage,
+    node_id: nodeIdForSpecies(tg, lineage),
+  };
+}
+
+// One entry per species, in the order the hits arrived. unassessed.parquet is one row per
+// GBIF species key, and CoL lumps some of those: 3,756 col_ids carry more than one key, so
+// a name like Abutilon halophilum matched twice (keys VLWL9 and 8N4F) and listed twice in
+// the dropdown — two rows that now resolve to the same species and would select the same
+// table row. The NE list already shows one row per col_id (ne_gbif_by_col groups by it), so
+// collapsing here is what makes search agree with the list it selects into. Keep the
+// best-observed key of the group, which is the most useful one to preview from; ties keep
+// the first, which is the better-ranked one. The name index adds a second way to arrive at
+// the same species (a hit on its scientific name AND its epithet, say), and this collapses
+// that too. Null keys are never collapsed — those species have no shared identity to merge on.
+function dedupeByRowKey(hits: SearchResult[]): SearchResult[] {
   const bestByKey = new Map<string, SearchResult>();
   for (const r of hits) {
     if (!r.species_key) continue;
@@ -598,15 +649,88 @@ export async function searchSpecies(query: string, limit = 10): Promise<SearchRe
       bestByKey.set(r.species_key, r);
     }
   }
-  const fast: SearchResult[] = hits.filter((r) => !r.species_key || bestByKey.get(r.species_key) === r);
+  return hits.filter((r) => !r.species_key || bestByKey.get(r.species_key) === r);
+}
 
-  // Return as soon as the direct search (assessed ∪ unassessed, ~16MB) finds anything.
-  // The CoL-only and synonym tiers below each full-scan a large parquet over R2 (species/
-  // ~36MB, synonym-index ~77MB) with no pruning — ~10s on a cold function. They exist to
-  // *answer* queries the direct search can't (an old/synonym name, or a CoL-only species),
-  // not to pad results, so only run them when the direct search came up empty. A precise
-  // hit like "Panthera leo" returns here after one cheap scan instead of falling through
-  // both heavy tiers.
+// Tier 0: prefix hits from the name-sorted index (scripts/build-search-index.ts).
+//
+// name-index.parquet is one row per searchable name — scientific name, common name,
+// epithet, and each word of a multi-word common name — sorted by that name, so this
+// range predicate prunes to the row group or two the prefix falls in (~1MB read of a
+// ~97MB file) instead of scanning both species parquets whole. It carries the full
+// SearchResult payload including col_id, so a hit needs no second read of any kind.
+//
+// This is what makes a *cold* container fast: unlike the substring tier below it needs
+// no materialized table, so it answers in ~10ms whether or not warm-up has finished.
+//
+// Ranking is the substring tier's ORDER BY verbatim — see the comment on it below.
+//
+// Returns [] (never throws) when the index isn't in this sync prefix — an older sync
+// still searches, just via the tiers below.
+async function prefixSearch(conn: DuckDBConnection, q: string, lim: number): Promise<SearchResult[]> {
+  try {
+    const rows = (await conn.runAndReadAll(
+      `SELECT * FROM read_parquet('${parquetUri("name-index.parquet")}')
+       WHERE name_lo >= $q AND name_lo < $q || chr(1114111)
+       -- Character-for-character the substring tier's ORDER BY, evaluated against the
+       -- same two names (the index carries both), so a hit ranks exactly where it would
+       -- have. Not a tier ladder over name_kind: these are three INDEPENDENT booleans,
+       -- and the third one reorders inside the second — a species matching on both its
+       -- common and scientific name outranks one matching only its common name. Ranking
+       -- off name_kind instead put Elephant Trunk Snake above Elephant's Foot for
+       -- "elephant", which is the old order inverted.
+       ORDER BY (lower(common_name) = $q) DESC,
+                (lower(common_name) LIKE $q || '%') DESC,
+                (lower(scientific_name) LIKE $q || '%') DESC,
+                lower(scientific_name)
+       -- Over-fetched: several name rows can collapse to one species below.
+       LIMIT ${lim * 3 + 5}`, { q })).getRowObjects();
+    return dedupeByRowKey(rows.map((r) => toSearchResult(r, str(r.col_id)))).slice(0, lim);
+  } catch {
+    return [];
+  }
+}
+
+// Substring search over the materialized index above (which replaced the in-memory
+// search-index.json, then the per-request parquet scan). Ranking mirrors the old JSON
+// path: exact common-name > common-name prefix > scientific prefix > alpha.
+//
+// Tiered, cheapest first, each tier gated on every tier above it finding nothing at all:
+// prefix hits (one pruned range read) → substring hits (the in-memory index) → the CoL
+// universe (species/) → synonyms. The gate is what keeps a precise query like "Panthera
+// leo" from ever touching the heavy tiers.
+export async function searchSpecies(query: string, limit = 10): Promise<SearchResult[]> {
+  if (query.length < 2) return [];
+  const conn = await getConn();
+  const lim = Math.min(Math.max(limit, 1), 50);
+
+  const prefixHits = await prefixSearch(conn, query.toLowerCase(), lim);
+  if (prefixHits.length > 0) return prefixHits;
+
+  // sn_lo/cn_lo are lowercased once at build time, so the match is a plain LIKE against
+  // an already-lowercased $q rather than a per-row ILIKE case-fold.
+  const sql = `
+    SELECT * FROM ${await searchSource(conn)}
+    WHERE sn_lo LIKE '%' || $q || '%'
+       OR (cn_lo IS NOT NULL AND cn_lo LIKE '%' || $q || '%')
+    ORDER BY (cn_lo = $q) DESC,
+             (cn_lo LIKE $q || '%') DESC,
+             (sn_lo LIKE $q || '%') DESC,
+             sn_lo
+    LIMIT ${lim}`;
+  const rows = (await conn.runAndReadAll(sql, { q: query.toLowerCase() })).getRowObjects();
+  // An unassessed hit is keyed by the col_id its GBIF key links to, which is what the
+  // NE list keys its rows on — resolved for the whole page of hits in one lookup.
+  const neKeys = rows.filter((r) => !r.assessed).map((r) => str(r.gbif_species_key)).filter((k): k is string => !!k);
+  const colIdByGbifKey = await colIdsForGbifKeys(conn, neKeys);
+  const fast = dedupeByRowKey(rows.map((r) =>
+    toSearchResult(r, colIdByGbifKey.get(str(r.gbif_species_key) ?? "") ?? null)));
+
+  // Return as soon as the direct search finds anything. The CoL-only and synonym tiers
+  // below each full-scan a large parquet over R2 (species/ ~36MB, synonym-index ~82MB)
+  // with no pruning — 13.7s measured on a cold function. They exist to *answer* queries
+  // the direct search can't (an old/synonym name, or a CoL-only species), not to pad
+  // results, so only run them when everything above came up empty.
   if (fast.length > 0) return fast;
 
   // CoL-only fallback: universe species (species/) that are neither IUCN-assessed nor
@@ -858,11 +982,42 @@ export async function getSynonyms(opts: { col?: string | null; sis?: number | nu
   return { col_id: colId, accepted_name, accepted_authorship, synonyms };
 }
 
-// Prime the cached connection (httpfs load + S3 config) so the first search
-// isn't paying cold-start init. Called by /api/search/warm on page load.
+// The fallback tiers searchSpecies reaches only when nothing matched — species/**
+// (a hive glob over many files) and synonym-index.parquet (~82MB, and the substring
+// backstop can't prune it). Nothing about them can be usefully materialized: measured
+// at ~590MB of temp table for the pair, an order of magnitude worse than search_idx
+// buys. What made them hurt was paying the *first* read per container: a cold no-match
+// measured 13.7s in production, while every later one on that same instance was 2.2s,
+// because DuckDB's external file cache had the footers and the glob listing by then.
+//
+// So prime rather than materialize: run each tier's query once for a string no name can
+// contain, which walks exactly the paths a real no-match walks and leaves the file cache
+// populated, at zero steady memory. Errors are swallowed — this is pure warm-up, and a
+// sync prefix without a synonym index is already a supported state (see searchSpecies).
+let primePromise: Promise<void> | null = null;
+function primeFallbackTiers(conn: DuckDBConnection): Promise<void> {
+  if (!primePromise) {
+    primePromise = (async () => {
+      const NO_MATCH = "zzq~unmatchable~qzz";
+      await conn.run(`SELECT col_id FROM read_parquet('${parquetUri("species/**/*.parquet")}', hive_partitioning=true)
+        WHERE scientific_name ILIKE '%${NO_MATCH}%' AND in_base AND extinct IS NOT TRUE LIMIT 1`).catch(() => {});
+      await conn.run(`SELECT synonym_name FROM read_parquet('${parquetUri("synonym-index.parquet")}')
+        WHERE synonym_name_lower LIKE '%${NO_MATCH}%' LIMIT 1`).catch(() => {});
+    })();
+  }
+  return primePromise;
+}
+
+// Prime the cached connection (httpfs load + S3 config), build the in-memory search
+// index, and walk the no-match fallback tiers once, so no user request pays any of it.
+// Called by /api/search/warm on page load; the route awaits it but nothing waits on the
+// route, and a search arriving mid-warm just awaits the same ensureSearchTables promise
+// rather than starting a second build.
 export async function warmConnection(): Promise<void> {
   const conn = await getConn();
   await conn.run("SELECT 1");
+  await ensureSearchTables(conn);
+  await primeFallbackTiers(conn);
 }
 
 // Lazy per-species assessment history (index 0 = latest), fetched when a detail
@@ -1079,6 +1234,10 @@ function findViewLeafForGroup(taxonGroup: string): string | null {
 // isn't live-drillable at all, or an ancestor rank's lookup comes back empty.
 async function resolveTaxonSuggestionNode(
   conn: DuckDBConnection, rank: DynamicRank, value: string, taxonGroup: string,
+  // The representative row's lineage when the suggestion came from rank-index.parquet,
+  // which bakes it in at build time (chosen by the same struct min that picks the taxon
+  // group, so the two always agree). null on the fallback path, which looks it up below.
+  lineage: Lineage | null,
 ): Promise<string | null> {
   const staticHit = RANK_VALUE_TO_NODE.get(`${rank}:${value}`);
   if (staticHit) return staticHit;
@@ -1089,26 +1248,34 @@ async function resolveTaxonSuggestionNode(
   if (idx === -1) return null;
   const segments: DynamicSegment[] = [];
   if (idx > 0) {
-    // Aliased positionally (r0, r1, …) rather than read back by column name: genus's
-    // "column" is an expression, not a name, so a raw projection would have nothing
-    // stable to index the result row by. (genus is always last in rankOrderFor's list,
-    // so it can't actually appear among the prior ranks today — the aliases just keep
-    // that from being a load-bearing assumption.)
     const priorRanks = order.slice(0, idx);
-    const selects = priorRanks.map((r, i) => `${RANK_TO_MATCH_SQL[r]} AS r${i}`).join(", ");
-    const matchSql = RANK_TO_MATCH_SQL[rank];
-    const sql = `
-      SELECT * FROM (
-        SELECT ${selects} FROM '${parquetUri("assessed.parquet")}' WHERE ${matchSql} = $v AND taxon_group = $tg
-        UNION ALL
-        SELECT ${selects} FROM '${parquetUri("unassessed.parquet")}' WHERE ${matchSql} = $v AND taxon_group = $tg
-      ) LIMIT 1`;
-    const rows = (await conn.runAndReadAll(sql, { v: value, tg: taxonGroup })).getRowObjects();
-    if (rows.length === 0) return null;
+    // genus is always last in rankOrderFor's list, so it can't actually appear among the
+    // prior ranks today; mapping it to null rather than assuming that keeps the lookup
+    // from being a load-bearing assumption.
+    const fromLineage = (r: DynamicRank) =>
+      r === "class" ? lineage?.class_name : r === "order" ? lineage?.order_name : r === "family" ? lineage?.family : null;
+
+    let values: (string | null | undefined)[];
+    if (lineage) {
+      values = priorRanks.map(fromLineage);
+    } else {
+      // Fallback path only. Aliased positionally (r0, r1, …) rather than read back by
+      // column name: genus's "column" is an expression, not a name, so a raw projection
+      // would have nothing stable to index the result row by. Reads the materialized
+      // search index rather than the parquets — this runs once per suggestion, so on the
+      // parquet path a single search paid up to three more unpruned R2 scans.
+      const selects = priorRanks.map((r, i) => `${RANK_TO_MATCH_SQL[r]} AS r${i}`).join(", ");
+      const matchSql = RANK_TO_MATCH_SQL[rank];
+      const sql = `SELECT ${selects} FROM ${await searchSource(conn)}
+        WHERE ${matchSql} = $v AND taxon_group = $tg LIMIT 1`;
+      const rows = (await conn.runAndReadAll(sql, { v: value, tg: taxonGroup })).getRowObjects();
+      if (rows.length === 0) return null;
+      values = priorRanks.map((_, i) => rows[0][`r${i}`] as string | null);
+    }
     priorRanks.forEach((r, i) => {
-      const v = rows[0][`r${i}`];
       // Coalesce a null ancestor rank to "" — the Unclassified bucket for that rank,
       // same convention filterToSql/matchesFilter already use, not an error case.
+      const v = values[i];
       segments.push({ rank: r, value: v == null ? "" : String(v).toLowerCase() });
     });
   }
@@ -1138,39 +1305,46 @@ export async function suggestTaxa(query: string, limit = 3): Promise<TaxonSugges
   if (query.length < 2) return [];
   const conn = await getConn();
   const q = query.toLowerCase();
-  const part = (src: string, rank: DynamicRank) => {
-    const match = RANK_TO_MATCH_SQL[rank];
-    // The scientific_name prefix test in the genus branch is redundant-but-cheap: the
-    // genus IS the leading word of the name, so `genus LIKE 'x%'` already implies
-    // `name LIKE 'x%'`. Stating it lets DuckDB reject most rows on a plain prefix
-    // compare before paying for the split_part.
-    const guard = rank === "genus"
-      ? `scientific_name IS NOT NULL AND lower(scientific_name) LIKE $q || '%' AND ${match} LIKE $q || '%'`
-      : `${match} IS NOT NULL AND ${match} LIKE $q || '%'`;
-    return `SELECT DISTINCT ${match} AS name, ${SUGGEST_RANKS.indexOf(rank)} AS rp, taxon_group
-            FROM '${parquetUri(src)}' WHERE ${guard}`;
-  };
-  const parts = SUGGEST_RANKS.flatMap((rank) =>
-    [part("assessed.parquet", rank), part("unassessed.parquet", rank)]);
   const lim = Math.min(Math.max(limit, 1), 10);
+  const genusRp = SUGGEST_RANKS.indexOf("genus");
   // Exact match first, then shortest (closest) name, then alphabetical — per tier, so
-  // the JS merge below can hand the genus tier its own reserved slot. DISTINCT in the
-  // sub-selects collapses per-file dupes; the GROUP BY dedupes across ranks by name,
-  // keeping the coarsest rank that name matched at (arg_min on the same priority).
-  // QUALIFY caps each tier at `lim` rows, so a flood of genus prefix matches never has
-  // to be materialized or shipped back.
-  const sql = `
-    SELECT name, rp, taxon_group FROM (
-      SELECT name, min(rp) AS rp, arg_min(taxon_group, rp) AS taxon_group
-      FROM (${parts.join(" UNION ALL ")})
-      GROUP BY name
-    )
-    QUALIFY row_number() OVER (
-      PARTITION BY rp = ${SUGGEST_RANKS.indexOf("genus")}
-      ORDER BY (name = $q) DESC, length(name), name
-    ) <= ${lim}
-    ORDER BY rp = ${SUGGEST_RANKS.indexOf("genus")}, (name = $q) DESC, length(name), name`;
-  const rows = (await conn.runAndReadAll(sql, { q })).getRowObjects();
+  // the JS merge below can hand the genus tier its own reserved slot. QUALIFY caps each
+  // tier at `lim` rows, so a flood of genus prefix matches never has to be materialized
+  // or shipped back.
+  const order = `(name = $q) DESC, length(name), name`;
+  const tail = `
+    QUALIFY row_number() OVER (PARTITION BY rp = ${genusRp} ORDER BY ${order}) <= ${lim}
+    ORDER BY rp = ${genusRp}, ${order}`;
+
+  // rank-index.parquet is one row per name, sorted by it, so this is a pruned range read
+  // of a ~1MB file — no GROUP BY, and no materialized table needed, which is what makes
+  // the taxon half of the dropdown fast on a cold container too. It also carries the
+  // lineage resolveTaxonSuggestionNode would otherwise have to look up per suggestion.
+  // Falls back to the scanned/materialized rank names when the sync predates the index.
+  let rows: Record<string, unknown>[] | null = null;
+  try {
+    rows = (await conn.runAndReadAll(
+      `SELECT name, rp, taxon_group, class_name, order_name, family, true AS has_lineage
+       FROM read_parquet('${parquetUri("rank-index.parquet")}')
+       WHERE name >= $q AND name < $q || chr(1114111)${tail}`, { q })).getRowObjects();
+  } catch { /* not in this sync prefix — fall through */ }
+
+  if (!rows) {
+    // Same answer the pre-aggregation above bakes in, computed on the fly: min() of a
+    // STRUCT compares field by field in declaration order, so the coarsest rank wins and
+    // an equal-rank tie goes to the alphabetically first taxon group. The arg_min(
+    // taxon_group, rp) this replaced left that tie to parallel aggregation order, which
+    // varied BETWEEN RUNS on identical data — the genus "×" is in both mosses and
+    // flowering plants, and two identical searches could offer to browse it in either.
+    rows = (await conn.runAndReadAll(
+      `SELECT name, rp, taxon_group, NULL AS class_name, NULL AS order_name, NULL AS family,
+              false AS has_lineage FROM (
+         SELECT name, (min(s)).rp AS rp, (min(s)).tg AS taxon_group
+         FROM (SELECT name, {'rp': rp, 'tg': taxon_group} AS s
+               FROM ${await rankSource(conn)} WHERE name LIKE $q || '%')
+         GROUP BY name
+       )${tail}`, { q })).getRowObjects();
+  }
 
   // One slot is reserved for the best genus hit whenever there is one — so searching a
   // genus that shares a prefix with its own family ("urs" → Ursidae + Ursus) shows both,
@@ -1192,7 +1366,11 @@ export async function suggestTaxa(query: string, limit = 3): Promise<TaxonSugges
       name: name.charAt(0).toUpperCase() + name.slice(1),
       rank,
       taxon: name,
-      nodeId: await resolveTaxonSuggestionNode(conn, rank, name, String(r.taxon_group)),
+      // rank-index.parquet rows carry the lineage; fallback rows don't and pass null, so
+      // the lookup still runs. Flagged explicitly rather than inferred from the columns
+      // being null — a taxon with no class/order/family at all is a real, indexed row.
+      nodeId: await resolveTaxonSuggestionNode(conn, rank, name, String(r.taxon_group),
+        r.has_lineage ? { class_name: str(r.class_name), order_name: str(r.order_name), family: str(r.family) } : null),
     };
   }));
 }
