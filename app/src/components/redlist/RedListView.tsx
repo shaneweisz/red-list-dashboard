@@ -528,7 +528,13 @@ const SPECIES_TH_SORTABLE = "cursor-pointer hover:text-zinc-900 dark:hover:text-
 // So the long ones wrap inside a width the values still fit in, which costs a header
 // line and buys back ~250px. The taxa summary table wraps its own headers the same way
 // (numericThWrapClasses). Short ones (Category) keep one line.
-const SPECIES_TH_LABEL = "max-w-[128px] leading-tight";
+//
+// A fixed width, not a max: as a max it was only an upper bound, so once the table came
+// under width pressure the column squeezed below it and "GBIF Records Since Assessment"
+// broke onto a third line. 128px is the narrowest box that still fits the wider of the
+// two lines it should break into ("Since Assessment"), so every long header holds at
+// two lines whatever the table around it is doing.
+const SPECIES_TH_LABEL = "w-[128px] leading-tight";
 const SPECIES_TH_NOWRAP = "whitespace-nowrap";
 
 const skipSet = (...axes: FilterAxis[]): ReadonlySet<FilterAxis> => new Set(axes);
