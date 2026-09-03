@@ -4204,6 +4204,23 @@ export default function OccurrenceMapRow({
                       >
                         Pin
                       </button>
+                      {/* Measuring from the spot you just right-clicked, rather
+                          than from the tools menu and then hunting for it
+                          again. The first end is this point; the next click on
+                          the map is the far one. */}
+                      <button
+                        onClick={() => {
+                          setMeasure([[pointQuery.lng, pointQuery.lat]]);
+                          setPointQuery(null);
+                        }}
+                        title="Measure from here — click the map for the far end"
+                        className="shrink-0 flex items-center gap-1 px-1.5 py-0.5 rounded border border-zinc-300 dark:border-zinc-600 text-zinc-600 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800"
+                      >
+                        <svg className="w-2.5 h-2.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
+                          <path strokeLinecap="round" d="M3 21L21 3M7 13l2 2M11 9l2 2M15 5l2 2" />
+                        </svg>
+                        Measure
+                      </button>
                     </div>
                     )}
                   </div>
@@ -4493,50 +4510,12 @@ export default function OccurrenceMapRow({
               )}
             </div>
           )}
-          {/* The split-view panels still need their own colour key: the
-              records panel is drawn per panel, but the before/after split is
-              about the two panels together. Everything else this used to hold
-              now sits on the rows it describes. */}
+          {/* Only the way into split view lives out here now. The colour key
+              and its toggle moved onto the row they describe, in the Records
+              panel — one legend for the layer rather than one for the points
+              and another for what their colours mean. */}
           {!loadingOccurrences && !label && assessmentYear && !splitView && (
             <div className="bg-white dark:bg-zinc-800 px-2 py-1 rounded shadow text-[10px] text-zinc-500 dark:text-zinc-400 flex items-center gap-2 flex-wrap">
-              {showGbif && (
-                <>
-                  {colorByDate ? (
-                    <span className="flex items-center gap-1">
-                      <span
-                        className="w-2.5 h-2.5 rounded-full shrink-0"
-                        style={{ background: dateToColor(minDateNum).fill, border: `1.5px solid ${dateToColor(minDateNum).stroke}` }}
-                      />
-                      <span className="tabular-nums">{minDateLabel}</span>
-                      <span>→</span>
-                      <span
-                        className="w-2.5 h-2.5 rounded-full shrink-0"
-                        style={{ background: dateToColor(maxDateNum).fill, border: `1.5px solid ${dateToColor(maxDateNum).stroke}` }}
-                      />
-                      <span className="tabular-nums">{maxDateLabel}</span>
-                    </span>
-                  ) : (
-                    <>
-                      <span className="flex items-center gap-1">
-                        <span className="w-2.5 h-2.5 rounded-full shrink-0 bg-gray-400 border-[1.5px] border-gray-500" />
-                        ≤{assessmentDate?.split("T")[0] ?? assessmentYear}
-                      </span>
-                      <span className="flex items-center gap-1">
-                        <span className="w-2.5 h-2.5 rounded-full shrink-0 bg-green-400 border-[1.5px] border-green-600" />
-                        After {assessmentDate?.split("T")[0] ?? assessmentYear}
-                      </span>
-                    </>
-                  )}
-                  <button
-                    onClick={() => setColorByDate(!colorByDate)}
-                    title={colorByDate ? "Colour by before/after the assessment date" : "Colour by date"}
-                    className="px-1.5 py-0.5 rounded border border-zinc-300 dark:border-zinc-600 hover:bg-zinc-100 dark:hover:bg-zinc-700 transition-colors"
-                  >
-                    {colorByDate ? "Color by before/after assess. date" : "Color by date"}
-                  </button>
-                  <span className="text-zinc-300 dark:text-zinc-600">|</span>
-                </>
-              )}
               <button
                 onClick={() => {
                   if (!splitDate && assessmentDate) setSplitDate(assessmentDate.split("T")[0]);
@@ -6388,7 +6367,7 @@ export default function OccurrenceMapRow({
         <span className="shrink-0 text-zinc-700 dark:text-zinc-200">GBIF points</span>
         {/* The colour key on the same row as the name it belongs to, which is
             what the panel was widened for. */}
-        {showGbif && !label && !assessmentYear && colorByDate && (
+        {showGbif && !label && colorByDate && (
           <span className="flex items-center gap-0.5 min-w-0 text-[9px] tabular-nums text-zinc-400">
             <span
               className="w-2 h-2 rounded-full shrink-0"
@@ -6429,12 +6408,17 @@ export default function OccurrenceMapRow({
         </label>
       )}
       {/* What the GBIF points' colours mean, under the row that draws them —
-          but only for a species with no assessment date. Where there is one,
-          this lives beside Split view, with the toggle that switches between
-          the two colourings, because they're the same question. */}
-      {showGbif && !label && !assessmentYear && !colorByDate && (
+          for every species, assessed or not.
+          An assessed species used to have this in a bar of its own below the
+          panel, which made two legends about one layer: the row that draws the
+          points here, the key to their colours there. The colouring is a
+          property of that row, so it belongs under it, and the toggle that
+          switches between the two schemes belongs with the key it changes. */}
+      {showGbif && !label && assessmentYear && (
         <div className="px-2 pb-0.5 pl-6 text-[10px] text-zinc-500 dark:text-zinc-400">
-          {(
+          {/* Only in the before/after scheme: the date ramp has its own key
+              inline on the row above, where both ends can be labelled. */}
+          {!colorByDate && (
             <div className="flex flex-col gap-0.5">
               <span className="flex items-center gap-1">
                 <span className="w-2.5 h-2.5 rounded-full shrink-0 bg-gray-400 border-[1.5px] border-gray-500" />
@@ -6446,15 +6430,13 @@ export default function OccurrenceMapRow({
               </span>
             </div>
           )}
-          {assessmentYear && (
-            <button
-              onClick={() => setColorByDate(!colorByDate)}
-              title={colorByDate ? "Colour by before/after the assessment date" : "Colour by date"}
-              className="mt-0.5 underline decoration-dotted hover:text-zinc-700 dark:hover:text-zinc-200"
-            >
-              {colorByDate ? "by assessment date" : "by date"}
-            </button>
-          )}
+          <button
+            onClick={() => setColorByDate(!colorByDate)}
+            title={colorByDate ? "Colour by before/after the assessment date" : "Colour by date"}
+            className="mt-0.5 underline decoration-dotted hover:text-zinc-700 dark:hover:text-zinc-200"
+          >
+            {colorByDate ? "by assessment date" : "by date"}
+          </button>
         </div>
       )}
     </div>
