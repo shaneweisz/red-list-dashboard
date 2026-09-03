@@ -566,24 +566,21 @@ type FilterAxis =
 // headers rather than the small-caps tracked ones this table used, so the two read as
 // one system instead of two unrelated tables stacked on a page.
 //
-// The 1px column rules stop at the header, where that table carries them through its
-// body too. They earn their place there because every cell is a composite — count,
-// bar, percent — so without a rule it isn't obvious where one column's three parts
-// end. Here each cell is a single value, which alignment and padding already separate;
-// ruling them too would only add a grid. The header keeps them because that's where
-// the eye maps the columns, and because the wrapped two-line labels ("Total GBIF /
-// Records" beside "Records Since / Assessment") would otherwise run together.
+// No column rules, where that table has them: its cells are composites (count, bar,
+// percent), so a rule is what shows where one column's three parts end, while every
+// cell here is a single value that alignment and padding already separate. Ruling them
+// only laid a grid over the data.
 //
 // Written out in full rather than composed from fragments — Tailwind only sees class
 // names it can read literally in the source.
-const SPECIES_TH = "px-2 md:px-4 py-3 text-sm font-bold text-zinc-600 dark:text-zinc-300 border-l border-zinc-200 dark:border-zinc-700";
+const SPECIES_TH = "px-2 md:px-4 py-3 text-sm font-bold text-zinc-600 dark:text-zinc-300";
 const SPECIES_TH_SORTABLE = "cursor-pointer hover:text-zinc-900 dark:hover:text-zinc-100 select-none";
-// Spelled-out headers ("Records Since Assessment") are wider than the numbers under
-// them, and six nowrap headers pushed the table past its container on a normal laptop
-// — a horizontal scrollbar to read a column title, while the data itself fits. So the
-// long ones wrap to two lines inside a width the values still fit in, which costs a
-// header line and buys back ~250px. The taxa summary table wraps its own headers the
-// same way (numericThWrapClasses). Short ones (Category) keep one line.
+// Spelled-out headers ("GBIF Records Since Assessment") are wider than the numbers
+// under them, and six nowrap headers pushed the table past its container on a normal
+// laptop — a horizontal scrollbar to read a column title, while the data itself fits.
+// So the long ones wrap inside a width the values still fit in, which costs a header
+// line and buys back ~250px. The taxa summary table wraps its own headers the same way
+// (numericThWrapClasses). Short ones (Category) keep one line.
 const SPECIES_TH_LABEL = "max-w-[128px] leading-tight";
 const SPECIES_TH_NOWRAP = "whitespace-nowrap";
 
@@ -6045,7 +6042,7 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
                   onClick={(e) => handleSort("newGbif", e)}
                 >
                   <span className="flex items-center justify-end gap-1">
-                    <span className={SPECIES_TH_LABEL}>Records Since Assessment</span>
+                    <span className={SPECIES_TH_LABEL}>GBIF Records Since Assessment</span>
                     <HoverTooltip text="Records added after the assessment year (not the exact date). Uses the year following the assessment as the start of the range.">
                       <svg className="w-3 h-3 text-zinc-400 dark:text-zinc-500 cursor-help" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                         <circle cx="12" cy="12" r="10" />
@@ -6062,7 +6059,7 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
                   onClick={(e) => handleSort("pctNewGbif", e)}
                 >
                   <span className="flex items-center justify-end gap-1">
-                    <span className={SPECIES_TH_LABEL}>% Records Since Assessment</span>
+                    <span className={SPECIES_TH_LABEL}>% GBIF Records Since Assessment</span>
                     <SortIndicator field="pctNewGbif" />
                   </span>
                 </th>
