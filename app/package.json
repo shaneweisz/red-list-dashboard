@@ -23,6 +23,7 @@
     "@sentry/nextjs": "^10.43.0",
     "@supabase/ssr": "^0.12.3",
     "@supabase/supabase-js": "^2.110.8",
+    "@turf/area": "7.2.0",
     "@turf/boolean-point-in-polygon": "^7.3.5",
     "@vercel/analytics": "^1.6.1",
     "@vercel/speed-insights": "^2.0.0",

@@ -15,6 +15,7 @@
  *   Phase 9: build-parquet          (CSVs → assessed/unassessed parquets + search)
  *   Phase 10: build-matching        (→ species_link.parquet, IUCN/GBIF → col_id)
  *   Phase 11: build-synonym-index   (→ synonym-index.parquet, search)
+ *   Phase 11b: build-search-index   (→ name-index.parquet + rank-index.parquet, search)
  *   Phase 12: build-col-taxon-ids   (taxonomy tree + backbone.parquet → src/config/col-taxon-ids.json, committed to git)
  *   Phase 13: build-taxa-summary    (CSVs + CoL artifacts → taxa-summary.json, incl. col counts)
  *   Phase 13a: build-col-revisions  (CoL artifacts → col-revisions.json, the dashboard-wide
@@ -63,6 +64,7 @@ import { run as buildBackbone } from "./build-backbone";
 import { run as deriveGbifTaxonKeys } from "./derive-gbif-taxon-keys";
 import { run as buildMatching } from "./build-matching";
 import { run as buildSynonymIndex } from "./build-synonym-index";
+import { run as buildSearchIndex } from "./build-search-index";
 import { run as buildColTaxonIds } from "./build-col-taxon-ids";
 import { run as uploadRangeMaps } from "./upload-range-maps";
 import { run as uploadAohMaps } from "./upload-aoh-maps";
@@ -255,6 +257,15 @@ async function main() {
       console.log("\nPhase 11: build-synonym-index (→ synonym-index.parquet, search)");
       console.log("═".repeat(60));
       await buildSynonymIndex();
+
+      // The other half of search's read layer: the name-sorted indexes over the fast
+      // path (assessed ∪ GBIF-observed) and over the higher-rank taxon names, so a
+      // typeahead prefix prunes to a row group instead of scanning both species
+      // parquets. Needs species_link (phase 10) for the col_ids it bakes in, so it
+      // can't move up next to build-parquet.
+      console.log("\nPhase 11b: build-search-index (→ name-index.parquet + rank-index.parquet)");
+      console.log("═".repeat(60));
+      await buildSearchIndex();
 
       // Small + derived from committed source (the taxonomy tree), so this writes to
       // src/config/ and gets committed to git, unlike the R2-published data/ outputs
