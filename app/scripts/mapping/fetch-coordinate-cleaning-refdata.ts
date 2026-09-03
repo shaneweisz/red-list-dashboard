@@ -4,7 +4,7 @@
  *
  * Institutions get added/moved in GRSciColl over time, so this is worth re-running
  * occasionally (not on every sync — it's not part of the taxonomic data pipeline).
- * Capitals/centroids/land/urban-areas/aohi/countries (src/lib/coordinate-cleaning-refdata/
+ * Capitals/centroids/land/urban-areas/aohi/countries (src/lib/mapping/coordinate-cleaning-refdata/
  * {capitals,centroids,land-polygons,urban-areas,aohi,countries}.json) are sourced from
  * Natural Earth, mledoze/countries, and a frozen Zenodo/Dryad deposit instead, all
  * essentially static, so there's no fetch script for those — they were extracted once
@@ -23,13 +23,13 @@
  *     Norway's -99 data quirk via ADM0_A3 — see coordinate-cleaning-refdata/README.md)
  *
  * Usage:
- *   npx tsx scripts/fetch-coordinate-cleaning-refdata.ts
+ *   npx tsx scripts/mapping/fetch-coordinate-cleaning-refdata.ts
  */
 
 import * as fs from "fs";
 import * as path from "path";
 
-const OUT_PATH = path.join(__dirname, "..", "src", "lib", "coordinate-cleaning-refdata", "institutions.json");
+const OUT_PATH = path.join(__dirname, "..", "..", "src", "lib", "mapping", "coordinate-cleaning-refdata", "institutions.json");
 const PAGE_LIMIT = 1000;
 
 interface Institution {
