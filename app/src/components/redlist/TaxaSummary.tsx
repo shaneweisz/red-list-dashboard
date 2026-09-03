@@ -206,6 +206,18 @@ function OutdatedInfoIcon() {
   );
 }
 
+// Spinner shown in place of a count/bar the drill-down is still fetching. Same
+// markup as the one beside a row's name while its children load, so a row waiting
+// on a live-drilldown fetch spins the same way wherever the waiting shows up.
+function PendingSpinner({ className = "h-3.5 w-3.5" }: { className?: string }) {
+  return (
+    <svg className={`animate-spin ${className} text-zinc-400`} viewBox="0 0 24 24" fill="none" aria-label="Loading">
+      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+    </svg>
+  );
+}
+
 // Sticky cell classes for the pinned taxon column
 const stickyClasses = "sticky left-0 z-10";
 // Compact cell classes for tighter table spacing
@@ -1800,16 +1812,18 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
     );
   };
 
-  // Same footprint as renderBar (count/bar/percent), but a pulsing skeleton instead
-  // of real numbers — used in place of renderBar for a breadcrumb/collapsed row whose
-  // summary hasn't streamed in yet (see isSummaryPending), so a still-loading
-  // Assessed/Outdated/Not-Evaluated cell doesn't flash a misleading "0" for the
-  // several seconds a live-drilldown fetch can take.
+  // Keeps renderBar's footprint (so the column doesn't resize when the numbers
+  // land) but spins in the count's own slot instead of drawing the bar — used in
+  // place of renderBar for a breadcrumb/collapsed row whose summary hasn't streamed
+  // in yet (see isSummaryPending), so a still-loading Assessed/Outdated/
+  // Not-Evaluated cell doesn't flash a misleading "0" for the several seconds a
+  // live-drilldown fetch can take. Nothing is drawn in the bar track: an empty
+  // track reads as a real 0%, which is the misreading this exists to avoid.
   const renderPendingBar = () => (
     <div className="flex items-center gap-1.5 sm:gap-3 min-w-[150px] sm:min-w-[230px] md:min-w-[250px]">
-      <div className="w-[48px] sm:w-[60px] h-3.5 sm:h-2.5 rounded bg-zinc-200 dark:bg-zinc-700 animate-pulse flex-shrink-0" />
-      <div className="flex-1 min-w-[40px] h-3.5 sm:h-2.5 rounded-full bg-zinc-200 dark:bg-zinc-700 animate-pulse" />
-      <div className="w-[44px] sm:w-[52px] h-3.5 sm:h-2.5 rounded bg-zinc-200 dark:bg-zinc-700 animate-pulse flex-shrink-0" />
+      <span className="w-[48px] sm:w-[60px] flex-shrink-0 flex justify-end">
+        <PendingSpinner />
+      </span>
     </div>
   );
 
@@ -1922,10 +1936,17 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
   // "# Not Evaluated" renders as a progress bar (ne / col_described) with the count,
   // mirroring the assessed column. Falls back to a plain count if there's no
   // denominator, and "—" when the row has no CoL data (sub-groups).
-  const colNeCell = (ne: number | undefined, described: number | undefined, opts?: { bold?: boolean; isAllRow?: boolean }) =>
+  // `pending` spins instead of dashing: a row still waiting on its counts has no
+  // colNe either, and "—" there reads as "this row has none", which is the wrong
+  // thing to say about a number that's on its way (it's the headline column in the
+  // new-assessments view). Only the two callers that know about isSummaryPending
+  // pass it; everywhere else "—" still means what it always did.
+  const colNeCell = (ne: number | undefined, described: number | undefined, opts?: { bold?: boolean; isAllRow?: boolean; pending?: boolean }) =>
     isVisible("colNe") ? (
       <td className={flexTdClasses}>
-        {ne == null ? (
+        {opts?.pending ? (
+          renderPendingBar()
+        ) : ne == null ? (
           <span className="text-sm text-zinc-400">—</span>
         ) : (
           // Mirror the Assessed column: a bar over the same (toggled) described
@@ -2141,7 +2162,7 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
         {isVisible("described") && (
           <td className={numericTdNoDividerClasses}>
             {isPending && sgDescribed === 0 ? (
-              <span className="inline-block w-12 h-3.5 rounded bg-zinc-200 dark:bg-zinc-700 animate-pulse" />
+              <span className="inline-flex w-12 justify-end"><PendingSpinner /></span>
             ) : (
               <span className="text-sm text-zinc-700 dark:text-zinc-300 tabular-nums inline-flex items-center gap-1">
                 {sgDescribed.toLocaleString()}
@@ -2174,7 +2195,7 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
                 : <span className="text-sm text-zinc-400">—</span>}
           </td>
         )}
-        {colNeCell(sg.colNe, sgDescribed)}
+        {colNeCell(sg.colNe, sgDescribed, { pending: isPending })}
         {isVisible("totalGbifObs") && (
           <td className={numericTdClasses}><span className="text-sm text-zinc-400">—</span></td>
         )}
@@ -2234,7 +2255,7 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
         {isVisible("described") && (
           <td className={numericTdNoDividerClasses}>
             {isPending && sgDescribed === 0 ? (
-              <span className="inline-block w-12 h-3.5 rounded bg-zinc-200 dark:bg-zinc-700 animate-pulse" />
+              <span className="inline-flex w-12 justify-end"><PendingSpinner /></span>
             ) : (
               <span className="text-sm md:text-base text-zinc-700 dark:text-zinc-300 tabular-nums inline-flex items-center gap-1">
                 {sgDescribed.toLocaleString()}
@@ -2267,7 +2288,7 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
                 : <span className="text-sm text-zinc-400">—</span>}
           </td>
         )}
-        {colNeCell(sg.colNe, sgDescribed)}
+        {colNeCell(sg.colNe, sgDescribed, { pending: isPending })}
         {isVisible("totalGbifObs") && (
           <td className={numericTdClasses}><span className="text-sm text-zinc-400">—</span></td>
         )}

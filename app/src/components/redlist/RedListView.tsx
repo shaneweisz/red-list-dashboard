@@ -508,6 +508,46 @@ type FilterAxis =
   | "habitat" | "endemics" | "growthForms" | "assessors" | "reviewers" | "facilitators"
   | "contributors" | "institutions" | "revision";
 
+// Species-table column classes. Deliberately the same treatment as the taxa summary
+// table above it (TaxaSummary's numericThClasses and friends): sentence-case bold
+// headers rather than the small-caps tracked ones this table used, so the two read as
+// one system instead of two unrelated tables stacked on a page.
+//
+// No column rules, where that table has them: its cells are composites (count, bar,
+// percent), so a rule is what shows where one column's three parts end, while every
+// cell here is a single value that alignment and padding already separate. Ruling them
+// only laid a grid over the data.
+//
+// Written out in full rather than composed from fragments — Tailwind only sees class
+// names it can read literally in the source.
+const SPECIES_TH = "px-2 md:px-4 py-3 text-sm font-bold text-zinc-600 dark:text-zinc-300";
+const SPECIES_TH_SORTABLE = "cursor-pointer hover:text-zinc-900 dark:hover:text-zinc-100 select-none";
+// Spelled-out headers ("GBIF Records Since Assessment") are wider than the numbers
+// under them, and six nowrap headers pushed the table past its container on a normal
+// laptop — a horizontal scrollbar to read a column title, while the data itself fits.
+// So the long ones wrap inside a width the values still fit in, which costs a header
+// line and buys back ~250px. The taxa summary table wraps its own headers the same way
+// (numericThWrapClasses). Short ones (Category) keep one line.
+//
+// A fixed width, not a max: as a max it was only an upper bound, so once the table came
+// under width pressure the column squeezed below it and "GBIF Records Since Assessment"
+// broke onto a third line.
+//
+// Each label carries its own width — the narrowest box that still fits the wider of the
+// two lines it should break into, measured at this size and weight:
+//
+//   Assessment / Date               84   ("Assessment" 83)
+//   Total GBIF / Records            72   ("Total GBIF" 70)
+//   GBIF Records / Since Assessment 124  ("Since Assessment" 124)
+//   Year Described                  104  (one line, 102 — new-assessments has the room)
+//   GBIF Records                    96   (one line, 94 — likewise)
+//
+// One shared width would have to be the largest of them, which is what left Assessment
+// Date and Total GBIF Records ~50px wider than their text and put a gutter of dead space
+// between the date and the number beside it.
+const SPECIES_TH_LABEL = "leading-tight";
+const SPECIES_TH_NOWRAP = "whitespace-nowrap";
+
 const skipSet = (...axes: FilterAxis[]): ReadonlySet<FilterAxis> => new Set(axes);
 
 // A chart's own axis, so its bars keep showing what clicking them would select.
@@ -532,6 +572,19 @@ const SKIP_CREDITS = skipSet("assessors", "reviewers", "facilitators", "contribu
 // inherits the same endemics/growth-form blind spot as the three above, having
 // been written from the Criteria chart's clause list.
 const SKIP_REVISION = skipSet("revision", "endemics", "growthForms");
+
+// GBIF occurrence-count bucket for a species — the bars on the GBIF Records
+// chart, and the single-value card that replaces that chart when the view is
+// narrowed to one searched species.
+function gbifObsBucket(count: number | null | undefined): string {
+  const obs = count ?? 0;
+  if (obs === 0) return "0";
+  if (obs <= 10) return "1-10";
+  if (obs <= 100) return "11-100";
+  if (obs <= 1000) return "101-1K";
+  if (obs <= 10000) return "1K-10K";
+  return "10K+";
+}
 
 // Explain IUCN Red List criteria codes
 // See: https://www.iucnredlist.org/resources/categories-and-criteria
@@ -2432,15 +2485,10 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
       { range: "1K-10K", shortRange: "1K-10K", count: 0 },
       { range: "10K+", shortRange: "10K+", count: 0 },
     ];
+    const byBucket: Record<string, number> = Object.fromEntries(ranges.map((r, i) => [r.range, i]));
     taxaFilteredSpecies.forEach(s => {
       if (!matchesFilters(s, SKIP_OBS)) return;
-      const obs = s.gbif_occurrence_count ?? 0;
-      if (obs === 0) ranges[0].count++;
-      else if (obs <= 10) ranges[1].count++;
-      else if (obs <= 100) ranges[2].count++;
-      else if (obs <= 1000) ranges[3].count++;
-      else if (obs <= 10000) ranges[4].count++;
-      else ranges[5].count++;
+      ranges[byBucket[gbifObsBucket(s.gbif_occurrence_count)]].count++;
     });
     const total = ranges.reduce((sum, r) => sum + r.count, 0);
     return ranges.map(r => ({
@@ -3742,7 +3790,13 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
               Country
             </h2>
           </div>
-          <div className="flex-1 flex items-center justify-center">
+          {/* The 180px box (not flex-1) is what lines this spinner up with the
+              Year Described / GBIF Records ones beside it: those cards size their
+              chart area to exactly 180px, so centering in the map card's full
+              height — it reserves 320px for the map — dropped this one ~60px
+              lower than the other two. The card keeps its own height; only the
+              spinner moves. */}
+          <div style={{ height: 180 }} className="flex items-center justify-center">
             <Spinner />
           </div>
         </div>
@@ -4917,15 +4971,11 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
               <div className="flex-1 min-h-[150px] flex items-center justify-center">
                 {speciesLoading && assessedSpecies.length === 0 ? (
                   <Spinner />
-                ) : isSingleSpecies && singleSpecies ? (() => {
-                  const obs = singleSpecies.gbif_occurrence_count ?? 0;
-                  const range = obs === 0 ? "0" : obs <= 10 ? "1-10" : obs <= 100 ? "11-100" : obs <= 1000 ? "101-1K" : obs <= 10000 ? "1K-10K" : "10K+";
-                  return (
-                    <span className="text-4xl font-bold text-zinc-900 dark:text-zinc-100">
-                      {range}
-                    </span>
-                  );
-                })() : gbifObsData.length > 0 ? (
+                ) : isSingleSpecies && singleSpecies ? (
+                  <span className="text-4xl font-bold text-zinc-900 dark:text-zinc-100">
+                    {gbifObsBucket(singleSpecies.gbif_occurrence_count)}
+                  </span>
+                ) : gbifObsData.length > 0 ? (
                   <FilterBarChart
                     data={gbifObsData}
                     dataKey="shortRange"
@@ -4968,6 +5018,13 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
               <div style={{ height: 180 }} className="flex items-center justify-center">
                 {speciesLoading && assessedSpecies.length === 0 ? (
                   <Spinner />
+                ) : isSingleSpecies && singleSpecies ? (
+                  // One species is one bar — a chart of it says nothing the number
+                  // doesn't. Show the year itself rather than its bucket: unlike the
+                  // GBIF card below, the exact value is short enough to read at a glance.
+                  <span className="text-4xl font-bold text-zinc-900 dark:text-zinc-100">
+                    {singleSpecies.described_year ?? "Unknown"}
+                  </span>
                 ) : describedYearData.length > 0 ? (
                   <FilterBarChart
                     data={describedYearData}
@@ -4993,6 +5050,10 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
               <div style={{ height: 180 }} className="flex items-center justify-center">
                 {speciesLoading && assessedSpecies.length === 0 ? (
                   <Spinner />
+                ) : isSingleSpecies && singleSpecies ? (
+                  <span className="text-4xl font-bold text-zinc-900 dark:text-zinc-100">
+                    {gbifObsBucket(singleSpecies.gbif_occurrence_count)}
+                  </span>
                 ) : (
                   <FilterBarChart
                     data={gbifObsData}
@@ -5887,18 +5948,18 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
         >
           <table className="w-full text-sm">
             <thead className="bg-zinc-50 dark:bg-zinc-800">
-              <tr>
-                <th className="sticky left-0 z-10 bg-zinc-50 dark:bg-zinc-800 px-2 py-3 text-center text-xs font-medium text-zinc-500 uppercase tracking-wider w-10">
+              <tr className="border-b border-zinc-200 dark:border-zinc-700">
+                <th className="sticky left-0 z-10 bg-zinc-50 dark:bg-zinc-800 px-2 py-3 text-center text-sm font-bold text-zinc-600 dark:text-zinc-300 w-10">
                   <svg className="w-4 h-4 mx-auto text-zinc-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.197-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.784-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z" />
                   </svg>
                 </th>
-                <th className="sticky left-[40px] z-10 bg-zinc-50 dark:bg-zinc-800 px-2 md:px-4 py-3 text-left text-xs font-medium text-zinc-500 uppercase tracking-wider">
+                <th className="sticky left-[40px] z-10 bg-zinc-50 dark:bg-zinc-800 px-2 md:px-4 py-3 text-left text-sm font-bold text-zinc-600 dark:text-zinc-300">
                   Species
                 </th>
                 {!isNewAssessments && (
                 <th
-                  className="px-2 md:px-4 py-3 text-left text-xs font-medium text-zinc-500 uppercase tracking-wider cursor-pointer hover:text-zinc-700 dark:hover:text-zinc-300 select-none whitespace-nowrap"
+                  className={`${SPECIES_TH} text-left ${SPECIES_TH_NOWRAP} ${SPECIES_TH_SORTABLE}`}
                   onClick={(e) => handleSort("category", e)}
                 >
                   <span className="flex items-center gap-1">
@@ -5909,43 +5970,43 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
                 )}
                 {!isNewAssessments && (
                 <th
-                  className="px-2 md:px-4 py-3 text-left text-xs font-medium text-zinc-500 uppercase tracking-wider cursor-pointer hover:text-zinc-700 dark:hover:text-zinc-300 select-none whitespace-nowrap"
+                  className={`${SPECIES_TH} text-left ${SPECIES_TH_SORTABLE}`}
                   onClick={(e) => handleSort("year", e)}
                 >
                   <span className="flex items-center gap-1">
-                    Assess. Date
+                    <span className={`${SPECIES_TH_LABEL} w-[84px]`}>Assessment Date</span>
                     <SortIndicator field="year" />
                   </span>
                 </th>
                 )}
                 {isNewAssessments && (
                 <th
-                  className="px-2 md:px-4 py-3 text-left text-xs font-medium text-zinc-500 uppercase tracking-wider cursor-pointer hover:text-zinc-700 dark:hover:text-zinc-300 select-none whitespace-nowrap"
+                  className={`${SPECIES_TH} text-left ${SPECIES_TH_SORTABLE}`}
                   onClick={(e) => handleSort("describedYear", e)}
                 >
                   <span className="flex items-center gap-1">
-                    Year Described
+                    <span className={`${SPECIES_TH_LABEL} w-[104px]`}>Year Described</span>
                     <SortIndicator field="describedYear" />
                   </span>
                 </th>
                 )}
                 <th
-                  className="px-3 md:px-4 py-3 text-right text-xs font-medium text-zinc-500 uppercase tracking-wider min-w-[60px] cursor-pointer hover:text-zinc-700 dark:hover:text-zinc-300 select-none"
+                  className={`${SPECIES_TH} text-right min-w-[60px] ${SPECIES_TH_SORTABLE}`}
                   onClick={(e) => handleSort("totalGbif", e)}
                 >
                   <span className="flex items-center justify-end gap-1">
-                    {isNewAssessments ? "GBIF Observations" : "GBIF Total"}
+                    <span className={`${SPECIES_TH_LABEL} ${isNewAssessments ? "w-[96px]" : "w-[72px]"}`}>{isNewAssessments ? "GBIF Records" : "Total GBIF Records"}</span>
                     <GbifInfoTooltip />
                     <SortIndicator field="totalGbif" />
                   </span>
                 </th>
                 {!isNewAssessments && (
                 <th
-                  className="px-3 md:px-4 py-3 text-right text-xs font-medium text-zinc-500 uppercase tracking-wider min-w-[60px] cursor-pointer hover:text-zinc-700 dark:hover:text-zinc-300 select-none"
+                  className={`${SPECIES_TH} text-right min-w-[60px] ${SPECIES_TH_SORTABLE}`}
                   onClick={(e) => handleSort("newGbif", e)}
                 >
                   <span className="flex items-center justify-end gap-1">
-                    GBIF Since Assess.
+                    <span className={`${SPECIES_TH_LABEL} w-[124px]`}>GBIF Records Since Assessment</span>
                     <HoverTooltip text="Records added after the assessment year (not the exact date). Uses the year following the assessment as the start of the range.">
                       <svg className="w-3 h-3 text-zinc-400 dark:text-zinc-500 cursor-help" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                         <circle cx="12" cy="12" r="10" />
@@ -5958,11 +6019,11 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
                 )}
                 {!isNewAssessments && (
                 <th
-                  className="px-3 md:px-4 py-3 text-right text-xs font-medium text-zinc-500 uppercase tracking-wider min-w-[60px] cursor-pointer hover:text-zinc-700 dark:hover:text-zinc-300 select-none"
+                  className={`${SPECIES_TH} text-right min-w-[60px] ${SPECIES_TH_SORTABLE}`}
                   onClick={(e) => handleSort("pctNewGbif", e)}
                 >
                   <span className="flex items-center justify-end gap-1">
-                    % GBIF Since Assess.
+                    <span className={`${SPECIES_TH_LABEL} w-[124px]`}>% GBIF Records Since Assessment</span>
                     <SortIndicator field="pctNewGbif" />
                   </span>
                 </th>
@@ -6175,7 +6236,19 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
                     {/* Year Described (CoL) */}
                     {isNewAssessments && (
                     <td className="px-2 md:px-4 py-3 text-zinc-600 dark:text-zinc-400 text-sm tabular-nums whitespace-nowrap">
-                      {s.described_year ?? <span className="text-zinc-400">—</span>}
+                      {/* The searched-species preview row is built from the search result,
+                          which carries no CoL description year — so it has none to show
+                          until the taxon's own list lands. A "—" there says CoL has no
+                          datable record for the name (the real meaning of the dash in this
+                          column) when the year is merely late, so spin instead while the
+                          list is still in flight. Once it isn't, the dash is honest again:
+                          a preview still standing in after the fetch settles is a species
+                          the list genuinely doesn't carry. */}
+                      {s.described_year ?? (
+                        s === singleSpeciesPreview && speciesLoading
+                          ? <Spinner />
+                          : <span className="text-zinc-400">—</span>
+                      )}
                     </td>
                     )}
                     {/* Total GBIF */}
