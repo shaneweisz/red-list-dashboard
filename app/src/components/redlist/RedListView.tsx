@@ -6249,7 +6249,19 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
                     {/* Year Described (CoL) */}
                     {isNewAssessments && (
                     <td className="px-2 md:px-4 py-3 text-zinc-600 dark:text-zinc-400 text-sm tabular-nums whitespace-nowrap">
-                      {s.described_year ?? <span className="text-zinc-400">—</span>}
+                      {/* The searched-species preview row is built from the search result,
+                          which carries no CoL description year — so it has none to show
+                          until the taxon's own list lands. A "—" there says CoL has no
+                          datable record for the name (the real meaning of the dash in this
+                          column) when the year is merely late, so spin instead while the
+                          list is still in flight. Once it isn't, the dash is honest again:
+                          a preview still standing in after the fetch settles is a species
+                          the list genuinely doesn't carry. */}
+                      {s.described_year ?? (
+                        s === singleSpeciesPreview && speciesLoading
+                          ? <Spinner />
+                          : <span className="text-zinc-400">—</span>
+                      )}
                     </td>
                     )}
                     {/* Total GBIF */}
