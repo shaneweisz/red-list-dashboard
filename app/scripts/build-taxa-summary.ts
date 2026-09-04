@@ -39,6 +39,7 @@ import {
   computeBreakdownEntry,
   SPLIT_CANDIDATES_SQL,
   COL_TO_ASSESSED_SQL,
+  backboneHasChecklistColumns,
   type BreakdownQueryContext,
 } from "../src/lib/data/col-breakdown";
 
@@ -204,6 +205,10 @@ async function attachColCounts(summaries: Record<string, NodeSummary[]>): Promis
     conn, speciesGlob, assessedPath, linkPath: link,
     universeSql: universe, assessedCidsTable: "assessed_cids",
     excludedColIdsSql: EXCLUDED_COL_IDS_SQL, hasBackbone, backbonePath,
+    // See BreakdownQueryContext.hasChecklistColumns: the sync rebuilds a backbone
+    // that lacks these, so this is true for every real build — probed anyway so a
+    // hand-run against an older data dir degrades instead of throwing.
+    hasChecklistColumns: hasBackbone && (await backboneHasChecklistColumns(conn, backbonePath)),
   };
   let n = 0;
   let breakdownQueries = 0;

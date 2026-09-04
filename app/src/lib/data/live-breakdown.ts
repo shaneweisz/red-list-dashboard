@@ -30,6 +30,7 @@ import {
   computeBreakdownEntry,
   SPLIT_CANDIDATES_SQL,
   COL_TO_ASSESSED_SQL,
+  backboneHasChecklistColumns,
   type BreakdownEntry,
   type BreakdownQueryContext,
 } from "./col-breakdown";
@@ -41,8 +42,14 @@ import type { NodeFilter } from "@/lib/taxonomy-sql";
 // species-duckdb.ts — Homo sapiens, which IUCN omits from its Red List export.
 const EXCLUDED_COL_IDS_SQL = `('6MB3T')`;
 
-let backboneHelpersPromise: Promise<boolean> | null = null; // resolves to hasBackbone
-async function ensureBackboneHelpers(conn: Awaited<ReturnType<typeof getConn>>): Promise<boolean> {
+interface BackboneHelpers {
+  hasBackbone: boolean;
+  /** See BreakdownQueryContext.hasChecklistColumns — false for a data sync whose
+   *  backbone.parquet was built before build-backbone stamped these columns. */
+  hasChecklistColumns: boolean;
+}
+let backboneHelpersPromise: Promise<BackboneHelpers> | null = null;
+async function ensureBackboneHelpers(conn: Awaited<ReturnType<typeof getConn>>): Promise<BackboneHelpers> {
   if (!backboneHelpersPromise) {
     backboneHelpersPromise = (async () => {
       await ensureNeHelpers(conn); // ne_assessed_col_ids / ne_ex_ew_col_ids
@@ -61,12 +68,16 @@ async function ensureBackboneHelpers(conn: Awaited<ReturnType<typeof getConn>>):
           await conn.run(SPLIT_CANDIDATES_SQL(backbonePath, assessedPath, "ne_assessed_col_ids"));
           await conn.run(COL_TO_ASSESSED_SQL(linkPath, assessedPath));
         }
-        return true;
+        const hasChecklistColumns = await backboneHasChecklistColumns(conn, parquetUri("backbone.parquet"));
+        if (!hasChecklistColumns) {
+          console.error("live-breakdown: backbone.parquet predates the checklist columns (in_checklist / checklist_parent_id / checklist_name) — breakdowns will omit CoL rename claims until the next backbone rebuild.");
+        }
+        return { hasBackbone: true, hasChecklistColumns };
       } catch (e) {
         // backbone.parquet missing/unreadable — degrade to no diagnostic detail
         // rather than fail every breakdown request.
         console.error("live-breakdown: backbone helpers unavailable, degrading:", e);
-        return false;
+        return { hasBackbone: false, hasChecklistColumns: false };
       }
     })().catch((e) => { backboneHelpersPromise = null; throw e; });
   }
@@ -115,7 +126,7 @@ export async function getLiveBreakdown(nodeId: string): Promise<BreakdownEntry |
 
   ensureVernacularNamesLoaded();
   const conn = await getConn();
-  const hasBackbone = await ensureBackboneHelpers(conn);
+  const { hasBackbone, hasChecklistColumns } = await ensureBackboneHelpers(conn);
   const ctx: BreakdownQueryContext = {
     conn,
     speciesGlob: parquetUri("species/**/*.parquet"),
@@ -125,6 +136,7 @@ export async function getLiveBreakdown(nodeId: string): Promise<BreakdownEntry |
     assessedCidsTable: "ne_assessed_col_ids",
     excludedColIdsSql: EXCLUDED_COL_IDS_SQL,
     hasBackbone,
+    hasChecklistColumns,
     backbonePath: hasBackbone ? parquetUri("backbone.parquet") : undefined,
   };
   // The raw matchable scientific value (e.g. "muridae"), NOT dynamicNodeDisplayName's

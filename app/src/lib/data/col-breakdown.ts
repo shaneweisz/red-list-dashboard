@@ -310,8 +310,39 @@ export interface BreakdownQueryContext {
   excludedColIdsSql: string;
   /** Whether split_candidates/col_to_assessed (backbone-dependent) have been built. */
   hasBackbone: boolean;
+  /**
+   * Whether backbone.parquet actually carries build-backbone's checklist-derived
+   * columns (in_checklist / checklist_parent_id / checklist_name). Separate from
+   * hasBackbone because those three were added to the backbone AFTER the queries
+   * that read them: the sync only rebuilds the backbone when a CoL release moves,
+   * so a data sync built before that change has a perfectly usable backbone that
+   * simply lacks these columns — and referencing one anyway is a DuckDB Binder
+   * Error that fails the whole request, which is exactly how every live-drilldown
+   * breakdown started returning a 500. False just drops the rename claim (the one
+   * thing those columns feed), same graceful degradation hasBackbone already gives.
+   * Callers derive it with backboneHasChecklistColumns below.
+   */
+  hasChecklistColumns: boolean;
   /** Only read when hasBackbone is true. */
   backbonePath?: string;
+}
+
+/** The build-backbone columns syn_in_checklist needs; see hasChecklistColumns. */
+const CHECKLIST_COLUMNS = ["in_checklist", "checklist_parent_id", "checklist_name"];
+
+/**
+ * Does the backbone on disk carry the checklist-derived columns? A parquet
+ * DESCRIBE reads footer metadata only — no scan — so this is cheap enough to run
+ * once per server/build rather than being cached in the data sync itself.
+ */
+export async function backboneHasChecklistColumns(conn: DuckDBConnection, backbonePath: string): Promise<boolean> {
+  try {
+    const rows = await (await conn.run(`DESCRIBE SELECT * FROM read_parquet('${backbonePath}') LIMIT 0`)).getRowObjects();
+    const cols = new Set(rows.map((r) => String(r.column_name)));
+    return CHECKLIST_COLUMNS.every((c) => cols.has(c));
+  } catch {
+    return false;
+  }
 }
 
 /**
@@ -332,6 +363,8 @@ export async function computeNoMatchDetails(
   assessedWhere: string,
 ): Promise<NoMatchDetail[]> {
   const { conn, speciesGlob, assessedPath, linkPath, universeSql: universe, excludedColIdsSql: EXCLUDED_COL_IDS_SQL, hasBackbone } = ctx;
+  // The synonym-rename claim needs both the backbone AND its checklist columns.
+  const hasSynClaim = hasBackbone && ctx.hasChecklistColumns;
   // The specific assessed species (sis_taxon_id) behind that gap, plus enough
   // context (its own primary CoL link, and who "won" that link if it lost a tie)
   // to classify WHY each one doesn't have a clean match — see classifyNoMatch.
@@ -386,7 +419,7 @@ export async function computeNoMatchDetails(
       WHERE rank = 'species' AND status = 'provisionally accepted'
         AND lower(scientific_name) IN (SELECT lower(scientific_name) FROM matched_assessed)
       GROUP BY 1
-    ),
+    )` : ""}${hasSynClaim ? `,
     -- The backbone's own synonym -> accepted-in-Base edge, for the names
     -- 'iucn_synonym_covered' misses. Same semi-join shape as prov_by_name.
     -- Synonymies CoL's CURRENT RELEASE holds, not the extended release's.
@@ -433,8 +466,8 @@ export async function computeNoMatchDetails(
       sp.scientific_name AS linked_name, sp.in_base AS linked_in_base, sp.extinct AS linked_extinct,
       w.winner_name AS winner_name, w.winner_id AS winner_id
       ${hasBackbone ? `,
-      pbn.col_id AS prov_col_id,
-      sib.name AS syn_name, sib.col_id AS syn_col_id,
+      pbn.col_id AS prov_col_id,${hasSynClaim ? `
+      sib.name AS syn_name, sib.col_id AS syn_col_id,` : ""}
       bk.parent_id AS parent_col_id,
       bk.rank AS bk_rank,
       bkparent.scientific_name AS parent_name,
@@ -451,7 +484,7 @@ export async function computeNoMatchDetails(
     LEFT JOIN read_parquet('${ctx.backbonePath}') bk ON bk.col_id = pl.col_id
     LEFT JOIN read_parquet('${ctx.backbonePath}') bkparent ON bkparent.col_id = bk.parent_id
     LEFT JOIN col_to_assessed ca ON ca.col_id = bk.parent_id
-    LEFT JOIN prov_by_name pbn ON pl.col_id IS NULL AND pbn.lname = lower(ma.scientific_name)
+    LEFT JOIN prov_by_name pbn ON pl.col_id IS NULL AND pbn.lname = lower(ma.scientific_name)` : ""}${hasSynClaim ? `
     LEFT JOIN syn_in_checklist sib ON sib.lname = lower(ma.scientific_name)` : ""}
     WHERE cl.id IS NULL
     -- Deterministic order — this JOIN chain has no natural order, and without one

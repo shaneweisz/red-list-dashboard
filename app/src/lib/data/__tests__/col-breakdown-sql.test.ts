@@ -17,7 +17,7 @@ import * as fs from "fs";
 import * as os from "os";
 import * as path from "path";
 import { DuckDBInstance, type DuckDBConnection } from "@duckdb/node-api";
-import { computeNoMatchDetails, COL_TO_ASSESSED_SQL, type BreakdownQueryContext } from "../col-breakdown";
+import { computeNoMatchDetails, COL_TO_ASSESSED_SQL, backboneHasChecklistColumns, type BreakdownQueryContext } from "../col-breakdown";
 
 let tmp: string;
 let conn: DuckDBConnection;
@@ -99,6 +99,7 @@ beforeAll(async () => {
     linkPath: path.join(tmp, "species_link.parquet"),
     backbonePath: path.join(tmp, "backbone.parquet"),
     hasBackbone: true,
+    hasChecklistColumns: true,
     universeSql: "extinct IS NOT TRUE",
     assessedCidsTable: "assessed_cids",
     excludedColIdsSql: "('__none__')",
@@ -151,5 +152,40 @@ describe("computeNoMatchDetails — the query, not just the classifier", () => {
     // sends you to have to agree.
     expect(byId.get(10)?.reason).toBe("synonym_of");
     expect(byId.get(10)?.detail).toBe("Lump winnerus");
+  });
+
+  // A backbone built before build-backbone stamped the checklist columns is a
+  // perfectly usable backbone that simply lacks three columns. Referencing one
+  // anyway is a Binder Error that fails the whole query — which is how every
+  // live-drilldown breakdown started returning a 500 while the data sync,
+  // gated only on the CoL release pins, kept declining to rebuild the file.
+  // With the columns gone the rename claim goes with them; nothing else does.
+  it("degrades instead of throwing when the backbone predates the checklist columns", async () => {
+    const legacyBackbone = path.join(tmp, "backbone-legacy.parquet");
+    await conn.run(`COPY (
+      SELECT col_id, parent_id, status, rank, scientific_name
+      FROM read_parquet('${path.join(tmp, "backbone.parquet")}')
+    ) TO '${legacyBackbone}' (FORMAT PARQUET);`);
+
+    expect(await backboneHasChecklistColumns(conn, legacyBackbone)).toBe(false);
+    expect(await backboneHasChecklistColumns(conn, path.join(tmp, "backbone.parquet"))).toBe(true);
+
+    const details = await computeNoMatchDetails(
+      { ...ctx, backbonePath: legacyBackbone, hasChecklistColumns: false },
+      "true",
+      "true",
+    );
+    const byId = new Map(details.map((d) => [d.id, d]));
+
+    // Every reason that doesn't come from those columns is unaffected.
+    expect(byId.has(1)).toBe(false);
+    expect(byId.get(4)?.reason).toBe("infraspecific");
+    expect(byId.get(6)?.reason).toBe("lumped");
+    expect(byId.get(7)?.reason).toBe("unmatched");
+
+    // The rename claim is the one thing lost: species 3 falls back to what the
+    // rest of the row still supports rather than disappearing or erroring.
+    expect(byId.get(3)?.reason).toBe("not_in_base");
+    expect(byId.get(3)?.detail).toBeUndefined();
   });
 });
