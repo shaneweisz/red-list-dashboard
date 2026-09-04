@@ -1009,15 +1009,20 @@ function DescribedInfoIcon({ nodeId, source, breakdown }: { nodeId: string; sour
   const [liveBreakdownLoading, setLiveBreakdownLoading] = useState(false);
   const [liveBreakdownError, setLiveBreakdownError] = useState(false);
   useEffect(() => {
-    if (!open || !isDynamicNodeId(nodeId) || breakdown?.length || liveBreakdown || liveBreakdownLoading) return;
+    // liveBreakdownError is a guard, not just a display flag: without it a failed
+    // request re-armed this effect the moment `finally` cleared the loading flag
+    // (both are dependencies), which refetched, failed, and refetched again —
+    // hammering the endpoint while the popover showed a spinner that never
+    // resolved, since loading was true again before the error line could be read.
+    // Cleared on each open below, so a reopen retries once rather than never.
+    if (!open || !isDynamicNodeId(nodeId) || breakdown?.length || liveBreakdown || liveBreakdownLoading || liveBreakdownError) return;
     setLiveBreakdownLoading(true); // eslint-disable-line react-hooks/set-state-in-effect -- kick off the fetch's loading state
-    setLiveBreakdownError(false);
     fetch(`/api/redlist/taxa-breakdown-live?nodeId=${encodeURIComponent(nodeId)}`)
       .then((res) => (res.ok ? res.json() : Promise.reject(new Error(`Live breakdown failed (${res.status})`))))
       .then((data) => setLiveBreakdown([data.breakdown]))
       .catch(() => setLiveBreakdownError(true))
       .finally(() => setLiveBreakdownLoading(false));
-  }, [open, nodeId, breakdown, liveBreakdown, liveBreakdownLoading]);
+  }, [open, nodeId, breakdown, liveBreakdown, liveBreakdownLoading, liveBreakdownError]);
   const effectiveBreakdown = breakdown?.length ? breakdown : liveBreakdown;
   // CoL taxon ids for this dynamic node's own ancestor chain (e.g.
   // "rodentia"/"heteromyidae"/"chaetodipus"), used as a fallback wherever the
@@ -1151,6 +1156,7 @@ function DescribedInfoIcon({ nodeId, source, breakdown }: { nodeId: string; sour
           e.stopPropagation();
           if (!open && btnRef.current) {
             setPos(computePopoverPos(btnRef.current.getBoundingClientRect()));
+            setLiveBreakdownError(false); // one fresh attempt per open — see the fetch effect's guard
           }
           setOpen((v) => !v);
         }}
