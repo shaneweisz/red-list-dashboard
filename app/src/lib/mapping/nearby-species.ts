@@ -1,0 +1,263 @@
+/**
+ * What else has been recorded here, and what it was assessed under.
+ *
+ * An assessor working one species on the map has a question the map itself
+ * can't answer: which other species are known from this spot, and what did
+ * their assessors decide was threatening them? A threat is rarely private to a
+ * taxon — the dam, the plantation, the road that put the neighbours on the list
+ * is very often the same pressure acting on the species being written up. Being
+ * shown "twelve of the species recorded within 25 km cite Annual & perennial
+ * non-timber crops" is a prompt to go and check, not a finding.
+ *
+ * Two sources, each doing the part it is authoritative for:
+ *
+ *   - GBIF answers "what is recorded here", via a radius search faceted by
+ *     species. That is the only side that knows about occurrences.
+ *   - The Red List parquets answer "and what was it assessed under" — category,
+ *     criteria, threat codes. GBIF carries an IUCN category of its own, from a
+ *     checklist snapshot it ingests, and it is not necessarily the category this
+ *     dashboard holds. So GBIF's is used to *narrow the search* and never to
+ *     label anything: every category shown to an assessor is ours.
+ *
+ * Why narrow on GBIF's category at all, rather than facet everything and filter
+ * ours afterwards: a 25 km radius in the tropics holds hundreds of thousands of
+ * records across thousands of species, and a facet has a size limit. Spending it
+ * on the whole community returns the commonest few hundred — abundant birds and
+ * weeds — and a threatened species is by definition not that, so exactly the
+ * rows worth seeing are the ones truncation drops. Pre-filtering to GBIF's
+ * threatened set spends the entire budget on candidates. The cost is that a
+ * species GBIF has a stale category for can be missed; that is the honest
+ * trade and NEARBY_STALENESS_NOTE says so in the UI.
+ */
+
+import { COL_XR_CHECKLIST_KEY } from "@/lib/gbif";
+
+/** Radii offered in the panel. Beyond ~50 km "near here" stops meaning much. */
+export const NEARBY_RADII_KM = [10, 25, 50] as const;
+export type NearbyRadiusKm = (typeof NEARBY_RADII_KM)[number];
+
+/**
+ * Opens at the tightest radius, because the panel now hangs off a record.
+ *
+ * "Near this record" is a much narrower claim than "near this map", and the
+ * narrow one is both the question being asked and the cheaper answer: a 10 km
+ * circle around a collection locality returns a list you can read, where 50 km
+ * around a point in a well-collected part of the world hits the facet ceiling
+ * and hands back 300 species sorted by how common they are. Widening is one
+ * click for when the tight answer is too thin.
+ */
+export const NEARBY_RADIUS_DEFAULT: NearbyRadiusKm = 10;
+
+/**
+ * The categories asked of GBIF: the threatened three, plus Near Threatened.
+ *
+ * NT earns its place because the threats are the point rather than the ranking
+ * — an NT neighbour was assessed against the same pressures and its assessment
+ * is just as much a precedent to read.
+ */
+export const NEARBY_CATEGORIES = ["CR", "EN", "VU", "NT"] as const;
+
+/**
+ * How many species the facet may return. GBIF caps facetLimit well above this;
+ * the ceiling here is the panel, which stops being readable long before it.
+ */
+export const NEARBY_FACET_LIMIT = 300;
+
+export const NEARBY_STALENESS_NOTE =
+  "Found via GBIF's own Red List categories, which lag this dashboard's; categories and threats shown are from the current assessment.";
+
+/**
+ * What "recorded here" does and doesn't mean, said where the numbers are.
+ *
+ * Every caveat that applies to a GBIF radius search applies to this panel:
+ * collecting effort is wildly uneven, a record can be a vagrant, a cultivated
+ * plant or a century-old specimen, and absence from the list is not absence
+ * from the place.
+ */
+export const NEARBY_RECORDS_NOTE =
+  "GBIF records within the radius — uneven collecting effort, and a record may be a vagrant, cultivated or historical. Nothing here is evidence of absence.";
+
+/**
+ * The colour the search radius is drawn in, shared by the circle on the map and
+ * the panel that explains it. Distinct from the violet the assessor's own
+ * georeference circles use — these two are both rings on the same ground and
+ * mean entirely different things.
+ */
+export const NEARBY_SEARCH_COLOR = "#0ea5e9";
+
+/**
+ * The colours picked neighbours' records are drawn in, in the order they are
+ * handed out.
+ *
+ * Everything else on this map is spoken for: GBIF's own points are the green
+ * ramp, the assessor's georeferences violet, an imported point file blue,
+ * protected areas and forest loss the two pinks, and the search radius the sky
+ * blue it is drawn in. These six keep clear of all of that and of each other,
+ * which is the whole point once more than one species is drawn at a time — two
+ * neighbours in nearly the same colour is worse than not drawing the second.
+ */
+export const NEARBY_PICKED_COLORS = [
+  "#ea580c", // orange
+  "#0f766e", // teal
+  "#be123c", // rose
+  "#4338ca", // indigo
+  "#a16207", // amber-brown
+  "#a21caf", // fuchsia
+] as const;
+
+/** How many neighbours can be drawn at once — one per colour, and no more. */
+export const NEARBY_MAX_PICKED = NEARBY_PICKED_COLORS.length;
+
+/**
+ * How many of a picked species' records to draw.
+ *
+ * A hundred is enough to show the shape of where a species has been found in a
+ * circle this size, and few enough that each cross stays a thing you can aim a
+ * click at rather than part of a mass. The panel says when it is showing a
+ * sample rather than all of them.
+ */
+export const NEARBY_POINTS_LIMIT = 100;
+
+/**
+ * One drawn record of a picked neighbour.
+ *
+ * Carries what its tooltip shows, because these are clickable in the same way
+ * the map's own records are — a cross you can't interrogate is barely better
+ * than no cross.
+ */
+export interface NearbyPoint {
+  gbifID: number;
+  lat: number;
+  lng: number;
+  species: string | null;
+  eventDate: string | null;
+  year: number | null;
+  basis: string | null;
+  recordedBy: string | null;
+  identifiedBy: string | null;
+  locality: string | null;
+  countryCode: string | null;
+  uncertaintyMetres: number | null;
+  catalogNumber: string | null;
+  datasetName: string | null;
+}
+
+/** Where a picked neighbour's records are, inside the same radius. */
+export function nearbyPointsUrl(opts: {
+  lat: number;
+  lng: number;
+  radiusKm: number;
+  speciesKey: string;
+}): string {
+  const params = new URLSearchParams({
+    geoDistance: `${opts.lat},${opts.lng},${opts.radiusKm}km`,
+    // Same checklist as the facet that produced this key — see nearbyFacetUrl.
+    checklistKey: COL_XR_CHECKLIST_KEY,
+    taxonKey: opts.speciesKey,
+    hasCoordinate: "true",
+    hasGeospatialIssue: "false",
+    limit: String(NEARBY_POINTS_LIMIT),
+  });
+  return `https://api.gbif.org/v1/occurrence/search?${params}`;
+}
+
+/** One species recorded in the radius, as the panel shows it. */
+export interface NearbySpecies {
+  gbif_species_key: string;
+  scientific_name: string;
+  common_name: string | null;
+  /** This dashboard's category, not GBIF's. */
+  category: string;
+  criteria: string | null;
+  taxon_group: string;
+  class_name: string | null;
+  threat_codes: string[];
+  /** Year of the assessment, not of its publication. */
+  assessment_year: number | null;
+  /** GBIF records for this species inside the radius. */
+  records: number;
+  sis_taxon_id: number | null;
+  /** `species=` param for the dashboard, when the species has a row there. */
+  dashboard_row_key: string | null;
+}
+
+/** A threat cited by the neighbours, rolled up to its top-level IUCN code. */
+export interface NearbyThreat {
+  /** Top-level IUCN threat code, e.g. "2". */
+  code: string;
+  /** e.g. "Agriculture & aquaculture". */
+  label: string;
+  /** How many of the neighbours cite it. */
+  species: number;
+  /** Their names, for the tooltip — capped by the caller. */
+  examples: string[];
+}
+
+export interface NearbyResult {
+  lat: number;
+  lng: number;
+  radiusKm: number;
+  /** Records in the radius across all taxa, assessed or not — the denominator. */
+  totalRecords: number;
+  /** Records in the radius belonging to the categories asked for. */
+  categoryRecords: number;
+  species: NearbySpecies[];
+  threats: NearbyThreat[];
+  /** Species GBIF returned that this dashboard's data doesn't carry a row for. */
+  unmatched: number;
+  /** The facet hit its limit, so the list is the commonest, not all of them. */
+  truncated: boolean;
+}
+
+/**
+ * A GBIF occurrence-search URL for the radius.
+ *
+ * `checklistKey` is not optional. GBIF's v1 API still defaults to the frozen
+ * 2023 backbone while this project's stored keys are Catalogue of Life ones, and
+ * a key from one taxonomy resolves to nothing in the other *without an error* —
+ * the facet simply comes back in the wrong key space and every join misses. That
+ * is not hypothetical: dropped from a first draft of this file, it matched 0 of
+ * 205 species. See lib/gbif.ts.
+ */
+export function nearbyFacetUrl(opts: {
+  lat: number;
+  lng: number;
+  radiusKm: number;
+  categories?: readonly string[];
+  facetLimit?: number;
+}): string {
+  const params = new URLSearchParams({
+    geoDistance: `${opts.lat},${opts.lng},${opts.radiusKm}km`,
+    checklistKey: COL_XR_CHECKLIST_KEY,
+    hasCoordinate: "true",
+    // Records GBIF itself flags as positionally suspect would put species in a
+    // radius they may have no business in, and this panel is entirely about
+    // where things are.
+    hasGeospatialIssue: "false",
+    facet: "speciesKey",
+    facetLimit: String(opts.facetLimit ?? NEARBY_FACET_LIMIT),
+    // Only the facet is wanted; the records themselves are never read.
+    limit: "0",
+  });
+  for (const c of opts.categories ?? NEARBY_CATEGORIES) {
+    params.append("iucnRedListCategory", c);
+  }
+  return `https://api.gbif.org/v1/occurrence/search?${params}`;
+}
+
+/** The same radius on gbif.org, so the assessor can go and look at the records. */
+export function nearbyGbifSiteUrl(opts: {
+  lat: number;
+  lng: number;
+  radiusKm: number;
+  speciesKey?: string;
+}): string {
+  const params = new URLSearchParams({
+    geoDistance: `${opts.lat},${opts.lng},${opts.radiusKm}km`,
+    checklistKey: COL_XR_CHECKLIST_KEY,
+    hasCoordinate: "true",
+    hasGeospatialIssue: "false",
+  });
+  if (opts.speciesKey) params.set("taxonKey", opts.speciesKey);
+  return `https://www.gbif.org/occurrence/search?${params}`;
+}
