@@ -70,11 +70,14 @@ export async function GET(request: NextRequest) {
       .map((a) => ({ ...a, records: byKey.get(a.gbif_species_key) ?? 0 }))
       .sort(
         (a, b) =>
-          // Rarity first — CR before EN before VU — because the panel is read
-          // top-down and the most constrained neighbour is the most
-          // informative precedent. Records break ties.
-          categoryRank(a.category) - categoryRank(b.category) ||
+          // How much of it was actually found here, first. Sorting by category
+          // put a species with one record above one with three hundred, which
+          // reads as a ranking of how threatened the neighbourhood is; sorting
+          // by records says how strongly each one is attested at this spot,
+          // which is what decides whether a precedent is worth opening. The
+          // category is still on every row, and still breaks ties.
           b.records - a.records ||
+          categoryRank(a.category) - categoryRank(b.category) ||
           a.scientific_name.localeCompare(b.scientific_name)
       );
 

@@ -197,33 +197,47 @@ export default function NearbySpeciesPanel({ lat, lng, recordName, excludeGbifKe
               <div className="pt-1 border-t border-zinc-100 dark:border-zinc-800">
                 <div className="text-zinc-500 dark:text-zinc-400 pb-0.5">The species</div>
                 {result.species.map((s) => (
-                  <div key={s.gbif_species_key} className="flex items-baseline gap-1.5 py-0.5">
-                    <span
-                      className="shrink-0 px-1 rounded text-[9px] font-medium text-white tabular-nums"
-                      style={{ backgroundColor: CATEGORY_COLORS[normalizeCategory(s.category)] ?? "#6b7280" }}
-                      title={s.criteria ? `Assessed ${s.category} under ${s.criteria}` : `Assessed ${s.category}`}
-                    >
-                      {s.category}
-                    </span>
-                    <a
-                      href={nearbyGbifSiteUrl({ lat, lng, radiusKm: result.radiusKm, speciesKey: s.gbif_species_key })}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      title="See these records on GBIF"
-                      className="italic text-zinc-700 dark:text-zinc-200 hover:text-blue-600 dark:hover:text-blue-400 hover:underline truncate"
-                    >
-                      {s.scientific_name}
-                    </a>
-                    {/* Both free — they came off the same parquet row as the
-                        category, so naming the group and the year costs the
-                        panel nothing and tells an assessor whether a precedent
-                        is a comparable taxon and how current it is. */}
-                    <span className="ml-auto shrink-0 text-zinc-400 tabular-nums">
-                      {taxonLabel(s.taxon_group)}
-                      {s.assessment_year != null && ` · ${s.assessment_year}`}
+                  /* Two lines, because one could not hold them: with the name,
+                     the common name, the taxon, the year and the count all
+                     competing for 320px, the scientific name — the identifier
+                     everything else hangs off — was the thing truncated, to
+                     stubs like "Spizaetus i…". The names get the width; what
+                     qualifies them sits underneath. */
+                  <div key={s.gbif_species_key} className="py-0.5">
+                    <div className="flex items-baseline gap-1.5">
+                      <span
+                        className="shrink-0 px-1 rounded text-[9px] font-medium text-white tabular-nums"
+                        style={{ backgroundColor: CATEGORY_COLORS[normalizeCategory(s.category)] ?? "#6b7280" }}
+                        title={s.criteria ? `Assessed ${s.category} under ${s.criteria}` : `Assessed ${s.category}`}
+                      >
+                        {s.category}
+                      </span>
+                      <a
+                        href={nearbyGbifSiteUrl({ lat, lng, radiusKm: result.radiusKm, speciesKey: s.gbif_species_key })}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        title="See these records on GBIF"
+                        className="italic text-zinc-700 dark:text-zinc-200 hover:text-blue-600 dark:hover:text-blue-400 hover:underline truncate"
+                      >
+                        {s.scientific_name}
+                      </a>
+                      {/* The common name is how most people hold a species — an
+                          assessor scanning for a comparable neighbour reads
+                          "Andean Bear" faster than the binomial. Bracketed and
+                          greyed so the scientific name stays the identifier. */}
+                      {s.common_name && (
+                        <span className="text-zinc-400 truncate">({s.common_name})</span>
+                      )}
+                    </div>
+                    {/* All three free — they came off the same parquet row as
+                        the category. The count leads because the list is now
+                        ordered by it. */}
+                    <div className="pl-6 text-zinc-400 tabular-nums">
+                      {s.records} record{s.records === 1 ? "" : "s"}
                       {" · "}
-                      <span title={`${s.records} GBIF records within ${result.radiusKm} km`}>{s.records}</span>
-                    </span>
+                      {taxonLabel(s.taxon_group)}
+                      {s.assessment_year != null && ` · assessed ${s.assessment_year}`}
+                    </div>
                   </div>
                 ))}
               </div>
