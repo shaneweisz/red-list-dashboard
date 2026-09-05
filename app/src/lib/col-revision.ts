@@ -487,8 +487,16 @@ const COL = "Catalogue of Life";
  * reader to work out why it mattered, which is the whole job of a flag.
  *
  * `subject` is the species name for a standalone tooltip, or null where the
- * surrounding UI already names it (the SSC panel's table cell), which drops the
- * sentence to its verb phrase.
+ * surrounding UI already names it (the SSC panel's table cell).
+ *
+ * The subject-free form used to stop at the finding — "Filed as a synonym of X",
+ * "Now a subspecies of Y" — leaving the panel's reader to work out the same
+ * "so what?" the tooltip spells out. It carries the consequence too now, in the
+ * same voice, just tighter: no subject to name, one clause for the finding and
+ * one for what follows, and the shared context (this is all Catalogue of Life,
+ * these are all assessments) left unsaid where the column heading already says
+ * it. It renders in a ~240px table column, so a sentence that reads well in a
+ * tooltip is two lines too many here.
  */
 export function noMatchSentence(flag: ColRevision, subject: string | null): NoMatchSentence {
   const s = subject ? `${subject} ` : "";
@@ -498,11 +506,15 @@ export function noMatchSentence(flag: ColRevision, subject: string | null): NoMa
       // species merged into a CoL name that is neither of them (e.g. IUCN's
       // Epimyrma ravouxi + this one → CoL's Temnothorax ravouxi). Only ~240 of
       // the ~2.1k lumps do that, so naming it unconditionally would mostly
-      // repeat `detail` back at the reader.
-      const merged = flag.colName ? ` — both are now called ${flag.colName}` : "";
+      // repeat `detail` back at the reader — which it was doing whenever CoL's
+      // accepted name IS the winner's, as it usually is: "The same species as
+      // Acer oblongum — both are now called Acer oblongum".
+      const merged = flag.colName && flag.colName !== flag.detail ? ` — both are now called ${flag.colName}` : "";
       return subject
         ? { before: `According to ${COL}, ${s}is the same species as `, detail: flag.detail, after: `${merged}.` }
-        : { before: "Same species as ", detail: flag.detail, after: merged };
+        // With a third name to report, that clause IS the consequence; adding
+        // "one record for both" after it makes three clauses in a table cell.
+        : { before: "The same species as ", detail: flag.detail, after: merged || " — one CoL record for both assessments." };
     }
     case "synonym_of":
       // NOT "not in the checklist yet" — the checklist has the name, filed as a
@@ -510,7 +522,7 @@ export function noMatchSentence(flag: ColRevision, subject: string | null): NoMa
       // adopted (Sorbus minima -> Hedlundia minima).
       return subject
         ? { before: `This assessment is published under ${subject}, but according to ${COL} the accepted name for this species is `, detail: flag.detail, after: "." }
-        : { before: "Filed as a synonym of ", detail: flag.detail, after: "" };
+        : { before: "A synonym on CoL, which accepts ", detail: flag.detail, after: " instead." };
     case "infraspecific": {
       // Say the rank CoL actually gives it. 124 of these are varieties and one is
       // a form; telling a botanist their variety is a subspecies is simply wrong,
@@ -518,7 +530,7 @@ export function noMatchSentence(flag: ColRevision, subject: string | null): NoMa
       const rank = flag.rank && flag.rank !== "subspecies" ? flag.rank : "subspecies";
       return subject
         ? { before: `${COL} ranks ${s}as a ${rank} of `, detail: flag.detail, after: ", so this assessment covers what it treats as part of another species." }
-        : { before: `Now a ${rank} of `, detail: flag.detail, after: "" };
+        : { before: `Ranked a ${rank} of `, detail: flag.detail, after: ", so it covers part of another species." };
     }
     // Deliberately NOT "hasn't added it yet": that implies a backlog the
     // checklist is working through, and for most of these it isn't true. Only
@@ -530,14 +542,14 @@ export function noMatchSentence(flag: ColRevision, subject: string | null): NoMa
     case "not_in_base":
       return subject
         ? { before: `${COL}'s curated checklist doesn't accept ${subject}, so the name survives only in its extended release.`, after: "" }
-        : { before: `In ${COL}'s extended release only, not its curated checklist`, after: "" };
+        : { before: "Not accepted by the curated checklist, so only the extended release has it.", after: "" };
     case "provisional":
       return subject
         // Quoting CoL's own two status values rather than paraphrasing them: the
         // distinction between them IS the finding, and a reader who goes to look
         // will see those exact words on the page.
         ? { before: `${COL} currently lists ${subject} as a 'provisionally accepted species', not yet an 'accepted species'.`, after: "" }
-        : { before: `Listed by ${COL} only provisionally`, after: "" };
+        : { before: "Listed as a 'provisionally accepted species', not yet an 'accepted species'.", after: "" };
     // Usually a species-boundary disagreement, not a data error: e.g. Equus ferus
     // (wild horse) — CoL treats it and Equus przewalskii as two species, one of
     // them (the true wild tarpan) extinct; this IUCN assessment lumps them as one,
@@ -551,19 +563,19 @@ export function noMatchSentence(flag: ColRevision, subject: string | null): NoMa
       // Columba elphinstonii (a Least Concern, extant pigeon) extinct.
       return subject
         ? { before: `${COL} marks ${s}extinct and this assessment doesn't, so one of them is wrong about whether it survives.`, after: "" }
-        : { before: `${COL}'s record is flagged extinct; this assessment's category contradicts it`, after: "" };
+        : { before: "CoL's record is flagged extinct; this assessment's category says otherwise.", after: "" };
     case "unmatched":
       return subject
         ? { before: `No ${COL} species matches ${subject}, so there is nothing there to check this assessment against.`, after: "" }
-        : { before: `No ${COL} species matches this name`, after: "" };
+        : { before: "No CoL species matches this name, so there is nothing to check against.", after: "" };
     case "missing_from_backbone":
       return subject
         ? { before: `${s}links to a ${COL} record that no longer resolves, so the match needs redoing.`, after: "" }
-        : { before: `Links to a ${COL} record that no longer resolves`, after: "" };
+        : { before: "Links to a record that no longer resolves, so the match needs redoing.", after: "" };
     case "classified_elsewhere":
       return subject
         ? { before: `${COL} files ${s}under a different group, so it won't appear where this assessment places it.`, after: "" }
-        : { before: `${COL} classifies it under a different group here`, after: "" };
+        : { before: "Classified under a different group, so it won't appear where this assessment puts it.", after: "" };
     default:
       // An unrecognised code renders as itself rather than as "undefined" — the
       // col-revision test asserts this can't happen for any shipped reason.

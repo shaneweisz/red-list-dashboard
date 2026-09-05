@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { createPortal } from "react-dom";
 import { useRouter } from "next/navigation";
-import { FaInfoCircle, FaChevronRight } from "react-icons/fa";
+import { FaInfoCircle, FaChevronRight, FaFlag } from "react-icons/fa";
 
 import { HiOutlineAdjustmentsHorizontal } from "react-icons/hi2";
 import TaxaIcon from "@/components/TaxaIcon";
@@ -169,6 +169,16 @@ const expandToggle = (expandable: boolean, expanded: boolean) =>
   );
 
 // Bar color helpers
+// Why a row can read over 100% assessed. The numerator is IUCN's count of what
+// it has assessed; the denominator is how many species this Catalogue of Life
+// release describes in the same group — two organisations' answers to "which
+// species exist", not one number divided by itself. Said in the row rather than
+// left to the reader, since a percentage above 100 reads as a bug on sight.
+// Deliberately no direction: IUCN has the newer treatment about as often as CoL
+// does (see col-revision.ts's "differs, never moved").
+const OVER_100_ASSESSED_NOTE =
+  "More species assessed than Catalogue of Life describes here — the two don't always recognise the same species, often where one accepts a split the other hasn't.";
+
 const getAssessedBarColor = (percent: number) =>
   percent >= 50 ? "#22c55e" : percent >= 20 ? "#eab308" : "#ef4444";
 
@@ -1219,7 +1229,7 @@ function DescribedInfoIcon({ nodeId, source, breakdown }: { nodeId: string; sour
                     <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
                     <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
                   </svg>
-                  Loading species-level detail — may take several seconds…
+                  Counting described and assessed species — may take a few seconds…
                 </p>
               )}
               {liveBreakdownError && (
@@ -1793,8 +1803,15 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
     );
   };
 
-  // Render a percentage bar (optionally with a count label above)
-  const renderBar = (percent: number, barColor: string, isAll: boolean, count?: number, fontWeight?: string) => {
+  // Render a percentage bar (optionally with a count label above).
+  //
+  // `flagOver100` opts a column into the over-100% note. Only # Red List Assessed
+  // can exceed 100% — its numerator is IUCN's count and its denominator is CoL's,
+  // and 5 SSC groups are over today (Wild Pig SG: 18 assessed, 17 described) —
+  // so only that column asks for it, and its explanation is written for it.
+  // Every row in an opted-in column reserves the icon's slot whether or not it
+  // shows one, so the percentages stay aligned down the column.
+  const renderBar = (percent: number, barColor: string, isAll: boolean, count?: number, fontWeight?: string, flagOver100?: boolean) => {
     const clampedPercent = Math.min(100, Math.max(0, percent));
     const fillColor = isAll ? "rgba(255,255,255,0.25)" : barColor;
     const fw = fontWeight || "font-medium";
@@ -1814,6 +1831,18 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
         <span className="text-xs md:text-sm tabular-nums text-zinc-500 dark:text-zinc-400 w-[44px] sm:w-[52px] text-right flex-shrink-0">
           {percent.toFixed(1)}%
         </span>
+        {flagOver100 && (
+          <span className="w-3 flex-shrink-0 flex justify-end">
+            {percent > 100 && (
+              <span
+                className="text-amber-500 dark:text-amber-400 cursor-help"
+                title={OVER_100_ASSESSED_NOTE}
+              >
+                <FaFlag size={8} aria-label={OVER_100_ASSESSED_NOTE} />
+              </span>
+            )}
+          </span>
+        )}
       </div>
     );
   };
@@ -2040,7 +2069,7 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
               // comment — so this is a plain count, not renderBar's bar+percent.
               <span className="text-sm md:text-base text-zinc-700 dark:text-zinc-300 tabular-nums">{assessed.toLocaleString()}</span>
             ) : (
-              renderBar(percentAssessed, getAssessedBarColor(percentAssessed), isAllRow, assessed)
+              renderBar(percentAssessed, getAssessedBarColor(percentAssessed), isAllRow, assessed, undefined, true)
             )}
           </td>
         )}
@@ -2491,7 +2520,7 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
               ) : countryStyleColumns ? (
                 <span className="text-sm md:text-base text-zinc-700 dark:text-zinc-300 tabular-nums">{taxon.totalAssessed.toLocaleString()}</span>
               ) : (
-                renderBar(taxon.percentAssessed, getAssessedBarColor(taxon.percentAssessed), false, taxon.totalAssessed)
+                renderBar(taxon.percentAssessed, getAssessedBarColor(taxon.percentAssessed), false, taxon.totalAssessed, undefined, true)
               )}
             </td>
           )}
@@ -2956,7 +2985,7 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
                           {colDescribedCell(row.colDescribed)}
                           {isVisible("assessed") && (
                             <td className={flexTdClasses}>
-                              {renderBar(row.percentAssessed, getAssessedBarColor(row.percentAssessed), false, row.totalAssessed)}
+                              {renderBar(row.percentAssessed, getAssessedBarColor(row.percentAssessed), false, row.totalAssessed, undefined, true)}
                             </td>
                           )}
                           {isVisible("outdated") && (
