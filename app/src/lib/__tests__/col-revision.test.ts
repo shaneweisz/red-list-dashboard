@@ -289,7 +289,7 @@ describe("noMatchSentence", () => {
     const flag = { reason: "lumped", detail: "Sus scrofa", detailId: 41775 };
     expect(noMatchExplanation(flag, "Sus bucculentus"))
       .toBe("According to Catalogue of Life, Sus bucculentus is the same species as Sus scrofa.");
-    expect(noMatchExplanation(flag, null)).toBe("The same species as Sus scrofa — one CoL record for both assessments.");
+    expect(noMatchExplanation(flag, null)).toBe("CoL lists this and Sus scrofa as one species.");
   });
 
   it("names the third species two lumped names merged into, when there is one", () => {
@@ -304,7 +304,7 @@ describe("noMatchSentence", () => {
     // CoL's accepted name usually IS the winner's, which read as "The same
     // species as Acer oblongum — both are now called Acer oblongum".
     const flag = { reason: "lumped", detail: "Acer oblongum", colName: "Acer oblongum" };
-    expect(noMatchExplanation(flag, null)).toBe("The same species as Acer oblongum — one CoL record for both assessments.");
+    expect(noMatchExplanation(flag, null)).toBe("CoL lists this and Acer oblongum as one species.");
     expect(noMatchExplanation(flag, "Acer albopurpurascens"))
       .toBe("According to Catalogue of Life, Acer albopurpurascens is the same species as Acer oblongum.");
   });
@@ -322,11 +322,12 @@ describe("noMatchSentence", () => {
   });
 
   it("explains more than it labels — the standalone sentence says more than the table one", () => {
-    // Both framings carry the consequence now; the dashboard's has room to name
-    // the species and spell the shared context out, where the panel's leans on
-    // the column heading beside it. Deliberately not asserting a particular
-    // word: an earlier version of this test required a literal "so", which the
-    // provisional wording then dropped for a better sentence.
+    // The dashboard's framing argues — finding, then what follows from it. The
+    // panel's states a checkable fact about CoL's own record and leaves the
+    // reader to draw the rest, with a link to that record beside it.
+    // Deliberately not asserting a particular word: an earlier version of this
+    // test required a literal "so", which the provisional wording then dropped
+    // for a better sentence.
     for (const reason of REVISION_REASONS) {
       if (PSEUDO_REASONS.has(reason) || reason === "lumped") continue; // their own summaries
       const flag = { reason, detail: "Panthera tigris" };
@@ -338,14 +339,13 @@ describe("noMatchSentence", () => {
   });
 
   it("keeps the SSC panel's framing terse — it renders in a table column", () => {
-    // 15, up from 12 when these stopped at the finding: a consequence clause
-    // costs a few words, and the column is ~240px, so this is the point past
-    // which a row grows a fourth line. The cap is the constraint that keeps the
-    // panel's wording from drifting back into the tooltip's.
+    // The column is ~240px, so past about a dozen words a row runs to a third
+    // and fourth line. The cap is also what keeps the panel's statement of what
+    // CoL records from growing into the tooltip's argument about what it means.
     for (const reason of REVISION_REASONS) {
       if (reason === SPLIT_REASON) continue;
       const terse = noMatchExplanation({ reason, detail: "Panthera tigris" }, null);
-      expect(terse.split(" ").length, reason).toBeLessThanOrEqual(15);
+      expect(terse.split(" ").length, reason).toBeLessThanOrEqual(12);
     }
   });
 
