@@ -6,7 +6,6 @@ import dynamic from "next/dynamic";
 import Link from "next/link";
 import type { MapRef, ViewStateChangeEvent, MapLayerMouseEvent } from "react-map-gl/maplibre";
 import type maplibregl from "maplibre-gl";
-import { taxonGroupCountsPreservedSpecimens } from "@/lib/gbif";
 import { InatObservation, getThumbUrl, InatPhotoWithPreview } from "@/components/InatPhotoCard";
 import { QualityFlag, QUALITY_FLAG_LABELS, QUALITY_FLAG_DESCRIPTIONS, QUALITY_FLAG_SOURCES } from "@/lib/mapping/coordinate-cleaning";
 import { fetchInstitutionName, knownInstitutionName } from "@/lib/mapping/grscicoll";
@@ -630,54 +629,46 @@ interface OccurrenceMapRowProps {
 }
 
 /**
- * Plants & fungi rely heavily on herbarium/fungarium specimens in GBIF, so
- * preserved specimens are ON by default for those kingdoms — the same rule the
- * counts behind this map are now fetched under, so the checkbox a species opens
- * with matches the number that got the user here. Re-exported rather than
- * redefined so the two cannot drift.
- */
-export const isPlantOrFungiTaxonGroup = taxonGroupCountsPreservedSpecimens;
-
-/**
  * Which record types are selected when the viewer opens.
  *
- * Plants and fungi start with every one of them, because for these kingdoms
- * the herbarium or fungarium sheet is often the only record there is, and a
- * default that quietly drops record types hides the very evidence an
- * assessment gets written from. Animals keep the narrower set: field
- * observations, with specimens and literature citations off until asked for.
+ * Every kingdom now starts with every record type but two, rather than only
+ * plants and fungi: a herbarium sheet, a museum skin or a literature citation
+ * is evidence of where the species was, and a default that quietly drops
+ * record types hides the very evidence an assessment gets written from.
+ *
+ * The two exceptions are the ones that say where an individual *ended up*
+ * rather than where the species lives: a living specimen is a zoo or botanic
+ * garden animal or plant, and a fossil specimen is a range from a different
+ * epoch. Both are off until asked for.
  */
-export function defaultCheckedTypes(taxonGroup: string | undefined) {
-  const everything = isPlantOrFungiTaxonGroup(taxonGroup);
+export function defaultCheckedTypes() {
   return {
     humanObservation: true,
     machineObservation: true,
-    observation: everything,
-    preservedSpecimen: everything,
-    fossilSpecimen: everything,
-    livingSpecimen: everything,
+    observation: true,
+    preservedSpecimen: true,
+    fossilSpecimen: false,
+    livingSpecimen: false,
     materialSample: true,
-    materialCitation: everything,
-    occurrence: everything,
+    materialCitation: true,
+    occurrence: true,
   };
 }
 
 /**
  * Which coordinate-cleaning checks are applied when the viewer opens.
  *
- * None at all for plants and fungi — same reasoning: these checks are
- * plausibility heuristics with real false-positive rates, and a herbarium
- * record trimmed by one is a record an assessor never sees. Everything else
- * starts with the two that flag coordinates nothing can defend: null island,
- * and exact duplicates.
+ * None at all, for any kingdom — the rule that used to apply only to plants
+ * and fungi. These checks are plausibility heuristics with real false-positive
+ * rates, and a record trimmed by one is a record an assessor never sees. The
+ * viewer opens on everything GBIF holds; the cleaning is opt-in from there.
  */
-export function defaultAppliedChecks(taxonGroup: string | undefined): Record<QualityFlag, boolean> {
-  const clean = !isPlantOrFungiTaxonGroup(taxonGroup);
+export function defaultAppliedChecks(): Record<QualityFlag, boolean> {
   return {
-    ZERO_COORDINATE: clean,
+    ZERO_COORDINATE: false,
     EQUAL_COORDINATES: false,
     GBIF_HEADQUARTERS: false,
-    DUPLICATE: clean,
+    DUPLICATE: false,
     NEAR_CAPITAL: false,
     NEAR_CENTROID: false,
     NEAR_INSTITUTION: false,
@@ -828,7 +819,7 @@ export default function OccurrenceMapRow({
   const [loadingOccurrences, setLoadingOccurrences] = useState(true);
   const [loadingBreakdown, setLoadingBreakdown] = useState(true);
 
-  const [checkedTypes, setCheckedTypes] = useState(() => defaultCheckedTypes(taxonGroup));
+  const [checkedTypes, setCheckedTypes] = useState(() => defaultCheckedTypes());
 
   // Advanced filter state
   const [maxUncertainty, setMaxUncertainty] = useState<number | null>(null);
@@ -845,13 +836,11 @@ export default function OccurrenceMapRow({
   // src/lib/coordinate-cleaning.ts), individually toggleable. Default all off —
   // opt-in, since these are plausibility heuristics with real false-positive risk
   // (documented per-check), not the same as GBIF's own hasGeospatialIssue=false
-  // parsing-error filter, which stays on unconditionally upstream of this. Two
-  // exceptions default on: zero/null-island coordinates (no plausible reading of
-  // (0,0) or an axis-zero point as a real location), and repeated coordinates
-  // (an exact duplicate of another record adds nothing on the map and is a very
-  // common GBIF artifact — only the repeat is hidden, the first stays visible).
+  // parsing-error filter, which stays on unconditionally upstream of this. No
+  // exceptions: not even null island or exact duplicates are trimmed before the
+  // assessor asks, so the viewer opens on everything GBIF holds for the species.
   const [appliedChecks, setAppliedChecks] = useState<Record<QualityFlag, boolean>>(() =>
-    defaultAppliedChecks(taxonGroup)
+    defaultAppliedChecks()
   );
   // Native range only — hide occurrences reported in a country outside this
   // species' native range. Off by default (folded into the Coordinate cleaning
@@ -1543,9 +1532,9 @@ export default function OccurrenceMapRow({
   // Records GBIF flags are always fetched now: they have coordinates, so they
   // belong with the rest and are hidden (or not) by a coordinate-cleaning check
   // like any other suspect point, rather than by a separate opt-in.
-  // Off for plants and fungi, on for everything else — the same rule the other
-  // cleaning checks follow, since this is now one of them.
-  const [hideGbifFlagged, setHideGbifFlagged] = useState(() => !isPlantOrFungiTaxonGroup(taxonGroup));
+  // Off by default — the same rule the other cleaning checks follow, since
+  // this is now one of them.
+  const [hideGbifFlagged, setHideGbifFlagged] = useState(false);
   const [recordSetTotals, setRecordSetTotals] = useState<{ mapped: number; issue: number; missing: number } | null>(null);
 
   /**
