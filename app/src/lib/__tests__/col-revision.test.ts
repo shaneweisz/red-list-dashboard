@@ -11,6 +11,8 @@ import {
   matchesRevisionFilter,
   noMatchSentence,
   noMatchExplanation,
+  canonicalReason,
+  reasonComposition,
   neSynonymSentence,
   neSplitSentence,
   NE_SPLIT_EVIDENCE,
@@ -284,6 +286,34 @@ describe("matchesRevisionFilter", () => {
     // is the belt-and-braces half of that.
     expect(matchesRevisionFilter(lumped, "clean", new Set(["lumped"]))).toBe(true);
     expect(matchesRevisionFilter(none, "clean", new Set(["lumped"]))).toBe(false);
+  });
+});
+
+describe("reasonComposition", () => {
+  it("breaks one no-match number into the chart's own labels, commonest first", () => {
+    const details = [
+      { reason: "lumped" }, { reason: "lumped" }, { reason: "lumped" },
+      { reason: "not_in_base" }, { reason: "not_in_base" },
+      { reason: "provisional" },
+    ];
+    expect(reasonComposition(details)).toEqual([
+      { reason: "lumped", label: "Lumped on CoL", count: 3 },
+      { reason: "not_in_base", label: "In XR, not Base", count: 2 },
+      { reason: "provisional", label: "Provisionally accepted", count: 1 },
+    ]);
+  });
+
+  it("counts a retired code under the reason it became", () => {
+    // Otherwise a shipped summaries artifact splits one reason across two
+    // entries, one of them labelled with a raw code.
+    expect(canonicalReason("no_link")).toBe("unmatched");
+    expect(reasonComposition([{ reason: "no_link" }, { reason: "unmatched" }]))
+      .toEqual([{ reason: "unmatched", label: "No CoL match", count: 2 }]);
+  });
+
+  it("skips rows with no reason rather than inventing a bucket for them", () => {
+    expect(reasonComposition([{ reason: undefined }, { reason: "lumped" }]))
+      .toEqual([{ reason: "lumped", label: "Lumped on CoL", count: 1 }]);
   });
 });
 

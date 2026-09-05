@@ -22,7 +22,7 @@ import { prettifyQs } from "@/lib/query-string";
 import { sisRowKey } from "@/lib/species-row-key";
 // Reason labels are shared with the main dashboard's taxonomic-revision flag —
 // see lib/col-revision.ts (both surfaces must explain a reason the same way).
-import { noMatchSentence, neSplitSentence, neSynonymSentence, NE_SPLIT_EVIDENCE } from "@/lib/col-revision";
+import { noMatchSentence, neSplitSentence, neSynonymSentence, reasonComposition, NE_SPLIT_EVIDENCE } from "@/lib/col-revision";
 
 // See scripts/build-taxa-summary.ts's classifyNoMatch for what each reason means.
 // Modular/additive on top of colBreakdown[].noMatchIds — safe to drop independently
@@ -588,6 +588,11 @@ function SpeciesListPanel({
     return m;
   }, [request.splitDetails]);
 
+  const composition = useMemo(
+    () => (request.bucket === "noColMatch" ? reasonComposition(request.noMatchDetails ?? []) : []),
+    [request.bucket, request.noMatchDetails],
+  );
+
   const neSynonymByColId = useMemo(() => {
     const m = new Map<string, NeSynonymDetail>();
     request.neSynonymDetails?.forEach((d) => m.set(d.colId, d));
@@ -665,6 +670,22 @@ function SpeciesListPanel({
             <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
           </svg>
         </div>
+      )}
+      {/* What the one number is made of, in the dashboard chart's own words.
+          Nine findings sit under "No 1:1 CoL Match" and they are not the same
+          kind of thing: "Lumped on CoL" is a taxonomic disagreement, "In XR,
+          not Base" is CoL holding the record outside its curated checklist,
+          and a bare count tells a specialist neither. Describes the whole
+          bucket, not the filtered page — it explains the column's number. */}
+      {!error && request.bucket === "noColMatch" && composition.length > 0 && (
+        <p className="mb-1.5 text-zinc-400">
+          {composition.map((c, i) => (
+            <span key={c.reason}>
+              {i > 0 && <span className="text-zinc-600"> · </span>}
+              {c.count} {c.label}
+            </span>
+          ))}
+        </p>
       )}
       {!error && filtered && filtered.length === 0 && <p className="text-zinc-400">No species.</p>}
       {!error && filtered && filtered.length > 0 && sorted && sorted.length === 0 && (
@@ -863,7 +884,7 @@ function BreakdownList({
             <th className="px-2 pb-1 pt-0.5 font-normal text-right">Total</th>
             <th
               className="px-2 pb-1 pt-0.5 font-normal text-right"
-              title="Assessed by IUCN, but doesn't cleanly correspond to one counted Catalogue of Life species here — most of these DO have a Catalogue of Life record (see the reason shown per species): a demoted subspecies, a provisionally-accepted name, a taxonomic split/lump, or a coverage gap. Only a small minority have no Catalogue of Life record at all."
+              title="Assessed by IUCN, with no clean 1:1 link to one of the species counted under # Described. Most DO have a Catalogue of Life record — but a record CoL holds only in its extended release, or only provisionally, is not in the described count, so there is nothing there for the assessment to pair with. Only a small minority have no Catalogue of Life record at all. The reason is shown per species."
             >
               No 1:1 CoL Match
             </th>

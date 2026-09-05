@@ -214,6 +214,44 @@ export type RevisionReasonCode = (typeof REVISION_REASONS)[number];
 
 /** Short label for a chart axis / filter chip. Kept to a couple of words —
  *  the sentence below is what a tooltip or table cell shows. */
+/**
+ * Reason codes shipped by an older build, mapped to the ones in use.
+ *
+ * Data outlives code here: a summaries artifact is rebuilt by a data sync, not
+ * by a deploy, so a renamed code keeps arriving for as long as the artifact
+ * that carries it is current. "no_link" became "unmatched", and 322 rows in
+ * today's ssc-group-children-summaries.json still say "no_link".
+ */
+const RETIRED_REASONS: Record<string, string> = { no_link: "unmatched" };
+
+/** The code a reason is known by now — see RETIRED_REASONS. */
+export function canonicalReason(reason: string | undefined): string | undefined {
+  return reason == null ? reason : (RETIRED_REASONS[reason] ?? reason);
+}
+
+/**
+ * What a set of no-match diagnoses is MADE OF, commonest first, labelled with
+ * the same words the dashboard's filter chart uses.
+ *
+ * The panel's "No 1:1 CoL Match" is one number over nine quite different
+ * findings, and the mix is the part a specialist reads first: 72 lumped is a
+ * taxonomy story, 15 "CoL only has the name in its extended release" is a
+ * coverage story, and a bare 127 tells neither. Borrowing REVISION_REASON_SHORT
+ * rather than inventing labels is deliberate — a reader who has used the
+ * dashboard's chart has already learnt these words.
+ */
+export function reasonComposition(details: readonly { reason?: string }[]): { reason: string; label: string; count: number }[] {
+  const counts = new Map<string, number>();
+  for (const d of details) {
+    const reason = canonicalReason(d.reason);
+    if (!reason) continue;
+    counts.set(reason, (counts.get(reason) ?? 0) + 1);
+  }
+  return [...counts.entries()]
+    .map(([reason, count]) => ({ reason, count, label: REVISION_REASON_SHORT[reason] ?? reason }))
+    .sort((a, b) => b.count - a.count || a.label.localeCompare(b.label));
+}
+
 export const REVISION_REASON_SHORT: Record<string, string> = {
   // "on CoL" goes on every label that names something BOTH databases do, and
   // nowhere else. Splitting, lumping and assigning a rank are all acts either
@@ -507,7 +545,7 @@ const COL = "Catalogue of Life";
  */
 export function noMatchSentence(flag: ColRevision, subject: string | null): NoMatchSentence {
   const s = subject ? `${subject} ` : "";
-  switch (flag.reason) {
+  switch (canonicalReason(flag.reason)) {
     case "lumped": {
       // The interesting sub-case is a lump under a THIRD name — both assessed
       // species merged into a CoL name that is neither of them (e.g. IUCN's
@@ -596,12 +634,6 @@ export function noMatchSentence(flag: ColRevision, subject: string | null): NoMa
           ? { before: `CoL files this record under ${where}.`, after: "" }
           : { before: "CoL files this record under a different group.", after: "" };
     }
-    // A data sync built before the rename still ships this code, and 322 rows in
-    // the current ssc-group-children-summaries.json carry it — rendered by the
-    // default below they read, in the panel, as the literal string "no_link".
-    // Same diagnosis under its old name, so give it the same words.
-    case "no_link":
-      return noMatchSentence({ ...flag, reason: "unmatched" }, subject);
     default:
       // Never reached for a shipped reason (the col-revision test asserts every
       // one is handled), so this is for data written by a future or older build.
