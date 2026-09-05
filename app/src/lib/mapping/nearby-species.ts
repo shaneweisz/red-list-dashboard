@@ -86,15 +86,27 @@ export const NEARBY_RECORDS_NOTE =
 export const NEARBY_SEARCH_COLOR = "#0ea5e9";
 
 /**
- * The colour one picked neighbour's records are drawn in.
+ * The colours picked neighbours' records are drawn in, in the order they are
+ * handed out.
  *
- * Orange because everything else on this map is spoken for: GBIF's own points
- * are the green ramp, the assessor's georeferences are violet, an imported
- * point file is blue, protected areas and forest loss are the two pinks, and
- * the search radius is the sky blue above. A neighbour's records have to be
- * unmistakably none of those at a glance.
+ * Everything else on this map is spoken for: GBIF's own points are the green
+ * ramp, the assessor's georeferences violet, an imported point file blue,
+ * protected areas and forest loss the two pinks, and the search radius the sky
+ * blue it is drawn in. These six keep clear of all of that and of each other,
+ * which is the whole point once more than one species is drawn at a time — two
+ * neighbours in nearly the same colour is worse than not drawing the second.
  */
-export const NEARBY_PICKED_COLOR = "#ea580c";
+export const NEARBY_PICKED_COLORS = [
+  "#ea580c", // orange
+  "#0f766e", // teal
+  "#be123c", // rose
+  "#4338ca", // indigo
+  "#a16207", // amber-brown
+  "#a21caf", // fuchsia
+] as const;
+
+/** How many neighbours can be drawn at once — one per colour, and no more. */
+export const NEARBY_MAX_PICKED = NEARBY_PICKED_COLORS.length;
 
 /**
  * How many of a picked species' records to draw.

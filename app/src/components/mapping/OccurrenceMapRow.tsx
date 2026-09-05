@@ -30,7 +30,8 @@ import NearbySpeciesPanel from "@/components/mapping/NearbySpeciesPanel";
 import {
   NEARBY_RADIUS_DEFAULT,
   NEARBY_SEARCH_COLOR,
-  NEARBY_PICKED_COLOR,
+  NEARBY_PICKED_COLORS,
+  NEARBY_MAX_PICKED,
   type NearbyPoint,
   type NearbyRadiusKm,
 } from "@/lib/mapping/nearby-species";
@@ -1157,52 +1158,99 @@ export default function OccurrenceMapRow({
    * shape that can be read — a valley, a roadside, a single locality everything
    * came from.
    */
-  const [nearbyPicked, setNearbyPicked] = useState<{ key: string; name: string } | null>(null);
-  const [nearbyPoints, setNearbyPoints] = useState<{ points: NearbyPoint[]; total: number } | null>(null);
+  const [nearbyPicked, setNearbyPicked] = useState<{ key: string; name: string }[]>([]);
+  /** Each picked species' records, by GBIF key, as they arrive. */
+  const [nearbyPoints, setNearbyPoints] = useState<Record<string, { points: NearbyPoint[]; total: number }>>({});
   /** The neighbour's record whose tooltip is open, if any. */
   const [nearbyShown, setNearbyShown] = useState<NearbyPoint | null>(null);
 
+  /**
+   * A colour per picked species, by pick order.
+   *
+   * Held against the key rather than the list position so that dropping the
+   * first of three doesn't recolour the other two under the reader — the
+   * legend and the map would both change meaning without anything being asked
+   * for. A freed colour is handed to the next species picked.
+   */
+  const nearbyColors = useMemo(() => {
+    const out: Record<string, string> = {};
+    const taken = new Set<string>();
+    for (const p of nearbyPicked) {
+      const free = NEARBY_PICKED_COLORS.find((c) => !taken.has(c)) ?? NEARBY_PICKED_COLORS[0];
+      out[p.key] = free;
+      taken.add(free);
+    }
+    return out;
+  }, [nearbyPicked]);
+
+  const toggleNearbyPicked = useCallback((species: { key: string; name: string }) => {
+    setNearbyPicked((prev) => {
+      if (prev.some((p) => p.key === species.key)) return prev.filter((p) => p.key !== species.key);
+      // Past the palette the map stops being readable, so the oldest pick makes
+      // way rather than the newest being silently refused.
+      return [...prev, species].slice(-NEARBY_MAX_PICKED);
+    });
+  }, []);
+
+  // One request per newly picked species; a species already fetched at this
+  // radius is not asked for again, so re-picking one is instant.
   useEffect(() => {
-    setNearbyShown(null);
-    if (!nearbyAt || !nearbyPicked) {
-      setNearbyPoints(null);
+    if (!nearbyAt || nearbyPicked.length === 0) {
+      setNearbyPoints({});
       return;
     }
     const controller = new AbortController();
-    const params = new URLSearchParams({
-      lat: String(nearbyAt.lat),
-      lng: String(nearbyAt.lng),
-      radiusKm: String(nearbyRadiusKm),
-      speciesKey: nearbyPicked.key,
-    });
-    fetch(`/api/nearby-species/points?${params}`, { signal: controller.signal })
-      .then(async (r) => {
-        const body = await r.json();
-        if (!r.ok) throw new Error(body?.error ?? `Request failed (${r.status})`);
-        setNearbyPoints({ points: body.points ?? [], total: body.total ?? 0 });
-      })
-      .catch((e: unknown) => {
-        if (e instanceof DOMException && e.name === "AbortError") return;
-        // A neighbour that won't draw shouldn't take the list down with it: the
-        // row simply stops saying "drawing…" and nothing appears.
-        setNearbyPoints({ points: [], total: 0 });
+    for (const picked of nearbyPicked) {
+      const params = new URLSearchParams({
+        lat: String(nearbyAt.lat),
+        lng: String(nearbyAt.lng),
+        radiusKm: String(nearbyRadiusKm),
+        speciesKey: picked.key,
       });
+      fetch(`/api/nearby-species/points?${params}`, { signal: controller.signal })
+        .then(async (r) => {
+          const body = await r.json();
+          if (!r.ok) throw new Error(body?.error ?? `Request failed (${r.status})`);
+          setNearbyPoints((prev) => ({
+            ...prev,
+            [picked.key]: { points: body.points ?? [], total: body.total ?? 0 },
+          }));
+        })
+        .catch((e: unknown) => {
+          if (e instanceof DOMException && e.name === "AbortError") return;
+          // A neighbour that won't draw shouldn't take the list down with it:
+          // its row stops saying "drawing…" and nothing appears.
+          setNearbyPoints((prev) => ({ ...prev, [picked.key]: { points: [], total: 0 } }));
+        });
+    }
     return () => controller.abort();
   }, [nearbyAt, nearbyPicked, nearbyRadiusKm]);
+
+  // Changing the radius invalidates every drawn set at once.
+  const nearbyFetchKey = `${nearbyAt?.lat},${nearbyAt?.lng},${nearbyRadiusKm}`;
+  const lastNearbyFetchKey = useRef(nearbyFetchKey);
+  if (lastNearbyFetchKey.current !== nearbyFetchKey) {
+    lastNearbyFetchKey.current = nearbyFetchKey;
+    if (Object.keys(nearbyPoints).length) setNearbyPoints({});
+    if (nearbyShown) setNearbyShown(null);
+  }
 
   const nearbyPointsGeoJson = useMemo<GeoJSON.FeatureCollection>(
     () => ({
       type: "FeatureCollection",
-      // Indexed rather than carrying the record: MapLibre flattens feature
-      // properties through its tile encoding, so the index is what survives to
-      // find the point again on a click.
-      features: (nearbyPoints?.points ?? []).map((pt, i) => ({
-        type: "Feature" as const,
-        properties: { nearbyIndex: i },
-        geometry: { type: "Point" as const, coordinates: [pt.lng, pt.lat] },
-      })),
+      // Keyed and indexed rather than carrying the record: MapLibre flattens
+      // feature properties through its tile encoding, so this pair is what
+      // survives to find the point again on a click. The colour rides along
+      // because one layer draws every picked species.
+      features: nearbyPicked.flatMap((p) =>
+        (nearbyPoints[p.key]?.points ?? []).map((pt, i) => ({
+          type: "Feature" as const,
+          properties: { nearbyKey: p.key, nearbyIndex: i, color: nearbyColors[p.key] },
+          geometry: { type: "Point" as const, coordinates: [pt.lng, pt.lat] },
+        }))
+      ),
     }),
-    [nearbyPoints]
+    [nearbyPicked, nearbyPoints, nearbyColors]
   );
   /** A pin whose label is being renamed in place. */
   const [renamingPin, setRenamingPin] = useState<string | null>(null);
@@ -2685,7 +2733,8 @@ export default function OccurrenceMapRow({
     const cross = features?.find((f) => String(f.layer?.id ?? "").startsWith(`nearby-points-circle-`));
     if (cross) {
       const i = Number(cross.properties?.nearbyIndex);
-      const pt = Number.isFinite(i) ? nearbyPoints?.points[i] : undefined;
+      const k = String(cross.properties?.nearbyKey ?? "");
+      const pt = Number.isFinite(i) ? nearbyPoints[k]?.points[i] : undefined;
       if (pt) {
         // Clicking the open one again closes it, the way a record's own panel
         // behaves.
@@ -2829,7 +2878,7 @@ export default function OccurrenceMapRow({
     closeTooltip,
     tooltipPinned,
     hoveredFeature,
-    nearbyPoints?.points,
+    nearbyPoints,
   ]);
 
   /**
@@ -3799,19 +3848,21 @@ export default function OccurrenceMapRow({
               {/* The picked neighbour's own records. Above the radius they sit
                   inside and below everything the assessor is deciding about —
                   they are context for this map, not one of its own layers. */}
-              {nearbyAt && nearbyPicked && nearbyPointsGeoJson.features.length > 0 && (
+              {nearbyAt && nearbyPicked.length > 0 && nearbyPointsGeoJson.features.length > 0 && (
                 <Source id={`nearby-points-${panelId}`} type="geojson" data={nearbyPointsGeoJson}>
-                  {/* Crosses rather than dots. These land among the map's own
+                  {/* Triangles rather than dots. These land among the map's own
                       round records, and at a glance a differently-coloured dot
-                      is still a dot — a different mark says "not one of yours"
-                      before the colour has to. Drawn as a text symbol, so it
-                      needs no sprite and stays crisp at every zoom. */}
+                      is still a dot — a different shape says "not one of yours"
+                      before the colour has to, which matters more now that the
+                      colour is carrying which species it is. Drawn as a text
+                      symbol, so it needs no sprite and stays crisp at every
+                      zoom. */}
                   <Layer
                     id={`nearby-points-circle-${panelId}`}
                     type="symbol"
                     layout={{
-                      "text-field": "✕",
-                      "text-size": 13,
+                      "text-field": "▲",
+                      "text-size": 12,
                       "text-font": ["Open Sans Regular"],
                       // Every record matters here, so none may be dropped for
                       // collision — a thinned layer would misreport the spread.
@@ -3819,7 +3870,9 @@ export default function OccurrenceMapRow({
                       "text-ignore-placement": true,
                     }}
                     paint={{
-                      "text-color": NEARBY_PICKED_COLOR,
+                      // One layer draws every picked species; the colour comes
+                      // off the feature so they don't need a layer each.
+                      "text-color": ["get", "color"],
                       "text-halo-color": "#ffffff",
                       "text-halo-width": 1.5,
                     }}
@@ -3998,12 +4051,18 @@ export default function OccurrenceMapRow({
                   here rather than by recordFields, which expects a record this
                   map is deciding about: no georeference to edit, no cleaning
                   flags of ours, no exclusion. */}
-              {nearbyShown && nearbyPicked && (
+              {nearbyShown && (
                 <MapOccurrenceTooltip
                   lat={nearbyShown.lat}
                   lng={nearbyShown.lng}
                   fields={[
-                    { label: "Species", value: nearbyShown.species ?? nearbyPicked.name },
+                    {
+                      label: "Species",
+                      value:
+                        nearbyShown.species ??
+                        nearbyPicked.find((p) => nearbyPoints[p.key]?.points.includes(nearbyShown))?.name ??
+                        "",
+                    },
                     ...(nearbyShown.basis
                       ? [{ label: "Basis", value: nearbyShown.basis.replace(/_/g, " ").toLowerCase() }]
                       : []),
@@ -4027,12 +4086,6 @@ export default function OccurrenceMapRow({
                       ? [{ label: "Identified by", value: nearbyShown.identifiedBy }]
                       : []),
                     ...(nearbyShown.datasetName ? [{ label: "Dataset", value: nearbyShown.datasetName }] : []),
-                  ]}
-                  notes={[
-                    {
-                      label: "Not this species",
-                      value: "A neighbour's record, drawn from the nearby search — not part of this map's records or counts.",
-                    },
                   ]}
                   onClose={() => setNearbyShown(null)}
                   actions={
@@ -4783,16 +4836,17 @@ export default function OccurrenceMapRow({
               excludeGbifKey={speciesKey}
               radiusKm={nearbyRadiusKm}
               onRadiusChange={setNearbyRadiusKm}
-              pickedKey={nearbyPicked?.key ?? null}
-              onPick={setNearbyPicked}
-              pickedPoints={
-                nearbyPicked && nearbyPoints
-                  ? { shown: nearbyPoints.points.length, total: nearbyPoints.total }
-                  : null
-              }
+              picked={nearbyPicked.map((p) => ({
+                key: p.key,
+                color: nearbyColors[p.key],
+                drawn: nearbyPoints[p.key]
+                  ? { shown: nearbyPoints[p.key].points.length, total: nearbyPoints[p.key].total }
+                  : null,
+              }))}
+              onTogglePick={toggleNearbyPicked}
               onClose={() => {
                 setNearbyAt(null);
-                setNearbyPicked(null);
+                setNearbyPicked([]);
               }}
             />
           )}
@@ -5895,7 +5949,7 @@ export default function OccurrenceMapRow({
                         recordName: String(record.properties.species || "this record"),
                       });
                       setNearbyRadiusKm(NEARBY_RADIUS_DEFAULT);
-                      setNearbyPicked(null);
+                      setNearbyPicked([]);
                     }}
                     title="Threatened and Near Threatened species with GBIF records around this one, and the threats their assessments cite"
                     className="flex w-full items-center gap-1.5 px-1 py-1 rounded text-left hover:bg-zinc-100 dark:hover:bg-zinc-800"
@@ -6599,6 +6653,33 @@ export default function OccurrenceMapRow({
             {visibleGeoreferences.length.toLocaleString()}
           </span>
         </label>
+      )}
+      {/* The neighbours currently drawn. They are a layer like any other here,
+          and a triangle in a colour with nothing naming it is a puzzle — this
+          is where the map says what it has drawn, so this is where they go.
+          Clicking one takes it off, the same as clicking its row in the panel. */}
+      {nearbyPicked.length > 0 && (
+        <div className="px-2 pt-1 pb-0.5 border-t border-zinc-100 dark:border-zinc-700">
+          <div className="text-[9px] uppercase tracking-wide text-zinc-400 dark:text-zinc-500 pb-0.5">
+            Recorded nearby
+          </div>
+          {nearbyPicked.map((p) => (
+            <button
+              key={p.key}
+              onClick={() => toggleNearbyPicked(p)}
+              title="Stop drawing this species"
+              className="flex w-full items-center gap-1.5 py-0.5 text-[11px] hover:bg-zinc-50 dark:hover:bg-zinc-700 rounded"
+            >
+              <span className="shrink-0 leading-none" style={{ color: nearbyColors[p.key] }}>
+                ▲
+              </span>
+              <span className="italic truncate text-zinc-700 dark:text-zinc-200">{p.name}</span>
+              <span className="ml-auto shrink-0 tabular-nums text-zinc-400">
+                {nearbyPoints[p.key] ? nearbyPoints[p.key].points.length : "…"}
+              </span>
+            </button>
+          ))}
+        </div>
       )}
       {pinnedPlaces.length > 0 && (
         <label className="flex items-center gap-1.5 px-2 py-0.5 hover:bg-zinc-50 dark:hover:bg-zinc-700 cursor-pointer text-[11px]">
