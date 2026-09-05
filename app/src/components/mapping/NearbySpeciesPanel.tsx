@@ -20,8 +20,8 @@ import { CATEGORY_COLORS, normalizeCategory } from "@/config/taxa";
 import { findNode } from "@/lib/taxonomy-utils";
 import {
   NEARBY_RADII_KM,
-  NEARBY_RADIUS_DEFAULT,
   NEARBY_RECORDS_NOTE,
+  NEARBY_SEARCH_COLOR,
   NEARBY_STALENESS_NOTE,
   nearbyGbifSiteUrl,
   type NearbyRadiusKm,
@@ -35,6 +35,9 @@ interface Props {
   recordName: string;
   /** The species whose map this is — never its own neighbour. */
   excludeGbifKey?: string | null;
+  /** Controlled by the map, which draws this radius on the ground. */
+  radiusKm: NearbyRadiusKm;
+  onRadiusChange: (km: NearbyRadiusKm) => void;
   onClose: () => void;
 }
 
@@ -43,10 +46,21 @@ function taxonLabel(taxonGroup: string): string {
   return findNode(taxonGroup)?.name ?? taxonGroup.replace(/_/g, " ");
 }
 
-export default function NearbySpeciesPanel({ lat, lng, recordName, excludeGbifKey, onClose }: Props) {
-  const [radiusKm, setRadiusKm] = useState<NearbyRadiusKm>(NEARBY_RADIUS_DEFAULT);
+export default function NearbySpeciesPanel({
+  lat, lng, recordName, excludeGbifKey, radiusKm, onRadiusChange, onClose,
+}: Props) {
   /** Which threat's species are expanded, if any. */
   const [openThreat, setOpenThreat] = useState<string | null>(null);
+  /**
+   * Which half of the answer is showing.
+   *
+   * They were stacked, and with a dozen threat rows above it the species list
+   * began below the fold of a panel nobody had reason to scroll — the heading
+   * that would have told you it was there was itself out of view. Tabs put
+   * both counts in permanent sight and give whichever you pick the full
+   * height, which at 320px wide is the only way either list gets read.
+   */
+  const [tab, setTab] = useState<"threats" | "species">("threats");
 
   /**
    * The answer, tagged with the question it answers.
@@ -98,6 +112,12 @@ export default function NearbySpeciesPanel({ lat, lng, recordName, excludeGbifKe
   return (
     <div className="absolute top-2 right-2 z-[1001] w-80 max-h-[75%] flex flex-col rounded-lg bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 shadow-lg text-[11px]">
       <div className="flex items-center gap-2 px-2 py-1.5 border-b border-zinc-100 dark:border-zinc-700 shrink-0">
+        {/* The same colour as the ring on the map, so the panel and the circle
+            it drew read as one thing. */}
+        <svg className="w-3 h-3 shrink-0" viewBox="0 0 24 24" fill="none" stroke={NEARBY_SEARCH_COLOR} strokeWidth={2}>
+          <circle cx="12" cy="12" r="3" fill={NEARBY_SEARCH_COLOR} stroke="none" />
+          <circle cx="12" cy="12" r="9" strokeDasharray="3 3" />
+        </svg>
         <span className="font-medium text-zinc-700 dark:text-zinc-200 shrink-0">Recorded near</span>
         <span className="italic text-zinc-500 dark:text-zinc-400 truncate" title={`${lat.toFixed(5)}, ${lng.toFixed(5)}`}>
           {recordName}
@@ -120,7 +140,7 @@ export default function NearbySpeciesPanel({ lat, lng, recordName, excludeGbifKe
         {NEARBY_RADII_KM.map((r) => (
           <button
             key={r}
-            onClick={() => setRadiusKm(r)}
+            onClick={() => onRadiusChange(r)}
             className={`px-1.5 py-0.5 rounded border tabular-nums ${
               r === radiusKm
                 ? "border-blue-500 bg-blue-50 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300"
@@ -159,9 +179,32 @@ export default function NearbySpeciesPanel({ lat, lng, recordName, excludeGbifKe
               </p>
             )}
 
+            {/* Both counts always visible, so neither list can be the one
+                nobody knew was there. */}
+            {(result.threats.length > 0 || result.species.length > 0) && (
+              <div className="flex gap-1 border-b border-zinc-200 dark:border-zinc-700 -mx-2 px-2">
+                {([
+                  ["threats", "Threats", result.threats.length],
+                  ["species", "Species", result.species.length],
+                ] as const).map(([id, label, n]) => (
+                  <button
+                    key={id}
+                    onClick={() => setTab(id)}
+                    className={`px-1.5 py-1 -mb-px border-b-2 ${
+                      tab === id
+                        ? "border-blue-500 text-zinc-800 dark:text-zinc-100 font-medium"
+                        : "border-transparent text-zinc-500 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200"
+                    }`}
+                  >
+                    {label} <span className="tabular-nums text-zinc-400">{n}</span>
+                  </button>
+                ))}
+              </div>
+            )}
+
+            {tab === "threats" && (<>
             {result.threats.length > 0 && (
               <div>
-                <div className="text-zinc-500 dark:text-zinc-400 pb-0.5">Threats their assessments cite</div>
                 {result.threats.map((t) => (
                   <div key={t.code}>
                     {/* Each row opens to name the species behind the count:
@@ -193,9 +236,11 @@ export default function NearbySpeciesPanel({ lat, lng, recordName, excludeGbifKe
               </div>
             )}
 
+            </>)}
+
+            {tab === "species" && (<>
             {result.species.length > 0 && (
               <div className="pt-1 border-t border-zinc-100 dark:border-zinc-800">
-                <div className="text-zinc-500 dark:text-zinc-400 pb-0.5">The species</div>
                 {result.species.map((s) => (
                   /* Two lines, because one could not hold them: with the name,
                      the common name, the taxon, the year and the count all
@@ -242,6 +287,8 @@ export default function NearbySpeciesPanel({ lat, lng, recordName, excludeGbifKe
                 ))}
               </div>
             )}
+
+            </>)}
 
             {result.unmatched > 0 && (
               <p className="text-zinc-400">

@@ -77,6 +77,14 @@ export const NEARBY_STALENESS_NOTE =
 export const NEARBY_RECORDS_NOTE =
   "GBIF records within the radius — uneven collecting effort, and a record may be a vagrant, cultivated or historical. Nothing here is evidence of absence.";
 
+/**
+ * The colour the search radius is drawn in, shared by the circle on the map and
+ * the panel that explains it. Distinct from the violet the assessor's own
+ * georeference circles use — these two are both rings on the same ground and
+ * mean entirely different things.
+ */
+export const NEARBY_SEARCH_COLOR = "#0ea5e9";
+
 /** One species recorded in the radius, as the panel shows it. */
 export interface NearbySpecies {
   gbif_species_key: string;

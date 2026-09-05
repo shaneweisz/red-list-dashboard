@@ -27,6 +27,11 @@ import YearRangeSlider from "@/components/mapping/YearRangeSlider";
 import ListZoomControl, { LIST_ZOOM_DEFAULT } from "@/components/mapping/ListZoomControl";
 import CompilerDialog from "@/components/mapping/CompilerDialog";
 import NearbySpeciesPanel from "@/components/mapping/NearbySpeciesPanel";
+import {
+  NEARBY_RADIUS_DEFAULT,
+  NEARBY_SEARCH_COLOR,
+  type NearbyRadiusKm,
+} from "@/lib/mapping/nearby-species";
 import MapGeoreferenceEditor from "./MapGeoreferenceEditor";
 import type { OccurrenceFeature as OccurrenceFeatureType } from "./OccurrenceListTable";
 // The table's own labels, so a basis of record is worded the same wherever it
@@ -1135,6 +1140,13 @@ export default function OccurrenceMapRow({
    * map with the answer still up beside it.
    */
   const [nearbyAt, setNearbyAt] = useState<{ lng: number; lat: number; recordName: string } | null>(null);
+  /**
+   * The radius the nearby panel is asking about, held here because the map
+   * draws it: "within 10 km" is a claim about the ground, and a list that says
+   * it without showing it leaves you to guess whether the next valley is in or
+   * out. Opening it on a different record starts from the default again.
+   */
+  const [nearbyRadiusKm, setNearbyRadiusKm] = useState<NearbyRadiusKm>(NEARBY_RADIUS_DEFAULT);
   /** A pin whose label is being renamed in place. */
   const [renamingPin, setRenamingPin] = useState<string | null>(null);
   /**
@@ -2448,6 +2460,33 @@ export default function OccurrenceMapRow({
     return true;
   }, []);
 
+  /**
+   * Bring the nearby radius into view when it is asked for, and when it changes.
+   *
+   * Drawn to scale and left alone, a 10 km circle on a map fitted to a species'
+   * whole range is a few pixels across — technically the answer and no use as
+   * one. Fitting to the circle is what makes "within 10 km" a place rather than
+   * a number. Only when the radius or the point changes, so panning away to
+   * look at something is not undone on the next render.
+   */
+  const fittedNearbyRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!nearbyAt) {
+      fittedNearbyRef.current = null;
+      return;
+    }
+    const key = `${nearbyAt.lng},${nearbyAt.lat},${nearbyRadiusKm}`;
+    if (fittedNearbyRef.current === key) return;
+    // The circle's own bounding box, so the ring sits inside the padding
+    // rather than touching the edges.
+    const ring = uncertaintyCircle(nearbyAt.lat, nearbyAt.lng, nearbyRadiusKm * 1000).coordinates[0];
+    const lons = ring.map((c) => c[0]);
+    const lats = ring.map((c) => c[1]);
+    if (fitMapToBbox([Math.min(...lons), Math.min(...lats), Math.max(...lons), Math.max(...lats)])) {
+      fittedNearbyRef.current = key;
+    }
+  }, [nearbyAt, nearbyRadiusKm, fitMapToBbox]);
+
   // Track whether we've fitted bounds for the current bbox
   const fittedBboxRef = useRef<string | null>(null);
   const pendingBboxRef = useRef<[number, number, number, number] | null>(null);
@@ -3655,6 +3694,31 @@ export default function OccurrenceMapRow({
                   </MapLibreMarker>
                 );
               })}
+                {/* The radius the nearby panel is describing, drawn to scale.
+                    Under the record layers rather than over them: it is the
+                    question's boundary, not a thing to read. */}
+                {nearbyAt && (
+                  <Source
+                    id={`nearby-radius-${panelId}`}
+                    type="geojson"
+                    data={{
+                      type: "Feature",
+                      properties: {},
+                      geometry: uncertaintyCircle(nearbyAt.lat, nearbyAt.lng, nearbyRadiusKm * 1000),
+                    }}
+                  >
+                    <Layer
+                      id={`nearby-radius-fill-${panelId}`}
+                      type="fill"
+                      paint={{ "fill-color": NEARBY_SEARCH_COLOR, "fill-opacity": 0.08 }}
+                    />
+                    <Layer
+                      id={`nearby-radius-line-${panelId}`}
+                      type="line"
+                      paint={{ "line-color": NEARBY_SEARCH_COLOR, "line-width": 1.5, "line-dasharray": [3, 2] }}
+                    />
+                  </Source>
+                )}
               {/* The assessor's own georeferences — drawn above the GBIF points
                   in a colour used nowhere else, with the uncertainty radius to
                   scale. They are never merged into the GBIF layer or into any
@@ -4548,6 +4612,8 @@ export default function OccurrenceMapRow({
               lng={nearbyAt.lng}
               recordName={nearbyAt.recordName}
               excludeGbifKey={speciesKey}
+              radiusKm={nearbyRadiusKm}
+              onRadiusChange={setNearbyRadiusKm}
               onClose={() => setNearbyAt(null)}
             />
           )}
@@ -5649,6 +5715,7 @@ export default function OccurrenceMapRow({
                         lat: position[1],
                         recordName: String(record.properties.species || "this record"),
                       });
+                      setNearbyRadiusKm(NEARBY_RADIUS_DEFAULT);
                     }}
                     title="Assessed species with GBIF records around this one, and the threats their assessments cite"
                     className="flex w-full items-center gap-1.5 px-1 py-1 rounded hover:bg-zinc-100 dark:hover:bg-zinc-800"
