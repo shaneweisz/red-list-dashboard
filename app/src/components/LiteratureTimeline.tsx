@@ -182,7 +182,7 @@ function WorkRow({
             </span>
           </div>
         </td>
-        <td className="hidden max-w-[15rem] truncate px-3 py-2 align-top text-xs text-zinc-500 md:table-cell">
+        <td className="hidden break-words px-3 py-2 align-top text-xs text-zinc-500 md:table-cell">
           {work.venue || "—"}
         </td>
         <td className="hidden whitespace-nowrap px-3 py-2 align-top text-xs text-zinc-500 lg:table-cell">
@@ -191,7 +191,7 @@ function WorkRow({
         <td className="whitespace-nowrap px-3 py-2 text-right align-top text-xs tabular-nums text-zinc-500">
           {work.citations !== null && work.citations > 0 ? work.citations.toLocaleString() : "—"}
         </td>
-        <td className="hidden whitespace-nowrap px-3 py-2 align-top text-xs text-zinc-400 lg:table-cell">
+        <td className="hidden break-words px-3 py-2 align-top text-xs text-zinc-400 lg:table-cell">
           {work.sources.map(shortSourceLabel).join(", ")}
         </td>
       </tr>
@@ -405,15 +405,16 @@ export default function LiteratureTimeline({
             loading ? "opacity-60 transition-opacity" : ""
           }`}
         >
-          <table className="w-full text-left">
+          <table className="w-full table-fixed text-left">
             <thead className="bg-zinc-100 dark:bg-zinc-800">
               <tr className="text-[10px] uppercase tracking-wider text-zinc-500">
-                <th className="px-3 py-2 font-medium">Date</th>
+                <th className="w-24 px-3 py-2 font-medium">Date</th>
+                {/* Title takes whatever the fixed columns leave. */}
                 <th className="px-3 py-2 font-medium">Title</th>
-                <th className="hidden px-3 py-2 font-medium md:table-cell">Published in</th>
-                <th className="hidden px-3 py-2 font-medium lg:table-cell">Type</th>
-                <th className="px-3 py-2 text-right font-medium">Cited</th>
-                <th className="hidden px-3 py-2 font-medium lg:table-cell">Source</th>
+                <th className="hidden w-36 px-3 py-2 font-medium md:table-cell">Published in</th>
+                <th className="hidden w-20 px-3 py-2 font-medium lg:table-cell">Type</th>
+                <th className="w-16 px-3 py-2 text-right font-medium">Cited</th>
+                <th className="hidden w-32 px-3 py-2 font-medium lg:table-cell">Source</th>
               </tr>
             </thead>
             <tbody>
