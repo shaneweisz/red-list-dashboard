@@ -22,7 +22,7 @@ import { prettifyQs } from "@/lib/query-string";
 import { sisRowKey } from "@/lib/species-row-key";
 // Reason labels are shared with the main dashboard's taxonomic-revision flag —
 // see lib/col-revision.ts (both surfaces must explain a reason the same way).
-import { noMatchSentence, neSplitSentence, neSynonymSentence, reasonComposition, NE_SPLIT_EVIDENCE } from "@/lib/col-revision";
+import { noMatchSentence, neSplitSentence, neSynonymSentence, reasonComposition, displayReason, countsAsMismatch, NE_SPLIT_EVIDENCE } from "@/lib/col-revision";
 
 // See scripts/build-taxa-summary.ts's classifyNoMatch for what each reason means.
 // Modular/additive on top of colBreakdown[].noMatchIds — safe to drop independently
@@ -503,8 +503,15 @@ function SpeciesListPanel({
   const [error, setError] = useState<string | null>(null);
   const [page, setPage] = useState(1);
   const [search, setSearch] = useState("");
-  const [sortBy, setSortBy] = useState<"name" | "date">("name");
+  // Newest first by default — assessment year for the assessed buckets, CoL
+  // description year for Not Evaluated. Alphabetical put Abrahamia and Acer at
+  // the top of every plant list, which is an accident of the alphabet; the
+  // recent end is the part anyone opening this is looking at.
+  const [sortBy, setSortBy] = useState<"name" | "date">("date");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
+  // Set by clicking one of the composition entries above the table: shows only
+  // that reason's species. Same code the entry is labelled with (displayReason).
+  const [reasonFilter, setReasonFilter] = useState<string | null>(null);
 
   useEffect(() => {
     const cacheKey = isNe ? "ne" : "assessed";
@@ -532,19 +539,24 @@ function SpeciesListPanel({
   useEffect(() => {
     setPage(1); // eslint-disable-line react-hooks/set-state-in-effect -- reset when switching bucket/name
     setSearch("");
-    setSortBy("name");
+    setSortBy("date");
     setSortDir("desc");
+    setReasonFilter(null);
   }, [nodeId, request.bucket, request.name, request.rank]);
 
   const filtered = useMemo(() => {
     if (!rows) return null;
     let matched = rows.filter((s) => speciesMatchesNode(s, nodeId) && matchesBreakdownName(s, request.rank, request.name, nodeId));
     if (request.bucket === "noColMatch" && request.noMatchIds?.length) {
-      const only = new Set(request.noMatchIds);
+      const only = new Set(
+        reasonFilter
+          ? (request.noMatchDetails ?? []).filter((d) => displayReason(d) === reasonFilter).map((d) => d.id)
+          : request.noMatchIds,
+      );
       matched = matched.filter((s) => s.sis_taxon_id != null && only.has(s.sis_taxon_id));
     }
     return matched;
-  }, [rows, nodeId, request]);
+  }, [rows, nodeId, request, reasonFilter]);
 
   const searched = useMemo(() => {
     if (!filtered) return null;
@@ -682,9 +694,29 @@ function SpeciesListPanel({
           {composition.map((c, i) => (
             <span key={c.reason}>
               {i > 0 && <span className="text-zinc-600"> · </span>}
-              {c.count} {c.label}
+              <button
+                type="button"
+                aria-pressed={reasonFilter === c.reason}
+                onClick={() => { setReasonFilter((r) => (r === c.reason ? null : c.reason)); setPage(1); }}
+                className={
+                  reasonFilter === c.reason
+                    ? "text-white underline underline-offset-2"
+                    : "underline decoration-dotted underline-offset-2 hover:text-white"
+                }
+              >
+                {c.count} {c.label}
+              </button>
             </span>
           ))}
+          {reasonFilter && (
+            <button
+              type="button"
+              onClick={() => { setReasonFilter(null); setPage(1); }}
+              className="ml-1.5 text-zinc-500 hover:text-zinc-300"
+            >
+              ✕ clear
+            </button>
+          )}
         </p>
       )}
       {!error && filtered && filtered.length === 0 && <p className="text-zinc-400">No species.</p>}
@@ -842,6 +874,51 @@ function renderFilterSegs(segs: DescribeFilterSegment[]): React.ReactNode {
 // every row one at a time). Clicking # Assessed / No 1:1 CoL Match / # Not
 // Evaluated opens the species-level panel (onOpenPanel) narrowed to that exact
 // slice; # Described has no drill-down (it's CoL's own count, not a species
+/**
+ * The "No 1:1 CoL Match" cell, and the only place that decides which diagnoses
+ * that number counts.
+ *
+ * Three of the nine are CoL holding the record outside the described universe
+ * rather than disagreeing about the taxon — see NOT_A_MISMATCH_REASONS. They
+ * were a third of the number. Filtered here, in the client, rather than in the
+ * query: the SSC groups' summaries are rebuilt by a data sync, not by a deploy,
+ * so a server-side filter would leave the shipped artifact counting them for
+ * another week. Falls back to the raw ids for an artifact old enough to carry
+ * no per-species reasons at all, since there is then nothing to filter on.
+ */
+function MismatchCell({
+  rank,
+  rowLabel,
+  b,
+  onOpenPanel,
+}: {
+  rank: FilterRank;
+  rowLabel: string;
+  b: { name: string; noMatchIds: number[]; noMatchDetails?: NoMatchDetail[] };
+  onOpenPanel: (request: PanelRequest) => void;
+}) {
+  const counted = useMemo(() => {
+    if (!b.noMatchDetails?.length) return { ids: b.noMatchIds, details: b.noMatchDetails };
+    const details = b.noMatchDetails.filter((d) => countsAsMismatch(d.reason));
+    return { ids: details.map((d) => d.id), details };
+  }, [b.noMatchIds, b.noMatchDetails]);
+  return (
+    <td className="px-2 py-1 text-right">
+      {counted.ids.length > 0 ? (
+        <button
+          type="button"
+          className="underline decoration-dotted underline-offset-2 hover:text-white"
+          onClick={() => onOpenPanel({ rank, name: b.name, bucket: "noColMatch", label: `${rowLabel} — No 1:1 CoL Match`, noMatchIds: counted.ids, noMatchDetails: counted.details })}
+        >
+          {counted.ids.length}
+        </button>
+      ) : (
+        <span className="text-zinc-300">0</span>
+      )}
+    </td>
+  );
+}
+
 // list this dashboard can independently show).
 function BreakdownList({
   rank,
@@ -922,19 +999,7 @@ function BreakdownList({
                     {b.trueAssessed}
                   </button>
                 </td>
-                <td className="px-2 py-1 text-right">
-                  {b.noMatchIds.length > 0 ? (
-                    <button
-                      type="button"
-                      className="underline decoration-dotted underline-offset-2 hover:text-white"
-                      onClick={() => onOpenPanel({ rank, name: b.name, bucket: "noColMatch", label: `${rowLabel} — No 1:1 CoL Match`, noMatchIds: b.noMatchIds, noMatchDetails: b.noMatchDetails })}
-                    >
-                      {b.noMatchIds.length}
-                    </button>
-                  ) : (
-                    <span className="text-zinc-300">0</span>
-                  )}
-                </td>
+<MismatchCell rank={rank} rowLabel={rowLabel} b={b} onOpenPanel={onOpenPanel} />
                 <td className="pl-2 py-1 text-right">
                   <button
                     type="button"
@@ -1287,7 +1352,7 @@ function DescribedInfoIcon({ nodeId, source, breakdown }: { nodeId: string; sour
                     <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
                     <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
                   </svg>
-                  Counting described and assessed species — may take a few seconds…
+                  Enumerating described species from CoL and assessed species from Red List – may take several seconds...
                 </p>
               )}
               {liveBreakdownError && (
@@ -1905,6 +1970,16 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
     );
   };
 
+  // Every # Red List Assessed bar goes through this, never renderBar directly.
+  // It is the one metric whose numerator (IUCN's count) and denominator (this
+  // CoL release's) come from different organisations, so it is the only one that
+  // can exceed 100% — and the over-100 note was wired into three of its seven
+  // call sites and missed the four that draw drilldown rows, which is where the
+  // over-100 rows actually are (genus Sorbus: 251 assessed, 171 described).
+  // One entry point, so the next bar added cannot be inconsistent either.
+  const renderAssessedBar = (percent: number, count: number, opts?: { isAll?: boolean; fontWeight?: string }) =>
+    renderBar(percent, getAssessedBarColor(percent), opts?.isAll ?? false, count, opts?.fontWeight, true);
+
   // Keeps renderBar's footprint (so the column doesn't resize when the numbers
   // land) but spins in the count's own slot instead of drawing the bar — used in
   // place of renderBar for a breadcrumb/collapsed row whose summary hasn't streamed
@@ -2127,7 +2202,7 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
               // comment — so this is a plain count, not renderBar's bar+percent.
               <span className="text-sm md:text-base text-zinc-700 dark:text-zinc-300 tabular-nums">{assessed.toLocaleString()}</span>
             ) : (
-              renderBar(percentAssessed, getAssessedBarColor(percentAssessed), isAllRow, assessed, undefined, true)
+              renderAssessedBar(percentAssessed, assessed, { isAll: isAllRow })
             )}
           </td>
         )}
@@ -2267,7 +2342,7 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
         {colDescribedCell(sg.colDescribed)}
         {isVisible("assessed") && (
           <td className={flexTdClasses}>
-            {isPending ? renderPendingBar() : renderBar(sgPctAssessed, getAssessedBarColor(sgPctAssessed), false, sg.totalAssessed)}
+            {isPending ? renderPendingBar() : renderAssessedBar(sgPctAssessed, sg.totalAssessed)}
           </td>
         )}
         {isVisible("outdated") && (
@@ -2360,7 +2435,7 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
         {colDescribedCell(sg.colDescribed)}
         {isVisible("assessed") && (
           <td className={flexTdClasses}>
-            {isPending ? renderPendingBar() : renderBar(sgPctAssessed, getAssessedBarColor(sgPctAssessed), false, sg.totalAssessed)}
+            {isPending ? renderPendingBar() : renderAssessedBar(sgPctAssessed, sg.totalAssessed)}
           </td>
         )}
         {isVisible("outdated") && (
@@ -2461,7 +2536,7 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
               {countryStyleColumns ? (
                 <span className="text-sm text-zinc-600 dark:text-zinc-400 tabular-nums">{sg.totalAssessed.toLocaleString()}</span>
               ) : (
-                renderBar(sgPctAssessed, getAssessedBarColor(sgPctAssessed), false, sg.totalAssessed)
+                renderAssessedBar(sgPctAssessed, sg.totalAssessed)
               )}
             </td>
           )}
@@ -2578,7 +2653,7 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
               ) : countryStyleColumns ? (
                 <span className="text-sm md:text-base text-zinc-700 dark:text-zinc-300 tabular-nums">{taxon.totalAssessed.toLocaleString()}</span>
               ) : (
-                renderBar(taxon.percentAssessed, getAssessedBarColor(taxon.percentAssessed), false, taxon.totalAssessed, undefined, true)
+                renderAssessedBar(taxon.percentAssessed, taxon.totalAssessed)
               )}
             </td>
           )}
@@ -2919,7 +2994,7 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
                         {colDescribedCell(subColDescribed, true)}
                         {isVisible("assessed") && (
                           <td className={flexTdClasses}>
-                            {renderBar(subPctAssessed, getAssessedBarColor(subPctAssessed), false, subAssessed, "font-semibold")}
+                            {renderAssessedBar(subPctAssessed, subAssessed, { fontWeight: "font-semibold" })}
                           </td>
                         )}
                         {isVisible("outdated") && (
@@ -3043,7 +3118,7 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
                           {colDescribedCell(row.colDescribed)}
                           {isVisible("assessed") && (
                             <td className={flexTdClasses}>
-                              {renderBar(row.percentAssessed, getAssessedBarColor(row.percentAssessed), false, row.totalAssessed, undefined, true)}
+                              {renderAssessedBar(row.percentAssessed, row.totalAssessed)}
                             </td>
                           )}
                           {isVisible("outdated") && (

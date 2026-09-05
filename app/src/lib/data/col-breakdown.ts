@@ -148,10 +148,18 @@ export function classifyNoMatch(row: Record<string, unknown>): NoMatchDetail {
   // patchy for molluscs especially, hence the fallback chain rather than a fixed
   // pair of ranks).
   const titleCase = (v: unknown) => (typeof v === "string" && v ? v.charAt(0).toUpperCase() + v.slice(1) : null);
+  const same = (a: unknown, b: unknown) =>
+    typeof a === "string" && typeof b === "string" && a.toLowerCase() === b.toLowerCase();
   const colFamily = titleCase(row.col_family);
   const colOrder = titleCase(row.col_order);
-  const colGroupName = colFamily ?? colOrder ?? titleCase(row.col_class);
-  const colGroupOuter = colFamily && colOrder ? ` (${colOrder})` : "";
+  // Only the ranks that actually DIFFER from where the assessment sits. Sorbus
+  // is the case that made this necessary: CoL moves 186 of its species to Aria,
+  // Karpatiosorbus and friends, all still in Rosaceae — so the family and order
+  // agree, and only the genus (which the accepted name carries) has moved.
+  const familyDiffers = colFamily != null && !same(row.col_family, row.assessed_family);
+  const orderDiffers = colOrder != null && !same(row.col_order, row.assessed_order);
+  const colGroupName = familyDiffers ? colFamily : orderDiffers ? colOrder : null;
+  const colGroupOuter = familyDiffers && orderDiffers ? ` (${colOrder})` : "";
   const colGroup = colGroupName ? `${colGroupName}${colGroupOuter}` : undefined;
   if (!linkedColId) {
     // Nothing in species_link — but CoL may still hold the name, just not as an
@@ -463,7 +471,12 @@ export async function computeNoMatchDetails(
       WHERE in_base AND ${universe} AND col_id NOT IN ${EXCLUDED_COL_IDS_SQL} AND ${speciesWhere}
     ),
     matched_assessed AS (
-      SELECT id, scientific_name FROM read_parquet('${assessedPath}') WHERE ${assessedWhere}
+      -- family/order come along so classified_elsewhere can say WHICH rank CoL
+      -- files the record under differently. Naming CoL's family unconditionally
+      -- is no help when it is the same family: every Sorbus row read "CoL files
+      -- this record under Rosaceae (Rosales)" while sitting under Rosaceae.
+      SELECT id, scientific_name, family AS assessed_family, order_name AS assessed_order
+      FROM read_parquet('${assessedPath}') WHERE ${assessedWhere}
     ),
     primary_links AS (
       -- Primary link only (excludes 'iucn_synonym_covered' — a bookkeeping alias
@@ -546,6 +559,7 @@ export async function computeNoMatchDetails(
       -- classified_elsewhere, whose whole content is "somewhere other than the
       -- group you are looking at" — which is not worth saying without saying where.
       sp.family AS col_family, sp.order_name AS col_order, sp.class_name AS col_class,
+      ma.assessed_family AS assessed_family, ma.assessed_order AS assessed_order,
       w.winner_name AS winner_name, w.winner_id AS winner_id
       ${hasBackbone ? `,
       pbn.col_id AS prov_col_id,${hasSynClaim ? `

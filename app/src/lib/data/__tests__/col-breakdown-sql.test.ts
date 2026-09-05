@@ -74,18 +74,21 @@ beforeAll(async () => {
       ('NEAMB2', 'NEAMB', 'synonym', 'species', 'Demoted one', true, NULL, NULL)
     ) v(col_id, parent_id, status, rank, scientific_name, in_checklist, checklist_parent_id, checklist_name)`, "backbone.parquet");
 
+  // family/order_name are the assessment's own placement, which the
+  // classified_elsewhere wording compares CoL's against — naming a family the
+  // two already agree on tells a reader nothing (every Sorbus row did).
   await copy(`SELECT * FROM (VALUES
-      (1::BIGINT, 'Clean species', 'LC'),
-      (2::BIGINT, 'Xr onlyus', 'LC'),
-      (3::BIGINT, 'Renamed away', 'LC'),
-      (4::BIGINT, 'Demoted one', 'LC'),
-      (5::BIGINT, 'Lump winner', 'LC'),
-      (6::BIGINT, 'Lump loser', 'LC'),
-      (7::BIGINT, 'Nothing at all', 'LC'),
-      (8::BIGINT, 'Anselli test', 'LC'),
-      (9::BIGINT, 'Ambiguous target', 'LC'),
-      (10::BIGINT, 'Spelling case', 'LC')
-    ) v(id, scientific_name, iucn_category)`, "assessed.parquet");
+      (1::BIGINT, 'Clean species', 'LC', 'Felidae', 'Carnivora'),
+      (2::BIGINT, 'Xr onlyus', 'LC', 'Felidae', 'Carnivora'),
+      (3::BIGINT, 'Renamed away', 'LC', 'Felidae', 'Carnivora'),
+      (4::BIGINT, 'Demoted one', 'LC', 'Felidae', 'Carnivora'),
+      (5::BIGINT, 'Lump winner', 'LC', 'Felidae', 'Carnivora'),
+      (6::BIGINT, 'Lump loser', 'LC', 'Felidae', 'Carnivora'),
+      (7::BIGINT, 'Nothing at all', 'LC', 'Felidae', 'Carnivora'),
+      (8::BIGINT, 'Anselli test', 'LC', 'Felidae', 'Carnivora'),
+      (9::BIGINT, 'Ambiguous target', 'LC', 'Felidae', 'Carnivora'),
+      (10::BIGINT, 'Spelling case', 'LC', 'Felidae', 'Carnivora')
+    ) v(id, scientific_name, iucn_category, family, order_name)`, "assessed.parquet");
 
   await copy(`SELECT * FROM (VALUES
       ('redlist', 1::BIGINT, 'Clean species', 'IN1', 'accepted'),

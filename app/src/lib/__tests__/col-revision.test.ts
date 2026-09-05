@@ -13,6 +13,8 @@ import {
   noMatchExplanation,
   canonicalReason,
   reasonComposition,
+  displayReason,
+  countsAsMismatch,
   neSynonymSentence,
   neSplitSentence,
   NE_SPLIT_EVIDENCE,
@@ -289,6 +291,48 @@ describe("matchesRevisionFilter", () => {
   });
 });
 
+describe("what the No 1:1 CoL Match count includes", () => {
+  it("drops the three that are CoL holding the record, not disagreeing about it", () => {
+    // A third of the number was these. See NOT_A_MISMATCH_REASONS.
+    expect(countsAsMismatch("not_in_base")).toBe(false);
+    expect(countsAsMismatch("provisional")).toBe(false);
+    expect(countsAsMismatch("extinct_unconfirmed")).toBe(false);
+    // Every real disagreement still counts, synonym_of included — it is
+    // relabelled as an accepted-name difference, not dropped.
+    for (const r of ["lumped", "infraspecific", "unmatched", "classified_elsewhere", "missing_from_backbone", "synonym_of"]) {
+      expect(countsAsMismatch(r), r).toBe(true);
+    }
+    // A retired code counts as the reason it became, not as an unknown.
+    expect(countsAsMismatch("no_link")).toBe(true);
+  });
+});
+
+describe("displayReason", () => {
+  it("reports an accepted-name difference the way the dashboard's card does", () => {
+    // Sorbus greenii / Aria greenii: same epithet, another genus.
+    expect(displayReason({ reason: "synonym_of", name: "Sorbus greenii", detail: "Aria greenii" }))
+      .toBe(GENUS_DIFFERS_REASON);
+    // Anolis wattsi / Norops wattsii: the epithet agrees with the new genus, so
+    // still a transfer — this is why the comparison canonicalises the endings.
+    expect(displayReason({ reason: "synonym_of", name: "Anolis wattsi", detail: "Norops wattsii" }))
+      .toBe(GENUS_DIFFERS_REASON);
+    // Dalbergia campenonii / Dalbergia emirnensis: a different species, not a move.
+    expect(displayReason({ reason: "synonym_of", name: "Dalbergia campenonii", detail: "Dalbergia emirnensis" }))
+      .toBe(RENAMED_REASON);
+    // Both parts differ — a different name, not a genus transfer.
+    expect(displayReason({ reason: "synonym_of", name: "Sorbus minima", detail: "Karpatiosorbus devoniensis" }))
+      .toBe(RENAMED_REASON);
+    // Nothing to compare against: stays the raw reason rather than guessing.
+    expect(displayReason({ reason: "synonym_of", name: "Sorbus greenii" })).toBe("synonym_of");
+  });
+
+  it("leaves every other reason alone", () => {
+    expect(displayReason({ reason: "lumped", name: "A b", detail: "C d" })).toBe("lumped");
+    expect(displayReason({ reason: "no_link" })).toBe("unmatched");
+    expect(displayReason({})).toBeUndefined();
+  });
+});
+
 describe("reasonComposition", () => {
   it("breaks one no-match number into the chart's own labels, commonest first", () => {
     const details = [
@@ -300,6 +344,16 @@ describe("reasonComposition", () => {
       { reason: "lumped", label: "Lumped on CoL", count: 3 },
       { reason: "not_in_base", label: "In XR, not Base", count: 2 },
       { reason: "provisional", label: "Provisionally accepted", count: 1 },
+    ]);
+  });
+
+  it("counts an accepted-name difference under the bar it is drawn in", () => {
+    expect(reasonComposition([
+      { reason: "synonym_of", name: "Sorbus greenii", detail: "Aria greenii" },
+      { reason: "synonym_of", name: "Sus bucculentus", detail: "Sus scrofa" },
+    ])).toEqual([
+      { reason: GENUS_DIFFERS_REASON, label: "Different genus on CoL", count: 1 },
+      { reason: RENAMED_REASON, label: "Different name on CoL", count: 1 },
     ]);
   });
 
@@ -402,6 +456,26 @@ describe("noMatchSentence", () => {
     }
   });
 
+  it("leads with the accepted name when a reclassified record differs in name", () => {
+    // 186 of genus Sorbus's 187 rows: CoL accepts the species under another
+    // genus in the SAME family, so naming the family said nothing ("CoL files
+    // this record under Rosaceae (Rosales)", under Rosaceae).
+    expect(noMatchExplanation({ reason: "classified_elsewhere", name: "Sorbus greenii", colName: "Aria greenii" }, null))
+      .toBe("CoL uses another genus, accepting Aria greenii.");
+    expect(noMatchExplanation({ reason: "classified_elsewhere", name: "Sorbus greenii", colName: "Aria greenii" }, "Sorbus greenii"))
+      .toBe("Catalogue of Life uses a different genus for Sorbus greenii, accepting Aria greenii.");
+    // Genus AND family differ (Sapindaceae -> Rosaceae, epithet kept): the name
+    // first, the placement after it, since both are true and one is the finding.
+    expect(noMatchExplanation({ reason: "classified_elsewhere", name: "Nephelium topengii", colName: "Prunus topengii", colGroup: "Rosaceae (Rosales)" }, null))
+      .toBe("CoL uses another genus, accepting Prunus topengii, in Rosaceae (Rosales).");
+    // A different species entirely, in a different family.
+    expect(noMatchExplanation({ reason: "classified_elsewhere", name: "Aa mandonii", colName: "Myrosmodes nubigenum", colGroup: "Orchidaceae (Asparagales)" }, null))
+      .toBe("CoL accepts a different name: Myrosmodes nubigenum, in Orchidaceae (Asparagales).");
+    // Counted under the bar the dashboard would draw it in, not as "Reclassified".
+    expect(displayReason({ reason: "classified_elsewhere", name: "Sorbus greenii", colName: "Aria greenii" }))
+      .toBe(GENUS_DIFFERS_REASON);
+  });
+
   it("says WHICH group CoL files a reclassified record under", () => {
     // "A different group" is the entire finding; without the group there is
     // nothing to check and nothing to act on. 708 rows in the current SSC
@@ -413,6 +487,9 @@ describe("noMatchSentence", () => {
     // No placement recorded at all — say the little that is true, not a blank.
     expect(noMatchExplanation({ reason: "classified_elsewhere" }, null))
       .toBe("CoL files this record under a different group.");
+    // Same name, different placement: the placement is the whole finding.
+    expect(noMatchExplanation({ reason: "classified_elsewhere", name: "Vallonia costata", colName: "Vallonia costata", colGroup: "Valloniidae (Stylommatophora)" }, null))
+      .toBe("CoL files this record under Valloniidae (Stylommatophora).");
   });
 
   it("names the CoL id behind a dangling link", () => {
