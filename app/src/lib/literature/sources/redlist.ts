@@ -28,6 +28,19 @@ interface RedListAssessment {
   references?: RedListReference[] | null;
 }
 
+/**
+ * Assessments routinely cite the Red List itself — "IUCN. 2026. The IUCN Red
+ * List of Threatened Species. Version 2026-1" — as the source of their own
+ * publication. That is boilerplate, not evidence about the species, so it is
+ * dropped rather than shown as a work the assessment cited.
+ */
+function isSelfCitation(reference: RedListReference): boolean {
+  const text = `${reference.title ?? ""} ${reference.citation ?? ""}`
+    .replace(/<[^>]*>/g, " ")
+    .toLowerCase();
+  return /red list of threatened species/.test(text);
+}
+
 /** Red List citations carry inline `<i>` markup around scientific names. */
 function stripMarkup(raw: string | null | undefined): string | null {
   if (!raw) return null;
@@ -57,7 +70,7 @@ export const redListSource: SourceAdapter = {
         `https://api.iucnredlist.org/api/v4/assessment/${encodeURIComponent(assessmentId)}`,
         { signal, headers: { Authorization: apiKey } },
       );
-      const references = data.references ?? [];
+      const references = (data.references ?? []).filter((r) => !isSelfCitation(r));
       const works = references
         .map((reference, index) => toWork(reference, index, assessmentId, data.url ?? null))
         .filter((w): w is LiteratureWork => w !== null);

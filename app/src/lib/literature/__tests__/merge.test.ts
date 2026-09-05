@@ -130,6 +130,62 @@ describe("dedupeWorks", () => {
     expect(merged).toHaveLength(2);
   });
 
+  it("merges a preprint with its published version, keeping the journal's record", () => {
+    // Same work, two DOIs and two venues — the reader wants the version of
+    // record, not both rows.
+    const merged = dedupeWorks([
+      [
+        work("openalex", {
+          title: "Chromosomal Evolution of the Talpinae",
+          doi: "10.3390/genes14071472",
+          date: "2023-07-19",
+          venue: "Genes",
+          type: "article",
+        }),
+      ],
+      [
+        work("openalex", {
+          title: "Chromosomal Evolution of the Talpinae",
+          doi: "10.20944/preprints202306.1428.v1",
+          date: "2023-06-20",
+          venue: "Preprints.org",
+          type: "preprint",
+        }),
+      ],
+    ]);
+
+    expect(merged).toHaveLength(1);
+    expect(merged[0]).toMatchObject({
+      doi: "10.3390/genes14071472",
+      url: "https://doi.org/10.3390/genes14071472",
+      venue: "Genes",
+      type: "article",
+    });
+  });
+
+  it("merges them whichever order they arrive in", () => {
+    const preprint = work("openalex", {
+      title: "A paper",
+      doi: "10.20944/preprint",
+      date: "2023-06-20",
+      venue: "Preprints.org",
+      type: "preprint",
+    });
+    const published = work("openalex", {
+      title: "A paper",
+      doi: "10.3390/published",
+      date: "2023-07-19",
+      venue: "Genes",
+      type: "article",
+    });
+
+    for (const pools of [[[preprint], [published]], [[published], [preprint]]]) {
+      const merged = dedupeWorks(pools);
+      expect(merged).toHaveLength(1);
+      expect(merged[0]).toMatchObject({ doi: "10.3390/published", venue: "Genes", type: "article" });
+    }
+  });
+
   it("keeps same-title records with conflicting DOIs apart", () => {
     // An article and its erratum can carry the same title in the same year.
     const merged = dedupeWorks([

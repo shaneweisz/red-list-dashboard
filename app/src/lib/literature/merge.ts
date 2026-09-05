@@ -44,6 +44,25 @@ function priorityOf(work: LiteratureWork): number {
 const PRECISION_RANK = { day: 3, month: 2, year: 1 } as const;
 
 /**
+ * True when exactly one of the pair is a preprint — i.e. they are the same work
+ * at two stages, not two different works. Version-of-record fields (DOI, venue,
+ * type, link) should come from the published side.
+ */
+function isPreprintPair(a: LiteratureWork, b: LiteratureWork): boolean {
+  return (a.type === "preprint") !== (b.type === "preprint");
+}
+
+/** The record whose identity fields win: the published version, else priority. */
+function canonicalOf(
+  a: LiteratureWork,
+  b: LiteratureWork,
+  preferred: LiteratureWork,
+): LiteratureWork {
+  if (isPreprintPair(a, b)) return a.type === "preprint" ? b : a;
+  return preferred;
+}
+
+/**
  * Fold `incoming` into `base`, returning a new work. `base` is whichever record
  * we saw first; priority decides scalar conflicts, not arrival order.
  */
@@ -73,25 +92,31 @@ export function mergeWorks(base: LiteratureWork, incoming: LiteratureWork): Lite
   }
   sources.sort((a, b) => FIELD_PRIORITY.indexOf(a.id) - FIELD_PRIORITY.indexOf(b.id));
 
-  const doi = base.doi ?? incoming.doi;
+  // A preprint and its published version each have their own DOI; the reader
+  // wants the version of record.
+  const canonical = canonicalOf(base, incoming, preferred);
+  const secondary = canonical === base ? incoming : base;
+  const doi = canonical.doi ?? secondary.doi;
 
   return {
     key: base.key,
     // A longer title is usually the un-truncated one; sources clip subtitles.
     title: preferred.title.length >= other.title.length ? preferred.title : other.title,
     // A DOI outranks any landing page as the canonical link for a reader.
-    url: doi ? `https://doi.org/${doi}` : pick("url"),
+    url: doi ? `https://doi.org/${doi}` : (canonical.url ?? secondary.url),
     doi,
     date: dateSource.date,
     datePrecision: dateSource.datePrecision,
     year: dateSource.year ?? pick("year"),
     sortStamp: dateSource.sortStamp,
     authors: pick("authors"),
-    venue: pick("venue"),
+    // "Genes", not "Preprints.org".
+    venue: canonical.venue ?? secondary.venue,
     // Citation counts are floors, not measurements — take the fullest one.
     citations: maxOrNull(base.citations, incoming.citations),
-    // "other" is a fallback, so any source with a real opinion overrides it.
-    type: preferred.type !== "other" ? preferred.type : other.type,
+    // "other" is a fallback, so any source with a real opinion overrides it —
+    // and a published version outranks its own preprint.
+    type: canonical.type !== "other" ? canonical.type : secondary.type,
     openAccessUrl: pick("openAccessUrl"),
     abstract: longer(base.abstract, incoming.abstract),
     sources,
@@ -139,10 +164,18 @@ export function dedupeWorks(pools: LiteratureWork[][]): LiteratureWork[] {
       if (matchIndex === undefined && titleKey) {
         for (const candidate of byTitle.get(titleKey) ?? []) {
           const existing = merged[candidate];
-          // A DOI mismatch is real evidence of two different works (e.g. an
-          // article and its erratum can share a title), so don't merge those.
+          // A DOI mismatch is usually real evidence of two different works (an
+          // article and its erratum can share a title) — except for a preprint
+          // and its published version, which are one work with two DOIs.
           const existingDoi = normalizeDoi(existing.doi);
-          if (doi !== null && existingDoi !== null && doi !== existingDoi) continue;
+          if (
+            doi !== null &&
+            existingDoi !== null &&
+            doi !== existingDoi &&
+            !isPreprintPair(existing, work)
+          ) {
+            continue;
+          }
           if (yearsCompatible(existing.year, work.year)) {
             matchIndex = candidate;
             break;

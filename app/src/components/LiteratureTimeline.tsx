@@ -107,6 +107,15 @@ function formatAssessmentDate(raw: string | null): string {
   return year;
 }
 
+function Spinner({ className = "h-4 w-4" }: { className?: string }) {
+  return (
+    <svg className={`${className} animate-spin`} fill="none" viewBox="0 0 24 24" aria-hidden>
+      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+    </svg>
+  );
+}
+
 /** Columns in the works table; the marker row spans all of them. */
 const COLUMN_COUNT = 6;
 
@@ -130,7 +139,7 @@ function shortSourceLabel(source: WorkProvenance): string {
 function AssessmentMarkerRow({ assessmentDate }: { assessmentDate: string | null }) {
   return (
     <tr aria-label="Last assessment">
-      <td colSpan={COLUMN_COUNT} className="px-3 py-2">
+      <td colSpan={COLUMN_COUNT} className="px-2 py-1.5">
         <div className="flex items-center gap-3">
           <span className="whitespace-nowrap text-xs font-medium text-red-600 dark:text-red-400">
             Last assessed{assessmentDate ? ` ${formatAssessmentDate(assessmentDate)}` : ""}
@@ -165,40 +174,53 @@ function WorkRow({
           isExpanded ? "bg-zinc-50 dark:bg-zinc-800/30" : ""
         }`}
       >
-        <td className="whitespace-nowrap px-3 py-2 align-top text-xs tabular-nums text-zinc-500">
+        <td className="whitespace-nowrap px-2 py-1 align-top text-[11px] tabular-nums text-zinc-500">
           {formatDate(work.date, work.datePrecision)}
         </td>
-        <td className="px-3 py-2 align-top">
-          <div className="flex items-start gap-2">
+        <td className="px-2 py-1 align-top">
+          <div className="flex items-start gap-1.5">
             <svg
-              className={`mt-1 h-3 w-3 flex-shrink-0 text-zinc-400 transition-transform ${isExpanded ? "rotate-90" : ""}`}
+              className={`mt-0.5 h-3 w-3 flex-shrink-0 text-zinc-400 transition-transform ${isExpanded ? "rotate-90" : ""}`}
               fill="currentColor"
               viewBox="0 0 20 20"
             >
               <path fillRule="evenodd" d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 011.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z" clipRule="evenodd" />
             </svg>
-            <span className="text-sm leading-snug text-zinc-800 dark:text-zinc-200">
+            {/* Some deposits carry a whole page of text as their "title"; two
+                lines keeps every row a predictable height. The full string is
+                on hover, and in the expanded row. */}
+            <span
+              className="line-clamp-2 text-xs leading-snug text-zinc-800 dark:text-zinc-200"
+              title={work.title}
+            >
               {work.title}
             </span>
           </div>
         </td>
-        <td className="hidden break-words px-3 py-2 align-top text-xs text-zinc-500 md:table-cell">
+        <td
+          className="hidden truncate px-2 py-1 align-top text-[11px] text-zinc-500 md:table-cell"
+          title={work.venue ?? undefined}
+        >
           {work.venue || "—"}
         </td>
-        <td className="hidden whitespace-nowrap px-3 py-2 align-top text-xs text-zinc-500 lg:table-cell">
+        <td className="hidden whitespace-nowrap px-2 py-1 align-top text-[11px] text-zinc-500 lg:table-cell">
           {TYPE_LABELS[work.type] || "—"}
         </td>
-        <td className="whitespace-nowrap px-3 py-2 text-right align-top text-xs tabular-nums text-zinc-500">
+        <td className="whitespace-nowrap px-2 py-1 text-right align-top text-[11px] tabular-nums text-zinc-500">
           {work.citations !== null && work.citations > 0 ? work.citations.toLocaleString() : "—"}
         </td>
-        <td className="hidden break-words px-3 py-2 align-top text-xs text-zinc-400 lg:table-cell">
+        <td
+          className="hidden truncate px-2 py-1 align-top text-[11px] text-zinc-400 lg:table-cell"
+          title={work.sources.map((s) => s.label).join(", ")}
+        >
           {work.sources.map(shortSourceLabel).join(", ")}
         </td>
       </tr>
 
       {isExpanded && (
         <tr className="border-b border-zinc-100 bg-zinc-50 dark:border-zinc-800 dark:bg-zinc-800/30">
-          <td colSpan={COLUMN_COUNT} className="space-y-2 px-3 py-3 pl-8 text-xs text-zinc-500">
+          <td colSpan={COLUMN_COUNT} className="space-y-2 px-2 py-2 pl-7 text-[11px] text-zinc-500">
+            <div className="font-medium text-zinc-700 dark:text-zinc-300">{work.title}</div>
             {work.authors && <div>{work.authors}</div>}
             {/* Columns hidden at this breakpoint still need to be readable. */}
             <div className="md:hidden">{work.venue}</div>
@@ -360,7 +382,7 @@ export default function LiteratureTimeline({
 
   return (
     <div className={className}>
-      <div ref={listTopRef} className="mb-3 flex flex-wrap items-baseline gap-x-3 gap-y-1">
+      <div ref={listTopRef} className="mb-2 flex flex-wrap items-baseline gap-x-3 gap-y-1">
         <h3 className="text-sm font-medium text-zinc-700 dark:text-zinc-300">Literature</h3>
         {data && (
           <span className="text-sm text-zinc-500">
@@ -381,10 +403,7 @@ export default function LiteratureTimeline({
 
       {loading && !data && (
         <div className="flex items-center gap-2 py-4 text-sm text-zinc-400">
-          <svg className="h-4 w-4 animate-spin" fill="none" viewBox="0 0 24 24">
-            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
-          </svg>
+          <Spinner />
           Searching the literature…
         </div>
       )}
@@ -401,20 +420,21 @@ export default function LiteratureTimeline({
 
       {data && items.length > 0 && (
         <div
-          className={`overflow-x-auto rounded-lg border border-zinc-200 dark:border-zinc-700 ${
-            loading ? "opacity-60 transition-opacity" : ""
+          className={`overflow-x-auto rounded-lg border border-zinc-200 transition-opacity dark:border-zinc-700 ${
+            loading ? "pointer-events-none opacity-50" : ""
           }`}
+          aria-busy={loading}
         >
           <table className="w-full table-fixed text-left">
             <thead className="bg-zinc-100 dark:bg-zinc-800">
               <tr className="text-[10px] uppercase tracking-wider text-zinc-500">
-                <th className="w-24 px-3 py-2 font-medium">Date</th>
+                <th className="w-20 px-2 py-1.5 font-medium">Date</th>
                 {/* Title takes whatever the fixed columns leave. */}
-                <th className="px-3 py-2 font-medium">Title</th>
-                <th className="hidden w-36 px-3 py-2 font-medium md:table-cell">Published in</th>
-                <th className="hidden w-20 px-3 py-2 font-medium lg:table-cell">Type</th>
-                <th className="w-16 px-3 py-2 text-right font-medium">Cited</th>
-                <th className="hidden w-32 px-3 py-2 font-medium lg:table-cell">Source</th>
+                <th className="px-2 py-1.5 font-medium">Title</th>
+                <th className="hidden w-32 px-2 py-1.5 font-medium md:table-cell">Published in</th>
+                <th className="hidden w-16 px-2 py-1.5 font-medium lg:table-cell">Type</th>
+                <th className="w-12 px-2 py-1.5 text-right font-medium">Cited</th>
+                <th className="hidden w-28 px-2 py-1.5 font-medium lg:table-cell">Source</th>
               </tr>
             </thead>
             <tbody>
@@ -439,7 +459,7 @@ export default function LiteratureTimeline({
       )}
 
       {data && data.totalPages > 1 && (
-        <div className="mt-2 flex items-center justify-between border-t border-zinc-100 pt-3 dark:border-zinc-800">
+        <div className="mt-2 flex items-center justify-between border-t border-zinc-100 pt-2 dark:border-zinc-800">
           <button
             type="button"
             onClick={(e) => { e.stopPropagation(); goToPage(data.page - 1); }}
@@ -448,7 +468,8 @@ export default function LiteratureTimeline({
           >
             ← Newer
           </button>
-          <span className="text-xs text-zinc-500 tabular-nums">
+          <span className="flex items-center gap-1.5 text-xs tabular-nums text-zinc-500">
+            {loading && <Spinner className="h-3 w-3" />}
             Page {data.page} of {data.totalPages}
           </span>
           <button

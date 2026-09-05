@@ -224,6 +224,14 @@ describe("redListSource", () => {
       },
       // Some references carry only the formatted citation.
       { citation: "IUCN. 2020. Guidelines.", year: "2020", title: null, author: null },
+      // Boilerplate: the assessment citing the Red List itself.
+      {
+        citation:
+          "IUCN. 2026. The IUCN Red List of Threatened Species. Version 2026-1. Available at: www.iucnredlist.org.",
+        year: "2026",
+        title: "The IUCN Red List of Threatened Species. Version 2026-1",
+        author: "IUCN",
+      },
     ],
   };
 
@@ -253,6 +261,10 @@ describe("redListSource", () => {
     expect(lastUrl).toContain("/api/v4/assessment/243434007");
     expect((lastInit?.headers as Record<string, string>).Authorization).toBe("test-redlist-key");
     expect(result.upstreamTotal).toBe(2);
+    // The Red List's citation of itself is boilerplate, not species evidence.
+    expect(result.works.map((w) => w.title)).not.toContain(
+      "The IUCN Red List of Threatened Species. Version 2026-1",
+    );
     expect(result.works[0]).toMatchObject({
       title: "Focus on Encephalartos woodii",
       date: "1986",
