@@ -1052,6 +1052,16 @@ export default function OccurrenceMapRow({
     areasFailed?: boolean;
     /** Which of the listed areas is outlined on the map. */
     highlight: number;
+    /**
+     * The record under the right-click, when it landed on one.
+     *
+     * "What else is assessed near here" hangs off this rather than off bare
+     * ground: the question is almost always about a record you are looking at
+     * — this specimen, this observation — and anchoring it there means the
+     * radius is centred on the record's own coordinates rather than on
+     * wherever the cursor happened to be a few pixels away.
+     */
+    record: { gbifID: number; name: string; lng: number; lat: number } | null;
   } | null>(null);
   const pointQueryId = useRef(0);
   /** Discards a habitat lookup that a later click has already superseded. */
@@ -1134,7 +1144,7 @@ export default function OccurrenceMapRow({
    * opened it — you ask what else is here, then carry on clicking around the
    * map with the answer still up beside it.
    */
-  const [nearbyAt, setNearbyAt] = useState<{ lng: number; lat: number } | null>(null);
+  const [nearbyAt, setNearbyAt] = useState<{ lng: number; lat: number; recordName: string } | null>(null);
   /** A pin whose label is being renamed in place. */
   const [renamingPin, setRenamingPin] = useState<string | null>(null);
   /**
@@ -2686,6 +2696,9 @@ export default function OccurrenceMapRow({
         if (query !== pointQueryId.current || areas.length === 0) return;
         setPointQuery({
           kind: "areas",
+          // The protected-areas popup is a different question and never offers
+          // the nearby lookup, so it has no record to carry.
+          record: null,
           panelId,
           lng,
           lat,
@@ -2737,6 +2750,22 @@ export default function OccurrenceMapRow({
     // a slow answer would overwrite the panel you're already reading.
     const isCurrent = () => query === pointQueryId.current;
     setCopiedPoint(false);
+    // Whether the right-click landed on a record. interactiveLayerIds already
+    // includes the occurrence circles, so the hit test is the same one the left
+    // click uses to open a record — no extra query against the map.
+    const hit = e.features?.find((f) => Number(f.properties?.gbifID));
+    const known = hit ? occurrencesByGbifIdRef.current.get(Number(hit.properties?.gbifID)) : undefined;
+    const record = known
+      ? {
+          gbifID: known.properties.gbifID as number,
+          name: String(known.properties.species || "this record"),
+          // The record's own coordinates, not the cursor's — a click is only
+          // ever within a few pixels of the dot it hits, and the radius should
+          // be centred on the collection locality itself.
+          lng: (known.geometry as GeoJSON.Point).coordinates[0],
+          lat: (known.geometry as GeoJSON.Point).coordinates[1],
+        }
+      : null;
     setPointQuery({
       kind: "point",
       panelId,
@@ -2747,6 +2776,7 @@ export default function OccurrenceMapRow({
       areas: [],
       areasLoading: false,
       highlight: 0,
+      record,
     });
 
     elevationAt(lng, lat)
@@ -4247,26 +4277,30 @@ export default function OccurrenceMapRow({
                       </button>
                     </div>
                     )}
-                    {/* What else has been assessed around this spot. On its own
-                        row because it opens a panel rather than acting on the
-                        map, and because the label has to say "assessed" — the
-                        answer is about the Red List, not about everything GBIF
-                        holds here. */}
-                    {fullscreen && (
+                    {/* What else has been assessed around a record. Offered only
+                        when the right-click landed on one: "near this specimen"
+                        is the question an assessor actually has, and on bare
+                        ground the same button answers about a spot nobody has
+                        any particular interest in. On its own row because it
+                        opens a panel rather than acting on the map, and the
+                        label says "assessed" because the answer is about the
+                        Red List, not about everything GBIF holds here. */}
+                    {fullscreen && pointQuery.record && (
                       <div className="pt-1 border-t border-zinc-100 dark:border-zinc-800">
                         <button
                           onClick={() => {
-                            setNearbyAt({ lng: pointQuery.lng, lat: pointQuery.lat });
+                            const r = pointQuery.record!;
+                            setNearbyAt({ lng: r.lng, lat: r.lat, recordName: r.name });
                             setPointQuery(null);
                           }}
-                          title="Assessed species with GBIF records around this spot, and the threats their assessments cite"
+                          title="Assessed species with GBIF records around this one, and the threats their assessments cite"
                           className="w-full flex items-center gap-1 px-1.5 py-0.5 rounded border border-zinc-300 dark:border-zinc-600 text-zinc-600 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800"
                         >
-                          <svg className="w-2.5 h-2.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
+                          <svg className="w-2.5 h-2.5 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
                             <circle cx="12" cy="12" r="3" />
                             <circle cx="12" cy="12" r="9" strokeDasharray="3 3" />
                           </svg>
-                          What else is assessed near here
+                          What else is assessed near this record
                         </button>
                       </div>
                     )}
@@ -4565,6 +4599,7 @@ export default function OccurrenceMapRow({
             <NearbySpeciesPanel
               lat={nearbyAt.lat}
               lng={nearbyAt.lng}
+              recordName={nearbyAt.recordName}
               excludeGbifKey={speciesKey}
               onClose={() => setNearbyAt(null)}
             />

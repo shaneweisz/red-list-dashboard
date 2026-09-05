@@ -975,6 +975,9 @@ export async function getAssessedByGbifKeys(keys: readonly string[]): Promise<
     category: string;
     criteria: string | null;
     threat_codes: string[];
+    /** Year of the assessment itself, not of its publication — the same field
+     *  the dashboard's "outdated" test reads (species-filter.ts). */
+    assessment_year: number | null;
     sis_taxon_id: number | null;
     dashboard_row_key: SpeciesRowKey | null;
   }[]
@@ -985,7 +988,8 @@ export async function getAssessedByGbifKeys(keys: readonly string[]): Promise<
   const rows = (
     await conn.runAndReadAll(`
       SELECT id, gbif_species_key, scientific_name, common_name, taxon_group,
-             class_name, iucn_category AS category, criteria, threat_codes
+             class_name, iucn_category AS category, criteria, threat_codes,
+             CAST(assessment_date AS VARCHAR) AS assessment_date
       FROM '${parquetUri("assessed.parquet")}'
       WHERE gbif_species_key IN (${list})`)
   ).getRowObjects();
@@ -1001,12 +1005,21 @@ export async function getAssessedByGbifKeys(keys: readonly string[]): Promise<
       criteria: (r.criteria as string) ?? null,
       // ";"-separated in the parquet, written by fetch-redlist-species.
       threat_codes: String(r.threat_codes ?? "").split(";").filter(Boolean),
+      // Free to carry: the row is already being read, so this is two more
+      // columns off the same scan rather than another query.
+      assessment_year: yearOf(r.assessment_date as string | null),
       sis_taxon_id: sisTaxonId,
       // Assessed rows always have a SIS id, so the col_id half of a row key is
       // never needed here — which is what keeps this to a single scan.
       dashboard_row_key: speciesRowKey({ sis_taxon_id: sisTaxonId, col_id: null }),
     };
   });
+}
+
+/** Leading year of an ISO-ish date, or null. */
+function yearOf(date: string | null): number | null {
+  const y = date ? parseInt(date.slice(0, 4), 10) : NaN;
+  return Number.isFinite(y) ? y : null;
 }
 
 export async function getSynonyms(opts: { col?: string | null; sis?: number | null }): Promise<SpeciesSynonyms> {

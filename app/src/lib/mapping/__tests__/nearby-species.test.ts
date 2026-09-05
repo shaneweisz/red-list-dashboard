@@ -19,6 +19,7 @@ function species(name: string, threat_codes: string[], over: Partial<NearbySpeci
     taxon_group: "amphibians",
     class_name: "amphibia",
     threat_codes,
+    assessment_year: 2020,
     records: 1,
     sis_taxon_id: 1,
     dashboard_row_key: null,

@@ -35,7 +35,18 @@ import { COL_XR_CHECKLIST_KEY } from "@/lib/gbif";
 /** Radii offered in the panel. Beyond ~50 km "near here" stops meaning much. */
 export const NEARBY_RADII_KM = [10, 25, 50] as const;
 export type NearbyRadiusKm = (typeof NEARBY_RADII_KM)[number];
-export const NEARBY_RADIUS_DEFAULT: NearbyRadiusKm = 25;
+
+/**
+ * Opens at the tightest radius, because the panel now hangs off a record.
+ *
+ * "Near this record" is a much narrower claim than "near this map", and the
+ * narrow one is both the question being asked and the cheaper answer: a 10 km
+ * circle around a collection locality returns a list you can read, where 50 km
+ * around a point in a well-collected part of the world hits the facet ceiling
+ * and hands back 300 species sorted by how common they are. Widening is one
+ * click for when the tight answer is too thin.
+ */
+export const NEARBY_RADIUS_DEFAULT: NearbyRadiusKm = 10;
 
 /**
  * The categories asked of GBIF: the threatened three, plus Near Threatened.
@@ -77,6 +88,8 @@ export interface NearbySpecies {
   taxon_group: string;
   class_name: string | null;
   threat_codes: string[];
+  /** Year of the assessment, not of its publication. */
+  assessment_year: number | null;
   /** GBIF records for this species inside the radius. */
   records: number;
   sis_taxon_id: number | null;

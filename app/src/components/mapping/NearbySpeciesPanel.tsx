@@ -3,9 +3,10 @@
 /**
  * The species recorded around a point, and what their assessments blame.
  *
- * Opened from the map's right-click panel, so the spot it describes is a spot
- * the assessor deliberately picked — a locality on their point file, the centre
- * of a subpopulation — rather than wherever the viewport happens to sit.
+ * Opened by right-clicking a record, so the centre is a collection locality
+ * someone actually cares about — this specimen, this observation — rather than
+ * wherever the cursor happened to be. It takes the record's own coordinates,
+ * not the click's.
  *
  * Threats lead and the species list follows. The summary is the reusable part:
  * "18 of the 41 species recorded within 25 km cite Agriculture" is a line that
@@ -16,6 +17,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { CATEGORY_COLORS, normalizeCategory } from "@/config/taxa";
+import { findNode } from "@/lib/taxonomy-utils";
 import {
   NEARBY_RADII_KM,
   NEARBY_RADIUS_DEFAULT,
@@ -29,12 +31,19 @@ import {
 interface Props {
   lat: number;
   lng: number;
+  /** The record the radius is centred on, named in the header. */
+  recordName: string;
   /** The species whose map this is — never its own neighbour. */
   excludeGbifKey?: string | null;
   onClose: () => void;
 }
 
-export default function NearbySpeciesPanel({ lat, lng, excludeGbifKey, onClose }: Props) {
+/** "flowering_plants" → "Flowering Plants", falling back to the raw group. */
+function taxonLabel(taxonGroup: string): string {
+  return findNode(taxonGroup)?.name ?? taxonGroup.replace(/_/g, " ");
+}
+
+export default function NearbySpeciesPanel({ lat, lng, recordName, excludeGbifKey, onClose }: Props) {
   const [radiusKm, setRadiusKm] = useState<NearbyRadiusKm>(NEARBY_RADIUS_DEFAULT);
   /** Which threat's species are expanded, if any. */
   const [openThreat, setOpenThreat] = useState<string | null>(null);
@@ -89,9 +98,9 @@ export default function NearbySpeciesPanel({ lat, lng, excludeGbifKey, onClose }
   return (
     <div className="absolute top-2 right-2 z-[1001] w-80 max-h-[75%] flex flex-col rounded-lg bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 shadow-lg text-[11px]">
       <div className="flex items-center gap-2 px-2 py-1.5 border-b border-zinc-100 dark:border-zinc-700 shrink-0">
-        <span className="font-medium text-zinc-700 dark:text-zinc-200">Recorded nearby</span>
-        <span className="text-zinc-400 tabular-nums">
-          {lat.toFixed(3)}, {lng.toFixed(3)}
+        <span className="font-medium text-zinc-700 dark:text-zinc-200 shrink-0">Recorded near</span>
+        <span className="italic text-zinc-500 dark:text-zinc-400 truncate" title={`${lat.toFixed(5)}, ${lng.toFixed(5)}`}>
+          {recordName}
         </span>
         <button
           onClick={onClose}
@@ -205,7 +214,16 @@ export default function NearbySpeciesPanel({ lat, lng, excludeGbifKey, onClose }
                     >
                       {s.scientific_name}
                     </a>
-                    <span className="ml-auto shrink-0 tabular-nums text-zinc-400">{s.records}</span>
+                    {/* Both free — they came off the same parquet row as the
+                        category, so naming the group and the year costs the
+                        panel nothing and tells an assessor whether a precedent
+                        is a comparable taxon and how current it is. */}
+                    <span className="ml-auto shrink-0 text-zinc-400 tabular-nums">
+                      {taxonLabel(s.taxon_group)}
+                      {s.assessment_year != null && ` · ${s.assessment_year}`}
+                      {" · "}
+                      <span title={`${s.records} GBIF records within ${result.radiusKm} km`}>{s.records}</span>
+                    </span>
                   </div>
                 ))}
               </div>
