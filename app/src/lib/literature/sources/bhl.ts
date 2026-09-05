@@ -53,6 +53,9 @@ export const bhlSource: SourceAdapter = {
   id: "bhl",
   label: "Biodiversity Heritage Library",
   homepage: "https://www.biodiversitylibrary.org",
+  // Full-text search across scanned books is slow: 8.5s measured on a cold
+  // query, which the default budget was cutting off.
+  timeoutMs: 25_000,
 
   async fetch({ scientificName, limit, signal }: SourceQuery): Promise<SourceResult> {
     const apiKey = process.env.BHL_API_KEY;

@@ -111,5 +111,7 @@ export interface SourceAdapter {
   label: string;
   /** Where the data comes from; shown in the UI's source legend. */
   homepage: string;
+  /** Overrides `SOURCE_TIMEOUT_MS` for a source that is legitimately slow. */
+  timeoutMs?: number;
   fetch(query: SourceQuery): Promise<SourceResult>;
 }

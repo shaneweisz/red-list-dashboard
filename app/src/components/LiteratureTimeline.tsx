@@ -4,7 +4,7 @@ import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "rea
 import { generateNameVariants } from "@/lib/nameVariants";
 
 /**
- * The Literature tab: one chronological run of everything published about a
+ * The Literature tab: one chronological table of everything published about a
  * species, newest first, with a dotted line marking where the last Red List
  * assessment falls.
  *
@@ -107,39 +107,43 @@ function formatAssessmentDate(raw: string | null): string {
   return year;
 }
 
+/** Columns in the works table; the marker row spans all of them. */
+const COLUMN_COUNT = 6;
+
+/**
+ * Short names for the sources column — "Biodiversity Heritage Library" is
+ * accurate but too wide to sit in a table cell.
+ */
+const SOURCE_SHORT_LABELS: Record<string, string> = {
+  openalex: "OpenAlex",
+  europepmc: "Europe PMC",
+  semanticscholar: "Semantic Scholar",
+  bhl: "BHL",
+  core: "CORE",
+  googlebooks: "Google Books",
+};
+
+function shortSourceLabel(source: WorkProvenance): string {
+  return SOURCE_SHORT_LABELS[source.id] ?? source.label;
+}
+
 /** The dotted line that says where the assessment sits in the record. */
-function AssessmentMarker({ assessmentDate }: { assessmentDate: string | null }) {
+function AssessmentMarkerRow({ assessmentDate }: { assessmentDate: string | null }) {
   return (
-    <li className="relative flex items-center gap-3 py-3" aria-label="Last assessment">
-      <span className="relative z-10 flex h-3 w-3 shrink-0 items-center justify-center">
-        <span className="h-3 w-3 rounded-full border-2 border-red-500 bg-white dark:bg-zinc-900" />
-      </span>
-      <span className="whitespace-nowrap rounded-full bg-red-50 px-2 py-0.5 text-[11px] font-medium text-red-700 dark:bg-red-950/50 dark:text-red-300">
-        Last assessed{assessmentDate ? ` ${formatAssessmentDate(assessmentDate)}` : ""}
-      </span>
-      <span className="h-0 flex-1 border-t-2 border-dashed border-red-300 dark:border-red-800/70" />
-    </li>
+    <tr aria-label="Last assessment">
+      <td colSpan={COLUMN_COUNT} className="px-3 py-2">
+        <div className="flex items-center gap-3">
+          <span className="whitespace-nowrap text-xs font-medium text-red-600 dark:text-red-400">
+            Last assessed{assessmentDate ? ` ${formatAssessmentDate(assessmentDate)}` : ""}
+          </span>
+          <span className="h-0 flex-1 border-t border-dashed border-red-400 dark:border-red-800" />
+        </div>
+      </td>
+    </tr>
   );
 }
 
-function SourceBadge({ source }: { source: WorkProvenance }) {
-  const className =
-    "rounded border border-zinc-200 px-1.5 py-px text-[10px] text-zinc-500 dark:border-zinc-700 dark:text-zinc-400";
-  if (!source.url) return <span className={className}>{source.label}</span>;
-  return (
-    <a
-      href={source.url}
-      target="_blank"
-      rel="noopener noreferrer"
-      onClick={(e) => e.stopPropagation()}
-      className={`${className} hover:border-blue-400 hover:text-blue-600 dark:hover:text-blue-400`}
-    >
-      {source.label}
-    </a>
-  );
-}
-
-function TimelineRow({
+function WorkRow({
   work,
   isExpanded,
   onToggle,
@@ -148,87 +152,87 @@ function TimelineRow({
   isExpanded: boolean;
   onToggle: () => void;
 }) {
-  const typeLabel = TYPE_LABELS[work.type];
   return (
-    <li className="relative flex gap-3">
-      {/* Dot on the rail */}
-      <span className="relative z-10 mt-2 flex h-3 w-3 shrink-0 items-center justify-center">
-        <span className="h-2 w-2 rounded-full bg-zinc-300 ring-4 ring-white dark:bg-zinc-600 dark:ring-zinc-900" />
-      </span>
-
-      <div className="min-w-0 flex-1 pb-4">
-        <button
-          type="button"
-          onClick={onToggle}
-          aria-expanded={isExpanded}
-          className="w-full rounded-md px-2 py-1.5 text-left transition-colors hover:bg-zinc-50 dark:hover:bg-zinc-800/50"
-        >
-          <div className="flex items-baseline gap-2">
-            <span className="whitespace-nowrap text-xs tabular-nums text-zinc-400">
-              {formatDate(work.date, work.datePrecision)}
-            </span>
+    <>
+      <tr
+        // The whole tab sits inside the species row, whose own click handler
+        // collapses it — so an expand here must not reach it.
+        onClick={(e) => {
+          e.stopPropagation();
+          onToggle();
+        }}
+        aria-expanded={isExpanded}
+        className={`cursor-pointer border-b border-zinc-100 hover:bg-zinc-50 dark:border-zinc-800 dark:hover:bg-zinc-800/50 ${
+          isExpanded ? "bg-zinc-50 dark:bg-zinc-800/30" : ""
+        }`}
+      >
+        <td className="whitespace-nowrap px-3 py-2 align-top text-xs tabular-nums text-zinc-500">
+          {formatDate(work.date, work.datePrecision)}
+        </td>
+        <td className="px-3 py-2 align-top">
+          <div className="flex items-start gap-2">
+            <svg
+              className={`mt-1 h-3 w-3 flex-shrink-0 text-zinc-400 transition-transform ${isExpanded ? "rotate-90" : ""}`}
+              fill="currentColor"
+              viewBox="0 0 20 20"
+            >
+              <path fillRule="evenodd" d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 011.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z" clipRule="evenodd" />
+            </svg>
             <span className="text-sm leading-snug text-zinc-800 dark:text-zinc-200">
               {work.title}
             </span>
           </div>
-          <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 pl-0 text-xs text-zinc-500">
-            {work.venue && <span className="truncate max-w-[22rem]">{work.venue}</span>}
-            {typeLabel && (
-              <span className="rounded bg-zinc-100 px-1.5 py-px text-[10px] uppercase tracking-wide text-zinc-500 dark:bg-zinc-800 dark:text-zinc-400">
-                {typeLabel}
-              </span>
-            )}
-            {work.citations !== null && work.citations > 0 && (
-              <span className="tabular-nums text-amber-600 dark:text-amber-500">
-                {work.citations.toLocaleString()} citation{work.citations === 1 ? "" : "s"}
-              </span>
-            )}
-            {work.openAccessUrl && (
-              <span className="rounded bg-emerald-50 px-1.5 py-px text-[10px] font-medium uppercase tracking-wide text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-400">
-                Free to read
-              </span>
-            )}
-          </div>
-        </button>
+        </td>
+        <td className="hidden max-w-[15rem] truncate px-3 py-2 align-top text-xs text-zinc-500 md:table-cell">
+          {work.venue || "—"}
+        </td>
+        <td className="hidden whitespace-nowrap px-3 py-2 align-top text-xs text-zinc-500 lg:table-cell">
+          {TYPE_LABELS[work.type] || "—"}
+        </td>
+        <td className="whitespace-nowrap px-3 py-2 text-right align-top text-xs tabular-nums text-zinc-500">
+          {work.citations !== null && work.citations > 0 ? work.citations.toLocaleString() : "—"}
+        </td>
+        <td className="hidden whitespace-nowrap px-3 py-2 align-top text-xs text-zinc-400 lg:table-cell">
+          {work.sources.map(shortSourceLabel).join(", ")}
+        </td>
+      </tr>
 
-        {isExpanded && (
-          <div className="mt-1 space-y-2 px-2 pb-1">
-            {work.authors && <div className="text-xs text-zinc-500">{work.authors}</div>}
-            {work.abstract && (
-              <p className="text-xs leading-relaxed text-zinc-500">{work.abstract}</p>
-            )}
-            <div className="flex flex-wrap items-center gap-2">
+      {isExpanded && (
+        <tr className="border-b border-zinc-100 bg-zinc-50 dark:border-zinc-800 dark:bg-zinc-800/30">
+          <td colSpan={COLUMN_COUNT} className="space-y-2 px-3 py-3 pl-8 text-xs text-zinc-500">
+            {work.authors && <div>{work.authors}</div>}
+            {/* Columns hidden at this breakpoint still need to be readable. */}
+            <div className="md:hidden">{work.venue}</div>
+            {work.abstract && <p className="leading-relaxed">{work.abstract}</p>}
+            <div className="flex flex-wrap items-center gap-3 pt-1">
               <a
                 href={work.url}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="inline-flex items-center gap-1 text-xs text-blue-500 hover:text-blue-600 dark:hover:text-blue-400"
+                onClick={(e) => e.stopPropagation()}
+                className="text-blue-500 hover:text-blue-600 dark:hover:text-blue-400"
               >
                 {work.doi ? "View via DOI" : "View record"}
-                <svg className="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
-                </svg>
               </a>
               {work.openAccessUrl && work.openAccessUrl !== work.url && (
                 <a
                   href={work.openAccessUrl}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="text-xs text-blue-500 hover:text-blue-600 dark:hover:text-blue-400"
+                  onClick={(e) => e.stopPropagation()}
+                  className="text-blue-500 hover:text-blue-600 dark:hover:text-blue-400"
                 >
-                  Full text
+                  Free full text
                 </a>
               )}
-              <span className="flex flex-wrap items-center gap-1">
-                {work.sources.map((source) => (
-                  <SourceBadge key={source.id} source={source} />
-                ))}
+              <span className="text-zinc-400 lg:hidden">
+                {work.sources.map(shortSourceLabel).join(", ")}
               </span>
             </div>
-          </div>
-        )}
-      </div>
-    </li>
+          </td>
+        </tr>
+      )}
+    </>
   );
 }
 
@@ -393,29 +397,40 @@ export default function LiteratureTimeline({
       )}
 
       {data && items.length > 0 && (
-        <div className={`relative ${loading ? "opacity-60 transition-opacity" : ""}`}>
-          {/* The rail the dots sit on. */}
-          <span
-            aria-hidden
-            className="absolute bottom-2 left-[5px] top-2 w-px bg-zinc-200 dark:bg-zinc-800"
-          />
-          <ol className="relative space-y-0">
-            {items.map((work, index) => (
-              <Fragment key={work.key}>
-                {data.markerIndex === index && (
-                  <AssessmentMarker assessmentDate={data.assessmentDate} />
-                )}
-                <TimelineRow
-                  work={work}
-                  isExpanded={expandedKey === work.key}
-                  onToggle={() => setExpandedKey(expandedKey === work.key ? null : work.key)}
-                />
-              </Fragment>
-            ))}
-            {data.markerIndex === items.length && (
-              <AssessmentMarker assessmentDate={data.assessmentDate} />
-            )}
-          </ol>
+        <div
+          className={`overflow-x-auto rounded-lg border border-zinc-200 dark:border-zinc-700 ${
+            loading ? "opacity-60 transition-opacity" : ""
+          }`}
+        >
+          <table className="w-full text-left">
+            <thead className="bg-zinc-100 dark:bg-zinc-800">
+              <tr className="text-[10px] uppercase tracking-wider text-zinc-500">
+                <th className="px-3 py-2 font-medium">Date</th>
+                <th className="px-3 py-2 font-medium">Title</th>
+                <th className="hidden px-3 py-2 font-medium md:table-cell">Published in</th>
+                <th className="hidden px-3 py-2 font-medium lg:table-cell">Type</th>
+                <th className="px-3 py-2 text-right font-medium">Cited</th>
+                <th className="hidden px-3 py-2 font-medium lg:table-cell">Source</th>
+              </tr>
+            </thead>
+            <tbody>
+              {items.map((work, index) => (
+                <Fragment key={work.key}>
+                  {data.markerIndex === index && (
+                    <AssessmentMarkerRow assessmentDate={data.assessmentDate} />
+                  )}
+                  <WorkRow
+                    work={work}
+                    isExpanded={expandedKey === work.key}
+                    onToggle={() => setExpandedKey(expandedKey === work.key ? null : work.key)}
+                  />
+                </Fragment>
+              ))}
+              {data.markerIndex === items.length && (
+                <AssessmentMarkerRow assessmentDate={data.assessmentDate} />
+              )}
+            </tbody>
+          </table>
         </div>
       )}
 
@@ -423,7 +438,7 @@ export default function LiteratureTimeline({
         <div className="mt-2 flex items-center justify-between border-t border-zinc-100 pt-3 dark:border-zinc-800">
           <button
             type="button"
-            onClick={() => goToPage(data.page - 1)}
+            onClick={(e) => { e.stopPropagation(); goToPage(data.page - 1); }}
             disabled={data.page <= 1 || loading}
             className="rounded-md border border-zinc-200 px-2.5 py-1 text-xs text-zinc-600 transition-colors hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-40 dark:border-zinc-700 dark:text-zinc-300 dark:hover:bg-zinc-800"
           >
@@ -434,7 +449,7 @@ export default function LiteratureTimeline({
           </span>
           <button
             type="button"
-            onClick={() => goToPage(data.page + 1)}
+            onClick={(e) => { e.stopPropagation(); goToPage(data.page + 1); }}
             disabled={data.page >= data.totalPages || loading}
             className="rounded-md border border-zinc-200 px-2.5 py-1 text-xs text-zinc-600 transition-colors hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-40 dark:border-zinc-700 dark:text-zinc-300 dark:hover:bg-zinc-800"
           >

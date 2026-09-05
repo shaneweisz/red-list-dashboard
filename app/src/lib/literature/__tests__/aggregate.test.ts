@@ -169,6 +169,57 @@ describe("getLiteraturePool", () => {
     expect(pool.works).toHaveLength(2);
   });
 
+  it("gives a slow source its own clock and still returns the rest", async () => {
+    // OpenAlex hangs; the others answer. Its budget must expire on its own
+    // without capping the sources that were ready in time.
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string, init?: { signal?: AbortSignal }) => {
+        const respond = (data: unknown) =>
+          ({ ok: true, status: 200, json: async () => data }) as unknown as Response;
+        if (url.includes("api.openalex.org")) {
+          return new Promise<Response>((_resolve, reject) => {
+            init?.signal?.addEventListener("abort", () => {
+              const error = new Error("aborted");
+              error.name = "AbortError";
+              reject(error);
+            });
+          });
+        }
+        if (url.includes("ebi.ac.uk")) {
+          return respond({ hitCount: 1, resultList: { result: [EUROPEPMC_UNIQUE] } });
+        }
+        return respond({ total: 0, data: [] });
+      }),
+    );
+
+    // Fake timers so the 8s budget elapses instantly rather than in real time.
+    vi.useFakeTimers();
+    let pool;
+    try {
+      const pending = getLiteraturePool("Panthera leo");
+      await vi.advanceTimersByTimeAsync(9_000);
+      ({ pool } = await pending);
+    } finally {
+      vi.useRealTimers();
+    }
+
+    expect(pool.sources.find((s) => s.id === "openalex")).toMatchObject({
+      status: "error",
+      note: "Timed out",
+    });
+    expect(pool.works.map((w) => w.title)).toEqual(["An older note on lions"]);
+  });
+
+  it("declares a longer budget for the two sources that need one", () => {
+    // Both measured 4-9s against the live APIs; at the 8s default they were
+    // timing out often enough to be effectively absent.
+    const byId = Object.fromEntries(SOURCES.map((s) => [s.id, s]));
+    expect(byId.bhl.timeoutMs).toBeGreaterThan(8_000);
+    expect(byId.semanticscholar.timeoutMs).toBeGreaterThan(8_000);
+    expect(byId.openalex.timeoutMs).toBeUndefined();
+  });
+
   it("retries a throttled source sooner than a healthy one", async () => {
     // A rate limit shortens the TTL, so the gap doesn't stick for six hours.
     vi.useFakeTimers();

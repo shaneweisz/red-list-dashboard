@@ -110,12 +110,15 @@ async function buildPool(
   perSourceLimit: number,
 ): Promise<LiteraturePool> {
   const nameVariants = generateNameVariants(scientificName);
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), SOURCE_TIMEOUT_MS);
 
-  try {
-    const results = await Promise.all(
-      SOURCES.map(async (source) => {
+  // Each source runs on its own clock, so a legitimately slow one — BHL
+  // searching OCR'd text across scanned books — delays only itself instead of
+  // capping the whole fan-out at the fastest common budget.
+  const results = await Promise.all(
+    SOURCES.map(async (source) => {
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), source.timeoutMs ?? SOURCE_TIMEOUT_MS);
+      try {
         const result = await source.fetch({
           scientificName,
           nameVariants,
@@ -123,29 +126,29 @@ async function buildPool(
           signal: controller.signal,
         });
         return { source, result };
-      }),
-    );
+      } finally {
+        clearTimeout(timer);
+      }
+    }),
+  );
 
-    const sources: SourceReport[] = results.map(({ source, result }) => ({
-      id: source.id,
-      label: source.label,
-      homepage: source.homepage,
-      status: result.status,
-      fetched: result.works.length,
-      upstreamTotal: result.upstreamTotal,
-      note: result.note,
-    }));
+  const sources: SourceReport[] = results.map(({ source, result }) => ({
+    id: source.id,
+    label: source.label,
+    homepage: source.homepage,
+    status: result.status,
+    fetched: result.works.length,
+    upstreamTotal: result.upstreamTotal,
+    note: result.note,
+  }));
 
-    return {
-      scientificName,
-      nameVariants,
-      works: dedupeWorks(results.map(({ result }) => result.works)),
-      sources,
-      fetchedAt: Date.now(),
-    };
-  } finally {
-    clearTimeout(timer);
-  }
+  return {
+    scientificName,
+    nameVariants,
+    works: dedupeWorks(results.map(({ result }) => result.works)),
+    sources,
+    fetchedAt: Date.now(),
+  };
 }
 
 function evictOldest(): void {

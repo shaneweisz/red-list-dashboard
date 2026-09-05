@@ -17,8 +17,55 @@ export const CONTACT_EMAIL = "sw984@cam.ac.uk";
 export const USER_AGENT =
   `RedListDashboard/1.0 (+https://github.com/shaneweisz/redlist-dashboard; mailto:${CONTACT_EMAIL})`;
 
-/** Per-source budget. The route gives all sources this long, in parallel. */
+/**
+ * Default per-source budget. Sources run in parallel, each on its own clock,
+ * so one slow source delays only itself.
+ *
+ * Two sources need more and say so via `SourceAdapter.timeoutMs`: BHL is
+ * searching OCR'd text across scanned books and measured 8.5s on a cold query,
+ * and Semantic Scholar's authenticated endpoint measured 4-8s. At a flat 8s
+ * both timed out often enough to be effectively absent from the timeline.
+ */
 export const SOURCE_TIMEOUT_MS = 8_000;
+
+/**
+ * Serialises calls so they go out at least `minIntervalMs` apart.
+ *
+ * Semantic Scholar issues keys with an explicit "1 request per second,
+ * cumulative across all endpoints" ceiling and asks callers to stay under it.
+ * Nothing else here needs one: every other source is called at most once per
+ * species per six hours.
+ *
+ * This is per-process, so it holds within a server instance rather than across
+ * a horizontally-scaled deployment - combined with the six-hour pool cache,
+ * that keeps us comfortably inside the limit in practice.
+ */
+export class MinIntervalLimiter {
+  /** Epoch ms at which the next call may go out. */
+  private nextSlot = 0;
+
+  constructor(private readonly minIntervalMs: number) {}
+
+  async acquire(signal?: AbortSignal): Promise<void> {
+    const now = Date.now();
+    const slot = Math.max(now, this.nextSlot);
+    this.nextSlot = slot + this.minIntervalMs;
+    const wait = slot - now;
+    if (wait <= 0) return;
+    await new Promise<void>((resolve, reject) => {
+      const onAbort = () => {
+        clearTimeout(timer);
+        reject(new DOMException("Aborted while waiting for a rate-limit slot", "AbortError"));
+      };
+      const timer = setTimeout(() => {
+        signal?.removeEventListener("abort", onAbort);
+        resolve();
+      }, wait);
+      if (signal?.aborted) return onAbort();
+      signal?.addEventListener("abort", onAbort, { once: true });
+    });
+  }
+}
 
 export class SourceHttpError extends Error {
   constructor(
@@ -65,7 +112,7 @@ export function failed(error: unknown): SourceResult {
     status: "error",
     works: [],
     upstreamTotal: null,
-    note: isAbort ? `Timed out after ${SOURCE_TIMEOUT_MS / 1000}s` : message,
+    note: isAbort ? "Timed out" : message,
   };
 }
 

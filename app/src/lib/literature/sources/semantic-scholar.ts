@@ -5,7 +5,9 @@
  * Two caveats drive the shape of this adapter:
  *  - The keyless tier is a *shared* pool and 429s readily. That is expected,
  *    not an error to shout about, so it degrades to a "rate limited" report and
- *    the timeline is served from the other sources.
+ *    the timeline is served from the other sources. An issued key carries an
+ *    explicit "1 request per second, cumulative across all endpoints" ceiling,
+ *    which `RATE_LIMIT` keeps us under.
  *  - `/paper/search` is relevance-ranked with no date sort and no phrase
  *    operator, so results are filtered locally against the name variants and
  *    take their place in the timeline via the global merge sort rather than
@@ -23,7 +25,7 @@ import {
   toSortStamp,
 } from "../normalize";
 import type { LiteratureWork, SourceAdapter, SourceQuery, SourceResult } from "../types";
-import { failed, fetchJson } from "./http";
+import { failed, fetchJson, MinIntervalLimiter } from "./http";
 
 interface SemanticScholarPaper {
   paperId?: string;
@@ -59,10 +61,19 @@ const FIELDS = [
   "authors",
 ].join(",");
 
+/**
+ * Semantic Scholar's stated ceiling is 1 request per second, and they ask
+ * callers to sit below it — hence 1.1s rather than exactly 1s.
+ */
+const RATE_LIMIT = new MinIntervalLimiter(1_100);
+
 export const semanticScholarSource: SourceAdapter = {
   id: "semanticscholar",
   label: "Semantic Scholar",
   homepage: "https://www.semanticscholar.org",
+  // Measured 4-8s on the authenticated endpoint; the default budget was cutting
+  // it off. Also covers any time spent waiting for a rate-limit slot.
+  timeoutMs: 20_000,
 
   async fetch({ scientificName, nameVariants, limit, signal }: SourceQuery): Promise<SourceResult> {
     const url =
@@ -75,6 +86,10 @@ export const semanticScholarSource: SourceAdapter = {
     const headers = apiKey ? { "x-api-key": apiKey } : undefined;
 
     try {
+      // The 1 rps ceiling is a condition of an issued key. Unauthenticated
+      // callers share a 1000 rps pool that a single request can't breach, so
+      // there is nothing to pace there.
+      if (apiKey) await RATE_LIMIT.acquire(signal);
       const data = await fetchJson<SemanticScholarResponse>(url, { signal, headers });
       const works = (data.data ?? [])
         .map(toWork)
@@ -85,7 +100,10 @@ export const semanticScholarSource: SourceAdapter = {
     } catch (error) {
       const result = failed(error);
       if (result.status === "rate_limited") {
-        result.note = "Shared rate limit reached — set SEMANTIC_SCHOLAR_API_KEY for a private quota";
+        // Don't tell someone to set a key they have already set.
+        result.note = apiKey
+          ? "Rate limit reached"
+          : "Shared rate limit reached — set SEMANTIC_SCHOLAR_API_KEY for a private quota";
       }
       return result;
     }
