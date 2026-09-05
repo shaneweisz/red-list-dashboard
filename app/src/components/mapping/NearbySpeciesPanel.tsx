@@ -22,6 +22,7 @@ import {
   NEARBY_RADII_KM,
   NEARBY_RECORDS_NOTE,
   NEARBY_SEARCH_COLOR,
+  NEARBY_PICKED_COLOR,
   NEARBY_STALENESS_NOTE,
   nearbyGbifSiteUrl,
   type NearbyRadiusKm,
@@ -38,6 +39,11 @@ interface Props {
   /** Controlled by the map, which draws this radius on the ground. */
   radiusKm: NearbyRadiusKm;
   onRadiusChange: (km: NearbyRadiusKm) => void;
+  /** The neighbour whose own records the map is drawing, if any. */
+  pickedKey: string | null;
+  onPick: (species: { key: string; name: string } | null) => void;
+  /** What the map found for it: null while loading. */
+  pickedPoints: { shown: number; total: number } | null;
   onClose: () => void;
 }
 
@@ -47,7 +53,8 @@ function taxonLabel(taxonGroup: string): string {
 }
 
 export default function NearbySpeciesPanel({
-  lat, lng, recordName, excludeGbifKey, radiusKm, onRadiusChange, onClose,
+  lat, lng, recordName, excludeGbifKey, radiusKm, onRadiusChange,
+  pickedKey, onPick, pickedPoints, onClose,
 }: Props) {
   /** Which threat's species are expanded, if any. */
   const [openThreat, setOpenThreat] = useState<string | null>(null);
@@ -248,7 +255,12 @@ export default function NearbySpeciesPanel({
                      everything else hangs off — was the thing truncated, to
                      stubs like "Spizaetus i…". The names get the width; what
                      qualifies them sits underneath. */
-                  <div key={s.gbif_species_key} className="py-0.5">
+                  <div
+                    key={s.gbif_species_key}
+                    className={`py-0.5 -mx-1 px-1 rounded ${
+                      pickedKey === s.gbif_species_key ? "bg-orange-50 dark:bg-orange-950/40" : ""
+                    }`}
+                  >
                     <div className="flex items-baseline gap-1.5">
                       <span
                         className="shrink-0 px-1 rounded text-[9px] font-medium text-white tabular-nums"
@@ -257,15 +269,28 @@ export default function NearbySpeciesPanel({
                       >
                         {s.category}
                       </span>
-                      <a
-                        href={nearbyGbifSiteUrl({ lat, lng, radiusKm: result.radiusKm, speciesKey: s.gbif_species_key })}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        title="See these records on GBIF"
-                        className="italic text-zinc-700 dark:text-zinc-200 hover:text-blue-600 dark:hover:text-blue-400 hover:underline truncate"
+                      {/* The name is the switch now: clicking it puts this
+                          species' own records on the map, clicking again takes
+                          them off. Opening GBIF moved to the icon at the end of
+                          the row, because one row can't have two things a click
+                          might mean. */}
+                      <button
+                        onClick={() =>
+                          onPick(
+                            pickedKey === s.gbif_species_key
+                              ? null
+                              : { key: s.gbif_species_key, name: s.scientific_name }
+                          )
+                        }
+                        title={
+                          pickedKey === s.gbif_species_key
+                            ? "Take this species' records off the map"
+                            : "Draw this species' records on the map"
+                        }
+                        className="italic text-left text-zinc-700 dark:text-zinc-200 hover:text-orange-600 dark:hover:text-orange-400 truncate"
                       >
                         {s.scientific_name}
-                      </a>
+                      </button>
                       {/* The common name is how most people hold a species — an
                           assessor scanning for a comparable neighbour reads
                           "Andean Bear" faster than the binomial. Bracketed and
@@ -273,6 +298,17 @@ export default function NearbySpeciesPanel({
                       {s.common_name && (
                         <span className="text-zinc-400 truncate">({s.common_name})</span>
                       )}
+                      <a
+                        href={nearbyGbifSiteUrl({ lat, lng, radiusKm: result.radiusKm, speciesKey: s.gbif_species_key })}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        title="Open these records on GBIF"
+                        className="ml-auto shrink-0 text-zinc-300 hover:text-blue-600 dark:text-zinc-600 dark:hover:text-blue-400"
+                      >
+                        <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M14 5h5v5m0-5L10 14M9 5H6a1 1 0 00-1 1v12a1 1 0 001 1h12a1 1 0 001-1v-3" />
+                        </svg>
+                      </a>
                     </div>
                     {/* All three free — they came off the same parquet row as
                         the category. The count leads because the list is now
@@ -282,6 +318,19 @@ export default function NearbySpeciesPanel({
                       {" · "}
                       {taxonLabel(s.taxon_group)}
                       {s.assessment_year != null && ` · assessed ${s.assessment_year}`}
+                      {/* Only under the picked row, where it says what the
+                          orange dots on the map are and whether they are all
+                          of them. */}
+                      {pickedKey === s.gbif_species_key && (
+                        <span style={{ color: NEARBY_PICKED_COLOR }}>
+                          {" · "}
+                          {pickedPoints == null
+                            ? "drawing…"
+                            : pickedPoints.total > pickedPoints.shown
+                              ? `${pickedPoints.shown} of ${pickedPoints.total} drawn`
+                              : `${pickedPoints.shown} drawn`}
+                        </span>
+                      )}
                     </div>
                   </div>
                 ))}

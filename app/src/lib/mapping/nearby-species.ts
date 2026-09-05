@@ -85,6 +85,53 @@ export const NEARBY_RECORDS_NOTE =
  */
 export const NEARBY_SEARCH_COLOR = "#0ea5e9";
 
+/**
+ * The colour one picked neighbour's records are drawn in.
+ *
+ * Orange because everything else on this map is spoken for: GBIF's own points
+ * are the green ramp, the assessor's georeferences are violet, an imported
+ * point file is blue, protected areas and forest loss are the two pinks, and
+ * the search radius is the sky blue above. A neighbour's records have to be
+ * unmistakably none of those at a glance.
+ */
+export const NEARBY_PICKED_COLOR = "#ea580c";
+
+/**
+ * How many of a picked species' records to draw.
+ *
+ * GBIF's own per-request ceiling, and past a few hundred dots in a 10 km circle
+ * the map stops saying anything a smaller sample doesn't. The panel says when
+ * it is showing a sample rather than all of them.
+ */
+export const NEARBY_POINTS_LIMIT = 300;
+
+/** One drawn record of a picked neighbour. */
+export interface NearbyPoint {
+  lat: number;
+  lng: number;
+  year: number | null;
+  basis: string | null;
+}
+
+/** Where a picked neighbour's records are, inside the same radius. */
+export function nearbyPointsUrl(opts: {
+  lat: number;
+  lng: number;
+  radiusKm: number;
+  speciesKey: string;
+}): string {
+  const params = new URLSearchParams({
+    geoDistance: `${opts.lat},${opts.lng},${opts.radiusKm}km`,
+    // Same checklist as the facet that produced this key — see nearbyFacetUrl.
+    checklistKey: COL_XR_CHECKLIST_KEY,
+    taxonKey: opts.speciesKey,
+    hasCoordinate: "true",
+    hasGeospatialIssue: "false",
+    limit: String(NEARBY_POINTS_LIMIT),
+  });
+  return `https://api.gbif.org/v1/occurrence/search?${params}`;
+}
+
 /** One species recorded in the radius, as the panel shows it. */
 export interface NearbySpecies {
   gbif_species_key: string;

@@ -30,6 +30,8 @@ import NearbySpeciesPanel from "@/components/mapping/NearbySpeciesPanel";
 import {
   NEARBY_RADIUS_DEFAULT,
   NEARBY_SEARCH_COLOR,
+  NEARBY_PICKED_COLOR,
+  type NearbyPoint,
   type NearbyRadiusKm,
 } from "@/lib/mapping/nearby-species";
 import MapGeoreferenceEditor from "./MapGeoreferenceEditor";
@@ -1147,6 +1149,55 @@ export default function OccurrenceMapRow({
    * out. Opening it on a different record starts from the default again.
    */
   const [nearbyRadiusKm, setNearbyRadiusKm] = useState<NearbyRadiusKm>(NEARBY_RADIUS_DEFAULT);
+  /**
+   * One neighbour from the list, drawn on the map.
+   *
+   * One at a time on purpose: every neighbour at once is a thousand anonymous
+   * dots over the records the assessor came to look at, where one species is a
+   * shape that can be read — a valley, a roadside, a single locality everything
+   * came from.
+   */
+  const [nearbyPicked, setNearbyPicked] = useState<{ key: string; name: string } | null>(null);
+  const [nearbyPoints, setNearbyPoints] = useState<{ points: NearbyPoint[]; total: number } | null>(null);
+
+  useEffect(() => {
+    if (!nearbyAt || !nearbyPicked) {
+      setNearbyPoints(null);
+      return;
+    }
+    const controller = new AbortController();
+    const params = new URLSearchParams({
+      lat: String(nearbyAt.lat),
+      lng: String(nearbyAt.lng),
+      radiusKm: String(nearbyRadiusKm),
+      speciesKey: nearbyPicked.key,
+    });
+    fetch(`/api/nearby-species/points?${params}`, { signal: controller.signal })
+      .then(async (r) => {
+        const body = await r.json();
+        if (!r.ok) throw new Error(body?.error ?? `Request failed (${r.status})`);
+        setNearbyPoints({ points: body.points ?? [], total: body.total ?? 0 });
+      })
+      .catch((e: unknown) => {
+        if (e instanceof DOMException && e.name === "AbortError") return;
+        // A neighbour that won't draw shouldn't take the list down with it: the
+        // row simply stops saying "drawing…" and nothing appears.
+        setNearbyPoints({ points: [], total: 0 });
+      });
+    return () => controller.abort();
+  }, [nearbyAt, nearbyPicked, nearbyRadiusKm]);
+
+  const nearbyPointsGeoJson = useMemo<GeoJSON.FeatureCollection>(
+    () => ({
+      type: "FeatureCollection",
+      features: (nearbyPoints?.points ?? []).map((pt) => ({
+        type: "Feature" as const,
+        properties: { year: pt.year, basis: pt.basis },
+        geometry: { type: "Point" as const, coordinates: [pt.lng, pt.lat] },
+      })),
+    }),
+    [nearbyPoints]
+  );
   /** A pin whose label is being renamed in place. */
   const [renamingPin, setRenamingPin] = useState<string | null>(null);
   /**
@@ -3719,6 +3770,26 @@ export default function OccurrenceMapRow({
                     />
                   </Source>
                 )}
+              {/* The picked neighbour's own records. Above the radius they sit
+                  inside and below everything the assessor is deciding about —
+                  they are context for this map, not one of its own layers. */}
+              {nearbyAt && nearbyPicked && nearbyPointsGeoJson.features.length > 0 && (
+                <Source id={`nearby-points-${panelId}`} type="geojson" data={nearbyPointsGeoJson}>
+                  <Layer
+                    id={`nearby-points-circle-${panelId}`}
+                    type="circle"
+                    paint={{
+                      "circle-radius": 4,
+                      "circle-color": NEARBY_PICKED_COLOR,
+                      "circle-opacity": 0.85,
+                      // A white ring, because these land on top of the green
+                      // GBIF points and the two must not merge into one blob.
+                      "circle-stroke-width": 1,
+                      "circle-stroke-color": "#ffffff",
+                    }}
+                  />
+                </Source>
+              )}
               {/* The assessor's own georeferences — drawn above the GBIF points
                   in a colour used nowhere else, with the uncertainty radius to
                   scale. They are never merged into the GBIF layer or into any
@@ -4614,7 +4685,17 @@ export default function OccurrenceMapRow({
               excludeGbifKey={speciesKey}
               radiusKm={nearbyRadiusKm}
               onRadiusChange={setNearbyRadiusKm}
-              onClose={() => setNearbyAt(null)}
+              pickedKey={nearbyPicked?.key ?? null}
+              onPick={setNearbyPicked}
+              pickedPoints={
+                nearbyPicked && nearbyPoints
+                  ? { shown: nearbyPoints.points.length, total: nearbyPoints.total }
+                  : null
+              }
+              onClose={() => {
+                setNearbyAt(null);
+                setNearbyPicked(null);
+              }}
             />
           )}
           {/* This session's edits, newest first. Clicking one steps back to it,
@@ -5716,6 +5797,7 @@ export default function OccurrenceMapRow({
                         recordName: String(record.properties.species || "this record"),
                       });
                       setNearbyRadiusKm(NEARBY_RADIUS_DEFAULT);
+                      setNearbyPicked(null);
                     }}
                     title="Assessed species with GBIF records around this one, and the threats their assessments cite"
                     className="flex w-full items-center gap-1.5 px-1 py-1 rounded hover:bg-zinc-100 dark:hover:bg-zinc-800"
