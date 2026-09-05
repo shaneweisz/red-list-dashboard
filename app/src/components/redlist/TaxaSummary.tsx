@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useRef, useCallback, useMemo } from "react";
+import React, { useState, useEffect, useRef, useCallback, useMemo, useId } from "react";
 import { createPortal } from "react-dom";
 import { useRouter } from "next/navigation";
 import { FaInfoCircle, FaChevronRight, FaFlag } from "react-icons/fa";
@@ -22,7 +22,8 @@ import { prettifyQs } from "@/lib/query-string";
 import { sisRowKey } from "@/lib/species-row-key";
 // Reason labels are shared with the main dashboard's taxonomic-revision flag —
 // see lib/col-revision.ts (both surfaces must explain a reason the same way).
-import { noMatchSentence, neSplitSentence, neSynonymSentence, reasonComposition, displayReason, NE_SPLIT_EVIDENCE } from "@/lib/col-revision";
+import { neSplitSentence, neSynonymSentence, reasonComposition, displayReason, NE_SPLIT_EVIDENCE } from "@/lib/col-revision";
+import { NoMatchLine } from "@/components/redlist/revision-links";
 
 // See scripts/build-taxa-summary.ts's classifyNoMatch for what each reason means.
 // Modular/additive on top of colBreakdown[].noMatchIds — safe to drop independently
@@ -456,6 +457,72 @@ function computePopoverPos(rect: { top: number; bottom: number; left: number }):
   };
 }
 
+/**
+ * An explanatory note that appears the moment you hover, not a second later.
+ *
+ * A `title` attribute cannot do this: the delay before the browser shows one is
+ * the browser's, not ours, and it is about a second. On a note that explains a
+ * number the reader is already looking at ("why does this say 105.9%?"), a
+ * second is long enough to give up and assume it is a bug.
+ *
+ * Portalled and position: fixed, for the same reason the popovers above are: the
+ * taxa table scrolls horizontally and has sticky columns, so a tooltip rendered
+ * in place is clipped by one ancestor or another. Shown on focus as well as
+ * hover, since the trigger is reachable by keyboard.
+ */
+function HoverNote({ note, className, children }: { note: string; className?: string; children: React.ReactNode }) {
+  const ref = useRef<HTMLSpanElement>(null);
+  const noteId = useId();
+  const [pos, setPos] = useState<{ top: number; left: number } | null>(null);
+  const show = () => {
+    const rect = ref.current?.getBoundingClientRect();
+    if (!rect) return;
+    const width = 260;
+    const margin = 8;
+    // Clamped so a flag near either edge doesn't hang off it.
+    const left = Math.max(margin, Math.min(rect.left + rect.width / 2 - width / 2, window.innerWidth - width - margin));
+    // Below by default, above when there isn't room — a row near the fold is
+    // exactly where an over-100% flag tends to be.
+    const below = window.innerHeight - rect.bottom > 90;
+    setPos({ top: below ? rect.bottom + 6 : rect.top - 6, left });
+  };
+  return (
+    <>
+      <span
+        ref={ref}
+        tabIndex={0}
+        onMouseEnter={show}
+        onMouseLeave={() => setPos(null)}
+        onFocus={show}
+        onBlur={() => setPos(null)}
+        aria-describedby={noteId}
+        className={className}
+      >
+        {children}
+        {/* describedby, not aria-label: on the split line the visible sentence is
+            the content and this is the caveat about it, and a label would replace
+            the sentence rather than follow it. */}
+        <span id={noteId} className="sr-only">{note}</span>
+      </span>
+      {pos && typeof document !== "undefined" && createPortal(
+        <div
+          role="tooltip"
+          className="fixed z-[9999] px-3 py-2 text-xs text-white bg-zinc-800 dark:bg-zinc-700 rounded-lg shadow-lg normal-case text-left pointer-events-none"
+          style={{
+            top: pos.top,
+            left: pos.left,
+            width: 260,
+            transform: window.innerHeight - pos.top < 90 ? "translateY(-100%)" : undefined,
+          }}
+        >
+          {note}
+        </div>,
+        document.body,
+      )}
+    </>
+  );
+}
+
 // Same idea as computePopoverPos, but opens ABOVE the trigger instead of below —
 // for a column HEADER icon (DescribedSourceInfoIcon), where opening below would
 // drop the popover straight onto the table's own first data row instead of into
@@ -763,29 +830,12 @@ function SpeciesListPanel({
                       )}
                     </td>
                     <td className="py-1 pr-2 text-zinc-300">
-                      {detail && (() => {
-                        // Subject-free framing: the Name column beside this one
-                        // already says which species it is (see noMatchSentence).
-                        const sentence = noMatchSentence(detail, null);
-                        return (
-                          <>
-                            {sentence.before}
-                            {sentence.detail && (
-                              detail.detailId != null ? (
-                                <a
-                                  href={speciesHref(nodeId, sisRowKey(detail.detailId), "reassessments")}
-                                  target="_blank"
-                                  rel="noopener noreferrer"
-                                  className="text-blue-300 hover:text-blue-200 underline"
-                                >
-                                  {sentence.detail}
-                                </a>
-                              ) : sentence.detail
-                            )}
-                            {sentence.after}
-                          </>
-                        );
-                      })()}
+                      {/* The dashboard flag's own renderer, subject-free: same
+                          sentence, same links. It used to link a named species to
+                          its page in this app instead of to CoL, which is the one
+                          link a row of evidence about CoL's records should have —
+                          the species page is a click away in the Name column. */}
+                      {detail && <NoMatchLine flag={detail} subject={null} />}
                       {/* Not Evaluated, but IUCN has assessed the taxon under another
                           name — the checkable one first, since the split line is a
                           heuristic and this is CoL's own synonymy. A species can
@@ -810,7 +860,7 @@ function SpeciesListPanel({
                       {split && (() => {
                         const sentence = neSplitSentence(split.parentName);
                         return (
-                          <span className="block cursor-help" title={NE_SPLIT_EVIDENCE}>
+                          <HoverNote note={NE_SPLIT_EVIDENCE} className="block">
                             {sentence.before}
                             <a
                               href={speciesHref(nodeId, sisRowKey(split.parentId), "reassessments")}
@@ -821,7 +871,7 @@ function SpeciesListPanel({
                               {sentence.detail}
                             </a>
                             {sentence.after}
-                          </span>
+                          </HoverNote>
                         );
                       })()}
                     </td>
@@ -1927,12 +1977,11 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
         {flagOver100 && (
           <span className="w-3 flex-shrink-0 flex justify-end">
             {percent > 100 && (
-              <span
-                className="text-amber-500 dark:text-amber-400"
-                title={OVER_100_ASSESSED_NOTE}
-              >
-                <FaFlag size={8} aria-label={OVER_100_ASSESSED_NOTE} />
-              </span>
+              <HoverNote note={OVER_100_ASSESSED_NOTE}>
+                <span className="text-amber-500 dark:text-amber-400">
+                  <FaFlag size={8} />
+                </span>
+              </HoverNote>
             )}
           </span>
         )}

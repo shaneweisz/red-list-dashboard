@@ -880,6 +880,21 @@ export function neSplitSentence(parentName: string): NoMatchSentence {
 export const NE_SPLIT_EVIDENCE =
   `Heuristic, not a confirmed taxonomic changelog: ${COL} still files an old subspecies name of the linked species as a synonym of this one. Its page lists that name under Synonyms.`;
 
+/**
+ * The CoL record `noMatchSentence`'s `detail` names, for linking it.
+ *
+ * Usually detailColId — the record for the second species a row names. For a
+ * reclassified row the second name IS the record this assessment matched, which
+ * the classifier files under colId, so the link target has to follow the name
+ * rather than sit on one fixed field. Without this the reclassified rows print
+ * "accepting Aria greenii" as plain text, which is the one sentence in the
+ * column whose whole point is that you can go and look at it.
+ */
+export function noMatchDetailColId(flag: ColRevision): string | undefined {
+  if (flag.detailColId) return flag.detailColId;
+  return canonicalReason(flag.reason) === "classified_elsewhere" ? flag.colId : undefined;
+}
+
 /** The sentence as one plain string, for a `title`/tooltip that can't hold a link. */
 export function noMatchExplanation(flag: ColRevision, subject: string | null = null): string {
   const { before, detail, after } = noMatchSentence(flag, subject);
