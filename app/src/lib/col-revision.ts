@@ -346,6 +346,8 @@ export interface ColRevision {
   acceptedColId?: string;
   /** The difference is in the genus alone — same epithet, different genus. */
   genusDiffers?: boolean;
+  /** Where CoL files the record, "Family (Order)" ("classified_elsewhere" only). */
+  colGroup?: string;
 }
 
 /** Does this species carry any revision signal at all? */
@@ -574,17 +576,38 @@ export function noMatchSentence(flag: ColRevision, subject: string | null): NoMa
         ? { before: `No ${COL} species matches ${subject}, so there is nothing there to check this assessment against.`, after: "" }
         : { before: "No CoL record of this name, at any status.", after: "" };
     case "missing_from_backbone":
+      // Name the id. "A record that no longer resolves" is not something a reader
+      // can look up, act on, or report; the id is all three — it is what they
+      // would paste into CoL, and what makes the claim falsifiable.
       return subject
-        ? { before: `${s}links to a ${COL} record that no longer resolves, so the match needs redoing.`, after: "" }
-        : { before: "Links to a CoL id this release no longer holds.", after: "" };
-    case "classified_elsewhere":
+        ? { before: `${s}links to ${COL} id ${flag.colId ?? "(unknown)"}, which this release doesn't hold, so the match needs redoing.`, after: "" }
+        : { before: `Links to CoL id ${flag.colId ?? "(unknown)"}, which this release doesn't hold.`, after: "" };
+    case "classified_elsewhere": {
+      // "A different group" is the whole finding, so withholding WHICH group
+      // leaves nothing to check and nothing to act on. CoL's placement is on the
+      // record, so name it; only fall back to the bare phrasing where CoL files
+      // the record under no family, order or class at all.
+      const where = flag.colGroup;
       return subject
-        ? { before: `${COL} files ${s}under a different group, so it won't appear where this assessment places it.`, after: "" }
-        : { before: "CoL files this record under a different group.", after: "" };
+        ? where
+          ? { before: `${COL} files ${s}under ${where}, so it won't appear where this assessment places it.`, after: "" }
+          : { before: `${COL} files ${s}under a different group, so it won't appear where this assessment places it.`, after: "" }
+        : where
+          ? { before: `CoL files this record under ${where}.`, after: "" }
+          : { before: "CoL files this record under a different group.", after: "" };
+    }
+    // A data sync built before the rename still ships this code, and 322 rows in
+    // the current ssc-group-children-summaries.json carry it — rendered by the
+    // default below they read, in the panel, as the literal string "no_link".
+    // Same diagnosis under its old name, so give it the same words.
+    case "no_link":
+      return noMatchSentence({ ...flag, reason: "unmatched" }, subject);
     default:
-      // An unrecognised code renders as itself rather than as "undefined" — the
-      // col-revision test asserts this can't happen for any shipped reason.
-      return { before: flag.reason ?? "", after: "" };
+      // Never reached for a shipped reason (the col-revision test asserts every
+      // one is handled), so this is for data written by a future or older build.
+      // Says what the row is for rather than leaking a code the reader can make
+      // nothing of, which is what "no_link" did.
+      return { before: `No 1:1 ${COL} match for this name.`, after: "" };
   }
 }
 
@@ -730,6 +753,37 @@ export function acceptedNameSentence(
     ? { before: `${COL} uses a different genus for ${subject}, accepting `, detail: name, after: "." }
     : { before: `${COL} accepts a different name for ${subject}: `, detail: name, after: "." };
 }
+
+/**
+ * Why a Catalogue of Life species has no IUCN assessment, where we can say —
+ * the Not Evaluated half of the same panel, in the same voice as the no-match
+ * half above: a checkable statement about CoL's record, with the related
+ * assessed species named so a reader can see the assessment does exist, just
+ * not under this name.
+ *
+ * Two shapes, both derived from CoL's own synonymy (col-breakdown.ts):
+ *
+ *  - `neSynonym` — CoL files an IUCN-ASSESSED name among this species' synonyms
+ *    (SYNONYM_ASSESSED_SQL). Checkable on the species' CoL page, under Synonyms.
+ *  - `split` — CoL keeps an old infraspecific name under an assessed species
+ *    that now resolves here (SPLIT_CANDIDATES_SQL). A heuristic, so it stays
+ *    hedged, and the evidence is only visible from THIS species' CoL page —
+ *    hence a tooltip alongside saying what to look for.
+ *
+ * Most NE species get neither: they are simply species nobody has assessed,
+ * which the panel says by leaving the cell empty rather than padding it out.
+ */
+export function neSynonymSentence(assessedName: string): NoMatchSentence {
+  return { before: "CoL lists the assessed ", detail: assessedName, after: " as a synonym of this species." };
+}
+
+export function neSplitSentence(parentName: string): NoMatchSentence {
+  return { before: "Likely split from the assessed ", detail: parentName, after: "." };
+}
+
+/** The evidence behind neSplitSentence's hedge, for the tooltip beside it. */
+export const NE_SPLIT_EVIDENCE =
+  `Heuristic, not a confirmed taxonomic changelog: ${COL} still files an old subspecies name of the linked species as a synonym of this one. Its page lists that name under Synonyms.`;
 
 /** The sentence as one plain string, for a `title`/tooltip that can't hold a link. */
 export function noMatchExplanation(flag: ColRevision, subject: string | null = null): string {

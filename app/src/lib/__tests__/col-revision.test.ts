@@ -11,6 +11,9 @@ import {
   matchesRevisionFilter,
   noMatchSentence,
   noMatchExplanation,
+  neSynonymSentence,
+  neSplitSentence,
+  NE_SPLIT_EVIDENCE,
   splitSentence,
   splitSummary,
   lumpSentence,
@@ -284,6 +287,26 @@ describe("matchesRevisionFilter", () => {
   });
 });
 
+describe("Not Evaluated explanations", () => {
+  it("names the assessed species behind each, and keeps the heuristic hedged", () => {
+    const syn = neSynonymSentence("Epidendrum paniculatum");
+    expect(`${syn.before}${syn.detail}${syn.after}`)
+      .toBe("CoL lists the assessed Epidendrum paniculatum as a synonym of this species.");
+    // The linkable name stays in its own part, same rule as noMatchSentence's.
+    expect(syn.detail).toBe("Epidendrum paniculatum");
+    expect(syn.before).not.toContain("Epidendrum");
+
+    const split = neSplitSentence("Giraffa camelopardalis");
+    expect(`${split.before}${split.detail}${split.after}`)
+      .toBe("Likely split from the assessed Giraffa camelopardalis.");
+    // A name-pattern heuristic, so it may not state the split as fact.
+    expect(split.before).toContain("Likely");
+    // ...and the evidence a reader would check sits alongside it.
+    expect(NE_SPLIT_EVIDENCE).toContain("Synonyms");
+    expect(NE_SPLIT_EVIDENCE).toContain("Heuristic");
+  });
+});
+
 describe("noMatchSentence", () => {
   it("names the species when it stands alone, and drops it when the UI already does", () => {
     const flag = { reason: "lumped", detail: "Sus scrofa", detailId: 41775 };
@@ -349,6 +372,37 @@ describe("noMatchSentence", () => {
     }
   });
 
+  it("says WHICH group CoL files a reclassified record under", () => {
+    // "A different group" is the entire finding; without the group there is
+    // nothing to check and nothing to act on. 708 rows in the current SSC
+    // summaries carry this reason.
+    expect(noMatchExplanation({ reason: "classified_elsewhere", colGroup: "Valloniidae (Stylommatophora)" }, null))
+      .toBe("CoL files this record under Valloniidae (Stylommatophora).");
+    expect(noMatchExplanation({ reason: "classified_elsewhere", colGroup: "Valloniidae (Stylommatophora)" }, "Vallonia costata"))
+      .toContain("under Valloniidae (Stylommatophora)");
+    // No placement recorded at all — say the little that is true, not a blank.
+    expect(noMatchExplanation({ reason: "classified_elsewhere" }, null))
+      .toBe("CoL files this record under a different group.");
+  });
+
+  it("names the CoL id behind a dangling link", () => {
+    // The id is the actionable part: it is what a reader pastes into CoL, and
+    // what makes "no longer resolves" a claim they can falsify.
+    expect(noMatchExplanation({ reason: "missing_from_backbone", colId: "7FDLW" }, null))
+      .toBe("Links to CoL id 7FDLW, which this release doesn't hold.");
+  });
+
+  it("renders a retired reason code as words, not as the code", () => {
+    // 322 rows in the shipped ssc-group-children-summaries.json still carry
+    // "no_link", the pre-rename name for "unmatched" — which the panel was
+    // printing verbatim into its Explanation column.
+    expect(noMatchExplanation({ reason: "no_link" }, null))
+      .toBe(noMatchExplanation({ reason: "unmatched" }, null));
+    // And anything else unrecognised says what the row is, not what the code is.
+    expect(noMatchExplanation({ reason: "some_future_code" }, null))
+      .toBe("No 1:1 Catalogue of Life match for this name.");
+  });
+
   it("does not promise the checklist will add a name it has declined", () => {
     // "hasn't added it yet" implied a backlog; most of these are old names in
     // genera the checklist covers thoroughly. See noMatchSentence's not_in_base.
@@ -357,8 +411,14 @@ describe("noMatchSentence", () => {
     expect(sentence).toContain("extended release");
   });
 
-  it("falls back to the raw code rather than rendering undefined", () => {
-    expect(noMatchExplanation({ reason: "some_future_reason" }, "Bufo bufo")).toBe("some_future_reason");
+  it("falls back to words rather than to the raw code", () => {
+    // It used to render the code itself, on the reasoning that a code beats
+    // "undefined". It does, but only just: a sync built before "no_link" was
+    // renamed to "unmatched" is still shipping that code, and the panel printed
+    // the string "no_link" into its Explanation column for 322 species. Both
+    // halves are covered above, in "renders a retired reason code as words".
+    expect(noMatchExplanation({ reason: "some_future_reason" }, "Bufo bufo"))
+      .toBe("No 1:1 Catalogue of Life match for this name.");
   });
 });
 

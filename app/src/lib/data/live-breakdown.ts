@@ -10,7 +10,8 @@
  * The split_candidates/col_to_assessed temp tables are fully determined by the
  * data sync (never by which taxon/bucket a user is viewing), so
  * scripts/build-taxa-summary.ts precomputes them once at sync time into
- * data/col-split-candidates.parquet / data/col-to-assessed.parquet — tiny
+ * data/col-split-candidates.parquet / data/col-synonym-assessed.parquet /
+ * data/col-to-assessed.parquet — tiny
  * files (~6K / ~173K rows) loaded here directly. This used to instead rebuild
  * both from scratch on the first breakdown request after every cold server
  * start via a full scan + self-join over backbone.parquet (8M rows, ~125MB) —
@@ -29,6 +30,7 @@ import { ensureVernacularNamesLoaded } from "./vernacular-names";
 import {
   computeBreakdownEntry,
   SPLIT_CANDIDATES_SQL,
+  SYNONYM_ASSESSED_SQL,
   COL_TO_ASSESSED_SQL,
   backboneHasChecklistColumns,
   type BreakdownEntry,
@@ -57,6 +59,9 @@ async function ensureBackboneHelpers(conn: Awaited<ReturnType<typeof getConn>>):
         try {
           // Fast path: load the precomputed tables directly — no backbone scan.
           await conn.run(`CREATE TEMP TABLE split_candidates AS SELECT * FROM read_parquet('${parquetUri("col-split-candidates.parquet")}')`);
+          // Added after the other two, so a data sync that predates it takes the
+          // rebuild path below for all three rather than half-loading.
+          await conn.run(`CREATE TEMP TABLE synonym_assessed AS SELECT * FROM read_parquet('${parquetUri("col-synonym-assessed.parquet")}')`);
           await conn.run(`CREATE TEMP TABLE col_to_assessed AS SELECT * FROM read_parquet('${parquetUri("col-to-assessed.parquet")}')`);
         } catch (precomputeError) {
           // Precomputed files missing (e.g. an older data sync from before these
@@ -65,7 +70,9 @@ async function ensureBackboneHelpers(conn: Awaited<ReturnType<typeof getConn>>):
           const backbonePath = parquetUri("backbone.parquet");
           const assessedPath = parquetUri("assessed.parquet");
           const linkPath = parquetUri("species_link.parquet");
+          await conn.run(`DROP TABLE IF EXISTS split_candidates`);
           await conn.run(SPLIT_CANDIDATES_SQL(backbonePath, assessedPath, "ne_assessed_col_ids"));
+          await conn.run(SYNONYM_ASSESSED_SQL(backbonePath, assessedPath, "ne_assessed_col_ids"));
           await conn.run(COL_TO_ASSESSED_SQL(linkPath, assessedPath));
         }
         const hasChecklistColumns = await backboneHasChecklistColumns(conn, parquetUri("backbone.parquet"));

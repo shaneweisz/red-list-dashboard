@@ -17,7 +17,7 @@ import * as fs from "fs";
 import * as os from "os";
 import * as path from "path";
 import { DuckDBInstance, type DuckDBConnection } from "@duckdb/node-api";
-import { computeNoMatchDetails, COL_TO_ASSESSED_SQL, backboneHasChecklistColumns, type BreakdownQueryContext } from "../col-breakdown";
+import { computeNoMatchDetails, COL_TO_ASSESSED_SQL, SYNONYM_ASSESSED_SQL, backboneHasChecklistColumns, type BreakdownQueryContext } from "../col-breakdown";
 
 let tmp: string;
 let conn: DuckDBConnection;
@@ -31,13 +31,18 @@ beforeAll(async () => {
     conn.run(`COPY (${sql}) TO '${path.join(tmp, file)}' (FORMAT PARQUET);`);
 
   // CoL's displayable universe. IN1 is in Base; XR1 is the extended release only.
+  // The lineage columns are what the classified_elsewhere wording names — CoL's
+  // own placement for the record — and CLSEW carries no family, to exercise the
+  // fallback down the rank chain (CoL's family/order coverage is genuinely patchy).
   await copy(`SELECT * FROM (VALUES
-      ('IN1','Clean species', true, false),
-      ('XR1','Xr onlyus', false, false),
-      ('LUMP','Lump winner', true, false),
-      ('ANS','Anselli test', false, false),
-      ('AMBX','Ambiguous target', false, false)
-    ) v(col_id, scientific_name, in_base, extinct)`, "species/data_0.parquet");
+      ('IN1','Clean species', true, false, 'Felidae', 'Carnivora', 'Mammalia'),
+      ('XR1','Xr onlyus', false, false, 'Felidae', 'Carnivora', 'Mammalia'),
+      ('LUMP','Lump winner', true, false, 'Felidae', 'Carnivora', 'Mammalia'),
+      ('ANS','Anselli test', false, false, 'Felidae', 'Carnivora', 'Mammalia'),
+      ('AMBX','Ambiguous target', false, false, 'Felidae', 'Carnivora', 'Mammalia'),
+      ('CLSEW','Elsewhere species', true, false, 'valloniidae', 'stylommatophora', 'gastropoda'),
+      ('CLSEW2','Elsewhere unranked', true, false, NULL, NULL, 'gastropoda')
+    ) v(col_id, scientific_name, in_base, extinct, family, order_name, class_name)`, "species/data_0.parquet");
 
   // Backbone: a synonym of an in-Base accepted species (the synonym_of route),
   // and a subspecies record (the infraspecific route).
@@ -57,7 +62,16 @@ beforeAll(async () => {
       ('AMBX', NULL, 'accepted', 'species', 'Ambiguous target', false, NULL, NULL),
       ('AMB1', 'IN1', 'synonym', 'species', 'Ambiguous target', true, 'IN1', NULL),
       ('AMB2', 'LUMP', 'synonym', 'species', 'Ambiguous target', true, 'LUMP', NULL),
-      ('SPELL', 'LUMP', 'synonym', 'species', 'Spelling case', true, 'LUMP', NULL)
+      ('SPELL', 'LUMP', 'synonym', 'species', 'Spelling case', true, 'LUMP', NULL),
+      -- An UNASSESSED accepted species under which CoL files an assessed name:
+      -- IUCN has assessed this taxon, as 'Clean species'. SYNONYM_ASSESSED_SQL.
+      ('NEACC', NULL, 'accepted', 'species', 'Ne accepta', true, NULL, NULL),
+      ('NESYN', 'NEACC', 'synonym', 'species', 'Clean species', true, NULL, NULL),
+      -- Two names IUCN assesses separately, both synonyms of one unassessed
+      -- species: naming either would present a coin toss as a finding.
+      ('NEAMB', NULL, 'accepted', 'species', 'Ne ambigua', true, NULL, NULL),
+      ('NEAMB1', 'NEAMB', 'synonym', 'species', 'Lump winner', true, NULL, NULL),
+      ('NEAMB2', 'NEAMB', 'synonym', 'species', 'Demoted one', true, NULL, NULL)
     ) v(col_id, parent_id, status, rank, scientific_name, in_checklist, checklist_parent_id, checklist_name)`, "backbone.parquet");
 
   await copy(`SELECT * FROM (VALUES
@@ -187,5 +201,25 @@ describe("computeNoMatchDetails — the query, not just the classifier", () => {
     // rest of the row still supports rather than disappearing or erroring.
     expect(byId.get(3)?.reason).toBe("not_in_base");
     expect(byId.get(3)?.detail).toBeUndefined();
+  });
+});
+
+describe("SYNONYM_ASSESSED_SQL — why a Not Evaluated species may already be assessed", () => {
+  it("names the assessed species CoL files as a synonym, and refuses when there are two", async () => {
+    await conn.run(SYNONYM_ASSESSED_SQL(path.join(tmp, "backbone.parquet"), path.join(tmp, "assessed.parquet"), "assessed_cids"));
+    const rows = await (await conn.run("SELECT * FROM synonym_assessed ORDER BY ne_col_id")).getRowObjects();
+    const by = new Map(rows.map((r) => [String(r.ne_col_id), r]));
+
+    // CoL files the assessed 'Clean species' as a synonym of the unassessed
+    // 'Ne accepta' — the assessment exists, under a name CoL doesn't accept.
+    expect(by.get("NEACC")?.assessed_name).toBe("Clean species");
+    expect(Number(by.get("NEACC")?.assessed_id)).toBe(1);
+
+    // Two separately-assessed names under one unassessed species: no claim.
+    expect(by.has("NEAMB")).toBe(false);
+
+    // A synonym under an ASSESSED accepted record explains no gap — there is
+    // none. ('Renamed away' is a synonym of IN1, which IUCN has assessed.)
+    expect(by.has("IN1")).toBe(false);
   });
 });

@@ -22,12 +22,12 @@ import { prettifyQs } from "@/lib/query-string";
 import { sisRowKey } from "@/lib/species-row-key";
 // Reason labels are shared with the main dashboard's taxonomic-revision flag —
 // see lib/col-revision.ts (both surfaces must explain a reason the same way).
-import { noMatchSentence } from "@/lib/col-revision";
+import { noMatchSentence, neSplitSentence, neSynonymSentence, NE_SPLIT_EVIDENCE } from "@/lib/col-revision";
 
 // See scripts/build-taxa-summary.ts's classifyNoMatch for what each reason means.
 // Modular/additive on top of colBreakdown[].noMatchIds — safe to drop independently
 // of the count-only CoL Match / No CoL Match mechanism it rides alongside.
-type NoMatchDetail = { id: number; name: string; reason: string; detail?: string; detailId?: number; detailColId?: string; colId?: string; colName?: string };
+type NoMatchDetail = { id: number; name: string; reason: string; detail?: string; detailId?: number; detailColId?: string; colId?: string; colName?: string; colGroup?: string };
 
 // See scripts/build-taxa-summary.ts's SPLIT_CANDIDATES_SQL for the mechanism and its
 // caveats — a name-pattern heuristic (former-subspecies synonym → promoted species),
@@ -35,6 +35,12 @@ type NoMatchDetail = { id: number; name: string; reason: string; detail?: string
 // as fact. Modular/additive on top of colBreakdown[].splitDetails — keyed by col_id
 // since Not Evaluated species have no sis_taxon_id.
 type SplitDetail = { colId: string; parentId: number; parentName: string; parentCategory: string };
+
+// The second Not-Evaluated explanation: CoL files an IUCN-ASSESSED name among
+// this species' synonyms, so the taxon IS assessed — under a name CoL doesn't
+// accept. See col-breakdown.ts's SYNONYM_ASSESSED_SQL. Keyed by col_id and
+// droppable, exactly like SplitDetail.
+type NeSynonymDetail = { colId: string; assessedId: number; assessedName: string; assessedCategory: string };
 
 interface Table1aRowData {
   group: string;
@@ -52,7 +58,7 @@ interface Table1aRowData {
   medianGbifObsPerSpecies?: number;
   colDescribed?: number;
   colNe?: number;
-  colBreakdown?: { name: string; count: number; neCount: number; trueAssessed: number; noMatchIds: number[]; noMatchDetails?: NoMatchDetail[]; splitDetails?: SplitDetail[] }[];
+  colBreakdown?: { name: string; count: number; neCount: number; trueAssessed: number; noMatchIds: number[]; noMatchDetails?: NoMatchDetail[]; splitDetails?: SplitDetail[]; neSynonymDetails?: NeSynonymDetail[] }[];
   /** SSC groups mode only: which real view-root taxon this row's group is a
    * sub-population of (e.g. "mammals", "reptiles") — used to navigate to the
    * right root on click, since SSC group nodes span multiple taxa. */
@@ -117,7 +123,7 @@ interface SubGroupSummary {
   byCategory: Record<string, number>;
   colDescribed?: number;
   colNe?: number;
-  colBreakdown?: { name: string; count: number; neCount: number; trueAssessed: number; noMatchIds: number[]; noMatchDetails?: NoMatchDetail[]; splitDetails?: SplitDetail[] }[];
+  colBreakdown?: { name: string; count: number; neCount: number; trueAssessed: number; noMatchIds: number[]; noMatchDetails?: NoMatchDetail[]; splitDetails?: SplitDetail[]; neSynonymDetails?: NeSynonymDetail[] }[];
 }
 
 interface Props {
@@ -373,6 +379,7 @@ interface PanelRequest {
   noMatchIds?: number[];
   noMatchDetails?: NoMatchDetail[];
   splitDetails?: SplitDetail[];
+  neSynonymDetails?: NeSynonymDetail[];
 }
 
 const PANEL_PAGE_SIZE = 10;
@@ -581,6 +588,12 @@ function SpeciesListPanel({
     return m;
   }, [request.splitDetails]);
 
+  const neSynonymByColId = useMemo(() => {
+    const m = new Map<string, NeSynonymDetail>();
+    request.neSynonymDetails?.forEach((d) => m.set(d.colId, d));
+    return m;
+  }, [request.neSynonymDetails]);
+
   const total = sorted?.length ?? 0;
   const totalPages = Math.max(1, Math.ceil(total / PANEL_PAGE_SIZE));
   const pageRows = sorted ? sorted.slice((page - 1) * PANEL_PAGE_SIZE, page * PANEL_PAGE_SIZE) : [];
@@ -671,6 +684,7 @@ function SpeciesListPanel({
               {pageRows.map((s) => {
                 const detail = s.sis_taxon_id != null ? reasonBySisId.get(s.sis_taxon_id) : undefined;
                 const split = s.col_id != null ? splitByColId.get(s.col_id) : undefined;
+                const neSyn = s.col_id != null ? neSynonymByColId.get(s.col_id) : undefined;
                 const year = isNe ? s.described_year : (s.assessment_date ? s.assessment_date.slice(0, 4) : null);
                 return (
                   <tr key={s.species_key} className="border-t border-zinc-700/60 align-top">
@@ -716,21 +730,44 @@ function SpeciesListPanel({
                           </>
                         );
                       })()}
-                      {split && (
-                        <span
-                          title="Heuristic: Catalogue of Life still records this name as a former subspecies of the linked species — not a confirmed taxonomic changelog."
-                        >
-                          {"Likely split from "}
-                          <a
-                            href={speciesHref(nodeId, sisRowKey(split.parentId), "reassessments")}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="text-blue-300 hover:text-blue-200 underline"
-                          >
-                            {split.parentName}
-                          </a>
-                        </span>
-                      )}
+                      {/* Not Evaluated, but IUCN has assessed the taxon under another
+                          name — the checkable one first, since the split line is a
+                          heuristic and this is CoL's own synonymy. A species can
+                          carry both; they are different relationships, so both show. */}
+                      {neSyn && (() => {
+                        const sentence = neSynonymSentence(neSyn.assessedName);
+                        return (
+                          <span className="block">
+                            {sentence.before}
+                            <a
+                              href={speciesHref(nodeId, sisRowKey(neSyn.assessedId), "reassessments")}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="text-blue-300 hover:text-blue-200 underline"
+                            >
+                              {sentence.detail}
+                            </a>
+                            {sentence.after}
+                          </span>
+                        );
+                      })()}
+                      {split && (() => {
+                        const sentence = neSplitSentence(split.parentName);
+                        return (
+                          <span className="block cursor-help" title={NE_SPLIT_EVIDENCE}>
+                            {sentence.before}
+                            <a
+                              href={speciesHref(nodeId, sisRowKey(split.parentId), "reassessments")}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="text-blue-300 hover:text-blue-200 underline"
+                            >
+                              {sentence.detail}
+                            </a>
+                            {sentence.after}
+                          </span>
+                        );
+                      })()}
                     </td>
                     <td className="py-1 text-right text-zinc-400 whitespace-nowrap">{year ?? "—"}</td>
                   </tr>
@@ -794,7 +831,7 @@ function BreakdownList({
 }: {
   rank: FilterRank;
   label: string;
-  breakdown: { name: string; count: number; neCount: number; trueAssessed: number; noMatchIds: number[]; noMatchDetails?: NoMatchDetail[]; splitDetails?: SplitDetail[] }[];
+  breakdown: { name: string; count: number; neCount: number; trueAssessed: number; noMatchIds: number[]; noMatchDetails?: NoMatchDetail[]; splitDetails?: SplitDetail[]; neSynonymDetails?: NeSynonymDetail[] }[];
   onOpenPanel: (request: PanelRequest) => void;
   liveColIds?: Record<string, string>;
 }) {
@@ -881,7 +918,7 @@ function BreakdownList({
                   <button
                     type="button"
                     className="underline decoration-dotted underline-offset-2 hover:text-white"
-                    onClick={() => onOpenPanel({ rank, name: b.name, bucket: "ne", label: `${rowLabel} — Not Evaluated`, splitDetails: b.splitDetails })}
+                    onClick={() => onOpenPanel({ rank, name: b.name, bucket: "ne", label: `${rowLabel} — Not Evaluated`, splitDetails: b.splitDetails, neSynonymDetails: b.neSynonymDetails })}
                   >
                     {b.neCount}
                   </button>
@@ -995,7 +1032,7 @@ function DescribedSourceInfoIcon({ describedSource, setDescribedSource }: { desc
 // between a hover trigger and its target does this, there's no CSS-only fix that
 // survives a real mouse gap. Portal-rendered (mirrors the column-visibility menu
 // pattern above) so it isn't clipped by the table's scroll/sticky ancestors.
-function DescribedInfoIcon({ nodeId, source, breakdown }: { nodeId: string; source: "iucn" | "col"; breakdown?: { name: string; count: number; neCount: number; trueAssessed: number; noMatchIds: number[]; noMatchDetails?: NoMatchDetail[]; splitDetails?: SplitDetail[] }[] }) {
+function DescribedInfoIcon({ nodeId, source, breakdown }: { nodeId: string; source: "iucn" | "col"; breakdown?: { name: string; count: number; neCount: number; trueAssessed: number; noMatchIds: number[]; noMatchDetails?: NoMatchDetail[]; splitDetails?: SplitDetail[]; neSynonymDetails?: NeSynonymDetail[] }[] }) {
   const node = findNode(nodeId);
   const [open, setOpen] = useState(false);
   const btnRef = useRef<HTMLButtonElement>(null);
