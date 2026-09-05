@@ -183,7 +183,7 @@ const expandToggle = (expandable: boolean, expanded: boolean) =>
 // Deliberately no direction: IUCN has the newer treatment about as often as CoL
 // does (see col-revision.ts's "differs, never moved").
 const OVER_100_ASSESSED_NOTE =
-  "More species assessed than Catalogue of Life describes here — the two don't always recognise the same species, often where one accepts a split the other hasn't.";
+  "More species assessed than Catalogue of Life describes here, due to taxonomic mismatches between the Red List and CoL — often genus transfers, splits or lumps accepted by one source but not yet the other.";
 
 const getAssessedBarColor = (percent: number) =>
   percent >= 50 ? "#22c55e" : percent >= 20 ? "#eab308" : "#ef4444";
@@ -1928,7 +1928,7 @@ export default function TaxaSummary({ onToggleTaxon, selectedTaxa, selectedSubgr
           <span className="w-3 flex-shrink-0 flex justify-end">
             {percent > 100 && (
               <span
-                className="text-amber-500 dark:text-amber-400 cursor-help"
+                className="text-amber-500 dark:text-amber-400"
                 title={OVER_100_ASSESSED_NOTE}
               >
                 <FaFlag size={8} aria-label={OVER_100_ASSESSED_NOTE} />
