@@ -22,7 +22,7 @@ import { prettifyQs } from "@/lib/query-string";
 import { sisRowKey } from "@/lib/species-row-key";
 // Reason labels are shared with the main dashboard's taxonomic-revision flag —
 // see lib/col-revision.ts (both surfaces must explain a reason the same way).
-import { noMatchSentence, neSplitSentence, neSynonymSentence, reasonComposition, displayReason, countsAsMismatch, NE_SPLIT_EVIDENCE } from "@/lib/col-revision";
+import { noMatchSentence, neSplitSentence, neSynonymSentence, reasonComposition, displayReason, NE_SPLIT_EVIDENCE } from "@/lib/col-revision";
 
 // See scripts/build-taxa-summary.ts's classifyNoMatch for what each reason means.
 // Modular/additive on top of colBreakdown[].noMatchIds — safe to drop independently
@@ -689,36 +689,39 @@ function SpeciesListPanel({
           not Base" is CoL holding the record outside its curated checklist,
           and a bare count tells a specialist neither. Describes the whole
           bucket, not the filtered page — it explains the column's number. */}
-      {!error && request.bucket === "noColMatch" && composition.length > 0 && (
-        <p className="mb-1.5 text-zinc-400">
-          {composition.map((c, i) => (
-            <span key={c.reason}>
-              {i > 0 && <span className="text-zinc-600"> · </span>}
-              <button
-                type="button"
-                aria-pressed={reasonFilter === c.reason}
-                onClick={() => { setReasonFilter((r) => (r === c.reason ? null : c.reason)); setPage(1); }}
-                className={
-                  reasonFilter === c.reason
-                    ? "text-white underline underline-offset-2"
-                    : "underline decoration-dotted underline-offset-2 hover:text-white"
-                }
-              >
-                {c.count} {c.label}
-              </button>
-            </span>
-          ))}
-          {reasonFilter && (
+      {!error && request.bucket === "noColMatch" && composition.length > 0 && (() => {
+        const chip = (c: { reason: string; label: string; count: number }, i: number) => (
+          <span key={c.reason}>
+            {i > 0 && <span className="text-zinc-600"> · </span>}
             <button
               type="button"
-              onClick={() => { setReasonFilter(null); setPage(1); }}
-              className="ml-1.5 text-zinc-500 hover:text-zinc-300"
+              aria-pressed={reasonFilter === c.reason}
+              onClick={() => { setReasonFilter((r) => (r === c.reason ? null : c.reason)); setPage(1); }}
+              className={
+                reasonFilter === c.reason
+                  ? "text-white underline underline-offset-2"
+                  : "underline decoration-dotted underline-offset-2 hover:text-white"
+              }
             >
-              ✕ clear
+              {c.count} {c.label}
             </button>
-          )}
-        </p>
-      )}
+          </span>
+        );
+        return (
+          <p className="mb-1.5 text-zinc-400">
+            {composition.map(chip)}
+            {reasonFilter && (
+              <button
+                type="button"
+                onClick={() => { setReasonFilter(null); setPage(1); }}
+                className="ml-1.5 text-zinc-500 hover:text-zinc-300"
+              >
+                ✕ clear
+              </button>
+            )}
+          </p>
+        );
+      })()}
       {!error && filtered && filtered.length === 0 && <p className="text-zinc-400">No species.</p>}
       {!error && filtered && filtered.length > 0 && sorted && sorted.length === 0 && (
         <p className="text-zinc-400">No species match your search.</p>
@@ -874,51 +877,6 @@ function renderFilterSegs(segs: DescribeFilterSegment[]): React.ReactNode {
 // every row one at a time). Clicking # Assessed / No 1:1 CoL Match / # Not
 // Evaluated opens the species-level panel (onOpenPanel) narrowed to that exact
 // slice; # Described has no drill-down (it's CoL's own count, not a species
-/**
- * The "No 1:1 CoL Match" cell, and the only place that decides which diagnoses
- * that number counts.
- *
- * Three of the nine are CoL holding the record outside the described universe
- * rather than disagreeing about the taxon — see NOT_A_MISMATCH_REASONS. They
- * were a third of the number. Filtered here, in the client, rather than in the
- * query: the SSC groups' summaries are rebuilt by a data sync, not by a deploy,
- * so a server-side filter would leave the shipped artifact counting them for
- * another week. Falls back to the raw ids for an artifact old enough to carry
- * no per-species reasons at all, since there is then nothing to filter on.
- */
-function MismatchCell({
-  rank,
-  rowLabel,
-  b,
-  onOpenPanel,
-}: {
-  rank: FilterRank;
-  rowLabel: string;
-  b: { name: string; noMatchIds: number[]; noMatchDetails?: NoMatchDetail[] };
-  onOpenPanel: (request: PanelRequest) => void;
-}) {
-  const counted = useMemo(() => {
-    if (!b.noMatchDetails?.length) return { ids: b.noMatchIds, details: b.noMatchDetails };
-    const details = b.noMatchDetails.filter((d) => countsAsMismatch(d.reason));
-    return { ids: details.map((d) => d.id), details };
-  }, [b.noMatchIds, b.noMatchDetails]);
-  return (
-    <td className="px-2 py-1 text-right">
-      {counted.ids.length > 0 ? (
-        <button
-          type="button"
-          className="underline decoration-dotted underline-offset-2 hover:text-white"
-          onClick={() => onOpenPanel({ rank, name: b.name, bucket: "noColMatch", label: `${rowLabel} — No 1:1 CoL Match`, noMatchIds: counted.ids, noMatchDetails: counted.details })}
-        >
-          {counted.ids.length}
-        </button>
-      ) : (
-        <span className="text-zinc-300">0</span>
-      )}
-    </td>
-  );
-}
-
 // list this dashboard can independently show).
 function BreakdownList({
   rank,
@@ -961,7 +919,7 @@ function BreakdownList({
             <th className="px-2 pb-1 pt-0.5 font-normal text-right">Total</th>
             <th
               className="px-2 pb-1 pt-0.5 font-normal text-right"
-              title="Assessed by IUCN, with no clean 1:1 link to one of the species counted under # Described. Most DO have a Catalogue of Life record — but a record CoL holds only in its extended release, or only provisionally, is not in the described count, so there is nothing there for the assessment to pair with. Only a small minority have no Catalogue of Life record at all. The reason is shown per species."
+              title="Assessed by IUCN, with no clean 1:1 link to one of the species counted under # Described. Not one finding but several — a lump, a demotion below species, a name CoL doesn't accept, a record CoL holds only in its extended release or only provisionally, or nothing in CoL at all. Click the number for the breakdown by reason, and for the species behind each."
             >
               No 1:1 CoL Match
             </th>
@@ -999,7 +957,19 @@ function BreakdownList({
                     {b.trueAssessed}
                   </button>
                 </td>
-<MismatchCell rank={rank} rowLabel={rowLabel} b={b} onOpenPanel={onOpenPanel} />
+                <td className="px-2 py-1 text-right">
+                  {b.noMatchIds.length > 0 ? (
+                    <button
+                      type="button"
+                      className="underline decoration-dotted underline-offset-2 hover:text-white"
+                      onClick={() => onOpenPanel({ rank, name: b.name, bucket: "noColMatch", label: `${rowLabel} — No 1:1 CoL Match`, noMatchIds: b.noMatchIds, noMatchDetails: b.noMatchDetails })}
+                    >
+                      {b.noMatchIds.length}
+                    </button>
+                  ) : (
+                    <span className="text-zinc-300">0</span>
+                  )}
+                </td>
                 <td className="pl-2 py-1 text-right">
                   <button
                     type="button"

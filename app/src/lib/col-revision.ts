@@ -217,29 +217,6 @@ export type RevisionReasonCode = (typeof REVISION_REASONS)[number];
 /** Short label for a chart axis / filter chip. Kept to a couple of words —
  *  the sentence below is what a tooltip or table cell shows. */
 /**
- * Diagnosed, but NOT counted under the panel's "No 1:1 CoL Match".
- *
- * All three are CoL holding the record somewhere the described count doesn't
- * reach — an extended-release-only name, a provisionally-accepted one, or a
- * record CoL has flagged extinct. None of them is a taxonomic disagreement, and
- * grouping them with the lumps and the demotions made a third of the number
- * something other than what it says. The dashboard card reached the same
- * conclusion first (UNFLAGGED_REASONS, and the argument above REVISION_BARS);
- * this is the panel applying it.
- *
- * synonym_of is deliberately NOT here, though the card leaves it unflagged too:
- * the card covers those species under its accepted-name bars instead, and so
- * does the panel now — see displayReason.
- */
-export const NOT_A_MISMATCH_REASONS: ReadonlySet<string> = new Set(["not_in_base", "provisional", "extinct_unconfirmed"]);
-
-/** Is this diagnosis one the "No 1:1 CoL Match" count should include? */
-export function countsAsMismatch(reason: string | undefined): boolean {
-  const r = canonicalReason(reason);
-  return r != null && !NOT_A_MISMATCH_REASONS.has(r);
-}
-
-/**
  * The reason code a row is LABELLED and COUNTED under.
  *
  * One divergence from the raw classifier code, and it is the card's: an

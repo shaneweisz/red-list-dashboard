@@ -14,7 +14,6 @@ import {
   canonicalReason,
   reasonComposition,
   displayReason,
-  countsAsMismatch,
   neSynonymSentence,
   neSplitSentence,
   NE_SPLIT_EVIDENCE,
@@ -288,22 +287,6 @@ describe("matchesRevisionFilter", () => {
     // is the belt-and-braces half of that.
     expect(matchesRevisionFilter(lumped, "clean", new Set(["lumped"]))).toBe(true);
     expect(matchesRevisionFilter(none, "clean", new Set(["lumped"]))).toBe(false);
-  });
-});
-
-describe("what the No 1:1 CoL Match count includes", () => {
-  it("drops the three that are CoL holding the record, not disagreeing about it", () => {
-    // A third of the number was these. See NOT_A_MISMATCH_REASONS.
-    expect(countsAsMismatch("not_in_base")).toBe(false);
-    expect(countsAsMismatch("provisional")).toBe(false);
-    expect(countsAsMismatch("extinct_unconfirmed")).toBe(false);
-    // Every real disagreement still counts, synonym_of included — it is
-    // relabelled as an accepted-name difference, not dropped.
-    for (const r of ["lumped", "infraspecific", "unmatched", "classified_elsewhere", "missing_from_backbone", "synonym_of"]) {
-      expect(countsAsMismatch(r), r).toBe(true);
-    }
-    // A retired code counts as the reason it became, not as an unknown.
-    expect(countsAsMismatch("no_link")).toBe(true);
   });
 });
 
