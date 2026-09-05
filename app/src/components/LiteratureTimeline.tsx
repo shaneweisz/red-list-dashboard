@@ -120,19 +120,16 @@ function Spinner({ className = "h-4 w-4" }: { className?: string }) {
 const COLUMN_COUNT = 6;
 
 /**
- * Short names for the sources column — "Biodiversity Heritage Library" is
- * accurate but too wide to sit in a table cell.
+ * Column labels for the sources that read better as something other than their
+ * own name. Everything else uses the source's full label, and the cell carries
+ * the whole list on hover when it doesn't fit.
  */
-const SOURCE_SHORT_LABELS: Record<string, string> = {
-  openalex: "OpenAlex",
-  zenodo: "Zenodo",
-  bhl: "BHL",
-  googlebooks: "Google Books",
+const SOURCE_COLUMN_LABELS: Record<string, string> = {
   redlist: "Cited by assessment",
 };
 
-function shortSourceLabel(source: WorkProvenance): string {
-  return SOURCE_SHORT_LABELS[source.id] ?? source.label;
+function sourceColumnLabel(source: WorkProvenance): string {
+  return SOURCE_COLUMN_LABELS[source.id] ?? source.label;
 }
 
 /** The dotted line that says where the assessment sits in the record. */
@@ -213,7 +210,7 @@ function WorkRow({
           className="hidden truncate px-2 py-1 align-top text-[11px] text-zinc-400 lg:table-cell"
           title={work.sources.map((s) => s.label).join(", ")}
         >
-          {work.sources.map(shortSourceLabel).join(", ")}
+          {work.sources.map(sourceColumnLabel).join(", ")}
         </td>
       </tr>
 
@@ -247,7 +244,7 @@ function WorkRow({
                 </a>
               )}
               <span className="text-zinc-400 lg:hidden">
-                {work.sources.map(shortSourceLabel).join(", ")}
+                {work.sources.map(sourceColumnLabel).join(", ")}
               </span>
             </div>
           </td>
@@ -431,10 +428,10 @@ export default function LiteratureTimeline({
                 <th className="w-20 px-2 py-1.5 font-medium">Date</th>
                 {/* Title takes whatever the fixed columns leave. */}
                 <th className="px-2 py-1.5 font-medium">Title</th>
-                <th className="hidden w-32 px-2 py-1.5 font-medium md:table-cell">Published in</th>
+                <th className="hidden w-44 px-2 py-1.5 font-medium md:table-cell">Published in</th>
                 <th className="hidden w-16 px-2 py-1.5 font-medium lg:table-cell">Type</th>
                 <th className="w-12 px-2 py-1.5 text-right font-medium">Cited</th>
-                <th className="hidden w-28 px-2 py-1.5 font-medium lg:table-cell">Source</th>
+                <th className="hidden w-44 px-2 py-1.5 font-medium lg:table-cell">Source</th>
               </tr>
             </thead>
             <tbody>
