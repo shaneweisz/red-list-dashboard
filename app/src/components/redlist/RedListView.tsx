@@ -1312,6 +1312,12 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
     }
   }, [viewMode, setSelectedTaxa, setSelectedCategories, setSelectedYearRanges, setSelectedAssessmentYears, setSelectedDescribedYears, setSelectedCountries, setSelectedObsRanges, setSelectedAssessmentCounts, setSelectedSystems, setSelectedPopulationTrends, setSelectedMovementPatterns, setSelectedThreats, setSelectedCriteria, setSelectedHabitat, setHabitatBreadth, setSelectedHabitatImportance, setSelectedHabitatSeasons, setSelectedHabitatSuitability, setEndemicsOnly, setSelectedGrowthForms, setSelectedAssessors, setSelectedReviewers, setSelectedFacilitators, setSelectedContributors, setSelectedInstitutions, setSort]);
 
+  // Set by the navigations that already produce a complete, fully-specified
+  // state in one atomic update (a sub-group selection that also moves the view
+  // root, "All Species" resetting everything) — the generic per-field reset
+  // effect below must not run a second, partial pass over what they just set.
+  const skipClearOnTaxaChangeRef = useRef(false);
+
   // Taxon toggle handler (used by TaxaSummary)
   // Regular click: select only that taxon (or deselect if already sole selection)
   // Cmd/Ctrl+Click on taxon row: multi-select toggle (expands taxa summary to show all rows)
@@ -1354,9 +1360,18 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
           returnToLayoutMode("country");
           return;
         }
-        // Return to landing page
-        setSelectedSubgroups(new Set());
-        setSelectedTaxa(new Set());
+        // Return to the landing page — the same table a fresh visit lands on,
+        // so this drops every filter along with the taxa/sub-group selection,
+        // the header search bar's `search=` and any open species panel with
+        // them. Atomic (clearAllFiltersAndTaxa is one setState + one history
+        // push) rather than a taxa-clear that leaves the reset to the effect
+        // below: one back-press then returns to the drill-down instead of
+        // unwinding through a half-cleared intermediate. The ref tells that
+        // effect this transition is already complete, so it doesn't run a
+        // second, redundant pass over it.
+        skipClearOnTaxaChangeRef.current = true;
+        clearAllFiltersAndTaxa();
+        setShowOnlyStarred(false);
         return;
       }
       // On landing page: toggle "all" on/off (disabled in new-assessments — NE dataset too large)
@@ -1393,14 +1408,22 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
       setSelectedSubgroups(new Set());
       return new Set([taxonId]);
     });
-  }, [setSelectedTaxa, setSelectedSubgroups, selectedTaxa, selectedSubgroups, isNewAssessments, searchFilter, urlSpecies, clearAllFilters, layoutMode, setLayoutMode, exitCountryModeForTaxon, originLayout, returnToLayoutMode, fromPopstateRef]);
+  }, [setSelectedTaxa, setSelectedSubgroups, selectedTaxa, selectedSubgroups, isNewAssessments, searchFilter, urlSpecies, clearAllFilters, clearAllFiltersAndTaxa, layoutMode, setLayoutMode, exitCountryModeForTaxon, originLayout, returnToLayoutMode, fromPopstateRef]);
 
   // Reset all other filters when taxa selection changes
   const prevTaxaRef = useRef(selectedTaxa);
-  const skipClearOnTaxaChangeRef = useRef(false);
   useEffect(() => {
     const prev = prevTaxaRef.current;
     prevTaxaRef.current = selectedTaxa;
+    // Consume the popstate flag up front, before any early return below.
+    // parseParams builds a fresh Set on every popstate, so this effect re-runs
+    // for each one — but a popstate that doesn't *change* the taxa (searching a
+    // species from within the taxon it already sits in) used to bail out at the
+    // contents check with the flag still raised, and the next genuine taxon
+    // click would then read that stale flag and skip its reset entirely,
+    // leaving the previous taxon's filters applied to the new one.
+    const fromPopstate = fromPopstateRef.current;
+    fromPopstateRef.current = false;
     // Skip if taxa haven't actually changed (same reference or same contents)
     if (prev === selectedTaxa) return;
     if (prev.size === selectedTaxa.size && [...selectedTaxa].every(t => prev.has(t))) return;
@@ -1411,10 +1434,7 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
     }
     // Skip clearing when the taxa change came from URL navigation (popstate) —
     // the URL already contains the complete state (e.g. from search bar navigation).
-    if (fromPopstateRef.current) {
-      fromPopstateRef.current = false;
-      return;
-    }
+    if (fromPopstate) return;
     // Skip clearing when going from no taxa to some taxa — this happens during
     // URL hydration (useFilterParams starts empty then populates from URL) and
     // there are no taxa-specific filters to reset when nothing was selected before.
@@ -2118,6 +2138,18 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
       manualTabSelectionRef.current = visibleTab(urlTab) !== "gbif";
       autoColSwitchedRef.current = false;
       urlSpeciesHandledRef.current = false; // allow auto-page-navigate for new species
+    } else {
+      // `species=` is gone — close the detail panel. Not just the back button:
+      // navigating to another taxa/sub-group row drops the species drill-down
+      // with it (SPECIES_SCOPED_RESET in useFilterParams), and without this the
+      // row expansion is local state that would keep the old species' panel
+      // open under a table it no longer belongs to.
+      setSelectedSpeciesKeyRaw(null);
+      setActiveDetailTabRaw("gbif");
+      setVisitedTabs(new Set(["gbif"]));
+      manualTabSelectionRef.current = false;
+      autoColSwitchedRef.current = false;
+      urlSpeciesHandledRef.current = false;
     }
   }, [urlSpecies, urlTab]);
 
