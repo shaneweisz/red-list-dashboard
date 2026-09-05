@@ -26,6 +26,7 @@ import type { Feature, Polygon, MultiPolygon } from "geojson";
 import YearRangeSlider from "@/components/mapping/YearRangeSlider";
 import ListZoomControl, { LIST_ZOOM_DEFAULT } from "@/components/mapping/ListZoomControl";
 import CompilerDialog from "@/components/mapping/CompilerDialog";
+import NearbySpeciesPanel from "@/components/mapping/NearbySpeciesPanel";
 import MapGeoreferenceEditor from "./MapGeoreferenceEditor";
 import type { OccurrenceFeature as OccurrenceFeatureType } from "./OccurrenceListTable";
 // The table's own labels, so a basis of record is worded the same wherever it
@@ -1126,6 +1127,14 @@ export default function OccurrenceMapRow({
   );
   /** The label being typed in the right-click panel, before the pin exists. */
   const [newPinLabel, setNewPinLabel] = useState("");
+  /**
+   * The spot the "recorded nearby" panel is describing, once asked for.
+   *
+   * Held here rather than on pointQuery so the panel outlives the popup that
+   * opened it — you ask what else is here, then carry on clicking around the
+   * map with the answer still up beside it.
+   */
+  const [nearbyAt, setNearbyAt] = useState<{ lng: number; lat: number } | null>(null);
   /** A pin whose label is being renamed in place. */
   const [renamingPin, setRenamingPin] = useState<string | null>(null);
   /**
@@ -4238,6 +4247,29 @@ export default function OccurrenceMapRow({
                       </button>
                     </div>
                     )}
+                    {/* What else has been assessed around this spot. On its own
+                        row because it opens a panel rather than acting on the
+                        map, and because the label has to say "assessed" — the
+                        answer is about the Red List, not about everything GBIF
+                        holds here. */}
+                    {fullscreen && (
+                      <div className="pt-1 border-t border-zinc-100 dark:border-zinc-800">
+                        <button
+                          onClick={() => {
+                            setNearbyAt({ lng: pointQuery.lng, lat: pointQuery.lat });
+                            setPointQuery(null);
+                          }}
+                          title="Assessed species with GBIF records around this spot, and the threats their assessments cite"
+                          className="w-full flex items-center gap-1 px-1.5 py-0.5 rounded border border-zinc-300 dark:border-zinc-600 text-zinc-600 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800"
+                        >
+                          <svg className="w-2.5 h-2.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
+                            <circle cx="12" cy="12" r="3" />
+                            <circle cx="12" cy="12" r="9" strokeDasharray="3 3" />
+                          </svg>
+                          What else is assessed near here
+                        </button>
+                      </div>
+                    )}
                   </div>
                 </MapPopup>
               )}
@@ -4526,9 +4558,20 @@ export default function OccurrenceMapRow({
             </div>
           )}
           </div>
+          {/* Sits where the edit history sits, and the two are never both open:
+              asking what else is here closes the history rather than stacking
+              a second card on the same corner. */}
+          {nearbyAt && (
+            <NearbySpeciesPanel
+              lat={nearbyAt.lat}
+              lng={nearbyAt.lng}
+              excludeGbifKey={speciesKey}
+              onClose={() => setNearbyAt(null)}
+            />
+          )}
           {/* This session's edits, newest first. Clicking one steps back to it,
               which is undo applied until it's reached. */}
-          {historyOpen && editHistory.length > 0 && (
+          {!nearbyAt && historyOpen && editHistory.length > 0 && (
             <div className="absolute top-2 right-2 z-[1001] w-72 max-h-[60%] overflow-y-auto rounded-lg bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 shadow-lg text-[11px]">
               <div className="flex items-center gap-2 px-2 py-1.5 border-b border-zinc-100 dark:border-zinc-700 sticky top-0 bg-white dark:bg-zinc-800">
                 <span className="font-medium text-zinc-700 dark:text-zinc-200">This session</span>
