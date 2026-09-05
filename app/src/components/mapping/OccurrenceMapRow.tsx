@@ -1159,8 +1159,11 @@ export default function OccurrenceMapRow({
    */
   const [nearbyPicked, setNearbyPicked] = useState<{ key: string; name: string } | null>(null);
   const [nearbyPoints, setNearbyPoints] = useState<{ points: NearbyPoint[]; total: number } | null>(null);
+  /** The neighbour's record whose tooltip is open, if any. */
+  const [nearbyShown, setNearbyShown] = useState<NearbyPoint | null>(null);
 
   useEffect(() => {
+    setNearbyShown(null);
     if (!nearbyAt || !nearbyPicked) {
       setNearbyPoints(null);
       return;
@@ -1190,9 +1193,12 @@ export default function OccurrenceMapRow({
   const nearbyPointsGeoJson = useMemo<GeoJSON.FeatureCollection>(
     () => ({
       type: "FeatureCollection",
-      features: (nearbyPoints?.points ?? []).map((pt) => ({
+      // Indexed rather than carrying the record: MapLibre flattens feature
+      // properties through its tile encoding, so the index is what survives to
+      // find the point again on a click.
+      features: (nearbyPoints?.points ?? []).map((pt, i) => ({
         type: "Feature" as const,
-        properties: { year: pt.year, basis: pt.basis },
+        properties: { nearbyIndex: i },
         geometry: { type: "Point" as const, coordinates: [pt.lng, pt.lat] },
       })),
     }),
@@ -2673,6 +2679,21 @@ export default function OccurrenceMapRow({
       return;
     }
     const features = e.features;
+    // A neighbour's cross, before anything else: it is drawn above the map's
+    // own records, so a click that reaches one is aimed at it rather than at
+    // whatever green circle happens to lie underneath.
+    const cross = features?.find((f) => String(f.layer?.id ?? "").startsWith(`nearby-points-circle-`));
+    if (cross) {
+      const i = Number(cross.properties?.nearbyIndex);
+      const pt = Number.isFinite(i) ? nearbyPoints?.points[i] : undefined;
+      if (pt) {
+        // Clicking the open one again closes it, the way a record's own panel
+        // behaves.
+        setNearbyShown((prev) => (prev?.gbifID === pt.gbifID ? null : pt));
+        closeTooltip();
+        return;
+      }
+    }
     if (features && features.length > 0) {
       const gbifID = Number(features[0].properties?.gbifID);
       if (gbifID) {
@@ -2808,6 +2829,7 @@ export default function OccurrenceMapRow({
     closeTooltip,
     tooltipPinned,
     hoveredFeature,
+    nearbyPoints?.points,
   ]);
 
   /**
@@ -3441,7 +3463,11 @@ export default function OccurrenceMapRow({
               }}
               style={{ width: "100%", height: "100%" }}
               mapStyle={BASEMAP_STYLES[basemap].style}
-              interactiveLayerIds={[`occ-circles-${panelId}`, `georef-point-${panelId}`]}
+              interactiveLayerIds={[
+                `occ-circles-${panelId}`,
+                `georef-point-${panelId}`,
+                `nearby-points-circle-${panelId}`,
+              ]}
               onClick={(e: MapLayerMouseEvent) => handleMapClick(e, panelId)}
               onContextMenu={(e: MapLayerMouseEvent) => handleMapContextMenu(e, panelId)}
               onMouseMove={(e: MapLayerMouseEvent) => handleMapMouseMove(e, panelId)}
@@ -3775,17 +3801,27 @@ export default function OccurrenceMapRow({
                   they are context for this map, not one of its own layers. */}
               {nearbyAt && nearbyPicked && nearbyPointsGeoJson.features.length > 0 && (
                 <Source id={`nearby-points-${panelId}`} type="geojson" data={nearbyPointsGeoJson}>
+                  {/* Crosses rather than dots. These land among the map's own
+                      round records, and at a glance a differently-coloured dot
+                      is still a dot — a different mark says "not one of yours"
+                      before the colour has to. Drawn as a text symbol, so it
+                      needs no sprite and stays crisp at every zoom. */}
                   <Layer
                     id={`nearby-points-circle-${panelId}`}
-                    type="circle"
+                    type="symbol"
+                    layout={{
+                      "text-field": "✕",
+                      "text-size": 13,
+                      "text-font": ["Open Sans Regular"],
+                      // Every record matters here, so none may be dropped for
+                      // collision — a thinned layer would misreport the spread.
+                      "text-allow-overlap": true,
+                      "text-ignore-placement": true,
+                    }}
                     paint={{
-                      "circle-radius": 4,
-                      "circle-color": NEARBY_PICKED_COLOR,
-                      "circle-opacity": 0.85,
-                      // A white ring, because these land on top of the green
-                      // GBIF points and the two must not merge into one blob.
-                      "circle-stroke-width": 1,
-                      "circle-stroke-color": "#ffffff",
+                      "text-color": NEARBY_PICKED_COLOR,
+                      "text-halo-color": "#ffffff",
+                      "text-halo-width": 1.5,
                     }}
                   />
                 </Source>
@@ -3954,6 +3990,68 @@ export default function OccurrenceMapRow({
                   />
                 );
               })()}
+              {/* A picked neighbour's record, in the same panel the map's own
+                  records get. It is a GBIF occurrence like any other and the
+                  question you have about it is the same one — what is it, who
+                  collected it, where does it say it is — so it should not
+                  answer in some lesser tooltip of its own. The fields are built
+                  here rather than by recordFields, which expects a record this
+                  map is deciding about: no georeference to edit, no cleaning
+                  flags of ours, no exclusion. */}
+              {nearbyShown && nearbyPicked && (
+                <MapOccurrenceTooltip
+                  lat={nearbyShown.lat}
+                  lng={nearbyShown.lng}
+                  fields={[
+                    { label: "Species", value: nearbyShown.species ?? nearbyPicked.name },
+                    ...(nearbyShown.basis
+                      ? [{ label: "Basis", value: nearbyShown.basis.replace(/_/g, " ").toLowerCase() }]
+                      : []),
+                    ...(nearbyShown.eventDate || nearbyShown.year
+                      ? [{ label: "Date", value: nearbyShown.eventDate ?? String(nearbyShown.year) }]
+                      : []),
+                    ...(nearbyShown.locality ? [{ label: "Locality", value: nearbyShown.locality }] : []),
+                    ...(nearbyShown.countryCode ? [{ label: "Country", value: nearbyShown.countryCode }] : []),
+                    {
+                      label: "Coordinates",
+                      value: `${nearbyShown.lat.toFixed(5)}, ${nearbyShown.lng.toFixed(5)}`,
+                    },
+                    ...(nearbyShown.uncertaintyMetres != null
+                      ? [{ label: "GPS uncertainty", value: formatDistance(nearbyShown.uncertaintyMetres) }]
+                      : []),
+                    ...(nearbyShown.catalogNumber
+                      ? [{ label: "Catalogue no.", value: nearbyShown.catalogNumber }]
+                      : []),
+                    ...(nearbyShown.recordedBy ? [{ label: "Recorded by", value: nearbyShown.recordedBy }] : []),
+                    ...(nearbyShown.identifiedBy
+                      ? [{ label: "Identified by", value: nearbyShown.identifiedBy }]
+                      : []),
+                    ...(nearbyShown.datasetName ? [{ label: "Dataset", value: nearbyShown.datasetName }] : []),
+                  ]}
+                  notes={[
+                    {
+                      label: "Not this species",
+                      value: "A neighbour's record, drawn from the nearby search — not part of this map's records or counts.",
+                    },
+                  ]}
+                  onClose={() => setNearbyShown(null)}
+                  actions={
+                    nearbyShown.gbifID ? (
+                      <a
+                        href={`https://www.gbif.org/occurrence/${nearbyShown.gbifID}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="flex w-full items-center gap-1.5 px-1 py-1 rounded hover:bg-zinc-100 dark:hover:bg-zinc-800"
+                      >
+                        <svg className="w-3 h-3 shrink-0 text-zinc-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M14 5h5v5m0-5L10 14M9 5H6a1 1 0 00-1 1v12a1 1 0 001 1h12a1 1 0 001-1v-3" />
+                        </svg>
+                        Open on GBIF
+                      </a>
+                    ) : undefined
+                  }
+                />
+              )}
               {/* Where the search landed. Pinned rather than just flown to:
                   the point of looking a locality up is to compare it against
                   the records, which means both have to be on screen at once. */}
@@ -5799,14 +5897,14 @@ export default function OccurrenceMapRow({
                       setNearbyRadiusKm(NEARBY_RADIUS_DEFAULT);
                       setNearbyPicked(null);
                     }}
-                    title="Assessed species with GBIF records around this one, and the threats their assessments cite"
-                    className="flex w-full items-center gap-1.5 px-1 py-1 rounded hover:bg-zinc-100 dark:hover:bg-zinc-800"
+                    title="Threatened and Near Threatened species with GBIF records around this one, and the threats their assessments cite"
+                    className="flex w-full items-center gap-1.5 px-1 py-1 rounded text-left hover:bg-zinc-100 dark:hover:bg-zinc-800"
                   >
                     <svg className="w-3 h-3 shrink-0 text-zinc-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                       <circle cx="12" cy="12" r="3" />
                       <circle cx="12" cy="12" r="9" strokeDasharray="3 3" />
                     </svg>
-                    What else is assessed near here
+                    Search threatened species with GBIF records near here
                   </button>
                 )}
                 {opts.showInTable && fullscreen && (

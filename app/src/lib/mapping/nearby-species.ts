@@ -99,18 +99,35 @@ export const NEARBY_PICKED_COLOR = "#ea580c";
 /**
  * How many of a picked species' records to draw.
  *
- * GBIF's own per-request ceiling, and past a few hundred dots in a 10 km circle
- * the map stops saying anything a smaller sample doesn't. The panel says when
- * it is showing a sample rather than all of them.
+ * A hundred is enough to show the shape of where a species has been found in a
+ * circle this size, and few enough that each cross stays a thing you can aim a
+ * click at rather than part of a mass. The panel says when it is showing a
+ * sample rather than all of them.
  */
-export const NEARBY_POINTS_LIMIT = 300;
+export const NEARBY_POINTS_LIMIT = 100;
 
-/** One drawn record of a picked neighbour. */
+/**
+ * One drawn record of a picked neighbour.
+ *
+ * Carries what its tooltip shows, because these are clickable in the same way
+ * the map's own records are — a cross you can't interrogate is barely better
+ * than no cross.
+ */
 export interface NearbyPoint {
+  gbifID: number;
   lat: number;
   lng: number;
+  species: string | null;
+  eventDate: string | null;
   year: number | null;
   basis: string | null;
+  recordedBy: string | null;
+  identifiedBy: string | null;
+  locality: string | null;
+  countryCode: string | null;
+  uncertaintyMetres: number | null;
+  catalogNumber: string | null;
+  datasetName: string | null;
 }
 
 /** Where a picked neighbour's records are, inside the same radius. */

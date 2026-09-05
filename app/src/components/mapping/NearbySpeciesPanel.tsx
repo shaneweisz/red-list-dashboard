@@ -15,7 +15,7 @@
  * is what you read once the summary has told you where to look.
  */
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { CATEGORY_COLORS, normalizeCategory } from "@/config/taxa";
 import { findNode } from "@/lib/taxonomy-utils";
 import {
@@ -47,6 +47,21 @@ interface Props {
   onClose: () => void;
 }
 
+/**
+ * The panel's one busy indicator, used wherever it waits on GBIF.
+ *
+ * Both waits here are a second or so of nothing — long enough that a static
+ * "looking…" reads as a state rather than as progress.
+ */
+function Spinner() {
+  return (
+    <span
+      className="inline-block w-2.5 h-2.5 rounded-full border border-current border-t-transparent animate-spin"
+      aria-hidden
+    />
+  );
+}
+
 /** "flowering_plants" → "Flowering Plants", falling back to the raw group. */
 function taxonLabel(taxonGroup: string): string {
   return findNode(taxonGroup)?.name ?? taxonGroup.replace(/_/g, " ");
@@ -67,7 +82,16 @@ export default function NearbySpeciesPanel({
    * both counts in permanent sight and give whichever you pick the full
    * height, which at 320px wide is the only way either list gets read.
    */
-  const [tab, setTab] = useState<"threats" | "species">("threats");
+  const [tab, setTab] = useState<"species" | "threats">("species");
+  /**
+   * Which taxon's neighbours are listed, or null for all of them.
+   *
+   * A hundred-odd species across birds, amphibians and plants is a list nobody
+   * reads end to end, and an assessor almost always wants one of those groups —
+   * the comparable one. Derived from what actually came back rather than from
+   * the full taxonomy, so the row only ever offers groups with something in it.
+   */
+  const [taxon, setTaxon] = useState<string | null>(null);
 
   /**
    * The answer, tagged with the question it answers.
@@ -103,6 +127,27 @@ export default function NearbySpeciesPanel({
       });
     return () => controller.abort();
   }, [lat, lng, radiusKm, excludeGbifKey, key]);
+
+  // A radius that returns no birds should not keep offering a Birds tab, so the
+  // row is rebuilt from each answer and a selection that no longer exists is
+  // dropped rather than silently filtering everything away.
+  const taxonCounts = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const s of result?.species ?? []) {
+      counts.set(s.taxon_group, (counts.get(s.taxon_group) ?? 0) + 1);
+    }
+    return [...counts.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]));
+  }, [result]);
+
+  // Derived, not corrected after the fact: a group that the new radius no
+  // longer has simply stops being the selection, rather than being stored and
+  // then filtering the whole list away until an effect catches up.
+  const activeTaxon = taxon && taxonCounts.some(([g]) => g === taxon) ? taxon : null;
+
+  const shownSpecies = useMemo(
+    () => (result?.species ?? []).filter((s) => !activeTaxon || s.taxon_group === activeTaxon),
+    [result, activeTaxon]
+  );
 
   // Escape closes it, the way it dismisses every other mode on this map.
   const onKey = useCallback(
@@ -157,7 +202,12 @@ export default function NearbySpeciesPanel({
             {r} km
           </button>
         ))}
-        {loading && <span className="ml-auto text-zinc-400">looking…</span>}
+        {loading && (
+          <span className="ml-auto flex items-center gap-1 text-zinc-400">
+            <Spinner />
+            looking…
+          </span>
+        )}
       </div>
 
       <div className="overflow-y-auto px-2 py-1.5 space-y-2">
@@ -191,8 +241,8 @@ export default function NearbySpeciesPanel({
             {(result.threats.length > 0 || result.species.length > 0) && (
               <div className="flex gap-1 border-b border-zinc-200 dark:border-zinc-700 -mx-2 px-2">
                 {([
-                  ["threats", "Threats", result.threats.length],
                   ["species", "Species", result.species.length],
+                  ["threats", "Threats", result.threats.length],
                 ] as const).map(([id, label, n]) => (
                   <button
                     key={id}
@@ -246,9 +296,32 @@ export default function NearbySpeciesPanel({
             </>)}
 
             {tab === "species" && (<>
-            {result.species.length > 0 && (
+            {/* One row of groups, biggest first. Horizontally scrollable rather
+                than wrapped: a wrapped row of a dozen groups would push the
+                list itself back below the fold, which is the problem the tabs
+                above exist to solve. */}
+            {taxonCounts.length > 1 && (
+              <div className="flex gap-1 overflow-x-auto pb-0.5 -mx-2 px-2">
+                {([[null, "All", result.species.length], ...taxonCounts.map(
+                  ([g, n]) => [g, taxonLabel(g), n] as const
+                )] as readonly (readonly [string | null, string, number])[]).map(([id, label, n]) => (
+                  <button
+                    key={id ?? "all"}
+                    onClick={() => setTaxon(id)}
+                    className={`shrink-0 px-1.5 py-0.5 rounded-full border tabular-nums ${
+                      activeTaxon === id
+                        ? "border-blue-500 bg-blue-50 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300"
+                        : "border-zinc-200 dark:border-zinc-700 text-zinc-500 dark:text-zinc-400 hover:bg-zinc-50 dark:hover:bg-zinc-800"
+                    }`}
+                  >
+                    {label} <span className="text-zinc-400">{n}</span>
+                  </button>
+                ))}
+              </div>
+            )}
+            {shownSpecies.length > 0 && (
               <div className="pt-1 border-t border-zinc-100 dark:border-zinc-800">
-                {result.species.map((s) => (
+                {shownSpecies.map((s) => (
                   /* Two lines, because one could not hold them: with the name,
                      the common name, the taxon, the year and the count all
                      competing for 320px, the scientific name — the identifier
@@ -325,7 +398,12 @@ export default function NearbySpeciesPanel({
                         <span style={{ color: NEARBY_PICKED_COLOR }}>
                           {" · "}
                           {pickedPoints == null
-                            ? "drawing…"
+                            ? (
+                              <span className="inline-flex items-center gap-1 align-middle">
+                                <Spinner />
+                                drawing…
+                              </span>
+                            )
                             : pickedPoints.total > pickedPoints.shown
                               ? `${pickedPoints.shown} of ${pickedPoints.total} drawn`
                               : `${pickedPoints.shown} drawn`}

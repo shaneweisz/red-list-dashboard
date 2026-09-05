@@ -20,10 +20,22 @@ import {
 } from "@/lib/mapping/nearby-species";
 
 interface GbifOccurrence {
+  key?: number;
   decimalLatitude?: number;
   decimalLongitude?: number;
+  species?: string;
+  scientificName?: string;
+  eventDate?: string;
   year?: number;
   basisOfRecord?: string;
+  recordedBy?: string;
+  identifiedBy?: string;
+  locality?: string;
+  verbatimLocality?: string;
+  countryCode?: string;
+  coordinateUncertaintyInMeters?: number;
+  catalogNumber?: string;
+  datasetName?: string;
 }
 
 export async function GET(request: NextRequest) {
@@ -51,10 +63,24 @@ export async function GET(request: NextRequest) {
     const points: NearbyPoint[] = (data.results ?? [])
       .filter((r: GbifOccurrence) => Number.isFinite(r.decimalLatitude) && Number.isFinite(r.decimalLongitude))
       .map((r: GbifOccurrence) => ({
+        gbifID: r.key ?? 0,
         lat: r.decimalLatitude as number,
         lng: r.decimalLongitude as number,
+        species: r.species ?? r.scientificName ?? null,
+        eventDate: r.eventDate ?? null,
         year: Number.isFinite(r.year) ? (r.year as number) : null,
         basis: r.basisOfRecord ?? null,
+        recordedBy: r.recordedBy ?? null,
+        identifiedBy: r.identifiedBy ?? null,
+        // GBIF leaves a locality it couldn't interpret in the verbatim field,
+        // and for these records that is often the only description there is.
+        locality: r.locality ?? r.verbatimLocality ?? null,
+        countryCode: r.countryCode ?? null,
+        uncertaintyMetres: Number.isFinite(r.coordinateUncertaintyInMeters)
+          ? (r.coordinateUncertaintyInMeters as number)
+          : null,
+        catalogNumber: r.catalogNumber ?? null,
+        datasetName: r.datasetName ?? null,
       }));
 
     return NextResponse.json(
