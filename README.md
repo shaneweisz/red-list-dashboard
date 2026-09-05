@@ -47,10 +47,11 @@ Charts support multi-select (Cmd/Ctrl+click) and cross-filter with the search ba
 ### Expandable species rows
 Click any species row for a tabbed (or stacked) detail view:
 - **GBIF Map** — occurrence points on a MapLibre GL map, plus an iNaturalist photo gallery
-- **Literature** — one chronological timeline of everything published about the species,
+- **Literature** — one chronological table of everything published about the species,
   newest first and paginated, with a dotted line marking the last assessment date.
-  Merged and deduplicated across OpenAlex, Europe PMC and Semantic Scholar, plus
-  Biodiversity Heritage Library, CORE and Google Books when their API keys are configured
+  Merged and deduplicated across OpenAlex, Zenodo, the assessment's own reference
+  list, and Biodiversity Heritage Library / Google Books when their API keys are
+  configured. Rows the assessment cited are tagged as such
 - **Red List** — full assessment details: criteria, population trend, threats, conservation actions, rationale
 - **CITES** — trade status, suspensions, quotas, and a trade-flow map with history since 1975
 - **EOL** — traits and media from the Encyclopedia of Life
@@ -106,10 +107,10 @@ Live external APIs:
   GBIF REST API     → occurrence points, record breakdowns, iNaturalist photos
   Species+ API      → CITES listings, trade data
   OpenAlex          → scientific literature (primary literature source)
-  Europe PMC        → life-science literature, preprints, books
-  Semantic Scholar  → supplementary literature (shared rate limit)
-  BHL / CORE /      → historical scans, repository content, printed floras
-  Google Books        (each optional — enabled by its own API key)
+  Zenodo            → conservation grey literature, reports, theses
+  IUCN Red List API → assessment detail, and the assessment's reference list
+  BHL / Google      → historical scans and printed floras
+  Books               (each optional — enabled by its own API key)
   EOL TraitBank     → trait data for the EOL tab
 ```
 

@@ -1,16 +1,17 @@
 /**
  * Merge the per-source result pools into one deduplicated timeline.
  *
- * The same paper routinely appears in OpenAlex, Europe PMC and Semantic
- * Scholar at once, so "not repeating duplicates" is the whole job here. Two
- * records are the same work when either
+ * The same work routinely appears in several sources at once — and a paper the
+ * assessment cited will appear both there and in OpenAlex — so "not repeating
+ * duplicates" is the whole job here. Two records are the same work when either
  *   - they share a normalised DOI, or
  *   - they share a normalised title and their years are within one of each
  *     other (sources disagree on print vs online year all the time).
  *
  * Merging is field-by-field rather than "pick a winner", because each source is
- * good at something different: OpenAlex has citation counts, Europe PMC has the
- * cleanest abstracts, BHL has the only record of anything published in 1887.
+ * good at something different: OpenAlex has citation counts and clean metadata,
+ * BHL has the only record of anything published in 1887, and the Red List
+ * reference list contributes the fact that an assessor cited it at all.
  */
 
 import { normalizeDoi, normalizeTitle } from "./normalize";
@@ -18,16 +19,18 @@ import type { LiteratureWork, SourceId } from "./types";
 
 /**
  * Which source's *value* wins for a scalar field when several supply one.
- * Ordering reflects observed metadata quality, not coverage: OpenAlex and
- * Europe PMC are the best-curated, Google Books the roughest.
+ * Ordering reflects observed metadata quality, not coverage: OpenAlex is the
+ * best-curated, Google Books and the Red List citation strings the roughest.
  */
 const FIELD_PRIORITY: SourceId[] = [
   "openalex",
-  "europepmc",
-  "semanticscholar",
-  "core",
+  "zenodo",
   "bhl",
   "googlebooks",
+  // Last for scalars: a Red List reference is a formatted citation string, so
+  // its title and author are rougher than an indexer's. Its value is the
+  // provenance tag, which survives regardless of this ordering.
+  "redlist",
 ];
 
 function priorityOf(work: LiteratureWork): number {

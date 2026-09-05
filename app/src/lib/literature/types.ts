@@ -8,11 +8,10 @@
 /** Registry ids for the sources we can query. */
 export type SourceId =
   | "openalex"
-  | "europepmc"
-  | "semanticscholar"
-  | "core"
+  | "zenodo"
   | "bhl"
-  | "googlebooks";
+  | "googlebooks"
+  | "redlist";
 
 /**
  * How much of a publication date we actually know. Sources disagree wildly:
@@ -102,6 +101,11 @@ export interface SourceQuery {
   nameVariants: string[];
   /** Max records to ask this source for. */
   limit: number;
+  /**
+   * The species' latest assessment id, when it has one. Only the Red List
+   * reference-list source uses it; it is a lookup key, not a search term.
+   */
+  assessmentId: string | null;
   /** Passed to `fetch` so one slow source can't hold up the whole response. */
   signal: AbortSignal;
 }

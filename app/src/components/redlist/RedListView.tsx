@@ -6428,6 +6428,7 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
                               <LiteratureTimeline
                                 scientificName={s.scientific_name}
                                 assessmentDate={s.assessment_date ?? null}
+                                assessmentId={s.assessment_id ? String(s.assessment_id) : null}
                                 assessmentYear={assessmentYear}
                               />
                             </div>

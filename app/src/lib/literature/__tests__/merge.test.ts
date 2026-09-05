@@ -5,11 +5,10 @@ import type { LiteratureWork, SourceId } from "../types";
 
 const LABELS: Record<SourceId, string> = {
   openalex: "OpenAlex",
-  europepmc: "Europe PMC",
-  semanticscholar: "Semantic Scholar",
-  core: "CORE",
+  zenodo: "Zenodo",
   bhl: "Biodiversity Heritage Library",
   googlebooks: "Google Books",
+  redlist: "Red List assessment",
 };
 
 function work(
@@ -46,7 +45,7 @@ describe("mergeWorks", () => {
       date: "2020-05-01",
       venue: "Oryx",
     });
-    const europepmc = work("europepmc", {
+    const europepmc = work("zenodo", {
       title: "Status of Panthera leo",
       doi: "10.1234/abc",
       citations: 15,
@@ -59,10 +58,10 @@ describe("mergeWorks", () => {
 
     // Citation counts are floors: take the highest anyone reports.
     expect(merged.citations).toBe(15);
-    // Only Europe PMC had these.
+    // Only Zenodo had these.
     expect(merged.abstract).toBe("A long and useful abstract about lions.");
     expect(merged.openAccessUrl).toBe("https://example.org/oa.pdf");
-    // OpenAlex outranks Europe PMC for scalars both supply.
+    // OpenAlex outranks Zenodo for scalars both supply.
     expect(merged.venue).toBe("Oryx");
     // A DOI outranks any landing page as the reader's link.
     expect(merged.url).toBe("https://doi.org/10.1234/abc");
@@ -70,10 +69,10 @@ describe("mergeWorks", () => {
 
   it("records every contributing source, in priority order", () => {
     const merged = mergeWorks(
-      work("semanticscholar", { title: "T", doi: "10.1/x" }),
+      work("redlist", { title: "T", doi: "10.1/x" }),
       work("openalex", { title: "T", doi: "10.1/x" }),
     );
-    expect(merged.sources.map((s) => s.id)).toEqual(["openalex", "semanticscholar"]);
+    expect(merged.sources.map((s) => s.id)).toEqual(["openalex", "redlist"]);
   });
 
   it("keeps the most precise date whichever source supplied it", () => {
@@ -97,7 +96,7 @@ describe("mergeWorks", () => {
   it("keeps the longer of two titles and the longer abstract", () => {
     const merged = mergeWorks(
       work("openalex", { title: "Lions", abstract: "Short." }),
-      work("europepmc", { title: "Lions of the Serengeti", abstract: "A rather longer abstract." }),
+      work("zenodo", { title: "Lions of the Serengeti", abstract: "A rather longer abstract." }),
     );
     expect(merged.title).toBe("Lions of the Serengeti");
     expect(merged.abstract).toBe("A rather longer abstract.");
@@ -108,17 +107,17 @@ describe("dedupeWorks", () => {
   it("collapses records that share a DOI, whatever the title says", () => {
     const merged = dedupeWorks([
       [work("openalex", { title: "Lions of Kenya", doi: "10.1234/abc", date: "2020-01-01" })],
-      [work("europepmc", { title: "LIONS OF KENYA.", doi: "https://doi.org/10.1234/ABC", date: "2020-01-01" })],
+      [work("zenodo", { title: "LIONS OF KENYA.", doi: "https://doi.org/10.1234/ABC", date: "2020-01-01" })],
     ]);
     expect(merged).toHaveLength(1);
-    expect(merged[0].sources.map((s) => s.id)).toEqual(["openalex", "europepmc"]);
+    expect(merged[0].sources.map((s) => s.id)).toEqual(["openalex", "zenodo"]);
   });
 
   it("collapses records that share a title within a year of each other", () => {
     // Sources routinely disagree on print vs online year.
     const merged = dedupeWorks([
       [work("openalex", { title: "A revision of Aloe", date: "2019-11-02" })],
-      [work("core", { title: "A revision of Aloe.", date: "2020-02-01" })],
+      [work("googlebooks", { title: "A revision of Aloe.", date: "2020-02-01" })],
     ]);
     expect(merged).toHaveLength(1);
   });
@@ -135,7 +134,7 @@ describe("dedupeWorks", () => {
     // An article and its erratum can carry the same title in the same year.
     const merged = dedupeWorks([
       [work("openalex", { title: "Corrigendum", doi: "10.1234/aaa", date: "2020-01-01" })],
-      [work("europepmc", { title: "Corrigendum", doi: "10.1234/bbb", date: "2020-01-01" })],
+      [work("zenodo", { title: "Corrigendum", doi: "10.1234/bbb", date: "2020-01-01" })],
     ]);
     expect(merged).toHaveLength(2);
   });
@@ -145,12 +144,12 @@ describe("dedupeWorks", () => {
       // No DOI here, so the first match has to be on title...
       [work("bhl", { title: "Flora of Somewhere", date: "2001-01-01" })],
       // ...which then contributes a DOI...
-      [work("europepmc", { title: "Flora of Somewhere", doi: "10.1234/flora", date: "2001-01-01" })],
+      [work("zenodo", { title: "Flora of Somewhere", doi: "10.1234/flora", date: "2001-01-01" })],
       // ...that this differently-titled record can match on.
-      [work("core", { title: "Flora of Somewhere (2nd ed.)", doi: "10.1234/flora", date: "2001-01-01" })],
+      [work("googlebooks", { title: "Flora of Somewhere (2nd ed.)", doi: "10.1234/flora", date: "2001-01-01" })],
     ]);
     expect(merged).toHaveLength(1);
-    expect(merged[0].sources.map((s) => s.id)).toEqual(["europepmc", "core", "bhl"]);
+    expect(merged[0].sources.map((s) => s.id)).toEqual(["zenodo", "bhl", "googlebooks"]);
   });
 
   it("does not merge unrelated works", () => {

@@ -20,15 +20,17 @@ import {
  * to switch modes to answer "what has appeared since we last looked?".
  *
  * Sources are merged and deduplicated (see `lib/literature/`): OpenAlex and
- * Europe PMC need no credentials, Semantic Scholar runs on a shared quota, and
- * BHL / CORE / Google Books activate when their API keys are configured. Every
- * source's outcome is reported in `sources` so an absent one is visible rather
- * than silently narrowing the results.
+ * Zenodo need no credentials; BHL and Google Books activate when their API keys
+ * are configured; and the assessment's own reference list comes from the Red
+ * List API, so a row can show that the last assessment cited it. Every source's
+ * outcome is reported in `sources` so an absent one is visible rather than
+ * silently narrowing the results.
  *
  * Query parameters:
  *   scientificName  (required) accepted binomial; Latin gender variants are added
  *   assessmentDate  ISO date of the last assessment — where the marker goes
  *   assessmentYear  fallback when only the year is known (placed mid-year)
+ *   assessmentId    the latest assessment, whose reference list is one of the sources
  *   page            1-based, clamped into range (default 1)
  *   perPage         1-50 (default 10)
  */
@@ -41,6 +43,7 @@ export async function GET(request: NextRequest) {
   const scientificName = searchParams.get("scientificName");
   const assessmentDate = searchParams.get("assessmentDate");
   const assessmentYear = searchParams.get("assessmentYear");
+  const assessmentId = searchParams.get("assessmentId");
 
   if (!scientificName) {
     return NextResponse.json(
@@ -60,7 +63,11 @@ export async function GET(request: NextRequest) {
   const markerStamp = assessmentSortStamp(assessmentDate) ?? assessmentSortStamp(assessmentYear);
 
   try {
-    const { pool, cached } = await getLiteraturePool(scientificName, DEFAULT_PER_SOURCE_LIMIT);
+    const { pool, cached } = await getLiteraturePool(
+      scientificName,
+      assessmentId,
+      DEFAULT_PER_SOURCE_LIMIT,
+    );
 
     const markerPosition = findMarkerPosition(pool.works, markerStamp);
     const timeline = paginate(pool.works, page, perPage, markerPosition);
@@ -76,6 +83,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json(
       {
         scientificName: pool.scientificName,
+        assessmentId: pool.assessmentId,
         nameVariants: pool.nameVariants,
         assessmentDate: assessmentDate || (assessmentYear ? String(assessmentYear) : null),
         assessmentStamp: markerStamp,

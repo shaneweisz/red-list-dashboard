@@ -63,8 +63,8 @@ function stubSources({ openAlexStatus = 200 }: { openAlexStatus?: number } = {})
         if (openAlexStatus !== 200) return respond({}, openAlexStatus);
         return respond({ meta: { count: 200 }, results: OPENALEX_RESULTS });
       }
-      if (url.includes("ebi.ac.uk")) return respond({ hitCount: 0, resultList: { result: [] } });
-      if (url.includes("semanticscholar.org")) return respond({ total: 0, data: [] });
+      if (url.includes("zenodo.org")) return respond({ hits: { total: 0, hits: [] } });
+      if (url.includes("api.iucnredlist.org")) return respond({ references: [] });
       throw new Error(`Unexpected fetch: ${url}`);
     }),
   );
@@ -95,8 +95,8 @@ async function get(query: string): Promise<{ status: number; body: Body }> {
 beforeEach(() => {
   clearLiteratureCache();
   delete process.env.BHL_API_KEY;
-  delete process.env.CORE_API_KEY;
   delete process.env.GOOGLE_BOOKS_API_KEY;
+  process.env.RED_LIST_API_KEY = "test-redlist-key";
 });
 
 afterEach(() => {
@@ -209,6 +209,31 @@ describe("GET /api/literature", () => {
     expect(status).toBe(200);
     expect(body.total).toBe(0);
     expect(body.sources.find((s) => s.id === "openalex")?.status).toBe("error");
+  });
+
+  it("passes the assessment id through to the reference-list source", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string) => {
+        const respond = (data: unknown) =>
+          ({ ok: true, status: 200, json: async () => data }) as unknown as Response;
+        if (url.includes("api.openalex.org")) return respond({ meta: { count: 0 }, results: [] });
+        if (url.includes("zenodo.org")) return respond({ hits: { total: 0, hits: [] } });
+        if (url.includes("api.iucnredlist.org/api/v4/assessment/98765")) {
+          return respond({
+            url: "https://www.iucnredlist.org/species/1/2",
+            references: [{ title: "A cited field study", year: "1994", author: "B Two" }],
+          });
+        }
+        throw new Error(`Unexpected fetch: ${url}`);
+      }),
+    );
+
+    const { body } = await get("scientificName=Panthera%20leo&assessmentId=98765");
+
+    expect(body.total).toBe(1);
+    expect(body.items[0].title).toBe("A cited field study");
+    expect(body.sources.find((s) => s.id === "redlist")?.status).toBe("ok");
   });
 
   it("searches the Latin gender variants too", async () => {

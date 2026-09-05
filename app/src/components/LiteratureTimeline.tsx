@@ -116,11 +116,10 @@ const COLUMN_COUNT = 6;
  */
 const SOURCE_SHORT_LABELS: Record<string, string> = {
   openalex: "OpenAlex",
-  europepmc: "Europe PMC",
-  semanticscholar: "Semantic Scholar",
+  zenodo: "Zenodo",
   bhl: "BHL",
-  core: "CORE",
   googlebooks: "Google Books",
+  redlist: "Cited by assessment",
 };
 
 function shortSourceLabel(source: WorkProvenance): string {
@@ -282,6 +281,8 @@ interface LiteratureTimelineProps {
   scientificName: string;
   /** ISO assessment date; where the dotted marker goes. */
   assessmentDate?: string | null;
+  /** Latest assessment id — its reference list is one of the sources. */
+  assessmentId?: string | null;
   /** Fallback when only the year is known. Null/0 means no assessment to mark. */
   assessmentYear?: number | null;
   className?: string;
@@ -290,6 +291,7 @@ interface LiteratureTimelineProps {
 export default function LiteratureTimeline({
   scientificName,
   assessmentDate = null,
+  assessmentId = null,
   assessmentYear = null,
   className = "",
 }: LiteratureTimelineProps) {
@@ -322,6 +324,7 @@ export default function LiteratureTimeline({
         });
         if (assessmentDate) params.set("assessmentDate", assessmentDate);
         else if (assessmentYear) params.set("assessmentYear", String(assessmentYear));
+        if (assessmentId) params.set("assessmentId", assessmentId);
 
         const response = await fetch(`/api/literature?${params}`);
         if (!response.ok) throw new Error("Failed to fetch literature");
@@ -338,7 +341,7 @@ export default function LiteratureTimeline({
     return () => {
       cancelled = true;
     };
-  }, [scientificName, assessmentDate, assessmentYear, page]);
+  }, [scientificName, assessmentDate, assessmentId, assessmentYear, page]);
 
   const goToPage = useCallback((next: number) => {
     setPage(next);

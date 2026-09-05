@@ -19,29 +19,32 @@ const OPENALEX_WORK = {
   primary_location: { source: { display_name: "Oryx" } },
 };
 
-const EUROPEPMC_WORK = {
-  id: "999",
-  source: "MED",
+const ZENODO_SHARED = {
+  id: 555,
   doi: "10.1234/SHARED",
-  title: "Lions of the Serengeti",
-  pubYear: "2021",
-  firstPublicationDate: "2021-04-02",
-  citedByCount: 9,
-  abstractText: "An abstract only Europe PMC has.",
+  links: { self_html: "https://zenodo.org/records/555" },
+  metadata: {
+    title: "Lions of the Serengeti",
+    publication_date: "2021-04-02",
+    description: "An abstract only Zenodo has.",
+    resource_type: { type: "publication" },
+  },
 };
 
-const EUROPEPMC_UNIQUE = {
-  id: "1000",
-  source: "MED",
+const ZENODO_UNIQUE = {
+  id: 556,
   doi: "10.1234/other",
-  title: "An older note on lions",
-  pubYear: "2005",
-  firstPublicationDate: "2005-02-01",
+  links: { self_html: "https://zenodo.org/records/556" },
+  metadata: {
+    title: "An older note on lions",
+    publication_date: "2005-02-01",
+    resource_type: { type: "publication" },
+  },
 };
 
 interface RouteOptions {
   openAlexStatus?: number;
-  semanticScholarStatus?: number;
+  zenodoStatus?: number;
 }
 
 function routedFetch(options: RouteOptions = {}) {
@@ -53,15 +56,12 @@ function routedFetch(options: RouteOptions = {}) {
       if (options.openAlexStatus) return respond({}, options.openAlexStatus);
       return respond({ meta: { count: 40 }, results: [OPENALEX_WORK] });
     }
-    if (url.includes("ebi.ac.uk")) {
-      return respond({
-        hitCount: 12,
-        resultList: { result: [EUROPEPMC_WORK, EUROPEPMC_UNIQUE] },
-      });
+    if (url.includes("zenodo.org")) {
+      if (options.zenodoStatus) return respond({}, options.zenodoStatus);
+      return respond({ hits: { total: 12, hits: [ZENODO_SHARED, ZENODO_UNIQUE] } });
     }
-    if (url.includes("semanticscholar.org")) {
-      if (options.semanticScholarStatus) return respond({}, options.semanticScholarStatus);
-      return respond({ total: 0, data: [] });
+    if (url.includes("api.iucnredlist.org")) {
+      return respond({ url: "https://www.iucnredlist.org/species/1/2", references: [] });
     }
     throw new Error(`Unexpected fetch: ${url}`);
   });
@@ -69,11 +69,10 @@ function routedFetch(options: RouteOptions = {}) {
 
 beforeEach(() => {
   clearLiteratureCache();
-  // Key-gated sources stay off, so only the keyless three make requests.
+  // Key-gated sources stay off, so only the keyless ones make requests.
   delete process.env.BHL_API_KEY;
-  delete process.env.CORE_API_KEY;
   delete process.env.GOOGLE_BOOKS_API_KEY;
-  delete process.env.SEMANTIC_SCHOLAR_API_KEY;
+  process.env.RED_LIST_API_KEY = "test-redlist-key";
 });
 
 afterEach(() => {
@@ -92,23 +91,72 @@ describe("getLiteraturePool", () => {
       "Lions of the Serengeti",
       "An older note on lions",
     ]);
-    expect(pool.works[0].sources.map((s) => s.id)).toEqual(["openalex", "europepmc"]);
+    expect(pool.works[0].sources.map((s) => s.id)).toEqual(["openalex", "zenodo"]);
     // Each source's best contribution survives the merge.
-    expect(pool.works[0].citations).toBe(9);
-    expect(pool.works[0].abstract).toBe("An abstract only Europe PMC has.");
+    expect(pool.works[0].citations).toBe(7);
+    expect(pool.works[0].abstract).toBe("An abstract only Zenodo has.");
     expect(pool.works[0].venue).toBe("Oryx");
 
     expect(pool.sources).toHaveLength(SOURCES.length);
     expect(pool.sources.map((s) => [s.id, s.status])).toEqual([
       ["openalex", "ok"],
-      ["europepmc", "ok"],
-      ["semanticscholar", "ok"],
+      ["zenodo", "ok"],
       ["bhl", "unconfigured"],
-      ["core", "unconfigured"],
       ["googlebooks", "unconfigured"],
+      // No assessment id was given, so there is no reference list to read.
+      ["redlist", "ok"],
     ]);
     expect(pool.sources[0]).toMatchObject({ fetched: 1, upstreamTotal: 40 });
     expect(pool.sources[1]).toMatchObject({ fetched: 2, upstreamTotal: 12 });
+  });
+
+  it("reads the assessment's reference list when given an assessment id", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string) => {
+        const respond = (data: unknown) =>
+          ({ ok: true, status: 200, json: async () => data }) as unknown as Response;
+        if (url.includes("api.iucnredlist.org")) {
+          return respond({
+            url: "https://www.iucnredlist.org/species/1/2",
+            references: [
+              // Same work OpenAlex returned: it must merge, not duplicate.
+              { title: "Lions of the Serengeti", year: "2021", author: "A One" },
+              { title: "A 1994 field study", year: "1994", author: "B Two" },
+            ],
+          });
+        }
+        if (url.includes("api.openalex.org")) {
+          return respond({ meta: { count: 40 }, results: [OPENALEX_WORK] });
+        }
+        return respond({ hits: { total: 0, hits: [] } });
+      }),
+    );
+
+    const { pool } = await getLiteraturePool("Panthera leo", "12345");
+
+    expect(pool.assessmentId).toBe("12345");
+    expect(pool.works).toHaveLength(2);
+    // The cited paper carries both tags; that is the whole point of the source.
+    expect(pool.works[0].sources.map((s) => s.id)).toEqual(["openalex", "redlist"]);
+    // A reference nothing else returned still appears, in date order.
+    expect(pool.works[1]).toMatchObject({ title: "A 1994 field study", year: 1994 });
+    expect(pool.sources.find((s) => s.id === "redlist")).toMatchObject({
+      status: "ok",
+      fetched: 2,
+    });
+  });
+
+  it("keys the cache on the assessment id, not just the name", async () => {
+    const fetchSpy = routedFetch();
+    vi.stubGlobal("fetch", fetchSpy);
+
+    await getLiteraturePool("Panthera leo", "111");
+    const afterFirst = fetchSpy.mock.calls.length;
+    // Same species, different assessment — the reference list differs, so this
+    // must not be served from the first pool.
+    expect((await getLiteraturePool("Panthera leo", "222")).cached).toBe(false);
+    expect(fetchSpy.mock.calls.length).toBeGreaterThan(afterFirst);
   });
 
   it("includes the Latin gender variants in the query", async () => {
@@ -150,8 +198,9 @@ describe("getLiteraturePool", () => {
       getLiteraturePool("Panthera leo"),
     ]);
 
-    // Three keyless sources, queried once between the three callers.
-    expect(fetchSpy.mock.calls.length).toBe(3);
+    // Two keyless searches, queried once between the three callers. (The Red
+    // List source makes no request without an assessment id.)
+    expect(fetchSpy.mock.calls.length).toBe(2);
     expect(a.pool.works).toBe(b.pool.works);
     expect(b.pool.works).toBe(c.pool.works);
   });
@@ -165,7 +214,7 @@ describe("getLiteraturePool", () => {
       status: "error",
       fetched: 0,
     });
-    // Europe PMC's two records still make it through.
+    // Zenodo's two records still make it through.
     expect(pool.works).toHaveLength(2);
   });
 
@@ -186,10 +235,10 @@ describe("getLiteraturePool", () => {
             });
           });
         }
-        if (url.includes("ebi.ac.uk")) {
-          return respond({ hitCount: 1, resultList: { result: [EUROPEPMC_UNIQUE] } });
+        if (url.includes("zenodo.org")) {
+          return respond({ hits: { total: 1, hits: [ZENODO_UNIQUE] } });
         }
-        return respond({ total: 0, data: [] });
+        return respond({ references: [] });
       }),
     );
 
@@ -211,12 +260,11 @@ describe("getLiteraturePool", () => {
     expect(pool.works.map((w) => w.title)).toEqual(["An older note on lions"]);
   });
 
-  it("declares a longer budget for the two sources that need one", () => {
-    // Both measured 4-9s against the live APIs; at the 8s default they were
-    // timing out often enough to be effectively absent.
+  it("declares a longer budget for the source that needs one", () => {
+    // BHL measured 8.5s against the live API; at the 8s default it was timing
+    // out often enough to be effectively absent.
     const byId = Object.fromEntries(SOURCES.map((s) => [s.id, s]));
     expect(byId.bhl.timeoutMs).toBeGreaterThan(8_000);
-    expect(byId.semanticscholar.timeoutMs).toBeGreaterThan(8_000);
     expect(byId.openalex.timeoutMs).toBeUndefined();
   });
 
@@ -224,7 +272,7 @@ describe("getLiteraturePool", () => {
     // A rate limit shortens the TTL, so the gap doesn't stick for six hours.
     vi.useFakeTimers();
     try {
-      const fetchSpy = routedFetch({ semanticScholarStatus: 429 });
+      const fetchSpy = routedFetch({ zenodoStatus: 429 });
       vi.stubGlobal("fetch", fetchSpy);
 
       await getLiteraturePool("Panthera leo");

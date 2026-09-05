@@ -14,22 +14,20 @@
 import { generateNameVariants } from "@/lib/nameVariants";
 import { dedupeWorks } from "./merge";
 import { bhlSource } from "./sources/bhl";
-import { coreSource } from "./sources/core";
-import { europePmcSource } from "./sources/europepmc";
 import { googleBooksSource } from "./sources/google-books";
 import { openAlexSource } from "./sources/openalex";
-import { semanticScholarSource } from "./sources/semantic-scholar";
+import { redListSource } from "./sources/redlist";
+import { zenodoSource } from "./sources/zenodo";
 import { SOURCE_TIMEOUT_MS } from "./sources/http";
 import type { LiteratureWork, SourceAdapter, SourceReport } from "./types";
 
 /** Every source we know how to query, in the order they're reported to the UI. */
 export const SOURCES: SourceAdapter[] = [
   openAlexSource,
-  europePmcSource,
-  semanticScholarSource,
+  zenodoSource,
   bhlSource,
-  coreSource,
   googleBooksSource,
+  redListSource,
 ];
 
 /**
@@ -48,6 +46,7 @@ const MAX_CACHE_ENTRIES = 300;
 
 export interface LiteraturePool {
   scientificName: string;
+  assessmentId: string | null;
   nameVariants: string[];
   works: LiteratureWork[];
   sources: SourceReport[];
@@ -63,8 +62,14 @@ const poolCache = new Map<string, CacheEntry>();
 /** Concurrent callers for the same species wait on one shared fetch. */
 const inFlight = new Map<string, Promise<LiteraturePool>>();
 
-function cacheKey(scientificName: string, perSourceLimit: number): string {
-  return `${scientificName.trim().toLowerCase()}::${perSourceLimit}`;
+// The assessment id is part of the key because it changes what the Red List
+// reference source contributes, not just how the pool is presented.
+function cacheKey(
+  scientificName: string,
+  assessmentId: string | null,
+  perSourceLimit: number,
+): string {
+  return `${scientificName.trim().toLowerCase()}::${assessmentId ?? "-"}::${perSourceLimit}`;
 }
 
 /** Exposed for tests; also handy if a source's config changes at runtime. */
@@ -75,9 +80,10 @@ export function clearLiteratureCache(): void {
 
 export async function getLiteraturePool(
   scientificName: string,
+  assessmentId: string | null = null,
   perSourceLimit: number = DEFAULT_PER_SOURCE_LIMIT,
 ): Promise<{ pool: LiteraturePool; cached: boolean }> {
-  const key = cacheKey(scientificName, perSourceLimit);
+  const key = cacheKey(scientificName, assessmentId, perSourceLimit);
 
   const hit = poolCache.get(key);
   if (hit && hit.expiresAt > Date.now()) return { pool: hit.pool, cached: true };
@@ -85,7 +91,7 @@ export async function getLiteraturePool(
   const pending = inFlight.get(key);
   if (pending) return { pool: await pending, cached: true };
 
-  const request = buildPool(scientificName, perSourceLimit)
+  const request = buildPool(scientificName, assessmentId, perSourceLimit)
     .then((pool) => {
       const degraded = pool.sources.some(
         (s) => s.status === "error" || s.status === "rate_limited",
@@ -107,6 +113,7 @@ export async function getLiteraturePool(
 
 async function buildPool(
   scientificName: string,
+  assessmentId: string | null,
   perSourceLimit: number,
 ): Promise<LiteraturePool> {
   const nameVariants = generateNameVariants(scientificName);
@@ -122,6 +129,7 @@ async function buildPool(
         const result = await source.fetch({
           scientificName,
           nameVariants,
+          assessmentId,
           limit: perSourceLimit,
           signal: controller.signal,
         });
@@ -144,6 +152,7 @@ async function buildPool(
 
   return {
     scientificName,
+    assessmentId,
     nameVariants,
     works: dedupeWorks(results.map(({ result }) => result.works)),
     sources,
