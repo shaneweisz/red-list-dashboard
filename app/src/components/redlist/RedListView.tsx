@@ -4,7 +4,7 @@ import React, { useState, useEffect, useRef, useMemo, useCallback } from "react"
 import { createPortal } from "react-dom";
 import dynamic from "next/dynamic";
 import TaxaSummary from "./TaxaSummary";
-import NewLiteratureSinceAssessment from "../LiteratureSearch";
+import LiteratureTimeline from "../LiteratureTimeline";
 import { GBIF_CHECKLIST_KEY, gbifOccurrenceParams, taxonGroupCountsPreservedSpecimens } from "@/lib/gbif";
 import RedListAssessments from "../RedListAssessments";
 import CitesSummary from "../CitesSummary";
@@ -6457,9 +6457,11 @@ export default function RedListView({ viewMode = "reassessments", onViewModeChan
                           )}
                           {(assessmentYear || s.category === "NE") && (visitedTabs.has("literature")) && (
                             <div className="p-4" style={{ display: activeDetailTab === "literature" ? undefined : "none" }}>
-                              <NewLiteratureSinceAssessment
+                              <LiteratureTimeline
                                 scientificName={s.scientific_name}
-                                assessmentYear={assessmentYear ?? 0}
+                                assessmentDate={s.assessment_date ?? null}
+                                assessmentId={s.assessment_id ? String(s.assessment_id) : null}
+                                assessmentYear={assessmentYear}
                               />
                             </div>
                           )}

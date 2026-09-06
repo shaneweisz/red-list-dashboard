@@ -6539,6 +6539,8 @@ export default function OccurrenceMapRow({
               <div className="relative" ref={filtersRef}>
                 <button
                   onClick={() => setFiltersOpen(!filtersOpen)}
+                  title="Basis of Record — which kinds of evidence to include"
+                  aria-label="Basis of Record"
                   className={`inline-flex items-center gap-1.5 px-2 py-1 rounded border text-xs transition-colors ${
                     filtersOpen
                       ? "bg-zinc-100 dark:bg-zinc-800 border-zinc-400 dark:border-zinc-500"
@@ -6548,9 +6550,9 @@ export default function OccurrenceMapRow({
                   <svg className="w-3.5 h-3.5 text-zinc-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                     <path strokeLinecap="round" strokeLinejoin="round" d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z" />
                   </svg>
-                  Basis of Record
+                  <span className="hidden lg:inline">Basis of Record</span>
                   {!loadingBreakdown && (
-                    <span className="text-[10px] text-zinc-400 tabular-nums">
+                    <span className="hidden lg:inline text-[10px] text-zinc-400 tabular-nums">
                       Selected {pillDefs.filter(p => checkedTypes[p.key]).length} of {pillDefs.length}
                     </span>
                   )}
@@ -6668,6 +6670,7 @@ export default function OccurrenceMapRow({
               <div className="relative" ref={cleaningFilterRef}>
                 <button
                   onClick={() => setCleaningFilterOpen(!cleaningFilterOpen)}
+                  aria-label="Coordinate cleaning"
                   className={`inline-flex items-center gap-1.5 px-2 py-1 rounded border text-xs transition-colors ${
                     cleaningFilterOpen
                       ? "bg-zinc-100 dark:bg-zinc-800 border-zinc-400 dark:border-zinc-500"
@@ -6675,11 +6678,14 @@ export default function OccurrenceMapRow({
                   } text-zinc-700 dark:text-zinc-300`}
                   title="Filter by GPS uncertainty and hide records flagged by coordinate-cleaning checks (e.g. zero coordinates, GBIF headquarters, duplicates)"
                 >
+                  {/* A crosshair, not the funnel Basis of Record uses: with the
+                      labels hidden below lg the two would be indistinguishable. */}
                   <svg className="w-3.5 h-3.5 text-zinc-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z" />
+                    <circle cx="12" cy="12" r="7" strokeLinecap="round" strokeLinejoin="round" />
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M12 2v3M12 19v3M2 12h3M19 12h3" />
                   </svg>
-                  Coordinate cleaning
-                  <span className="text-[10px] text-zinc-400 tabular-nums">
+                  <span className="hidden lg:inline">Coordinate cleaning</span>
+                  <span className="hidden lg:inline text-[10px] text-zinc-400 tabular-nums">
                     {/* Counts every row in the dropdown, GBIF's own verdict included */}
                     Applied {flagDefs.filter((d) => appliedChecks[d.key]).length + (hideGbifFlagged ? 1 : 0) + (hasNativeRangeData && nativeRangeOnly ? 1 : 0)} of {flagDefs.length + 1 + (hasNativeRangeData ? 1 : 0)}
                     {maxUncertainty != null && ` · ≤ ${formatUncertainty(maxUncertainty)}`}
@@ -6957,6 +6963,7 @@ export default function OccurrenceMapRow({
               <div className="relative" ref={dateRangeRef}>
                 <button
                   onClick={() => setDateRangeOpen(!dateRangeOpen)}
+                  aria-label="Date range"
                   className={`inline-flex items-center gap-1.5 px-2 py-1 rounded border text-xs transition-colors ${
                     dateRangeOpen
                       ? "bg-zinc-100 dark:bg-zinc-800 border-zinc-400 dark:border-zinc-500"
@@ -6968,8 +6975,8 @@ export default function OccurrenceMapRow({
                     <rect x="3" y="4" width="18" height="17" rx="2" strokeLinecap="round" strokeLinejoin="round" />
                     <path strokeLinecap="round" strokeLinejoin="round" d="M3 9h18M8 2v4M16 2v4" />
                   </svg>
-                  Date range
-                  <span className="text-[10px] text-zinc-400 tabular-nums">
+                  <span className="hidden lg:inline">Date range</span>
+                  <span className="hidden lg:inline text-[10px] text-zinc-400 tabular-nums">
                     {dateRangeFrom == null && dateRangeTo == null
                       ? "All dates"
                       : `${dateRangeFrom ?? sliderMinDate} – ${dateRangeTo ?? sliderMaxDate}`}
@@ -7179,6 +7186,7 @@ export default function OccurrenceMapRow({
               <div className="relative" ref={overlaysRef}>
                 <button
                   onClick={() => setOverlaysOpen(!overlaysOpen)}
+                  aria-label="Overlays"
                   className={`inline-flex items-center gap-1.5 px-2 py-1 rounded border text-xs transition-colors ${
                     overlaysOpen
                       ? "bg-zinc-100 dark:bg-zinc-800 border-zinc-400 dark:border-zinc-500"
@@ -7190,8 +7198,8 @@ export default function OccurrenceMapRow({
                     <path strokeLinecap="round" strokeLinejoin="round" d="M12 3l9 5-9 5-9-5 9-5z" />
                     <path strokeLinecap="round" strokeLinejoin="round" d="M3 13l9 5 9-5" />
                   </svg>
-                  Overlays
-                  <span className="text-[10px] text-zinc-400 tabular-nums">
+                  <span className="hidden lg:inline">Overlays</span>
+                  <span className="hidden lg:inline text-[10px] text-zinc-400 tabular-nums">
                     {overlayToggleValues.filter(Boolean).length} of {overlayToggleValues.length}
                   </span>
                   <svg className={`w-3 h-3 text-zinc-400 transition-transform ${overlaysOpen ? "rotate-180" : ""}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -7364,7 +7372,7 @@ export default function OccurrenceMapRow({
                     <svg className="w-3.5 h-3.5 text-zinc-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                       <path strokeLinecap="round" strokeLinejoin="round" d="M4 8V5a1 1 0 011-1h3m8 0h3a1 1 0 011 1v3m0 8v3a1 1 0 01-1 1h-3m-8 0H5a1 1 0 01-1-1v-3" />
                     </svg>
-                    Fullscreen
+                    <span className="hidden lg:inline">Fullscreen</span>
                   </Link>
                 )}
               </div>
