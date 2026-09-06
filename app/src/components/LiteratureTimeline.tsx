@@ -203,7 +203,9 @@ function WorkRow({
         <td className="hidden whitespace-nowrap px-2 py-1 align-top text-[11px] text-zinc-500 lg:table-cell">
           {TYPE_LABELS[work.type] || "—"}
         </td>
-        <td className="whitespace-nowrap px-2 py-1 text-right align-top text-[11px] tabular-nums text-zinc-500">
+        {/* On a phone the title needs this width more than a citation count
+            does; the expanded row carries it instead. */}
+        <td className="hidden whitespace-nowrap px-2 py-1 text-right align-top text-[11px] tabular-nums text-zinc-500 sm:table-cell">
           {work.citations !== null && work.citations > 0 ? work.citations.toLocaleString() : "—"}
         </td>
         <td
@@ -219,8 +221,18 @@ function WorkRow({
           <td colSpan={COLUMN_COUNT} className="space-y-2 px-2 py-2 pl-7 text-[11px] text-zinc-500">
             <div className="font-medium text-zinc-700 dark:text-zinc-300">{work.title}</div>
             {work.authors && <div>{work.authors}</div>}
-            {/* Columns hidden at this breakpoint still need to be readable. */}
-            <div className="md:hidden">{work.venue}</div>
+            {/* Every column the table may have dropped at this width, so the
+                expanded row is complete on a phone as well as a desktop. */}
+            <div className="text-zinc-400">
+              {[
+                work.venue,
+                TYPE_LABELS[work.type] || null,
+                work.citations ? `${work.citations.toLocaleString()} citations` : null,
+                work.sources.map(sourceColumnLabel).join(", "),
+              ]
+                .filter(Boolean)
+                .join(" · ")}
+            </div>
             {work.abstract && <p className="leading-relaxed">{work.abstract}</p>}
             <div className="flex flex-wrap items-center gap-3 pt-1">
               <a
@@ -243,9 +255,6 @@ function WorkRow({
                   Free full text
                 </a>
               )}
-              <span className="text-zinc-400 lg:hidden">
-                {work.sources.map(sourceColumnLabel).join(", ")}
-              </span>
             </div>
           </td>
         </tr>
@@ -430,7 +439,7 @@ export default function LiteratureTimeline({
                 <th className="px-2 py-1.5 font-medium">Title</th>
                 <th className="hidden w-44 px-2 py-1.5 font-medium md:table-cell">Published in</th>
                 <th className="hidden w-16 px-2 py-1.5 font-medium lg:table-cell">Type</th>
-                <th className="w-12 px-2 py-1.5 text-right font-medium">Cited</th>
+                <th className="hidden w-12 px-2 py-1.5 text-right font-medium sm:table-cell">Cited</th>
                 <th className="hidden w-44 px-2 py-1.5 font-medium lg:table-cell">Source</th>
               </tr>
             </thead>
